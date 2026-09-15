@@ -89,6 +89,7 @@ const RunEvaluation = () => {
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationQueueItem[]>([]);
   const [expandedEvaluationRunId, setExpandedEvaluationRunId] = useState<string | null>(null);
+  const [stoppingEvaluationRunId, setStoppingEvaluationRunId] = useState<string | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -121,6 +122,21 @@ const RunEvaluation = () => {
     [configs, libraryScenarios]
   );
   const activeQueueEntry = activeQueueEntries[0] ?? null;
+  const activeEvaluation = useMemo(
+    () =>
+      evaluations.find((evaluation) =>
+        evaluation.jobs.some((job) => job.jobId === activeJobId)
+      ) ?? null,
+    [evaluations, activeJobId]
+  );
+  const visibleProgress = activeEvaluation
+    ? Math.max(
+        progress,
+        activeEvaluation.totalJobs > 0
+          ? Math.round((activeEvaluation.completedJobs / activeEvaluation.totalJobs) * 100)
+          : 0
+      )
+    : progress;
   const requestedConfigId = searchParams.get('configId');
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
@@ -560,6 +576,36 @@ const RunEvaluation = () => {
     }
   };
 
+  const stopEvaluation = async (evaluationRunId: string) => {
+    if (stoppingEvaluationRunId === evaluationRunId) return;
+    setStoppingEvaluationRunId(evaluationRunId);
+    try {
+      await source.stopEvaluationRun(evaluationRunId);
+      await refreshQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not stop run',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setStoppingEvaluationRunId(null);
+    }
+  };
+
+  const removeEvaluation = async (evaluationRunId: string) => {
+    try {
+      await source.removeEvaluationRun(evaluationRunId);
+      await refreshQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not remove run',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
   const attachRunJob = (jobId: string) => {
     if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
@@ -636,23 +682,78 @@ const RunEvaluation = () => {
         }
       }
       if (event.type === 'completed') {
-        const nextRunId = String(event.payload.runId ?? '').trim();
-        setOauthRequired(null);
-        oauthConnectingRef.current = false;
-        setLogs((prev) => {
-          const line = `[${ts}] Run completed.`;
-          return prev.includes(line) ? prev : [...prev, line];
-        });
-        setProgress(100);
-        setRunning(false);
-        setDone(true);
-        setStopped(false);
-        setRunId(nextRunId);
-        clearActiveRunJob();
-        setActiveJobId(null);
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
-        void refreshQueue();
+        const completedJobId = activeJobId;
+        const evaluationRunId = String(event.payload.runId ?? '').trim();
+        void source
+          .getRunQueue()
+          .then((queue) => {
+            const evaluation =
+              queue.evaluations?.find((item) => item.evaluationRunId === evaluationRunId) ??
+              queue.evaluations?.find((item) =>
+                item.jobs.some((job) => job.jobId === completedJobId)
+              );
+            const nextJob = evaluation?.jobs.find(
+              (job) =>
+                job.jobId !== completedJobId &&
+                ['queued', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
+            );
+
+            if (nextJob && evaluation) {
+              const completedLine = `[${ts}] Subtask completed. ${
+                evaluation.completedJobs
+              }/${evaluation.totalJobs} complete. Continuing with the remaining run tasks...`;
+              setLogs((prev) => (prev.includes(completedLine) ? prev : [...prev, completedLine]));
+              setProgress((prev) =>
+                Math.max(
+                  prev,
+                  evaluation.totalJobs > 0
+                    ? Math.round((evaluation.completedJobs / evaluation.totalJobs) * 100)
+                    : prev
+                )
+              );
+              setOauthRequired(null);
+              oauthConnectingRef.current = false;
+              setRunning(true);
+              setDone(false);
+              setStopped(false);
+              setActiveJobId(nextJob.jobId);
+              setActiveRunJob(nextJob.jobId);
+              void refreshQueue();
+              attachRunJob(nextJob.jobId);
+              return;
+            }
+
+            const nextRunId = String(event.payload.runId ?? '').trim();
+            setOauthRequired(null);
+            oauthConnectingRef.current = false;
+            setLogs((prev) => {
+              const line = `[${ts}] Run completed.`;
+              return prev.includes(line) ? prev : [...prev, line];
+            });
+            setProgress(100);
+            setRunning(false);
+            setDone(true);
+            setStopped(false);
+            setRunId(nextRunId);
+            clearActiveRunJob();
+            setActiveJobId(null);
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            void refreshQueue();
+          })
+          .catch(() => {
+            // Preserve the existing completion behavior if queue reconciliation fails.
+            setProgress(100);
+            setRunning(false);
+            setDone(true);
+            setStopped(false);
+            setRunId(evaluationRunId);
+            clearActiveRunJob();
+            setActiveJobId(null);
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            void refreshQueue();
+          });
       }
       if (event.type === 'error') {
         const message = String(event.payload.message ?? 'Unknown error');
@@ -1065,12 +1166,47 @@ const RunEvaluation = () => {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Progress</CardTitle>
               <span className="text-xs text-muted-foreground font-mono">
-                {Math.round(progress)}%
+                {Math.round(visibleProgress)}%
               </span>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Progress value={progress} className="h-2" />
+            <Progress value={visibleProgress} className="h-2" />
+            {(activeEvaluation || activeQueueEntry) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {activeEvaluation ? (
+                  <>
+                    <span>
+                      {activeEvaluation.completedJobs}/{activeEvaluation.totalJobs} subtasks complete
+                    </span>
+                    {activeEvaluation.failedJobs - activeEvaluation.stoppedJobs > 0 && (
+                      <span className="font-medium text-destructive">
+                        {activeEvaluation.failedJobs - activeEvaluation.stoppedJobs} failed
+                      </span>
+                    )}
+                    {activeEvaluation.stoppedJobs > 0 && (
+                      <span className="font-medium text-muted-foreground">
+                        {activeEvaluation.stoppedJobs} stopped
+                      </span>
+                    )}
+                    {activeEvaluation.pausedJobs > 0 && (
+                      <span className="font-medium text-yellow-700 dark:text-yellow-400">
+                        {activeEvaluation.pausedJobs} paused
+                      </span>
+                    )}
+                    <Badge variant="outline" className="capitalize">
+                      {activeEvaluation.status}
+                    </Badge>
+                  </>
+                ) : (
+                  <span>
+                    {activeQueueEntry?.roverProgress
+                      ? `${activeQueueEntry.roverProgress.completed}/${activeQueueEntry.roverProgress.total} scenarios complete`
+                      : 'Attached to active run'}
+                  </span>
+                )}
+              </div>
+            )}
             {oauthRequired && (
               <div className="flex items-center justify-between rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm">
                 <span className="text-yellow-700 dark:text-yellow-400">
@@ -1183,6 +1319,8 @@ const RunEvaluation = () => {
                   className={`rounded-md border p-3 text-sm ${
                     evaluation.status === 'failed'
                       ? 'border-destructive/40 bg-destructive/5'
+                      : evaluation.status === 'stopped'
+                        ? 'border-muted-foreground/30 bg-muted/40'
                       : evaluation.status === 'partial'
                         ? 'border-yellow-500/40 bg-yellow-500/5'
                         : 'border-primary/20 bg-primary/5'
@@ -1217,47 +1355,31 @@ const RunEvaluation = () => {
                         </Button>
                       )}
                       {evaluation.jobs.length > 0 &&
-                        evaluation.jobs.every(
-                          (job) => job.status === 'queued' || job.status === 'blocked_auth'
+                        evaluation.jobs.every((job) =>
+                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(
+                            job.status
+                          )
                         ) && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => {
-                              void source
-                                .removeEvaluationRun(evaluation.evaluationRunId)
-                                .then(() => void refreshQueue());
-                            }}
-                            title="Remove evaluation from queue"
-                            aria-label="Remove evaluation from queue"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => void removeEvaluation(evaluation.evaluationRunId)}
+                            title={
+                              evaluation.status === 'stopped'
+                                ? 'Remove stopped run from the queue'
+                                : 'Remove evaluation from queue'
+                            }
+                            aria-label={
+                              evaluation.status === 'stopped'
+                                ? 'Remove stopped run from queue'
+                                : 'Remove evaluation from queue'
+                            }
                           >
-                            <X className="h-4 w-4" />
+                            <X className="mr-1 h-3 w-3" />
+                            {evaluation.status === 'stopped' ? 'Remove run' : 'Remove'}
                           </Button>
                         )}
-                      {evaluation.jobs.some((job) =>
-                        [
-                          'queued',
-                          'blocked_auth',
-                          'waiting_for_rover',
-                          'paused_rover',
-                          'running'
-                        ].includes(job.status)
-                      ) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => {
-                            void source
-                              .stopEvaluationRun(evaluation.evaluationRunId)
-                              .then(() => void refreshQueue());
-                          }}
-                        >
-                          <Square className="mr-1 h-3 w-3" />
-                          Stop
-                        </Button>
-                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1279,6 +1401,29 @@ const RunEvaluation = () => {
                           ? 'Hide'
                           : 'Details'}
                       </Button>
+                      {evaluation.jobs.some((job) =>
+                        [
+                          'queued',
+                          'blocked_auth',
+                          'waiting_for_rover',
+                          'paused_rover',
+                          'running'
+                        ].includes(job.status)
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          disabled={stoppingEvaluationRunId === evaluation.evaluationRunId}
+                          onClick={() => void stopEvaluation(evaluation.evaluationRunId)}
+                          title="Stop this evaluation run and its queued or running tasks"
+                        >
+                          <Square className="mr-1 h-3 w-3" />
+                          {stoppingEvaluationRunId === evaluation.evaluationRunId
+                            ? 'Stopping run...'
+                            : 'Stop run'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {expandedEvaluationRunId === evaluation.evaluationRunId && (
@@ -1288,10 +1433,22 @@ const RunEvaluation = () => {
                           key={`${job.jobId}:${child?.scenarioId ?? 'job'}:${
                             child?.agentName ?? 'job'
                           }`}
-                          className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1"
+                          className={`flex items-center justify-between gap-2 rounded px-2 py-1 ${
+                            child?.status === 'completed'
+                              ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                              : child?.status === 'error' || child?.status === 'stopped'
+                                ? 'border border-destructive/30 bg-destructive/5'
+                                : 'bg-background'
+                          }`}
                           onClick={() => selectQueueJob(job.jobId)}
                         >
-                          <span className="min-w-0 truncate">
+                          <span className="flex min-w-0 items-center gap-1.5 truncate">
+                            {child?.status === 'completed' && (
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            )}
+                            {(child?.status === 'error' || child?.status === 'stopped') && (
+                              <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                            )}
                             {child
                               ? `${child.scenarioId} · ${child.agentName}: `
                               : `${
