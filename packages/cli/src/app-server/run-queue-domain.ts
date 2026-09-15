@@ -932,7 +932,7 @@ export function createRunQueueService(params: {
           // Any nonterminal error release is retryable. This covers offers that
           // fail before acceptance as well as accepted/running work that loses
           // the provider before MCPLab receives a terminal completion.
-          const shouldRequeue = reason === 'connection_lost' || (reason === 'error' && job.status === 'running');
+          const shouldRequeue = ['connection_lost', 'provider_unavailable', 'provider_mismatch', 'stale_provider'].includes(reason) || (reason === 'error' && job.status === 'running');
           job.roverLease = undefined;
           const timer = leaseTimers.get(job.id);
           if (timer) clearTimeout(timer);
