@@ -943,6 +943,7 @@ export function createRunQueueService(params: {
             if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
           }
           emit();
+          send({ type: 'lease_action_ack', jobId: job.id, leaseId: message.leaseId, action: 'release' });
           return null;
         }
         return null;
@@ -1069,6 +1070,9 @@ export function createRunQueueService(params: {
         outcome: message.outcome,
         provider
       });
+      if (typeof message.leaseId === 'string') {
+        send({ type: 'lease_action_ack', jobId: message.jobId, leaseId: message.leaseId, action: 'complete' });
+      }
       const next = this.assignRoverJob(provider, send, worker);
       return next?.id ?? null;
     }
