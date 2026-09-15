@@ -275,6 +275,24 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
 
+  it('marks terminal Rover lease releases as errors instead of leaving running zombies', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+
+    service.handleRoverMessage(
+      { type: 'lease_release', jobId, leaseId: assignment.leaseId, reason: 'bound_tab_unavailable' },
+      'claude', send, worker
+    );
+
+    expect(service.jobs.get(jobId)?.status).toBe('error');
+    expect(service.state.queue).not.toContain(jobId);
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+  });
+
   it('rejects lease messages from another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

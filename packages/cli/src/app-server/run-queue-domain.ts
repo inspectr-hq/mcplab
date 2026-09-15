@@ -941,6 +941,14 @@ export function createRunQueueService(params: {
           if (shouldRequeue && job.status === 'running') {
             job.status = 'waiting_for_rover';
             if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
+          } else if (['bound_tab_unavailable', 'terminal_error'].includes(reason)) {
+            job.status = 'error';
+            deps.addJobEvent(job, {
+              type: 'error',
+              ts: new Date().toISOString(),
+              payload: { message: `Rover terminated the assignment: ${reason}` }
+            });
+            recordTerminalExecution(job, 'error', reason);
           }
           emit();
           send({ type: 'lease_action_ack', jobId: job.id, leaseId: message.leaseId, action: 'release' });
