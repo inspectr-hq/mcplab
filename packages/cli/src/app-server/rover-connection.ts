@@ -1,14 +1,18 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
+import { randomUUID } from 'node:crypto';
 
 export type RoverProvider = string;
+export const ROVER_ASSIGNMENT_LEASE_CAPABILITY = 'assignment_lease';
 
 export interface RoverRegistration {
   protocolVersion: 1;
   provider: RoverProvider;
+  providerRevision?: string;
   pageUrl: string;
   extensionVersion: string;
+  capabilities: string[];
 }
 
 export interface RoverSocketMessage {
@@ -17,6 +21,7 @@ export interface RoverSocketMessage {
 }
 
 export interface RoverConnection {
+  connectionId: string;
   registration: RoverRegistration;
   socket: WebSocket;
   connectedAt: string;
@@ -41,6 +46,7 @@ export function createRoverConnectionService(
     onRegister?: (connection: RoverConnection) => void | Promise<void>;
     onMessage?: (connection: RoverConnection, message: RoverSocketMessage) => void | Promise<void>;
     onDisconnect?: (connection: RoverConnection) => void | Promise<void>;
+    assignmentLeases?: boolean;
   } = {}
 ): RoverConnectionService {
   const log = options.log ?? console.log;
@@ -101,18 +107,31 @@ export function createRoverConnectionService(
         }
         const now = new Date().toISOString();
         connection = {
+          connectionId: randomUUID(),
           registration: {
             protocolVersion: 1,
             provider: message.provider,
+            ...(typeof message.providerRevision === 'string'
+              ? { providerRevision: message.providerRevision }
+              : {}),
             pageUrl: message.pageUrl,
-            extensionVersion: message.extensionVersion
+            extensionVersion: message.extensionVersion,
+            capabilities: Array.isArray(message.capabilities)
+              ? message.capabilities.filter((value): value is string => typeof value === 'string')
+              : []
           },
           socket,
           connectedAt: now,
           lastSeenAt: now
         };
         current = connection;
-        send(socket, { type: 'registered', connectedAt: now });
+        send(socket, {
+          type: 'registered',
+          connectedAt: now,
+          capabilities: options.assignmentLeases === false
+            ? []
+            : [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
+        });
         log(timestampedLog(`Rover connected: ${connection.registration.provider}`));
         void options.onRegister?.(connection);
         return;
@@ -123,9 +142,18 @@ export function createRoverConnectionService(
         connection.registration = {
           ...connection.registration,
           provider: message.provider,
+          ...(typeof message.providerRevision === 'string'
+            ? { providerRevision: message.providerRevision }
+            : {}),
           pageUrl: String(message.pageUrl ?? connection.registration.pageUrl)
         };
-        send(socket, { type: 'registered', connectedAt: connection.connectedAt });
+        send(socket, {
+          type: 'registered',
+          connectedAt: connection.connectedAt,
+          capabilities: options.assignmentLeases === false
+            ? []
+            : [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
+        });
         log(
           timestampedLog(
             `Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`

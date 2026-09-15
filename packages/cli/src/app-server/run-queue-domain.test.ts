@@ -110,6 +110,16 @@ describe('Rover run queue domain', () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'assignment', jobId }));
   });
 
+  it('reports only queued evaluations waiting for the connected provider', () => {
+    const service = createRunQueueServiceForTest();
+    const first = service.enqueueRun({ ...roverParams('claude'), evaluationName: 'First' });
+    service.enqueueRun({ ...roverParams('trendminer'), evaluationName: 'Other provider' });
+
+    expect(service.getWaitingRoverJobs('claude')).toEqual([
+      { jobId: first.jobId, evaluationName: 'First', provider: 'claude', position: 1 }
+    ]);
+  });
+
   it('initializes Rover child progress before the assignment starts', () => {
     const service = createRunQueueServiceForTest();
     const { jobId } = service.enqueueRun({
@@ -147,6 +157,156 @@ describe('Rover run queue domain', () => {
         agent: expect.objectContaining({ providerRevision: 'rev-1' })
       })
     );
+  });
+
+  it('only matches an exact provider revision when both sides provide one', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const { jobId } = service.enqueueRun({
+      ...roverParams('custom' as 'claude'),
+      roverAgent: {
+        name: 'custom',
+        provider: 'custom',
+        url: 'https://custom.example',
+        providerRevision: 'rev-1'
+      }
+    });
+    expect(
+      service.assignRoverJob('custom', send, {
+        connectionId: 'connection-1',
+        provider: 'custom',
+        providerRevision: 'rev-2',
+        capabilities: ['assignment_lease']
+      })
+    ).toBeNull();
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(
+      service.assignRoverJob('custom', send, {
+        connectionId: 'connection-2',
+        provider: 'custom',
+        providerRevision: 'rev-1',
+        capabilities: ['assignment_lease']
+      })?.id
+    ).toBe(jobId);
+  });
+
+  it('offers a lease, accepts it, renews it, and requeues after expiry', () => {
+    vi.useFakeTimers();
+    try {
+      const service = createRunQueueServiceForTest();
+      const send = vi.fn(() => true);
+      const worker = {
+        connectionId: 'connection-1',
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      };
+      const { jobId } = service.enqueueRun(roverParams());
+      service.assignRoverJob('claude', send, worker);
+      const assignment = send.mock.calls[0][0] as { leaseId: string; leaseExpiresAt: string };
+      expect(assignment.leaseId).toEqual(expect.any(String));
+      expect(service.jobs.get(jobId)?.roverLease?.state).toBe('offered');
+
+      service.handleRoverMessage(
+        { type: 'assignment_accept', jobId, leaseId: assignment.leaseId, tabId: 7 },
+        'claude',
+        send,
+        worker
+      );
+      expect(service.jobs.get(jobId)?.roverLease?.state).toBe('accepted');
+      service.handleRoverMessage(
+        {
+          type: 'lease_renew',
+          jobId,
+          leaseId: assignment.leaseId,
+          leaseExpiresAt: new Date(Date.now() + 25_000).toISOString()
+        },
+        'claude',
+        send,
+        worker
+      );
+      expect(service.jobs.get(jobId)?.roverLease?.expiresAt).toBeTruthy();
+      vi.advanceTimersByTime(31_000);
+      expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+      expect(service.state.queue).toContain(jobId);
+      expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('requeues a rejected offer and ignores stale lease messages', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+
+    service.handleRoverMessage(
+      { type: 'assignment_reject', jobId, leaseId: assignment.leaseId, reason: 'busy', retryable: true },
+      'claude', send, worker
+    );
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(service.state.queue).toContain(jobId);
+
+    service.handleRoverMessage(
+      { type: 'lease_renew', jobId, leaseId: assignment.leaseId, leaseExpiresAt: new Date(Date.now() + 30_000).toISOString() },
+      'claude', send, worker
+    );
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+  });
+
+  it('rejects lease messages from another connection', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId, leaseId: assignment.leaseId, tabId: 4 },
+      'claude', send,
+      { ...worker, connectionId: 'connection-2' }
+    );
+    expect(service.jobs.get(jobId)?.roverLease?.state).toBe('offered');
+  });
+
+  it('ignores progress and scenario updates carrying a stale lease ID', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId, leaseId: assignment.leaseId },
+      'claude', send, worker
+    );
+    service.handleRoverMessage(
+      { type: 'progress', jobId, leaseId: 'stale-lease', completed: 1, total: 1 },
+      'claude', send, worker
+    );
+    expect(service.jobs.get(jobId)?.roverProgress).toBeUndefined();
+  });
+
+  it('rebinds an active lease to a reconnecting worker', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+    service.handleRoverMessage({ type: 'assignment_accept', jobId, leaseId: assignment.leaseId }, 'claude', send, worker);
+
+    service.rebindRoverLeases('claude', { ...worker, connectionId: 'connection-2' });
+    expect(service.jobs.get(jobId)?.roverLease).toMatchObject({
+      leaseId: assignment.leaseId,
+      connectionId: 'connection-2',
+      state: 'accepted'
+    });
   });
 
   it('does not consume a waiting job when the Rover assignment cannot be delivered', () => {

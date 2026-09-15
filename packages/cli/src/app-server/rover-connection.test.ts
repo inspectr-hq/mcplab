@@ -44,14 +44,21 @@ describe('Rover connection protocol', () => {
       JSON.stringify({
         type: 'register',
         protocolVersion: 1,
+        capabilities: ['scenario_control', 'assignment_lease'],
         provider: 'claude',
+        providerRevision: 'rev-1',
         pageUrl: 'https://claude.ai/chat/1',
         extensionVersion: 'test'
       })
     );
     const [raw] = await once(socket, 'message');
     expect(JSON.parse(raw.toString()).type).toBe('registered');
-    expect(service.connection()?.registration.provider).toBe('claude');
+    expect(service.connection()?.registration).toMatchObject({
+      provider: 'claude',
+      providerRevision: 'rev-1',
+      capabilities: ['scenario_control', 'assignment_lease']
+    });
+    expect(JSON.parse(raw.toString())).toMatchObject({ capabilities: ['assignment_lease'] });
     expect(log).toHaveBeenCalledWith(
       expect.stringMatching(
         /^\[mcplab-app\] \[\d{4}-\d{2}-\d{2}T[^\]]+Z\] Rover connected: claude$/

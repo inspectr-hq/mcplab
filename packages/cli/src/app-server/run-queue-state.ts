@@ -42,6 +42,18 @@ export type RunJobStatus =
   | 'completed'
   | 'error';
 
+export type RoverLeaseState = 'offered' | 'accepted' | 'running';
+
+export interface RoverLease {
+  leaseId: string;
+  connectionId: string;
+  state: RoverLeaseState;
+  expiresAt: string;
+  offeredAt: string;
+  acceptedAt?: string;
+  tabId?: number;
+}
+
 export type RunJob = {
   id: string;
   status: RunJobStatus;
@@ -59,6 +71,7 @@ export type RunJob = {
   };
   childProgress?: QueueChildProgress[];
   childAbortControllers?: Map<string, AbortController>;
+  roverLease?: RoverLease;
 };
 
 export interface RunQueueState {

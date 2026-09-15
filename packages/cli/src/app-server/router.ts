@@ -229,17 +229,31 @@ export async function startAppServer(options: AppServerOptions) {
     jobs: jobs as any,
     state: runQueueState,
     sendRoverMessage: (message) => roverConnection.send(message),
-    assignRoverJob: (provider) => {
+    assignRoverJob: (provider, worker) => {
+      const connection = roverConnection.connection();
+      const effectiveWorker = worker ?? (connection
+        ? {
+            connectionId: connection.connectionId,
+            provider: connection.registration.provider,
+            providerRevision: connection.registration.providerRevision,
+            capabilities: connection.registration.capabilities
+          }
+        : undefined);
       const assigned = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
-        roverConnection.send(message)
+        roverConnection.send(message), effectiveWorker
       );
       if (assigned) activeRoverJobId = assigned.id;
       return assigned;
     },
     onRoverJobReleased: (provider) => {
+      const connection = roverConnection.connection();
       const next = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
-        roverConnection.send(message)
-      );
+        roverConnection.send(message), connection ? {
+          connectionId: connection.connectionId,
+          provider: connection.registration.provider,
+          providerRevision: connection.registration.providerRevision,
+          capabilities: connection.registration.capabilities
+        } : undefined);
       activeRoverJobId = next?.id ?? null;
     }
   });
@@ -247,30 +261,65 @@ export async function startAppServer(options: AppServerOptions) {
   const roverConnection = createRoverConnectionService({
     log: (message) => console.log(message),
     onRegister: (connection) => {
+      const worker = {
+        connectionId: connection.connectionId,
+        provider: connection.registration.provider,
+        providerRevision: connection.registration.providerRevision,
+        capabilities: connection.registration.capabilities
+      };
+      runQueueService.rebindRoverLeases(connection.registration.provider, worker);
       const assigned = runQueueService.assignRoverJob(
         connection.registration.provider,
-        (message: RoverSocketMessage) => roverConnection.send(message)
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        worker
       );
+      roverConnection.send({
+        type: 'queue_waiting',
+        provider: connection.registration.provider,
+        jobs: runQueueService.getWaitingRoverJobs(connection.registration.provider)
+      });
       activeRoverJobId = assigned?.id ?? null;
     },
     onMessage: (connection, message) => {
       if (message.type === 'register_update' && !activeRoverJobId) {
+        const worker = {
+          connectionId: connection.connectionId,
+          provider: connection.registration.provider,
+          providerRevision: connection.registration.providerRevision,
+          capabilities: connection.registration.capabilities
+        };
         const assigned = runQueueService.assignRoverJob(
           connection.registration.provider,
-          (payload: RoverSocketMessage) => roverConnection.send(payload)
+          (payload: RoverSocketMessage) => roverConnection.send(payload),
+          worker
         );
         activeRoverJobId = assigned?.id ?? null;
+        roverConnection.send({
+          type: 'queue_waiting',
+          provider: connection.registration.provider,
+          jobs: runQueueService.getWaitingRoverJobs(connection.registration.provider)
+        });
       }
       if (
         message.type === 'progress' ||
         message.type === 'complete' ||
         message.type === 'stage' ||
-        message.type === 'scenario_status'
+        message.type === 'scenario_status' ||
+        message.type === 'assignment_accept' ||
+        message.type === 'assignment_reject' ||
+        message.type === 'lease_renew' ||
+        message.type === 'lease_release'
       ) {
         const nextJobId = runQueueService.handleRoverMessage(
           message,
           connection.registration.provider,
-          (payload: RoverSocketMessage) => roverConnection.send(payload)
+          (payload: RoverSocketMessage) => roverConnection.send(payload),
+          {
+            connectionId: connection.connectionId,
+            provider: connection.registration.provider,
+            providerRevision: connection.registration.providerRevision,
+            capabilities: connection.registration.capabilities
+          }
         );
         if (
           message.type === 'complete' &&
@@ -281,8 +330,13 @@ export async function startAppServer(options: AppServerOptions) {
         }
       }
     },
-    onDisconnect: () => {
-      if (activeRoverJobId) runQueueService.pauseRoverJob(activeRoverJobId);
+    onDisconnect: (connection) => {
+      if (activeRoverJobId) {
+        const activeJob = runQueueService.jobs.get(activeRoverJobId);
+        const lease = activeJob?.roverLease;
+        const leaseOwnedByConnection = lease?.connectionId === connection.connectionId;
+        if (!leaseOwnedByConnection) runQueueService.pauseRoverJob(activeRoverJobId);
+      }
       activeRoverJobId = null;
     }
   });
