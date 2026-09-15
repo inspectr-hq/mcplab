@@ -257,6 +257,24 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
 
+  it('requeues an offered lease released with a retryable error', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const assignment = send.mock.calls[0][0] as { leaseId: string };
+
+    service.handleRoverMessage(
+      { type: 'lease_release', jobId, leaseId: assignment.leaseId, reason: 'error' },
+      'claude', send, worker
+    );
+
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(service.state.queue).toContain(jobId);
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+  });
+
   it('rejects lease messages from another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
