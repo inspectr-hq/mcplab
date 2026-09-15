@@ -1,5 +1,31 @@
 import type { RoverAgentRef } from './types.js';
 
+export const ROVER_LEASE_RELEASE_REASONS = [
+  'completed',
+  'error',
+  'stopped',
+  'connection_lost',
+  'provider_unavailable',
+  'provider_mismatch',
+  'stale_provider',
+  'bound_tab_unavailable',
+  'terminal_error'
+] as const;
+
+export type RoverLeaseReleaseReason = (typeof ROVER_LEASE_RELEASE_REASONS)[number];
+
+export const ROVER_LEASE_REQUEUE_REASONS = [
+  'connection_lost',
+  'provider_unavailable',
+  'provider_mismatch',
+  'stale_provider'
+] as const satisfies readonly RoverLeaseReleaseReason[];
+
+export const ROVER_LEASE_TERMINAL_REASONS = [
+  'bound_tab_unavailable',
+  'terminal_error'
+] as const satisfies readonly RoverLeaseReleaseReason[];
+
 interface QueueRunParamsBase {
   evaluationRunId?: string;
   evaluationName?: string;

@@ -311,6 +311,22 @@ describe('Rover run queue domain', () => {
     });
   });
 
+  it('does not let Rover lease messages mutate a normal MCPLab agent job', () => {
+    const job = createQueuedJob('/tmp/agent-eval.yaml', 'mcplab-job');
+    job.status = 'running';
+    const service = createRunQueueServiceForTest({ jobs: new Map([[job.id, job]]) });
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+
+    service.handleRoverMessage(
+      { type: 'lease_release', jobId: job.id, leaseId: 'not-a-mcplab-lease', reason: 'terminal_error' },
+      'claude', send, worker
+    );
+
+    expect(job.status).toBe('running');
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'lease_unknown', jobId: job.id }));
+  });
+
   it('rejects lease messages from another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

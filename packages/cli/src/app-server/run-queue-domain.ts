@@ -15,7 +15,7 @@ import {
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
-import { upsertQueueChildProgress } from '@inspectr/mcplab-core';
+import { ROVER_LEASE_REQUEUE_REASONS, ROVER_LEASE_TERMINAL_REASONS, upsertQueueChildProgress } from '@inspectr/mcplab-core';
 import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
 import { recordEvaluationTerminalExecution } from './evaluation-journal-writer.js';
 import { projectEvaluationJournal } from './evaluation-journal-projection.js';
@@ -963,9 +963,9 @@ export function createRunQueueService(params: {
         }
         if (message.type === 'lease_release') {
           const reason = String(message.reason ?? 'error');
-          const shouldRequeue = ['connection_lost', 'provider_unavailable', 'provider_mismatch', 'stale_provider'].includes(reason) || (reason === 'error' && job.status === 'running');
+          const shouldRequeue = ROVER_LEASE_REQUEUE_REASONS.includes(reason as (typeof ROVER_LEASE_REQUEUE_REASONS)[number]) || (reason === 'error' && job.status === 'running');
           if (shouldRequeue && job.status === 'running') finalizeRoverJob(job, { kind: 'requeue', reason });
-          else if (['bound_tab_unavailable', 'terminal_error'].includes(reason)) finalizeRoverJob(job, { kind: 'error', reason });
+          else if (ROVER_LEASE_TERMINAL_REASONS.includes(reason as (typeof ROVER_LEASE_TERMINAL_REASONS)[number])) finalizeRoverJob(job, { kind: 'error', reason });
           send({ type: 'lease_action_ack', jobId: job.id, leaseId: message.leaseId, action: 'release' });
           return null;
         }
