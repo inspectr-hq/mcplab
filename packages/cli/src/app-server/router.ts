@@ -334,10 +334,14 @@ export async function startAppServer(options: AppServerOptions) {
       if (activeRoverJobId) {
         const activeJob = runQueueService.jobs.get(activeRoverJobId);
         const lease = activeJob?.roverLease;
-        const leaseOwnedByConnection = lease?.connectionId === connection.connectionId;
-        if (!leaseOwnedByConnection) runQueueService.pauseRoverJob(activeRoverJobId);
+        if (!lease) {
+          runQueueService.pauseRoverJob(activeRoverJobId);
+          activeRoverJobId = null;
+        } else if (lease.connectionId === connection.connectionId) {
+          // Lease-capable workers use the lease expiry as the disconnect grace period.
+          activeRoverJobId = null;
+        }
       }
-      activeRoverJobId = null;
     }
   });
 

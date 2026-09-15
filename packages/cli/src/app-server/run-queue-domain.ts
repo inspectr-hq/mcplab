@@ -949,6 +949,14 @@ export function createRunQueueService(params: {
       ) {
         const leasedJob = jobs.get(message.jobId);
         if (leasedJob?.roverLease && leasedJob.roverLease.leaseId !== message.leaseId) return null;
+        if (
+          leasedJob?.roverLease?.state === 'accepted' &&
+          ['progress', 'stage', 'scenario_status'].includes(message.type) &&
+          (!worker || leasedJob.roverLease.connectionId === worker.connectionId)
+        ) {
+          leasedJob.roverLease.state = 'running';
+          emit();
+        }
       }
       if (message.type === 'scenario_status' && typeof message.jobId === 'string') {
         const job = jobs.get(message.jobId);
