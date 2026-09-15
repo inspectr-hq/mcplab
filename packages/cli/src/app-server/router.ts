@@ -335,7 +335,7 @@ export async function startAppServer(options: AppServerOptions) {
         const activeJob = runQueueService.jobs.get(activeRoverJobId);
         const lease = activeJob?.roverLease;
         if (!lease) {
-          runQueueService.pauseRoverJob(activeRoverJobId);
+          runQueueService.pauseRoverJob(activeRoverJobId, connection.connectionId);
           activeRoverJobId = null;
         } else if (lease.connectionId === connection.connectionId) {
           // Lease-capable workers use the lease expiry as the disconnect grace period.

@@ -72,7 +72,7 @@ export interface RunQueueService {
     worker?: RoverAssignmentWorker
   ): RunJob | null;
   rebindRoverLeases(provider: string, worker: RoverAssignmentWorker): void;
-  pauseRoverJob(jobId: string): void;
+  pauseRoverJob(jobId: string, connectionId?: string): void;
   resumeRoverJob(jobId: string): boolean;
   completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
   stopRoverScenario(
@@ -805,9 +805,10 @@ export function createRunQueueService(params: {
         scheduleLeaseExpiry(job);
       }
     },
-    pauseRoverJob(jobId) {
+    pauseRoverJob(jobId, connectionId) {
       const job = jobs.get(jobId);
       if (!job || job.runParams.executionType !== 'rover' || job.status !== 'running') return;
+      if (connectionId && job.roverLease && job.roverLease.connectionId !== connectionId) return;
       state.activeJobIds.delete(jobId);
       job.status = 'paused_rover';
       state.queue.unshift(jobId);

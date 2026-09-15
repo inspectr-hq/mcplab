@@ -407,6 +407,19 @@ describe('Rover run queue domain', () => {
     expect(service.assignRoverJob('claude', send)?.id).toBe(jobId);
   });
 
+  it('ignores a stale disconnect for a lease owned by another connection', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const owner = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, owner);
+
+    service.pauseRoverJob(jobId, 'connection-2');
+
+    expect(service.jobs.get(jobId)?.status).toBe('running');
+    expect(service.state.activeJobIds.has(jobId)).toBe(true);
+  });
+
   it('releases a running Rover job when it is stopped', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
