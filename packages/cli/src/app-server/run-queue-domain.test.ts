@@ -293,6 +293,24 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
 
+  it('actively rejects an unknown lease so Rover can clear its outbox', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+
+    service.handleRoverMessage(
+      { type: 'lease_release', jobId: 'after-restart', leaseId: 'stale-lease', reason: 'completed' },
+      'claude', send, worker
+    );
+
+    expect(send).toHaveBeenCalledWith({
+      type: 'lease_unknown',
+      jobId: 'after-restart',
+      leaseId: 'stale-lease',
+      reason: 'unknown_lease'
+    });
+  });
+
   it('rejects lease messages from another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

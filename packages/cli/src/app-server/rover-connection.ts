@@ -5,9 +5,10 @@ import { randomUUID } from 'node:crypto';
 
 export type RoverProvider = string;
 export const ROVER_ASSIGNMENT_LEASE_CAPABILITY = 'assignment_lease';
+export const ROVER_PROTOCOL_VERSION = 2;
 
 export interface RoverRegistration {
-  protocolVersion: 1;
+  protocolVersion: typeof ROVER_PROTOCOL_VERSION;
   provider: RoverProvider;
   providerRevision?: string;
   pageUrl: string;
@@ -92,12 +93,17 @@ export function createRoverConnectionService(
       if (!connection) {
         if (
           message.type !== 'register' ||
-          message.protocolVersion !== 1 ||
+          message.protocolVersion !== ROVER_PROTOCOL_VERSION ||
           typeof message.provider !== 'string' ||
           typeof message.pageUrl !== 'string' ||
           typeof message.extensionVersion !== 'string'
         ) {
           socket.close(1008, 'Rover registration required');
+          return;
+        }
+        if (!Array.isArray(message.capabilities) || !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)) {
+          send(socket, { type: 'rejected', reason: 'Rover assignment leases are required' });
+          socket.close(1008, 'Rover assignment leases are required');
           return;
         }
         if (current && current.socket.readyState === WebSocket.OPEN) {
@@ -109,7 +115,7 @@ export function createRoverConnectionService(
         connection = {
           connectionId: randomUUID(),
           registration: {
-            protocolVersion: 1,
+            protocolVersion: ROVER_PROTOCOL_VERSION,
             provider: message.provider,
             ...(typeof message.providerRevision === 'string'
               ? { providerRevision: message.providerRevision }
@@ -127,6 +133,7 @@ export function createRoverConnectionService(
         current = connection;
         send(socket, {
           type: 'registered',
+          protocolVersion: ROVER_PROTOCOL_VERSION,
           connectedAt: now,
           capabilities: options.assignmentLeases === false
             ? []
@@ -149,6 +156,7 @@ export function createRoverConnectionService(
         };
         send(socket, {
           type: 'registered',
+          protocolVersion: ROVER_PROTOCOL_VERSION,
           connectedAt: connection.connectedAt,
           capabilities: options.assignmentLeases === false
             ? []

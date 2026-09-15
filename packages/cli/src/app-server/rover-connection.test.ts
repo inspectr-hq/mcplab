@@ -43,7 +43,7 @@ describe('Rover connection protocol', () => {
     socket.send(
       JSON.stringify({
         type: 'register',
-        protocolVersion: 1,
+        protocolVersion: 2,
         capabilities: ['scenario_control', 'assignment_lease'],
         provider: 'claude',
         providerRevision: 'rev-1',
@@ -82,7 +82,8 @@ describe('Rover connection protocol', () => {
     first.send(
       JSON.stringify({
         type: 'register',
-        protocolVersion: 1,
+        protocolVersion: 2,
+        capabilities: ['assignment_lease'],
         provider: 'claude',
         pageUrl: 'https://claude.ai',
         extensionVersion: '1'
@@ -94,7 +95,8 @@ describe('Rover connection protocol', () => {
     second.send(
       JSON.stringify({
         type: 'register',
-        protocolVersion: 1,
+        protocolVersion: 2,
+        capabilities: ['assignment_lease'],
         provider: 'trendminer',
         pageUrl: 'https://tm.example',
         extensionVersion: '1'

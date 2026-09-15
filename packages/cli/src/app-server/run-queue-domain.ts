@@ -121,11 +121,9 @@ export function createRunQueueService(params: {
       leaseTimers.delete(job.id);
       const current = jobs.get(job.id)?.roverLease;
       if (!current || current.leaseId !== lease.leaseId || Date.parse(current.expiresAt) > Date.now()) return;
-      job.roverLease = undefined;
-      state.activeJobIds.delete(job.id);
       if (job.status === 'running' || job.status === 'paused_rover') {
-        job.status = 'waiting_for_rover';
-        if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
+        finalizeRoverJob(job, { kind: 'requeue', reason: 'lease_expired' });
+        return;
       }
       deps.addJobEvent(job, {
         type: 'log',
@@ -175,6 +173,48 @@ export function createRunQueueService(params: {
       status,
       reason
     });
+  }
+
+  type RoverFinalDisposition =
+    | { kind: 'completed'; payload?: Record<string, unknown> }
+    | { kind: 'error'; reason: string }
+    | { kind: 'stopped'; reason: string }
+    | { kind: 'requeue'; reason: string };
+
+  function finalizeRoverJob(job: RunJob, disposition: RoverFinalDisposition): boolean {
+    if (job.runParams.executionType !== 'rover') return false;
+    state.activeJobIds.delete(job.id);
+    state.admittingJobIds.delete(job.id);
+    state.blockedJobIds.delete(job.id);
+    const timer = leaseTimers.get(job.id);
+    if (timer) clearTimeout(timer);
+    leaseTimers.delete(job.id);
+    job.roverLease = undefined;
+    const queueIndex = state.queue.indexOf(job.id);
+    if (queueIndex !== -1) state.queue.splice(queueIndex, 1);
+
+    if (disposition.kind === 'requeue') {
+      job.status = 'waiting_for_rover';
+      state.queue.unshift(job.id);
+      deps.addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: `Rover assignment requeued: ${disposition.reason}` } });
+    } else if (disposition.kind === 'completed') {
+      job.status = 'completed';
+      deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...disposition.payload, executionType: 'rover' } });
+      closeJobClients(job);
+    } else if (disposition.kind === 'stopped') {
+      job.status = 'stopped';
+      addStopEvent(job, disposition.reason);
+      markEvaluationStopped(job, disposition.reason);
+      closeJobClients(job);
+    } else {
+      job.status = 'error';
+      deps.addJobEvent(job, { type: 'error', ts: new Date().toISOString(), payload: { message: `Rover assignment failed: ${disposition.reason}` } });
+      recordTerminalExecution(job, 'error', disposition.reason);
+      closeJobClients(job);
+    }
+    emit();
+    if (disposition.kind !== 'completed') params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+    return true;
   }
 
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
@@ -564,15 +604,14 @@ export function createRunQueueService(params: {
         return { ok: true, status: job.status };
       }
       job.abortController.abort();
-      state.activeJobIds.delete(jobId);
       if (job.runParams.executionType === 'rover') {
         params.sendRoverMessage?.({ type: 'stop', jobId: job.id });
+        finalizeRoverJob(job, { kind: 'stopped', reason: 'Run stopped by user' });
+        return { ok: true, status: 'stopped' };
       }
+      state.activeJobIds.delete(jobId);
       job.status = 'stopped';
       markEvaluationStopped(job, 'Run stopped by user');
-      if (job.runParams.executionType === 'rover' && job.runParams.roverAgent) {
-        params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
-      }
       return { ok: true, status: 'stopped' };
     },
     stopEvaluationRun(evaluationRunId, options) {
@@ -802,21 +841,7 @@ export function createRunQueueService(params: {
         (job.status !== 'running' && job.status !== 'paused_rover')
       )
         return;
-      state.activeJobIds.delete(jobId);
-      const timer = leaseTimers.get(jobId);
-      if (timer) clearTimeout(timer);
-      leaseTimers.delete(jobId);
-      job.roverLease = undefined;
-      const index = state.queue.indexOf(jobId);
-      if (index !== -1) state.queue.splice(index, 1);
-      job.status = 'completed';
-      deps.addJobEvent(job, {
-        type: 'completed',
-        ts: new Date().toISOString(),
-        payload: { ...payload, executionType: 'rover' }
-      });
-      closeJobClients(job);
-      emit();
+      finalizeRoverJob(job, { kind: 'completed', payload });
     },
     stopRoverScenario(jobId, scenarioId) {
       const job = jobs.get(jobId);
@@ -879,6 +904,15 @@ export function createRunQueueService(params: {
       return { ok: true, status: 'stopped' };
     },
     handleRoverMessage(message, provider, send, worker) {
+      const leaseControlMessage = ['assignment_accept', 'assignment_reject', 'lease_renew', 'lease_release', 'complete'].includes(message.type);
+      if (leaseControlMessage && typeof message.jobId === 'string' && typeof message.leaseId === 'string') {
+        const knownJob = jobs.get(message.jobId);
+        const knownLease = knownJob?.roverLease;
+        if (!knownJob || !knownLease || knownLease.leaseId !== message.leaseId || (worker && knownLease.connectionId !== worker.connectionId)) {
+          send({ type: 'lease_unknown', jobId: message.jobId, leaseId: message.leaseId, reason: 'unknown_lease' });
+          return null;
+        }
+      }
       if (
         (message.type === 'assignment_accept' ||
           message.type === 'assignment_reject' ||
@@ -929,28 +963,9 @@ export function createRunQueueService(params: {
         }
         if (message.type === 'lease_release') {
           const reason = String(message.reason ?? 'error');
-          // Any nonterminal error release is retryable. This covers offers that
-          // fail before acceptance as well as accepted/running work that loses
-          // the provider before MCPLab receives a terminal completion.
           const shouldRequeue = ['connection_lost', 'provider_unavailable', 'provider_mismatch', 'stale_provider'].includes(reason) || (reason === 'error' && job.status === 'running');
-          job.roverLease = undefined;
-          const timer = leaseTimers.get(job.id);
-          if (timer) clearTimeout(timer);
-          leaseTimers.delete(job.id);
-          state.activeJobIds.delete(job.id);
-          if (shouldRequeue && job.status === 'running') {
-            job.status = 'waiting_for_rover';
-            if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
-          } else if (['bound_tab_unavailable', 'terminal_error'].includes(reason)) {
-            job.status = 'error';
-            deps.addJobEvent(job, {
-              type: 'error',
-              ts: new Date().toISOString(),
-              payload: { message: `Rover terminated the assignment: ${reason}` }
-            });
-            recordTerminalExecution(job, 'error', reason);
-          }
-          emit();
+          if (shouldRequeue && job.status === 'running') finalizeRoverJob(job, { kind: 'requeue', reason });
+          else if (['bound_tab_unavailable', 'terminal_error'].includes(reason)) finalizeRoverJob(job, { kind: 'error', reason });
           send({ type: 'lease_action_ack', jobId: job.id, leaseId: message.leaseId, action: 'release' });
           return null;
         }
