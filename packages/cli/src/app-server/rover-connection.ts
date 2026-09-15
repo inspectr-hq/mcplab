@@ -2,10 +2,11 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { randomUUID } from 'node:crypto';
+import { ROVER_CAPABILITIES, ROVER_PROTOCOL_VERSION as CORE_ROVER_PROTOCOL_VERSION } from '@inspectr/mcplab-core';
 
 export type RoverProvider = string;
-export const ROVER_ASSIGNMENT_LEASE_CAPABILITY = 'assignment_lease';
-export const ROVER_PROTOCOL_VERSION = 2;
+export const ROVER_ASSIGNMENT_LEASE_CAPABILITY = ROVER_CAPABILITIES[1];
+export const ROVER_PROTOCOL_VERSION = CORE_ROVER_PROTOCOL_VERSION;
 
 export interface RoverRegistration {
   protocolVersion: typeof ROVER_PROTOCOL_VERSION;

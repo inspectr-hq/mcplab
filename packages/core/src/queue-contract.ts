@@ -1,5 +1,8 @@
 import type { RoverAgentRef } from './types.js';
 
+export const ROVER_PROTOCOL_VERSION = 2 as const;
+export const ROVER_CAPABILITIES = ['scenario_control', 'assignment_lease'] as const;
+
 export const ROVER_LEASE_RELEASE_REASONS = [
   'completed',
   'error',
