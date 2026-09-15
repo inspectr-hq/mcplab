@@ -929,12 +929,13 @@ export function createRunQueueService(params: {
         }
         if (message.type === 'lease_release') {
           const reason = String(message.reason ?? 'error');
+          const shouldRequeue = reason === 'connection_lost' || (reason === 'error' && lease.state === 'accepted');
           job.roverLease = undefined;
           const timer = leaseTimers.get(job.id);
           if (timer) clearTimeout(timer);
           leaseTimers.delete(job.id);
           state.activeJobIds.delete(job.id);
-          if (reason === 'connection_lost' && job.status === 'running') {
+          if (shouldRequeue && job.status === 'running') {
             job.status = 'waiting_for_rover';
             if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
           }
@@ -951,7 +952,7 @@ export function createRunQueueService(params: {
         if (leasedJob?.roverLease && leasedJob.roverLease.leaseId !== message.leaseId) return null;
         if (
           leasedJob?.roverLease?.state === 'accepted' &&
-          ['progress', 'stage', 'scenario_status'].includes(message.type) &&
+          (message.type === 'progress' || message.type === 'stage' || (message.type === 'scenario_status' && message.status === 'running')) &&
           (!worker || leasedJob.roverLease.connectionId === worker.connectionId)
         ) {
           leasedJob.roverLease.state = 'running';
