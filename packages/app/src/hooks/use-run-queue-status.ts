@@ -11,7 +11,9 @@ function countOAuthBlockedQueued(queue: QueueResponse['queued']): number {
   ).length;
 }
 
-function normalizeQueueState(value: Partial<QueueResponse> | undefined): QueueResponse {
+type QueueStatusState = Pick<QueueResponse, 'active' | 'active_jobs' | 'admitting_jobs' | 'queued'>;
+
+function normalizeQueueState(value: Partial<QueueResponse> | undefined): QueueStatusState {
   const active = value?.active ?? null;
   const activeJobs = Array.isArray(value?.active_jobs) ? value.active_jobs : active ? [active] : [];
   const admittingJobs = Array.isArray(value?.admitting_jobs) ? value.admitting_jobs : [];
@@ -20,19 +22,17 @@ function normalizeQueueState(value: Partial<QueueResponse> | undefined): QueueRe
     active,
     active_jobs: activeJobs,
     admitting_jobs: admittingJobs,
-    queued,
-    evaluations: Array.isArray(value?.evaluations) ? value.evaluations : []
+    queued
   };
 }
 
 export function useRunQueueStatus() {
   const { source } = useDataSource();
-  const [queueState, setQueueState] = useState<QueueResponse>({
+  const [queueState, setQueueState] = useState<QueueStatusState>({
     active: null,
     active_jobs: [],
     admitting_jobs: [],
-    queued: [],
-    evaluations: []
+    queued: []
   });
   const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected'>(
     'connecting'
