@@ -37,6 +37,7 @@ import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import { safeText } from '@/lib/utils';
 import { getConfigDisplayPath } from '@/lib/config-file-path';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
+import { createEmptyAgent } from '@/lib/agent-factory';
 import type {
   AgentConfig,
   AgentEntry,
@@ -336,16 +337,7 @@ const ConfigEditor = () => {
   };
 
   const addInlineAgentEntry = () => {
-    const createdAt = Date.now();
-    const inlineAgent: AgentConfig = {
-      id: `agt-${createdAt}`,
-      name: '',
-      type: 'llm',
-      provider: 'openai',
-      model: 'gpt-4o',
-      temperature: DEFAULT_AGENT_TEMPERATURE,
-      maxTokens: 4096
-    };
+    const inlineAgent: AgentConfig = createEmptyAgent('llm');
     setAgentEntries([{ kind: 'inline', agent: inlineAgent }, ...agentEntries]);
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineAgent.id]: true }));
   };
