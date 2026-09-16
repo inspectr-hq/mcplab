@@ -22,7 +22,11 @@ export interface RoverSocketMessage {
   [key: string]: unknown;
 }
 
-export function validateRoverRegistration(message: Record<string, unknown>): string | null {
+export type RoverRegistrationValidation =
+  | { ok: true }
+  | { ok: false; code: 'invalid_registration' | 'lease_required'; message: string };
+
+export function validateRoverRegistration(message: Record<string, unknown>): RoverRegistrationValidation {
   if (
     message.type !== 'register' ||
     message.protocolVersion !== ROVER_PROTOCOL_VERSION ||
@@ -30,12 +34,12 @@ export function validateRoverRegistration(message: Record<string, unknown>): str
     typeof message.pageUrl !== 'string' ||
     typeof message.extensionVersion !== 'string'
   ) {
-    return 'Rover registration required';
+    return { ok: false, code: 'invalid_registration', message: 'Rover registration required' };
   }
   if (!Array.isArray(message.capabilities) || !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)) {
-    return 'Rover assignment leases are required';
+    return { ok: false, code: 'lease_required', message: 'Rover assignment leases are required' };
   }
-  return null;
+  return { ok: true };
 }
 
 export interface RoverConnection {
@@ -108,13 +112,13 @@ export function createRoverConnectionService(
       }
       if (!connection) {
         const registrationError = validateRoverRegistration(message);
-        if (registrationError === 'Rover registration required') {
-          socket.close(1008, 'Rover registration required');
+        if (!registrationError.ok && registrationError.code === 'invalid_registration') {
+          socket.close(1008, registrationError.message);
           return;
         }
-        if (registrationError) {
-          send(socket, { type: 'rejected', reason: 'Rover assignment leases are required' });
-          socket.close(1008, 'Rover assignment leases are required');
+        if (!registrationError.ok) {
+          send(socket, { type: 'rejected', reason: registrationError.message });
+          socket.close(1008, registrationError.message);
           return;
         }
         if (current && current.socket.readyState === WebSocket.OPEN) {

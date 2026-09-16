@@ -181,15 +181,19 @@ export function createRunQueueService(params: {
     | { kind: 'stopped'; reason: string }
     | { kind: 'requeue'; reason: string };
 
+  function clearRoverLease(job: RunJob): void {
+    const timer = leaseTimers.get(job.id);
+    if (timer) clearTimeout(timer);
+    leaseTimers.delete(job.id);
+    job.roverLease = undefined;
+  }
+
   function finalizeRoverJob(job: RunJob, disposition: RoverFinalDisposition): boolean {
     if (job.runParams.executionType !== 'rover') return false;
     state.activeJobIds.delete(job.id);
     state.admittingJobIds.delete(job.id);
     state.blockedJobIds.delete(job.id);
-    const timer = leaseTimers.get(job.id);
-    if (timer) clearTimeout(timer);
-    leaseTimers.delete(job.id);
-    job.roverLease = undefined;
+    clearRoverLease(job);
     const queueIndex = state.queue.indexOf(job.id);
     if (queueIndex !== -1) state.queue.splice(queueIndex, 1);
 
@@ -769,10 +773,7 @@ export function createRunQueueService(params: {
       state.activeJobIds.add(job.id);
       if (!send(assignment)) {
         state.activeJobIds.delete(job.id);
-        const timer = leaseTimers.get(job.id);
-        if (timer) clearTimeout(timer);
-        leaseTimers.delete(job.id);
-        job.roverLease = undefined;
+        clearRoverLease(job);
         job.status = 'waiting_for_rover';
         if (index !== -1) state.queue.splice(index, 0, job.id);
         return null;
@@ -947,19 +948,10 @@ export function createRunQueueService(params: {
           return null;
         }
         if (message.type === 'assignment_reject' && lease.state === 'offered') {
-          job.roverLease = undefined;
-          const timer = leaseTimers.get(job.id);
-          if (timer) clearTimeout(timer);
-          leaseTimers.delete(job.id);
-          state.activeJobIds.delete(job.id);
-          job.status = 'waiting_for_rover';
-          if (!state.queue.includes(job.id)) state.queue.unshift(job.id);
-          deps.addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: { message: `Rover rejected assignment: ${String(message.reason ?? 'unknown')}` }
+          finalizeRoverJob(job, {
+            kind: 'requeue',
+            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}`
           });
-          emit();
           return null;
         }
         if (message.type === 'lease_release') {
