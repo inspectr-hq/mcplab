@@ -311,6 +311,27 @@ describe('Rover run queue domain', () => {
     });
   });
 
+  it.each(['assignment_accept', 'assignment_reject', 'lease_renew', 'complete'] as const)(
+    'actively rejects an unknown %s lease message after restart',
+    (type) => {
+      const service = createRunQueueServiceForTest();
+      const send = vi.fn(() => true);
+      const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+
+      service.handleRoverMessage(
+        { type, jobId: 'after-restart', leaseId: 'stale-lease' },
+        'claude', send, worker
+      );
+
+      expect(send).toHaveBeenCalledWith({
+        type: 'lease_unknown',
+        jobId: 'after-restart',
+        leaseId: 'stale-lease',
+        reason: 'unknown_lease'
+      });
+    }
+  );
+
   it('does not let Rover lease messages mutate a normal MCPLab agent job', () => {
     const job = createQueuedJob('/tmp/agent-eval.yaml', 'mcplab-job');
     job.status = 'running';
