@@ -125,16 +125,16 @@ export function buildQueueState(
         stoppedJobs > 0 && errorJobs === 0 && !hasPending
           ? 'stopped'
           : failedJobs > 0 && !hasPending
-          ? completedJobs > 0
-            ? 'partial'
-            : 'failed'
-          : pausedJobs > 0
-            ? 'paused'
-            : hasPending && entries.some((entry) => entry.status === 'running')
-              ? 'running'
-              : hasPending
-                ? 'queued'
-                : 'completed';
+            ? completedJobs > 0
+              ? 'partial'
+              : 'failed'
+            : pausedJobs > 0
+              ? 'paused'
+              : hasPending && entries.some((entry) => entry.status === 'running')
+                ? 'running'
+                : hasPending
+                  ? 'queued'
+                  : 'completed';
       return {
         evaluationRunId,
         evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,

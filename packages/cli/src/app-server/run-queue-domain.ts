@@ -15,7 +15,11 @@ import {
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
-import { ROVER_LEASE_REQUEUE_REASONS, ROVER_LEASE_TERMINAL_REASONS, upsertQueueChildProgress } from '@inspectr/mcplab-core';
+import {
+  ROVER_LEASE_REQUEUE_REASONS,
+  ROVER_LEASE_TERMINAL_REASONS,
+  upsertQueueChildProgress
+} from '@inspectr/mcplab-core';
 import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
 import { recordEvaluationTerminalExecution } from './evaluation-journal-writer.js';
 import { projectEvaluationJournal } from './evaluation-journal-projection.js';
@@ -61,7 +65,9 @@ export interface RunQueueService {
   ): { ok: true; jobId: string; status: 'stopped' } | { error: string; statusCode: number } | null;
   resumeBlockedJobs(options?: { hostHeader?: string }): void;
   getQueueState(): ReturnType<typeof buildQueueState>;
-  getWaitingRoverJobs(provider: string): Array<{ jobId: string; evaluationName?: string; provider: string; position: number }>;
+  getWaitingRoverJobs(
+    provider: string
+  ): Array<{ jobId: string; evaluationName?: string; provider: string; position: number }>;
   subscribeQueue(req: IncomingMessage, res: ServerResponse): void;
   advance(options?: QueueAdvanceOptions): Promise<void>;
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
@@ -117,22 +123,31 @@ export function createRunQueueService(params: {
     const existing = leaseTimers.get(job.id);
     if (existing) clearTimeout(existing);
     const delay = Math.max(0, Date.parse(lease.expiresAt) - Date.now());
-    leaseTimers.set(job.id, setTimeout(() => {
-      leaseTimers.delete(job.id);
-      const current = jobs.get(job.id)?.roverLease;
-      if (!current || current.leaseId !== lease.leaseId || Date.parse(current.expiresAt) > Date.now()) return;
-      if (job.status === 'running' || job.status === 'paused_rover') {
-        finalizeRoverJob(job, { kind: 'requeue', reason: 'lease_expired' });
-        return;
-      }
-      deps.addJobEvent(job, {
-        type: 'log',
-        ts: new Date().toISOString(),
-        payload: { message: 'Rover assignment lease expired and was requeued.' }
-      });
-      emit();
-      if (job.runParams.executionType === 'rover') params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
-    }, delay));
+    leaseTimers.set(
+      job.id,
+      setTimeout(() => {
+        leaseTimers.delete(job.id);
+        const current = jobs.get(job.id)?.roverLease;
+        if (
+          !current ||
+          current.leaseId !== lease.leaseId ||
+          Date.parse(current.expiresAt) > Date.now()
+        )
+          return;
+        if (job.status === 'running' || job.status === 'paused_rover') {
+          finalizeRoverJob(job, { kind: 'requeue', reason: 'lease_expired' });
+          return;
+        }
+        deps.addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: { message: 'Rover assignment lease expired and was requeued.' }
+        });
+        emit();
+        if (job.runParams.executionType === 'rover')
+          params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+      }, delay)
+    );
   }
 
   function addStopEvent(job: RunJob, message: string): void {
@@ -200,10 +215,18 @@ export function createRunQueueService(params: {
     if (disposition.kind === 'requeue') {
       job.status = 'waiting_for_rover';
       state.queue.unshift(job.id);
-      deps.addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: `Rover assignment requeued: ${disposition.reason}` } });
+      deps.addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: { message: `Rover assignment requeued: ${disposition.reason}` }
+      });
     } else if (disposition.kind === 'completed') {
       job.status = 'completed';
-      deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...disposition.payload, executionType: 'rover' } });
+      deps.addJobEvent(job, {
+        type: 'completed',
+        ts: new Date().toISOString(),
+        payload: { ...disposition.payload, executionType: 'rover' }
+      });
       closeJobClients(job);
     } else if (disposition.kind === 'stopped') {
       job.status = 'stopped';
@@ -212,12 +235,17 @@ export function createRunQueueService(params: {
       closeJobClients(job);
     } else {
       job.status = 'error';
-      deps.addJobEvent(job, { type: 'error', ts: new Date().toISOString(), payload: { message: `Rover assignment failed: ${disposition.reason}` } });
+      deps.addJobEvent(job, {
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: `Rover assignment failed: ${disposition.reason}` }
+      });
       recordTerminalExecution(job, 'error', disposition.reason);
       closeJobClients(job);
     }
     emit();
-    if (disposition.kind !== 'completed') params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+    if (disposition.kind !== 'completed')
+      params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
     return true;
   }
 
@@ -696,8 +724,16 @@ export function createRunQueueService(params: {
     getWaitingRoverJobs(provider) {
       return state.queue.flatMap((jobId, index) => {
         const job = jobs.get(jobId);
-        if (job?.status !== 'waiting_for_rover' || job.runParams.roverAgent?.provider !== provider) return [];
-        return [{ jobId: job.id, evaluationName: job.runParams.evaluationName, provider, position: index + 1 }];
+        if (job?.status !== 'waiting_for_rover' || job.runParams.roverAgent?.provider !== provider)
+          return [];
+        return [
+          {
+            jobId: job.id,
+            evaluationName: job.runParams.evaluationName,
+            provider,
+            position: index + 1
+          }
+        ];
       });
     },
     subscribeQueue(req, res) {
@@ -800,7 +836,8 @@ export function createRunQueueService(params: {
           job.status === 'completed' ||
           job.status === 'stopped' ||
           job.status === 'error'
-        ) continue;
+        )
+          continue;
         job.roverLease.connectionId = worker.connectionId;
         job.roverLease.expiresAt = new Date(now + 30_000).toISOString();
         scheduleLeaseExpiry(job);
@@ -906,12 +943,32 @@ export function createRunQueueService(params: {
       return { ok: true, status: 'stopped' };
     },
     handleRoverMessage(message, provider, send, worker) {
-      const leaseControlMessage = ['assignment_accept', 'assignment_reject', 'lease_renew', 'lease_release', 'complete'].includes(message.type);
-      if (leaseControlMessage && typeof message.jobId === 'string' && typeof message.leaseId === 'string') {
+      const leaseControlMessage = [
+        'assignment_accept',
+        'assignment_reject',
+        'lease_renew',
+        'lease_release',
+        'complete'
+      ].includes(message.type);
+      if (
+        leaseControlMessage &&
+        typeof message.jobId === 'string' &&
+        typeof message.leaseId === 'string'
+      ) {
         const knownJob = jobs.get(message.jobId);
         const knownLease = knownJob?.roverLease;
-        if (!knownJob || !knownLease || knownLease.leaseId !== message.leaseId || (worker && knownLease.connectionId !== worker.connectionId)) {
-          send({ type: 'lease_unknown', jobId: message.jobId, leaseId: message.leaseId, reason: 'unknown_lease' });
+        if (
+          !knownJob ||
+          !knownLease ||
+          knownLease.leaseId !== message.leaseId ||
+          (worker && knownLease.connectionId !== worker.connectionId)
+        ) {
+          send({
+            type: 'lease_unknown',
+            jobId: message.jobId,
+            leaseId: message.leaseId,
+            reason: 'unknown_lease'
+          });
           return null;
         }
       }
@@ -930,7 +987,8 @@ export function createRunQueueService(params: {
           !lease ||
           lease.leaseId !== message.leaseId ||
           (worker && lease.connectionId !== worker.connectionId)
-        ) return null;
+        )
+          return null;
         if (message.type === 'assignment_accept' && lease.state === 'offered') {
           lease.state = 'accepted';
           lease.acceptedAt = new Date().toISOString();
@@ -956,23 +1014,37 @@ export function createRunQueueService(params: {
         }
         if (message.type === 'lease_release') {
           const reason = String(message.reason ?? 'error');
-          const shouldRequeue = ROVER_LEASE_REQUEUE_REASONS.includes(reason as (typeof ROVER_LEASE_REQUEUE_REASONS)[number]) || (reason === 'error' && job.status === 'running');
-          if (shouldRequeue && job.status === 'running') finalizeRoverJob(job, { kind: 'requeue', reason });
-          else if (ROVER_LEASE_TERMINAL_REASONS.includes(reason as (typeof ROVER_LEASE_TERMINAL_REASONS)[number])) finalizeRoverJob(job, { kind: 'error', reason });
-          send({ type: 'lease_action_ack', jobId: job.id, leaseId: message.leaseId, action: 'release' });
+          const shouldRequeue =
+            ROVER_LEASE_REQUEUE_REASONS.includes(
+              reason as (typeof ROVER_LEASE_REQUEUE_REASONS)[number]
+            ) ||
+            (reason === 'error' && job.status === 'running');
+          if (shouldRequeue && job.status === 'running')
+            finalizeRoverJob(job, { kind: 'requeue', reason });
+          else if (
+            ROVER_LEASE_TERMINAL_REASONS.includes(
+              reason as (typeof ROVER_LEASE_TERMINAL_REASONS)[number]
+            )
+          )
+            finalizeRoverJob(job, { kind: 'error', reason });
+          send({
+            type: 'lease_action_ack',
+            jobId: job.id,
+            leaseId: message.leaseId,
+            action: 'release'
+          });
           return null;
         }
         return null;
       }
-      if (
-        typeof message.jobId === 'string' &&
-        typeof message.leaseId === 'string'
-      ) {
+      if (typeof message.jobId === 'string' && typeof message.leaseId === 'string') {
         const leasedJob = jobs.get(message.jobId);
         if (leasedJob?.roverLease && leasedJob.roverLease.leaseId !== message.leaseId) return null;
         if (
           leasedJob?.roverLease?.state === 'accepted' &&
-          (message.type === 'progress' || message.type === 'stage' || (message.type === 'scenario_status' && message.status === 'running')) &&
+          (message.type === 'progress' ||
+            message.type === 'stage' ||
+            (message.type === 'scenario_status' && message.status === 'running')) &&
           (!worker || leasedJob.roverLease.connectionId === worker.connectionId)
         ) {
           leasedJob.roverLease.state = 'running';
@@ -1087,7 +1159,12 @@ export function createRunQueueService(params: {
         provider
       });
       if (typeof message.leaseId === 'string') {
-        send({ type: 'lease_action_ack', jobId: message.jobId, leaseId: message.leaseId, action: 'complete' });
+        send({
+          type: 'lease_action_ack',
+          jobId: message.jobId,
+          leaseId: message.leaseId,
+          action: 'complete'
+        });
       }
       const next = this.assignRoverJob(provider, send, worker);
       return next?.id ?? null;

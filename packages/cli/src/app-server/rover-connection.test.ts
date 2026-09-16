@@ -123,12 +123,14 @@ describe('Rover connection protocol', () => {
     );
     await once(socket, 'message');
 
-    socket.send(JSON.stringify({
-      type: 'register_update',
-      provider: 'trendminer',
-      providerRevision: 'rev-2',
-      pageUrl: 'https://trendminer.example'
-    }));
+    socket.send(
+      JSON.stringify({
+        type: 'register_update',
+        provider: 'trendminer',
+        providerRevision: 'rev-2',
+        pageUrl: 'https://trendminer.example'
+      })
+    );
     const [raw] = await once(socket, 'message');
 
     expect(JSON.parse(raw.toString())).toMatchObject({
@@ -136,7 +138,10 @@ describe('Rover connection protocol', () => {
       protocolVersion: 2,
       capabilities: ['assignment_lease']
     });
-    expect(service.connection()?.registration).toMatchObject({ provider: 'trendminer', providerRevision: 'rev-2' });
+    expect(service.connection()?.registration).toMatchObject({
+      provider: 'trendminer',
+      providerRevision: 'rev-2'
+    });
     socket.close();
   });
 });

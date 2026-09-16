@@ -7,6 +7,10 @@ describe('createEmptyAgent', () => {
   });
 
   it('creates a browser agent when requested', () => {
-    expect(createEmptyAgent('browser')).toMatchObject({ type: 'browser', provider: 'claude', url: '' });
+    expect(createEmptyAgent('browser')).toMatchObject({
+      type: 'browser',
+      provider: 'claude',
+      url: ''
+    });
   });
 });

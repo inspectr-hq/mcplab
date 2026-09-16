@@ -131,7 +131,11 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button type="button" size="sm" onClick={() => navigate(`/libraries/agents/new?type=${agentTypeFilter}`)}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => navigate(`/libraries/agents/new?type=${agentTypeFilter}`)}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Agent
           </Button>
@@ -154,11 +158,7 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
           </Button>
         </div>
       ) : (
-        <Tabs
-          value={agentTypeFilter}
-          onValueChange={handleTypeChange}
-          className="space-y-4"
-        >
+        <Tabs value={agentTypeFilter} onValueChange={handleTypeChange} className="space-y-4">
           <TabsList className="grid w-full max-w-md grid-cols-2" aria-label="Agent type">
             <TabsTrigger value="llm">LLM ({agentCounts.llm})</TabsTrigger>
             <TabsTrigger value="browser">Browser ({agentCounts.browser})</TabsTrigger>
@@ -196,7 +196,9 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
                       <TableRow
                         key={agent.id}
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
+                        onClick={() =>
+                          navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)
+                        }
                       >
                         <TableCell className="font-medium">
                           <span

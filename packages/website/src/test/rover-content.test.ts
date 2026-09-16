@@ -21,7 +21,9 @@ describe('public Rover documentation', () => {
 
   it('documents the browser-agent configuration variant', () => {
     const reference = docsPages.find((page) => page.slug === 'reference-configuration');
-    const agents = JSON.stringify(reference?.sections.find((section) => section.id === 'agents-schema'));
+    const agents = JSON.stringify(
+      reference?.sections.find((section) => section.id === 'agents-schema')
+    );
 
     expect(agents).toContain('type: browser');
     expect(agents).toContain('Browser agent url (string, required)');
@@ -34,10 +36,7 @@ describe('public Rover documentation', () => {
   });
 
   it('promotes Rover from the landing page', () => {
-    const source = readFileSync(
-      resolve(process.cwd(), 'src/pages/index.astro'),
-      'utf8'
-    );
+    const source = readFileSync(resolve(process.cwd(), 'src/pages/index.astro'), 'utf8');
 
     expect(source).toContain('RoverFeature');
   });

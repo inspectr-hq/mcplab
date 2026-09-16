@@ -231,29 +231,38 @@ export async function startAppServer(options: AppServerOptions) {
     sendRoverMessage: (message) => roverConnection.send(message),
     assignRoverJob: (provider, worker) => {
       const connection = roverConnection.connection();
-      const effectiveWorker = worker ?? (connection
-        ? {
-            connectionId: connection.connectionId,
-            provider: connection.registration.provider,
-            providerRevision: connection.registration.providerRevision,
-            capabilities: connection.registration.capabilities
-          }
-        : undefined);
-      const assigned = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
-        roverConnection.send(message), effectiveWorker
+      const effectiveWorker =
+        worker ??
+        (connection
+          ? {
+              connectionId: connection.connectionId,
+              provider: connection.registration.provider,
+              providerRevision: connection.registration.providerRevision,
+              capabilities: connection.registration.capabilities
+            }
+          : undefined);
+      const assigned = runQueueService.assignRoverJob(
+        provider,
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        effectiveWorker
       );
       if (assigned) activeRoverJobId = assigned.id;
       return assigned;
     },
     onRoverJobReleased: (provider) => {
       const connection = roverConnection.connection();
-      const next = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
-        roverConnection.send(message), connection ? {
-          connectionId: connection.connectionId,
-          provider: connection.registration.provider,
-          providerRevision: connection.registration.providerRevision,
-          capabilities: connection.registration.capabilities
-        } : undefined);
+      const next = runQueueService.assignRoverJob(
+        provider,
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        connection
+          ? {
+              connectionId: connection.connectionId,
+              provider: connection.registration.provider,
+              providerRevision: connection.registration.providerRevision,
+              capabilities: connection.registration.capabilities
+            }
+          : undefined
+      );
       activeRoverJobId = next?.id ?? null;
     }
   });

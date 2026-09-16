@@ -124,9 +124,8 @@ const RunEvaluation = () => {
   const activeQueueEntry = activeQueueEntries[0] ?? null;
   const activeEvaluation = useMemo(
     () =>
-      evaluations.find((evaluation) =>
-        evaluation.jobs.some((job) => job.jobId === activeJobId)
-      ) ?? null,
+      evaluations.find((evaluation) => evaluation.jobs.some((job) => job.jobId === activeJobId)) ??
+      null,
     [evaluations, activeJobId]
   );
   const visibleProgress = activeEvaluation
@@ -179,13 +178,19 @@ const RunEvaluation = () => {
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
   const selectedBrowserAgents = useMemo(
-    () => availableAgents.filter((agent) => agent.type === 'browser' && selectedAgentIds.includes(agent.id)),
+    () =>
+      availableAgents.filter(
+        (agent) => agent.type === 'browser' && selectedAgentIds.includes(agent.id)
+      ),
     [availableAgents, selectedAgentIds]
   );
   const agentGroups = useMemo(
     () => [
       { label: 'LLM Agents', agents: availableAgents.filter((agent) => agent.type !== 'browser') },
-      { label: 'Browser Agents', agents: availableAgents.filter((agent) => agent.type === 'browser') }
+      {
+        label: 'Browser Agents',
+        agents: availableAgents.filter((agent) => agent.type === 'browser')
+      }
     ],
     [availableAgents]
   );
@@ -1177,7 +1182,8 @@ const RunEvaluation = () => {
                 {activeEvaluation ? (
                   <>
                     <span>
-                      {activeEvaluation.completedJobs}/{activeEvaluation.totalJobs} subtasks complete
+                      {activeEvaluation.completedJobs}/{activeEvaluation.totalJobs} subtasks
+                      complete
                     </span>
                     {activeEvaluation.failedJobs - activeEvaluation.stoppedJobs > 0 && (
                       <span className="font-medium text-destructive">
@@ -1321,9 +1327,9 @@ const RunEvaluation = () => {
                       ? 'border-destructive/40 bg-destructive/5'
                       : evaluation.status === 'stopped'
                         ? 'border-muted-foreground/30 bg-muted/40'
-                      : evaluation.status === 'partial'
-                        ? 'border-yellow-500/40 bg-yellow-500/5'
-                        : 'border-primary/20 bg-primary/5'
+                        : evaluation.status === 'partial'
+                          ? 'border-yellow-500/40 bg-yellow-500/5'
+                          : 'border-primary/20 bg-primary/5'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">

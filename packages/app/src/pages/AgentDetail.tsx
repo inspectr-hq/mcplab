@@ -88,7 +88,9 @@ const AgentDetail = () => {
     : (agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam));
 
   const requestedType = searchParams.get('type') === 'browser' ? 'browser' : 'llm';
-  const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? createEmptyAgent(requestedType));
+  const [form, setForm] = useState<AgentConfig>(
+    () => existingAgent ?? createEmptyAgent(requestedType)
+  );
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: 'idle' });

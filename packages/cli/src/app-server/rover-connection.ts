@@ -2,7 +2,10 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { randomUUID } from 'node:crypto';
-import { ROVER_CAPABILITIES, ROVER_PROTOCOL_VERSION as CORE_ROVER_PROTOCOL_VERSION } from '@inspectr/mcplab-core';
+import {
+  ROVER_CAPABILITIES,
+  ROVER_PROTOCOL_VERSION as CORE_ROVER_PROTOCOL_VERSION
+} from '@inspectr/mcplab-core';
 
 export type RoverProvider = string;
 export const ROVER_ASSIGNMENT_LEASE_CAPABILITY = ROVER_CAPABILITIES[1];
@@ -26,7 +29,9 @@ export type RoverRegistrationValidation =
   | { ok: true }
   | { ok: false; code: 'invalid_registration' | 'lease_required'; message: string };
 
-export function validateRoverRegistration(message: Record<string, unknown>): RoverRegistrationValidation {
+export function validateRoverRegistration(
+  message: Record<string, unknown>
+): RoverRegistrationValidation {
   if (
     message.type !== 'register' ||
     message.protocolVersion !== ROVER_PROTOCOL_VERSION ||
@@ -36,7 +41,10 @@ export function validateRoverRegistration(message: Record<string, unknown>): Rov
   ) {
     return { ok: false, code: 'invalid_registration', message: 'Rover registration required' };
   }
-  if (!Array.isArray(message.capabilities) || !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)) {
+  if (
+    !Array.isArray(message.capabilities) ||
+    !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)
+  ) {
     return { ok: false, code: 'lease_required', message: 'Rover assignment leases are required' };
   }
   return { ok: true };

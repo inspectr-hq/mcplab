@@ -238,14 +238,26 @@ describe('Rover run queue domain', () => {
     const send = vi.fn(() => true);
     const released = vi.fn();
     const callbackService = createRunQueueServiceForTest({ onRoverJobReleased: released });
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = callbackService.enqueueRun(roverParams());
     callbackService.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
     callbackService.handleRoverMessage(
-      { type: 'assignment_reject', jobId, leaseId: assignment.leaseId, reason: 'busy', retryable: true },
-      'claude', send, worker
+      {
+        type: 'assignment_reject',
+        jobId,
+        leaseId: assignment.leaseId,
+        reason: 'busy',
+        retryable: true
+      },
+      'claude',
+      send,
+      worker
     );
     expect(callbackService.jobs.get(jobId)?.status).toBe('waiting_for_rover');
     expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
@@ -253,8 +265,15 @@ describe('Rover run queue domain', () => {
     expect(released).toHaveBeenCalledWith('claude');
 
     callbackService.handleRoverMessage(
-      { type: 'lease_renew', jobId, leaseId: assignment.leaseId, leaseExpiresAt: new Date(Date.now() + 30_000).toISOString() },
-      'claude', send, worker
+      {
+        type: 'lease_renew',
+        jobId,
+        leaseId: assignment.leaseId,
+        leaseExpiresAt: new Date(Date.now() + 30_000).toISOString()
+      },
+      'claude',
+      send,
+      worker
     );
     expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
@@ -262,14 +281,20 @@ describe('Rover run queue domain', () => {
   it('requeues an offered lease released with a retryable error', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
     service.handleRoverMessage(
       { type: 'lease_release', jobId, leaseId: assignment.leaseId, reason: 'error' },
-      'claude', send, worker
+      'claude',
+      send,
+      worker
     );
 
     expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
@@ -280,14 +305,25 @@ describe('Rover run queue domain', () => {
   it('marks terminal Rover lease releases as errors instead of leaving running zombies', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
     service.handleRoverMessage(
-      { type: 'lease_release', jobId, leaseId: assignment.leaseId, reason: 'bound_tab_unavailable' },
-      'claude', send, worker
+      {
+        type: 'lease_release',
+        jobId,
+        leaseId: assignment.leaseId,
+        reason: 'bound_tab_unavailable'
+      },
+      'claude',
+      send,
+      worker
     );
 
     expect(service.jobs.get(jobId)?.status).toBe('error');
@@ -298,11 +334,22 @@ describe('Rover run queue domain', () => {
   it('actively rejects an unknown lease so Rover can clear its outbox', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
 
     service.handleRoverMessage(
-      { type: 'lease_release', jobId: 'after-restart', leaseId: 'stale-lease', reason: 'completed' },
-      'claude', send, worker
+      {
+        type: 'lease_release',
+        jobId: 'after-restart',
+        leaseId: 'stale-lease',
+        reason: 'completed'
+      },
+      'claude',
+      send,
+      worker
     );
 
     expect(send).toHaveBeenCalledWith({
@@ -318,11 +365,17 @@ describe('Rover run queue domain', () => {
     (type) => {
       const service = createRunQueueServiceForTest();
       const send = vi.fn(() => true);
-      const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+      const worker = {
+        connectionId: 'connection-1',
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      };
 
       service.handleRoverMessage(
         { type, jobId: 'after-restart', leaseId: 'stale-lease' },
-        'claude', send, worker
+        'claude',
+        send,
+        worker
       );
 
       expect(send).toHaveBeenCalledWith({
@@ -339,28 +392,46 @@ describe('Rover run queue domain', () => {
     job.status = 'running';
     const service = createRunQueueServiceForTest({ jobs: new Map([[job.id, job]]) });
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
 
     service.handleRoverMessage(
-      { type: 'lease_release', jobId: job.id, leaseId: 'not-a-mcplab-lease', reason: 'terminal_error' },
-      'claude', send, worker
+      {
+        type: 'lease_release',
+        jobId: job.id,
+        leaseId: 'not-a-mcplab-lease',
+        reason: 'terminal_error'
+      },
+      'claude',
+      send,
+      worker
     );
 
     expect(job.status).toBe('running');
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'lease_unknown', jobId: job.id }));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'lease_unknown', jobId: job.id })
+    );
   });
 
   it('rejects lease messages from another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
     service.handleRoverMessage(
       { type: 'assignment_accept', jobId, leaseId: assignment.leaseId, tabId: 4 },
-      'claude', send,
+      'claude',
+      send,
       { ...worker, connectionId: 'connection-2' }
     );
     expect(service.jobs.get(jobId)?.roverLease?.state).toBe('offered');
@@ -369,18 +440,26 @@ describe('Rover run queue domain', () => {
   it('ignores progress and scenario updates carrying a stale lease ID', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
     service.handleRoverMessage(
       { type: 'assignment_accept', jobId, leaseId: assignment.leaseId },
-      'claude', send, worker
+      'claude',
+      send,
+      worker
     );
     service.handleRoverMessage(
       { type: 'progress', jobId, leaseId: 'stale-lease', completed: 1, total: 1 },
-      'claude', send, worker
+      'claude',
+      send,
+      worker
     );
     expect(service.jobs.get(jobId)?.roverProgress).toBeUndefined();
   });
@@ -388,11 +467,20 @@ describe('Rover run queue domain', () => {
   it('rebinds an active lease to a reconnecting worker', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
-    service.handleRoverMessage({ type: 'assignment_accept', jobId, leaseId: assignment.leaseId }, 'claude', send, worker);
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId, leaseId: assignment.leaseId },
+      'claude',
+      send,
+      worker
+    );
 
     service.rebindRoverLeases('claude', { ...worker, connectionId: 'connection-2' });
     expect(service.jobs.get(jobId)?.roverLease).toMatchObject({
@@ -433,7 +521,11 @@ describe('Rover run queue domain', () => {
   it('ignores a stale disconnect for a lease owned by another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const owner = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
+    const owner = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send, owner);
 

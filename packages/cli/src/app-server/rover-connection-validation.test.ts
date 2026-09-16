@@ -24,13 +24,23 @@ describe('Rover registration validation', () => {
   });
 
   it('rejects registrations missing required metadata', () => {
-    expect(validateRoverRegistration({ ...valid, provider: undefined })).toMatchObject({ code: 'invalid_registration' });
-    expect(validateRoverRegistration({ ...valid, pageUrl: undefined })).toMatchObject({ code: 'invalid_registration' });
-    expect(validateRoverRegistration({ ...valid, extensionVersion: undefined })).toMatchObject({ code: 'invalid_registration' });
+    expect(validateRoverRegistration({ ...valid, provider: undefined })).toMatchObject({
+      code: 'invalid_registration'
+    });
+    expect(validateRoverRegistration({ ...valid, pageUrl: undefined })).toMatchObject({
+      code: 'invalid_registration'
+    });
+    expect(validateRoverRegistration({ ...valid, extensionVersion: undefined })).toMatchObject({
+      code: 'invalid_registration'
+    });
   });
 
   it('rejects registrations without assignment leases', () => {
-    expect(validateRoverRegistration({ ...valid, capabilities: ['scenario_control'] })).toMatchObject({ code: 'lease_required' });
-    expect(validateRoverRegistration({ ...valid, capabilities: 'assignment_lease' })).toMatchObject({ code: 'lease_required' });
+    expect(
+      validateRoverRegistration({ ...valid, capabilities: ['scenario_control'] })
+    ).toMatchObject({ code: 'lease_required' });
+    expect(validateRoverRegistration({ ...valid, capabilities: 'assignment_lease' })).toMatchObject(
+      { code: 'lease_required' }
+    );
   });
 });
