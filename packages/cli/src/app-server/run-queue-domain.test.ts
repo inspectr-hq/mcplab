@@ -235,26 +235,28 @@ describe('Rover run queue domain', () => {
   });
 
   it('requeues a rejected offer and ignores stale lease messages', () => {
-    const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
+    const released = vi.fn();
+    const callbackService = createRunQueueServiceForTest({ onRoverJobReleased: released });
     const worker = { connectionId: 'connection-1', provider: 'claude', capabilities: ['assignment_lease'] };
-    const { jobId } = service.enqueueRun(roverParams());
-    service.assignRoverJob('claude', send, worker);
+    const { jobId } = callbackService.enqueueRun(roverParams());
+    callbackService.assignRoverJob('claude', send, worker);
     const assignment = send.mock.calls[0][0] as { leaseId: string };
 
-    service.handleRoverMessage(
+    callbackService.handleRoverMessage(
       { type: 'assignment_reject', jobId, leaseId: assignment.leaseId, reason: 'busy', retryable: true },
       'claude', send, worker
     );
-    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
-    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
-    expect(service.state.queue).toContain(jobId);
+    expect(callbackService.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(callbackService.state.queue).toContain(jobId);
+    expect(released).toHaveBeenCalledWith('claude');
 
-    service.handleRoverMessage(
+    callbackService.handleRoverMessage(
       { type: 'lease_renew', jobId, leaseId: assignment.leaseId, leaseExpiresAt: new Date(Date.now() + 30_000).toISOString() },
       'claude', send, worker
     );
-    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
 
   it('requeues an offered lease released with a retryable error', () => {
