@@ -19,7 +19,14 @@ describe('Rover registration validation', () => {
     expect(validateRoverRegistration({ ...valid, protocolVersion: 1 })).toBe('Rover registration required');
   });
 
+  it('rejects registrations missing required metadata', () => {
+    expect(validateRoverRegistration({ ...valid, provider: undefined })).toBe('Rover registration required');
+    expect(validateRoverRegistration({ ...valid, pageUrl: undefined })).toBe('Rover registration required');
+    expect(validateRoverRegistration({ ...valid, extensionVersion: undefined })).toBe('Rover registration required');
+  });
+
   it('rejects registrations without assignment leases', () => {
     expect(validateRoverRegistration({ ...valid, capabilities: ['scenario_control'] })).toBe('Rover assignment leases are required');
+    expect(validateRoverRegistration({ ...valid, capabilities: 'assignment_lease' })).toBe('Rover assignment leases are required');
   });
 });
