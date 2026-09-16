@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot, Globe2 } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { Button } from '@/components/ui/button';
@@ -38,18 +38,21 @@ interface AgentsProps {
 const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
   const { agents, setAgents, reload, loading } = useLibraries();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [pendingDelete, setPendingDelete] = useState<AgentConfig | null>(null);
   const [agentFilter, setAgentFilter] = useState('');
-  const [agentTypeFilter, setAgentTypeFilter] = useState<AgentType>(defaultType);
+  const requestedType = searchParams.get('type');
+  const initialType: AgentType = requestedType === 'browser' ? 'browser' : defaultType;
+  const [agentTypeFilter, setAgentTypeFilter] = useState<AgentType>(initialType);
   const normalizedAgentFilter = agentFilter.trim().toLowerCase();
   useEffect(() => {
-    setAgentTypeFilter(defaultType);
-  }, [defaultType]);
+    setAgentTypeFilter(initialType);
+  }, [initialType]);
 
   const handleTypeChange = (value: string) => {
     const nextType = value as AgentType;
     setAgentTypeFilter(nextType);
-    navigate(`/libraries/agents/${nextType}`);
+    navigate(`/libraries/agents?type=${nextType}`);
   };
   const agentCounts = useMemo(
     () => ({

@@ -14,12 +14,14 @@ export function useRoverStatus(): RoverStatus {
 
   useEffect(() => {
     let disposed = false;
+    let requestVersion = 0;
     const refresh = () => {
       if (typeof source.getRoverStatus !== 'function') return;
+      const currentVersion = ++requestVersion;
       void source
         .getRoverStatus()
         .then((next) => {
-          if (!disposed)
+          if (!disposed && currentVersion === requestVersion)
             setStatus({
               connected: next.connected,
               provider: next.provider,
@@ -28,7 +30,7 @@ export function useRoverStatus(): RoverStatus {
             });
         })
         .catch(() => {
-          if (!disposed) setStatus({ connected: false });
+          if (!disposed && currentVersion === requestVersion) setStatus({ connected: false });
         });
     };
     refresh();
