@@ -14,6 +14,8 @@ describe('public Rover documentation', () => {
     expect(rover).toContain('GitHub Releases');
     expect(rover).toContain('new_conversation_between_scenarios');
     expect(rover).toContain('MCPLab-managed');
+    expect(rover).toContain('Manual tab');
+    expect(rover).toContain('manual fallback');
     expect(rover).toContain('local evaluation queue');
   });
 

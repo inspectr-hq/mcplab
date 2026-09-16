@@ -1419,6 +1419,7 @@ const appRover: DocPage = {
       ],
       bullets: [
         'A connection error usually means MCPLab is not running or the origin is incorrect.',
+        'Use the Manual tab for a one-off Live Test or when browser automation is unavailable.',
         'Open the Learn tab when the current browser provider does not have a built-in adapter.'
       ]
     },
@@ -1432,8 +1433,21 @@ const appRover: DocPage = {
       ]
     },
     {
+      id: 'manual-live-test',
+      title: '6. Run a Live Test from Rover',
+      paragraphs: [
+        'Open the Manual tab in Rover, browse the MCPLab evaluation catalog, and select one evaluation. Review its prompt before running it in the active browser agent.',
+        'When the current page cannot be automated, use the manual fallback: copy the prompt, run it yourself, paste the final response into Rover, and submit it through the same MCPLab evaluation pipeline.'
+      ],
+      bullets: [
+        'The Manual tab runs one evaluation at a time.',
+        'Closing the injected panel does not cancel an active Live Test.',
+        'Attachment-based Live Tests remain disabled with an eligibility explanation.'
+      ]
+    },
+    {
       id: 'queue-rover',
-      title: '6. Build a Local Queue in Rover',
+      title: '7. Build a Local Queue in Rover',
       paragraphs: [
         'Rover also provides a local evaluation queue for the active provider. Add eligible evaluations from the MCPLab catalog, choose whether each evaluation should start a new conversation, then run the queue in the current tab.'
       ],
@@ -1445,7 +1459,7 @@ const appRover: DocPage = {
     },
     {
       id: 'learn-provider',
-      title: '7. Learn Another Browser Provider',
+      title: '8. Learn Another Browser Provider',
       paragraphs: [
         'Open Rover on the provider page and select Learn. Start learning, send one message yourself, then let Rover identify the composer, submission behavior, assistant responses, and completion signals.',
         'Review the detected capabilities, give the provider a name, and save it to MCPLab. MCPLab stores the provider profile and links it to a browser agent for later matching.'
@@ -1458,7 +1472,7 @@ const appRover: DocPage = {
     },
     {
       id: 'managed-controls',
-      title: '8. Monitor and Control Managed Work',
+      title: '9. Monitor and Control Managed Work',
       paragraphs: [
         'MCPLab shows browser jobs as waiting for Rover, running, paused, completed, stopped, or failed. Use Connect to Rover to open the configured browser URL when a matching provider is not connected.'
       ],
@@ -1471,7 +1485,7 @@ const appRover: DocPage = {
     },
     {
       id: 'read-results',
-      title: '9. Read Rover Results',
+      title: '10. Read Rover Results',
       paragraphs: [
         'Rover results use the same result layout as normal MCPLab evaluations. Browser runs include Rover provenance, and outcomes are passed, failed, incomplete, or error.',
         'Tool-dependent assertions are marked not evaluated because Rover does not currently report MCP tool observations.'
@@ -1490,7 +1504,7 @@ const appRover: DocPage = {
       bullets: [
         'Connection refused: start MCPLab and verify the Rover origin is http://127.0.0.1:8787.',
         'Disconnected indicator: confirm the MCPLab App is running, then reopen Rover.',
-        'Unsupported page: use Learn to create a provider profile, or switch to Claude or ChatGPT.',
+        'Unsupported page: use the Manual tab fallback, use Learn to create a provider profile, or switch to Claude or ChatGPT.',
         'Provider not detected: navigate to the configured provider URL and refresh the page.',
         'Missing URL: add a valid url and restart MCPLab.',
         'Waiting for Rover: connect Rover using the same provider as the queued job.',
