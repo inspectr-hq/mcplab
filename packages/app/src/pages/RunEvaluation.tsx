@@ -1329,7 +1329,9 @@ const RunEvaluation = () => {
                         ? 'border-muted-foreground/30 bg-muted/40'
                         : evaluation.status === 'partial'
                           ? 'border-yellow-500/40 bg-yellow-500/5'
-                          : 'border-primary/20 bg-primary/5'
+                          : evaluation.status === 'running'
+                            ? 'border-primary/20 bg-primary/5'
+                            : 'border-border bg-background'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -1337,7 +1339,14 @@ const RunEvaluation = () => {
                       <span className="font-semibold">
                         {evaluation.evaluationName || 'Evaluation'}
                       </span>
-                      <Badge variant="outline" className="capitalize">
+                      <Badge
+                        variant="outline"
+                        className={`capitalize ${
+                          evaluation.status === 'running'
+                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            : ''
+                        }`}
+                      >
                         {evaluation.status}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
@@ -1360,6 +1369,27 @@ const RunEvaluation = () => {
                           {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() =>
+                          setExpandedEvaluationRunId((current) =>
+                            current === evaluation.evaluationRunId
+                              ? null
+                              : evaluation.evaluationRunId
+                          )
+                        }
+                        aria-label={`${
+                          expandedEvaluationRunId === evaluation.evaluationRunId
+                            ? 'Collapse'
+                            : 'Expand'
+                        } evaluation details`}
+                      >
+                        {expandedEvaluationRunId === evaluation.evaluationRunId
+                          ? 'Hide'
+                          : 'Details'}
+                      </Button>
                       {evaluation.jobs.length > 0 &&
                         evaluation.jobs.every((job) =>
                           ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(
@@ -1386,35 +1416,10 @@ const RunEvaluation = () => {
                             {evaluation.status === 'stopped' ? 'Remove run' : 'Remove'}
                           </Button>
                         )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() =>
-                          setExpandedEvaluationRunId((current) =>
-                            current === evaluation.evaluationRunId
-                              ? null
-                              : evaluation.evaluationRunId
-                          )
-                        }
-                        aria-label={`${
-                          expandedEvaluationRunId === evaluation.evaluationRunId
-                            ? 'Collapse'
-                            : 'Expand'
-                        } evaluation details`}
-                      >
-                        {expandedEvaluationRunId === evaluation.evaluationRunId
-                          ? 'Hide'
-                          : 'Details'}
-                      </Button>
                       {evaluation.jobs.some((job) =>
-                        [
-                          'queued',
-                          'blocked_auth',
-                          'waiting_for_rover',
-                          'paused_rover',
-                          'running'
-                        ].includes(job.status)
+                        ['blocked_auth', 'waiting_for_rover', 'paused_rover', 'running'].includes(
+                          job.status
+                        )
                       ) && (
                         <Button
                           variant="ghost"
@@ -1549,7 +1554,9 @@ const RunEvaluation = () => {
                                   ).then(() => void refreshQueue());
                                 }}
                               >
-                                {child?.status === 'queued' ? 'Remove' : 'Stop'}
+                                {child?.status === 'queued' || job.status === 'queued'
+                                  ? 'Remove'
+                                  : 'Stop'}
                               </Button>
                             )}
                           </span>
@@ -1661,7 +1668,7 @@ const RunEvaluation = () => {
                       className={`flex items-center justify-between rounded-md border p-2 text-sm ${
                         isBlockedRetry
                           ? 'border-yellow-500/40 bg-yellow-500/5'
-                          : 'border-primary/20 bg-primary/5'
+                          : 'border-border bg-background'
                       }`}
                     >
                       <div className="min-w-0 flex items-center gap-2 flex-wrap">

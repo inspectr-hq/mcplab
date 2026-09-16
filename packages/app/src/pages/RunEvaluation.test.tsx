@@ -550,6 +550,79 @@ describe('RunEvaluation', () => {
     });
   });
 
+  it('highlights only running evaluations and hides stop for queued evaluations', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-queued',
+          evaluationName: 'Queued evaluation',
+          status: 'queued',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-queued',
+              status: 'queued',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            }
+          ]
+        },
+        {
+          evaluationRunId: 'evaluation-running',
+          evaluationName: 'Running evaluation',
+          status: 'running',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-running',
+              status: 'running',
+              runParams: { configPath: '/tmp/eval-2.yaml', runsPerScenario: 1 }
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const queued = await screen.findByText('Queued evaluation');
+    const queuedCard = queued.closest('div.rounded-md.border');
+    expect(queuedCard).toBeTruthy();
+    expect(queuedCard).not.toHaveClass('bg-primary/5');
+    expect(queuedCard).toHaveTextContent('Remove');
+    expect(queuedCard).not.toHaveTextContent('Stop run');
+    const queuedActions = Array.from(queuedCard!.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim()
+    );
+    expect(queuedActions.indexOf('Details')).toBeLessThan(queuedActions.indexOf('Remove'));
+
+    const running = screen.getByText('Running evaluation');
+    const runningCard = running.closest('div.rounded-md.border');
+    expect(runningCard).toHaveClass('bg-primary/5');
+    expect(runningCard).toHaveTextContent('Stop run');
+    const runningBadge = Array.from(runningCard?.querySelectorAll('div') ?? []).find(
+      (node) => node.textContent?.trim() === 'running'
+    );
+    expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
+  });
+
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');
     sourceMock.getRunQueue.mockResolvedValueOnce({
