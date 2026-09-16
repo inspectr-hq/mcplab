@@ -142,6 +142,37 @@ describe('libraries-store test-case directory migration', () => {
     expect(existsSync(join(librariesDir, 'test-cases', 'tc-1.yaml'))).toBe(true);
   });
 
+  it('persists browser provider profiles when writing the complete library bundle', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const profile = {
+      schemaVersion: 1,
+      name: 'Custom Provider',
+      match: { origins: ['https://custom.example'] },
+      composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' },
+      submit: { action: 'enter' },
+      assistantMessages: { locator: { segments: ['.message'] } },
+      completion: { stabilityMs: 500 },
+      learned: {
+        sourceOrigin: 'https://custom.example',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        confidence: {}
+      }
+    };
+
+    writeLibraries(librariesDir, {
+      servers: {},
+      agents: {},
+      scenarios: [],
+      browserProviders: { 'custom-provider': profile }
+    });
+
+    expect(readLibraries(librariesDir).browserProviders['custom-provider']).toMatchObject({
+      id: 'custom-provider',
+      name: 'Custom Provider'
+    });
+  });
+
   it('migrates legacy scenarios folder to test-cases when reading libraries', () => {
     const librariesDir = makeTempLibrariesDir();
     const legacyDir = join(librariesDir, 'scenarios');

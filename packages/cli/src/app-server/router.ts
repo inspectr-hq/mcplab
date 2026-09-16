@@ -627,7 +627,8 @@ export async function startAppServer(options: AppServerOptions) {
         writeLibraries(settings.librariesDir, {
           servers: (body.servers as EvalConfig['servers']) ?? {},
           agents: (body.agents as EvalConfig['agents']) ?? {},
-          scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
+          scenarios: (body.scenarios as EvalConfig['scenarios']) ?? [],
+          browserProviders: body.browserProviders
         });
         asJson(res, 200, { ok: true });
         return;

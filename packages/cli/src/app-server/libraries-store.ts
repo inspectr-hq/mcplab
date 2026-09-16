@@ -145,6 +145,7 @@ export function writeLibraries(
     servers: EvalConfig['servers'];
     agents: EvalConfig['agents'];
     scenarios: EvalConfig['scenarios'];
+    browserProviders?: Record<string, BrowserProviderProfile>;
   }
 ) {
   const root = resolve(librariesDir);
@@ -154,6 +155,8 @@ export function writeLibraries(
 
   writeFileSync(join(root, 'servers.yaml'), `${stringifyYaml(libraries.servers ?? {})}\n`, 'utf8');
   writeFileSync(join(root, 'agents.yaml'), `${stringifyYaml(libraries.agents ?? {})}\n`, 'utf8');
+  if (libraries.browserProviders)
+    writeBrowserProviderProfiles(librariesDir, libraries.browserProviders);
 
   const desired = new Set<string>();
   for (const scenario of libraries.scenarios ?? []) {

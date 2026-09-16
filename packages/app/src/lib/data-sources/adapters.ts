@@ -694,7 +694,8 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
   return {
     servers: mapped.servers,
     agents: mapped.agents,
-    scenarios: mapped.scenarios
+    scenarios: mapped.scenarios,
+    browserProviders: libraries.browserProviders ?? {}
   };
 }
 
@@ -850,7 +851,8 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 }
 
 export function toCoreLibraries(
-  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>
+  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'> &
+    Pick<LibraryBundle, 'browserProviders'>
 ): CoreLibraryBundle {
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
@@ -932,7 +934,8 @@ export function toCoreLibraries(
         scenario,
         scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined
       )
-    ) as CoreEvalConfig['scenarios']
+    ) as CoreEvalConfig['scenarios'],
+    browserProviders: input.browserProviders
   };
 }
 

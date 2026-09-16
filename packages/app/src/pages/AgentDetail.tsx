@@ -77,7 +77,7 @@ const AgentDetail = () => {
   const { agentName } = useParams<{ agentName: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { agents, setAgents } = useLibraries();
+  const { agents, setAgents, browserProviders } = useLibraries();
   const { source } = useDataSource();
   const roverStatus = useRoverStatus();
 
@@ -100,6 +100,13 @@ const AgentDetail = () => {
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
   const hydratedRouteRef = useRef<string | null>(null);
+  const browserProviderOptions = [
+    { id: 'claude', name: 'Claude' },
+    { id: 'trendminer', name: 'TrendMiner' },
+    ...Object.values(browserProviders)
+      .filter((provider) => !['claude', 'trendminer'].includes(provider.id))
+      .map((provider) => ({ id: provider.id, name: provider.name }))
+  ];
 
   useEffect(() => {
     const routeKey = isNew ? `new:${decodedParam || 'new'}` : `agt:${decodedParam}`;
@@ -449,10 +456,11 @@ const AgentDetail = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {form.type === 'browser' ? (
-                    <>
-                      <SelectItem value="claude">Claude</SelectItem>
-                      <SelectItem value="trendminer">TrendMiner</SelectItem>
-                    </>
+                    browserProviderOptions.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))
                   ) : (
                     <>
                       <SelectItem value="openai">OpenAI</SelectItem>

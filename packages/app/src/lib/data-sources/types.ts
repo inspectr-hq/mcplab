@@ -24,7 +24,8 @@ import type {
   ToolDefinitionTokenEstimates,
   RoverAgentProvider,
   RunOutcome,
-  ExecutionSource
+  ExecutionSource,
+  BrowserProviderProfile
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -184,12 +185,14 @@ export interface LibraryBundle {
   servers: EvalConfig['servers'];
   agents: EvalConfig['agents'];
   scenarios: EvalConfig['scenarios'];
+  browserProviders: Record<string, BrowserProviderProfile>;
 }
 
 export interface CoreLibraryBundle {
   servers: CoreEvalConfig['servers'];
   agents: CoreEvalConfig['agents'];
   scenarios: CoreEvalConfig['scenarios'];
+  browserProviders?: Record<string, BrowserProviderProfile>;
 }
 
 export interface ScenarioAssistantSuggestionBundle {

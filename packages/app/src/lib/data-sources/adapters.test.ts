@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromCoreConfigYaml,
+  fromCoreLibraries,
   fromCoreResultsJson,
   toCoreConfigYaml,
   toCoreLibraries
@@ -668,6 +669,36 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(typeof run.toolCalls[0].timestamp).toBe('string'); // falls back to generated timestamp
     expect(run.conversation.find((item) => item.kind === 'tool_call')?.timestamp).toBeUndefined();
     expect(run.conversation.find((item) => item.kind === 'tool_result')?.timestamp).toBeUndefined();
+  });
+});
+
+describe('library mapping', () => {
+  it('preserves browser provider profiles from the workspace API', () => {
+    const profile = {
+      schemaVersion: 1,
+      id: 'custom-provider',
+      name: 'Custom Provider',
+      match: { origins: ['https://custom.example'] },
+      composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' as const },
+      submit: { action: 'enter' as const },
+      assistantMessages: { locator: { segments: ['.message'] } },
+      completion: { stabilityMs: 500 },
+      learned: {
+        sourceOrigin: 'https://custom.example',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        confidence: {}
+      }
+    };
+
+    const mapped = fromCoreLibraries({
+      servers: {},
+      agents: {},
+      scenarios: [],
+      browserProviders: { 'custom-provider': profile }
+    });
+
+    expect(mapped.browserProviders).toEqual({ 'custom-provider': profile });
   });
 });
 
