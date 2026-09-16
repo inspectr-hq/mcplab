@@ -64,7 +64,6 @@ export function createRoverConnectionService(
     onRegister?: (connection: RoverConnection) => void | Promise<void>;
     onMessage?: (connection: RoverConnection, message: RoverSocketMessage) => void | Promise<void>;
     onDisconnect?: (connection: RoverConnection) => void | Promise<void>;
-    assignmentLeases?: boolean;
   } = {}
 ): RoverConnectionService {
   const log = options.log ?? console.log;
@@ -151,9 +150,7 @@ export function createRoverConnectionService(
           type: 'registered',
           protocolVersion: ROVER_PROTOCOL_VERSION,
           connectedAt: now,
-          capabilities: options.assignmentLeases === false
-            ? []
-            : [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
+          capabilities: [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
         });
         log(timestampedLog(`Rover connected: ${registeredConnection.registration.provider}`));
         void options.onRegister?.(registeredConnection);
@@ -174,9 +171,7 @@ export function createRoverConnectionService(
           type: 'registered',
           protocolVersion: ROVER_PROTOCOL_VERSION,
           connectedAt: connection.connectedAt,
-          capabilities: options.assignmentLeases === false
-            ? []
-            : [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
+          capabilities: [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
         });
         log(
           timestampedLog(
