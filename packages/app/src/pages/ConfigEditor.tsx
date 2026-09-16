@@ -340,6 +340,7 @@ const ConfigEditor = () => {
     const inlineAgent: AgentConfig = {
       id: `agt-${createdAt}`,
       name: '',
+      type: 'llm',
       provider: 'openai',
       model: 'gpt-4o',
       temperature: DEFAULT_AGENT_TEMPERATURE,
@@ -1135,7 +1136,7 @@ const ConfigEditor = () => {
                           </div>
                         </div>
                         {entry.kind === 'inline' &&
-                          entry.agent.type === 'llm' &&
+                          (entry.agent.type ?? 'llm') === 'llm' &&
                           inlineExpanded && (
                             <div className="border-t px-3 py-3 space-y-3">
                               <div className="grid gap-3 sm:grid-cols-2">
@@ -1356,7 +1357,7 @@ const ConfigEditor = () => {
                             <Badge variant="outline" className="text-xs font-mono">
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
-                            {row.agent.type === 'llm' && (
+                            {(row.agent.type ?? 'llm') === 'llm' && (
                               <Badge variant="outline" className="text-xs font-mono">
                                 temperature: {resolveAgentTemperature(row.agent.temperature)}
                               </Badge>

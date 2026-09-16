@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Bot,
@@ -48,6 +48,7 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
+import { createEmptyAgent } from '@/lib/agent-factory';
 import type { AgentConfig } from '@/types/eval';
 import { useRoverStatus } from '@/hooks/use-rover-status';
 
@@ -72,17 +73,9 @@ type ConnectState =
   | { status: 'error'; message: string; testedAt: string }
   | { status: 'unsupported' };
 
-const emptyAgent = (): AgentConfig => ({
-  id: `agt-${Date.now()}`,
-  name: '',
-  provider: 'openai',
-  model: 'gpt-4o',
-  temperature: DEFAULT_AGENT_TEMPERATURE,
-  maxTokens: 4096
-});
-
 const AgentDetail = () => {
   const { agentName } = useParams<{ agentName: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { agents, setAgents } = useLibraries();
   const { source } = useDataSource();
@@ -94,7 +87,8 @@ const AgentDetail = () => {
     ? null
     : (agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam));
 
-  const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? emptyAgent());
+  const requestedType = searchParams.get('type') === 'browser' ? 'browser' : 'llm';
+  const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? createEmptyAgent(requestedType));
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: 'idle' });
@@ -109,7 +103,7 @@ const AgentDetail = () => {
     const routeKey = isNew ? `new:${decodedParam || 'new'}` : `agt:${decodedParam}`;
     if (hydratedRouteRef.current === routeKey) return;
     if (isNew) {
-      setForm(emptyAgent());
+      setForm(createEmptyAgent(requestedType));
       hydratedRouteRef.current = routeKey;
       return;
     }

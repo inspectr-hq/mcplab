@@ -128,7 +128,7 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button type="button" size="sm" onClick={() => navigate('/libraries/agents/new')}>
+          <Button type="button" size="sm" onClick={() => navigate(`/libraries/agents/new?type=${agentTypeFilter}`)}>
             <Plus className="mr-2 h-4 w-4" />
             Add Agent
           </Button>
@@ -144,7 +144,7 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
             type="button"
             size="sm"
             className="mt-4"
-            onClick={() => navigate('/libraries/agents/new')}
+            onClick={() => navigate(`/libraries/agents/new?type=${agentTypeFilter}`)}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Agent
