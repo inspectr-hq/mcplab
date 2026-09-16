@@ -21,6 +21,10 @@ import {
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
 
+export function getCompletedRunId(job: Pick<RunJob, 'runParams'>, executionRunId: string): string {
+  return job.runParams.evaluationRunId ?? executionRunId;
+}
+
 export function mergeLibraryEntriesIntoConfig(
   config: EvalConfig,
   libraryAgents: EvalConfig['agents'],
@@ -446,7 +450,7 @@ export async function executeRunJob(params: {
       type: 'completed',
       ts: new Date().toISOString(),
       payload: {
-        runId: results.metadata.run_id,
+        runId: getCompletedRunId(job, results.metadata.run_id),
         runDir,
         summary: results.summary
       }
