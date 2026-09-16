@@ -80,6 +80,9 @@ export function projectEvaluationResult(params: {
       else if (previous !== version) mcpServerVersions.set(serverId, null);
     }
   }
+  const toolTokensTotal = aggregateNumericMetadata('tool_tokens_total');
+  const totalDurationMs = aggregateNumericMetadata('total_duration_ms');
+  const totalToolDurationMs = aggregateNumericMetadata('total_tool_duration_ms');
   const executionClient =
     executionClients.size === 1
       ? Array.from(executionClients)[0]
@@ -94,14 +97,10 @@ export function projectEvaluationResult(params: {
       config_path: configPaths.length === 1 ? configPaths[0] : undefined,
       cli_version: sourceMetadata?.cli_version ?? 'unknown',
       mcp_server_versions: Object.fromEntries(mcpServerVersions),
-      ...(aggregateNumericMetadata('tool_tokens_total') !== undefined
-        ? { tool_tokens_total: aggregateNumericMetadata('tool_tokens_total') }
-        : {}),
-      ...(aggregateNumericMetadata('total_duration_ms') !== undefined
-        ? { total_duration_ms: aggregateNumericMetadata('total_duration_ms') }
-        : {}),
-      ...(aggregateNumericMetadata('total_tool_duration_ms') !== undefined
-        ? { total_tool_duration_ms: aggregateNumericMetadata('total_tool_duration_ms') }
+      ...(toolTokensTotal !== undefined ? { tool_tokens_total: toolTokensTotal } : {}),
+      ...(totalDurationMs !== undefined ? { total_duration_ms: totalDurationMs } : {}),
+      ...(totalToolDurationMs !== undefined
+        ? { total_tool_duration_ms: totalToolDurationMs }
         : {}),
       ...(executionClient ? { execution_client: executionClient } : {}),
       ...(executionSources.size === 1

@@ -455,7 +455,7 @@ export async function executeRunJob(params: {
         summary: results.summary
       }
     });
-    return { status: 'completed', runId: job.runParams.evaluationRunId ?? results.metadata.run_id };
+    return { status: 'completed', runId: getCompletedRunId(job, results.metadata.run_id) };
   } catch (error: unknown) {
     if (error instanceof OAuthAuthorizationRequiredError) {
       const blockedServers = Array.from(
