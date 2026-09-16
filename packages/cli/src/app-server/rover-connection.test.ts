@@ -107,4 +107,36 @@ describe('Rover connection protocol', () => {
     await once(second, 'close');
     first.close();
   });
+
+  it('keeps lease capability on provider registration updates', async () => {
+    const service = createRoverConnectionService();
+    const socket = await connectRover(service);
+    socket.send(
+      JSON.stringify({
+        type: 'register',
+        protocolVersion: 2,
+        capabilities: ['assignment_lease'],
+        provider: 'claude',
+        pageUrl: 'https://claude.ai',
+        extensionVersion: '1'
+      })
+    );
+    await once(socket, 'message');
+
+    socket.send(JSON.stringify({
+      type: 'register_update',
+      provider: 'trendminer',
+      providerRevision: 'rev-2',
+      pageUrl: 'https://trendminer.example'
+    }));
+    const [raw] = await once(socket, 'message');
+
+    expect(JSON.parse(raw.toString())).toMatchObject({
+      type: 'registered',
+      protocolVersion: 2,
+      capabilities: ['assignment_lease']
+    });
+    expect(service.connection()?.registration).toMatchObject({ provider: 'trendminer', providerRevision: 'rev-2' });
+    socket.close();
+  });
 });
