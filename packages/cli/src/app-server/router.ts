@@ -624,13 +624,17 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/libraries' && method === 'PUT') {
         const body = await parseBody(req);
-        writeLibraries(settings.librariesDir, {
-          servers: (body.servers as EvalConfig['servers']) ?? {},
-          agents: (body.agents as EvalConfig['agents']) ?? {},
-          scenarios: (body.scenarios as EvalConfig['scenarios']) ?? [],
-          browserProviders: body.browserProviders
-        });
-        asJson(res, 200, { ok: true });
+        try {
+          writeLibraries(settings.librariesDir, {
+            servers: (body.servers as EvalConfig['servers']) ?? {},
+            agents: (body.agents as EvalConfig['agents']) ?? {},
+            scenarios: (body.scenarios as EvalConfig['scenarios']) ?? [],
+            browserProviders: body.browserProviders
+          });
+          asJson(res, 200, { ok: true });
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
 

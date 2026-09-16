@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -171,6 +178,32 @@ describe('libraries-store test-case directory migration', () => {
       id: 'custom-provider',
       name: 'Custom Provider'
     });
+  });
+
+  it('rejects malformed or executable browser provider profiles before writing libraries', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(join(librariesDir, 'servers.yaml'), 'existing: true\n', 'utf8');
+
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: { next: { transport: 'http', url: 'http://next.example' } },
+        agents: {},
+        scenarios: [],
+        browserProviders: {
+          invalid: { schemaVersion: 1, name: 'Invalid' }
+        }
+      })
+    ).toThrow();
+
+    expect(readFileSync(join(librariesDir, 'servers.yaml'), 'utf8')).toBe('existing: true\n');
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: {},
+        agents: {},
+        scenarios: [],
+        browserProviders: { invalid: { script: 'alert(1)' } }
+      })
+    ).toThrow('Executable browser provider profiles are not supported.');
   });
 
   it('migrates legacy scenarios folder to test-cases when reading libraries', () => {

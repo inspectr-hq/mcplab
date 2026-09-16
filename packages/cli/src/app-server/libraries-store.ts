@@ -10,7 +10,11 @@ import {
 } from 'node:fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { BrowserAgentConfig, BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
-import { parseBrowserProviderProfiles, readLibraryAgentsAndServers } from '@inspectr/mcplab-core';
+import {
+  parseBrowserProviderProfiles,
+  readLibraryAgentsAndServers,
+  validateBrowserProviderProfile
+} from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 
 const TEST_CASES_DIR_NAME = 'test-cases';
@@ -148,6 +152,14 @@ export function writeLibraries(
     browserProviders?: Record<string, BrowserProviderProfile>;
   }
 ) {
+  const browserProviders = libraries.browserProviders
+    ? Object.fromEntries(
+        Object.entries(libraries.browserProviders).map(([id, profile]) => [
+          id,
+          validateBrowserProviderProfile({ ...profile, id })
+        ])
+      )
+    : undefined;
   const root = resolve(librariesDir);
   const { testCasesDir } = ensureTestCasesDir(root);
   mkdirSync(root, { recursive: true });
@@ -155,8 +167,7 @@ export function writeLibraries(
 
   writeFileSync(join(root, 'servers.yaml'), `${stringifyYaml(libraries.servers ?? {})}\n`, 'utf8');
   writeFileSync(join(root, 'agents.yaml'), `${stringifyYaml(libraries.agents ?? {})}\n`, 'utf8');
-  if (libraries.browserProviders)
-    writeBrowserProviderProfiles(librariesDir, libraries.browserProviders);
+  if (browserProviders) writeBrowserProviderProfiles(librariesDir, browserProviders);
 
   const desired = new Set<string>();
   for (const scenario of libraries.scenarios ?? []) {

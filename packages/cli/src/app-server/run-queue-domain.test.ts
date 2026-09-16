@@ -587,7 +587,7 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(second.jobId)?.status).toBe('running');
   });
 
-  it('pauses a running Rover job when Rover reports an assignment error', () => {
+  it('finalizes a Rover job as failed when Rover reports an assignment error', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
     const queued = service.enqueueRun(roverParams());
@@ -606,8 +606,15 @@ describe('Rover run queue domain', () => {
       send
     );
 
-    expect(service.jobs.get(queued.jobId)?.status).toBe('paused_rover');
-    expect(service.state.queue).toContain(queued.jobId);
+    expect(service.jobs.get(queued.jobId)?.status).toBe('error');
+    expect(service.state.queue).not.toContain(queued.jobId);
+
+    service.handleRoverMessage(
+      { type: 'complete', jobId: queued.jobId, runId: 'run-1', outcome: 'passed' },
+      'claude',
+      send
+    );
+    expect(service.jobs.get(queued.jobId)?.status).toBe('error');
   });
 
   it('tracks scenario-level Rover status updates', () => {
