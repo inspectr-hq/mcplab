@@ -58,6 +58,28 @@ export function projectEvaluationResult(params: {
   const executionClients = new Set(
     executions.map((result) => result.metadata.execution_client).filter(Boolean)
   );
+  const aggregateNumericMetadata = (
+    key: 'tool_tokens_total' | 'total_duration_ms' | 'total_tool_duration_ms'
+  ): number | undefined => {
+    const values = executions.map((result) => result.metadata[key]);
+    const numericValues = values.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value)
+    );
+    if (values.length === 0 || numericValues.length !== values.length) {
+      return undefined;
+    }
+    return numericValues.reduce((sum, value) => sum + value, 0);
+  };
+  const mcpServerVersions = new Map<string, string | null>();
+  for (const execution of executions) {
+    for (const [serverId, version] of Object.entries(
+      execution.metadata.mcp_server_versions ?? {}
+    )) {
+      const previous = mcpServerVersions.get(serverId);
+      if (!mcpServerVersions.has(serverId)) mcpServerVersions.set(serverId, version);
+      else if (previous !== version) mcpServerVersions.set(serverId, null);
+    }
+  }
   return {
     metadata: {
       run_id: params.runId,
@@ -65,7 +87,16 @@ export function projectEvaluationResult(params: {
       config_hash: sourceMetadata?.config_hash ?? params.evaluationRunId,
       config_path: configPaths.length === 1 ? configPaths[0] : undefined,
       cli_version: sourceMetadata?.cli_version ?? 'unknown',
-      mcp_server_versions: {},
+      mcp_server_versions: Object.fromEntries(mcpServerVersions),
+      ...(aggregateNumericMetadata('tool_tokens_total') !== undefined
+        ? { tool_tokens_total: aggregateNumericMetadata('tool_tokens_total') }
+        : {}),
+      ...(aggregateNumericMetadata('total_duration_ms') !== undefined
+        ? { total_duration_ms: aggregateNumericMetadata('total_duration_ms') }
+        : {}),
+      ...(aggregateNumericMetadata('total_tool_duration_ms') !== undefined
+        ? { total_tool_duration_ms: aggregateNumericMetadata('total_tool_duration_ms') }
+        : {}),
       execution_client:
         executionClients.size === 1 ? executions[0]?.metadata.execution_client : 'mixed',
       ...(executionSources.size === 1

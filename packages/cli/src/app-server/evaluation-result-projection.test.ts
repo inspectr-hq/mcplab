@@ -37,6 +37,55 @@ describe('projectEvaluationResult', () => {
     expect(result.metadata).not.toHaveProperty('child_run_ids');
   });
 
+  it('aggregates tool metadata and MCP server versions across executions', () => {
+    const first = execution('llm-1', 1, 1);
+    const second = execution('rover-1', 1, 1);
+    first.metadata.mcp_server_versions = { trendminer: '0.7.0' };
+    second.metadata.mcp_server_versions = { other: '1.2.3', trendminer: '0.7.0' };
+    Object.assign(first.metadata, {
+      total_duration_ms: 10_000,
+      total_tool_duration_ms: 1_200,
+      tool_tokens_total: 100
+    });
+    Object.assign(second.metadata, {
+      total_duration_ms: 20_000,
+      total_tool_duration_ms: 2_300,
+      tool_tokens_total: 250
+    });
+
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'evaluation-1',
+      executions: [first, second]
+    });
+
+    expect(result.metadata).toMatchObject({
+      total_duration_ms: 30_000,
+      total_tool_duration_ms: 3_500,
+      tool_tokens_total: 350,
+      mcp_server_versions: { other: '1.2.3', trendminer: '0.7.0' }
+    });
+  });
+
+  it('omits numeric aggregates when an execution has no metric', () => {
+    const first = execution('llm-1', 1, 1);
+    Object.assign(first.metadata, {
+      total_duration_ms: 10_000,
+      total_tool_duration_ms: 1_200,
+      tool_tokens_total: 100
+    });
+
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'evaluation-1',
+      executions: [first, execution('rover-1', 1, 1)]
+    });
+
+    expect(result.metadata).not.toHaveProperty('total_duration_ms');
+    expect(result.metadata).not.toHaveProperty('total_tool_duration_ms');
+    expect(result.metadata).not.toHaveProperty('tool_tokens_total');
+  });
+
   it('preserves rerun metadata needed to identify and rerun a queued Rover execution', () => {
     const source = execution('rover-1', 1, 1);
     source.metadata.config_path = 'evals/hi-there.yaml';
