@@ -1144,9 +1144,7 @@ export function createRunQueueService(params: {
             }
           });
           if (typeof message.error === 'string' && job.status === 'running') {
-            state.activeJobIds.delete(job.id);
-            job.status = 'paused_rover';
-            state.queue.unshift(job.id);
+            finalizeRoverJob(job, { kind: 'error', reason: message.error });
           }
           emit();
         }
