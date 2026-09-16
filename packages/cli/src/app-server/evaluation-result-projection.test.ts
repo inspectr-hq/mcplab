@@ -86,6 +86,27 @@ describe('projectEvaluationResult', () => {
     expect(result.metadata).not.toHaveProperty('tool_tokens_total');
   });
 
+  it('omits execution client when grouped executions provide no client metadata', () => {
+    const first = execution('llm-1', 1, 1);
+    const second = execution('rover-1', 1, 1);
+    second.metadata.execution_client = 'claude';
+
+    const withOneClient = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'evaluation-1',
+      executions: [first, second]
+    });
+    expect(withOneClient.metadata.execution_client).toBe('claude');
+
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'evaluation-1',
+      executions: [first]
+    });
+
+    expect(result.metadata).not.toHaveProperty('execution_client');
+  });
+
   it('preserves rerun metadata needed to identify and rerun a queued Rover execution', () => {
     const source = execution('rover-1', 1, 1);
     source.metadata.config_path = 'evals/hi-there.yaml';

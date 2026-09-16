@@ -80,6 +80,12 @@ export function projectEvaluationResult(params: {
       else if (previous !== version) mcpServerVersions.set(serverId, null);
     }
   }
+  const executionClient =
+    executionClients.size === 1
+      ? Array.from(executionClients)[0]
+      : executionClients.size > 1
+        ? 'mixed'
+        : undefined;
   return {
     metadata: {
       run_id: params.runId,
@@ -97,8 +103,7 @@ export function projectEvaluationResult(params: {
       ...(aggregateNumericMetadata('total_tool_duration_ms') !== undefined
         ? { total_tool_duration_ms: aggregateNumericMetadata('total_tool_duration_ms') }
         : {}),
-      execution_client:
-        executionClients.size === 1 ? executions[0]?.metadata.execution_client : 'mixed',
+      ...(executionClient ? { execution_client: executionClient } : {}),
       ...(executionSources.size === 1
         ? { execution_source: executions[0]?.metadata.execution_source }
         : {}),
