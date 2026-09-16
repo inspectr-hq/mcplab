@@ -22,6 +22,22 @@ export interface RoverSocketMessage {
   [key: string]: unknown;
 }
 
+export function validateRoverRegistration(message: Record<string, unknown>): string | null {
+  if (
+    message.type !== 'register' ||
+    message.protocolVersion !== ROVER_PROTOCOL_VERSION ||
+    typeof message.provider !== 'string' ||
+    typeof message.pageUrl !== 'string' ||
+    typeof message.extensionVersion !== 'string'
+  ) {
+    return 'Rover registration required';
+  }
+  if (!Array.isArray(message.capabilities) || !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)) {
+    return 'Rover assignment leases are required';
+  }
+  return null;
+}
+
 export interface RoverConnection {
   connectionId: string;
   registration: RoverRegistration;
@@ -92,17 +108,12 @@ export function createRoverConnectionService(
         return;
       }
       if (!connection) {
-        if (
-          message.type !== 'register' ||
-          message.protocolVersion !== ROVER_PROTOCOL_VERSION ||
-          typeof message.provider !== 'string' ||
-          typeof message.pageUrl !== 'string' ||
-          typeof message.extensionVersion !== 'string'
-        ) {
+        const registrationError = validateRoverRegistration(message);
+        if (registrationError === 'Rover registration required') {
           socket.close(1008, 'Rover registration required');
           return;
         }
-        if (!Array.isArray(message.capabilities) || !message.capabilities.includes(ROVER_ASSIGNMENT_LEASE_CAPABILITY)) {
+        if (registrationError) {
           send(socket, { type: 'rejected', reason: 'Rover assignment leases are required' });
           socket.close(1008, 'Rover assignment leases are required');
           return;
@@ -113,16 +124,19 @@ export function createRoverConnectionService(
           return;
         }
         const now = new Date().toISOString();
+        const provider = message.provider as string;
+        const pageUrl = message.pageUrl as string;
+        const extensionVersion = message.extensionVersion as string;
         connection = {
           connectionId: randomUUID(),
           registration: {
             protocolVersion: ROVER_PROTOCOL_VERSION,
-            provider: message.provider,
+            provider,
             ...(typeof message.providerRevision === 'string'
               ? { providerRevision: message.providerRevision }
               : {}),
-            pageUrl: message.pageUrl,
-            extensionVersion: message.extensionVersion,
+            pageUrl,
+            extensionVersion,
             capabilities: Array.isArray(message.capabilities)
               ? message.capabilities.filter((value): value is string => typeof value === 'string')
               : []
@@ -132,6 +146,7 @@ export function createRoverConnectionService(
           lastSeenAt: now
         };
         current = connection;
+        const registeredConnection = connection;
         send(socket, {
           type: 'registered',
           protocolVersion: ROVER_PROTOCOL_VERSION,
@@ -140,8 +155,8 @@ export function createRoverConnectionService(
             ? []
             : [ROVER_ASSIGNMENT_LEASE_CAPABILITY]
         });
-        log(timestampedLog(`Rover connected: ${connection.registration.provider}`));
-        void options.onRegister?.(connection);
+        log(timestampedLog(`Rover connected: ${registeredConnection.registration.provider}`));
+        void options.onRegister?.(registeredConnection);
         return;
       }
       connection.lastSeenAt = new Date().toISOString();
