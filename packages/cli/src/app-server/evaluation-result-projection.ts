@@ -99,9 +99,7 @@ export function projectEvaluationResult(params: {
       mcp_server_versions: Object.fromEntries(mcpServerVersions),
       ...(toolTokensTotal !== undefined ? { tool_tokens_total: toolTokensTotal } : {}),
       ...(totalDurationMs !== undefined ? { total_duration_ms: totalDurationMs } : {}),
-      ...(totalToolDurationMs !== undefined
-        ? { total_tool_duration_ms: totalToolDurationMs }
-        : {}),
+      ...(totalToolDurationMs !== undefined ? { total_tool_duration_ms: totalToolDurationMs } : {}),
       ...(executionClient ? { execution_client: executionClient } : {}),
       ...(executionSources.size === 1
         ? { execution_source: executions[0]?.metadata.execution_source }

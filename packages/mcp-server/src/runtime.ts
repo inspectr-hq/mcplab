@@ -1329,9 +1329,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ kind, includeContent }) => {
       return withToolHandling(async () => {
-      const selectedKind = kind ?? 'all';
-      const root = resolveBundleRoot();
-      const data = readLibrary(root, Boolean(includeContent), selectedKind);
+        const selectedKind = kind ?? 'all';
+        const root = resolveBundleRoot();
+        const data = readLibrary(root, Boolean(includeContent), selectedKind);
         const structured =
           selectedKind === 'all'
             ? data
@@ -1339,7 +1339,8 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
-                browser_providers: selectedKind === 'browser_providers' ? data.browser_providers : [],
+                browser_providers:
+                  selectedKind === 'browser_providers' ? data.browser_providers : [],
                 test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
@@ -3478,9 +3479,10 @@ function readLibrary(
   const agents = existsSync(agentsPath)
     ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
-  const browserProviders = (kind === 'all' || kind === 'browser_providers') && existsSync(browserProvidersPath)
-    ? parseBrowserProviderProfiles(parseYaml(readFileSync(browserProvidersPath, 'utf8')) ?? {})
-    : {};
+  const browserProviders =
+    (kind === 'all' || kind === 'browser_providers') && existsSync(browserProvidersPath)
+      ? parseBrowserProviderProfiles(parseYaml(readFileSync(browserProvidersPath, 'utf8')) ?? {})
+      : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
@@ -3519,7 +3521,9 @@ function readLibrary(
       .sort()
       .map((id) => ({
         id,
-        ...(includeContent ? { entry: browserProviders[id] as unknown as Record<string, unknown> } : {})
+        ...(includeContent
+          ? { entry: browserProviders[id] as unknown as Record<string, unknown> }
+          : {})
       })),
     test_cases: scenarioEntries,
     scenarios: scenarioEntries
@@ -3547,9 +3551,7 @@ function getLibraryItem(
     }
     const entry = parsed[id];
     const normalizedEntry =
-      kind === 'browser_providers'
-        ? parseBrowserProviderProfiles({ [id]: entry })[id]
-        : entry;
+      kind === 'browser_providers' ? parseBrowserProviderProfiles({ [id]: entry })[id] : entry;
     return {
       bundleRoot,
       kind,

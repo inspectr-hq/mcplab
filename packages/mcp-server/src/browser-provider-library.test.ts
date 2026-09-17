@@ -23,7 +23,11 @@ function writeFixture(root: string): void {
 function setupTools(registerTools: (server: any) => void) {
   const tools = new Map<string, { cb: (args: Record<string, unknown>) => Promise<any> | any }>();
   registerTools({
-    registerTool(name: string, _config: unknown, cb: (args: Record<string, unknown>) => Promise<any>) {
+    registerTool(
+      name: string,
+      _config: unknown,
+      cb: (args: Record<string, unknown>) => Promise<any>
+    ) {
       tools.set(name, { cb });
       return { name };
     }

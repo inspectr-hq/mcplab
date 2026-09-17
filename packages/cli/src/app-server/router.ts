@@ -561,7 +561,9 @@ export async function startAppServer(options: AppServerOptions) {
               : undefined;
           const learningArtifact = {
             trace: sanitizeBrowserProviderLearningTrace(body.trace ?? {}),
-            proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(body.proposalDiagnostics),
+            proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(
+              body.proposalDiagnostics
+            ),
             savedAt: new Date().toISOString()
           };
           let responseBody: Record<string, unknown>;

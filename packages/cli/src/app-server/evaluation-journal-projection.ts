@@ -35,8 +35,7 @@ export function projectEvaluationJournal(params: {
     .flatMap(
       (event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]
     );
-  const roverTraceEvents = events
-    .filter((event) => event.type === 'rover_event');
+  const roverTraceEvents = events.filter((event) => event.type === 'rover_event');
   const traceRecords = [...executionTraceRecords, ...roverTraceEvents].sort((a, b) => {
     const timestamp = (record: { ts?: unknown; ts_start?: unknown }) =>
       typeof record.ts === 'string'

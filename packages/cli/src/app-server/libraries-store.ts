@@ -167,7 +167,9 @@ export function writeBrowserProviderLearningArtifact(
       {
         providerId,
         trace: artifact.trace,
-        proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(artifact.proposalDiagnostics),
+        proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(
+          artifact.proposalDiagnostics
+        ),
         savedAt: artifact.savedAt
       },
       null,

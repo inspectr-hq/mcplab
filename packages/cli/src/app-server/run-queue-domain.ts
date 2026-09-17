@@ -971,8 +971,7 @@ export function createRunQueueService(params: {
       return { ok: true, status: 'stopped' };
     },
     handleRoverMessage(message, provider, send, worker) {
-      const messageJob =
-        typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
+      const messageJob = typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
       appendRoverTraceEvent(messageJob, message, provider);
       const leaseControlMessage = [
         'assignment_accept',

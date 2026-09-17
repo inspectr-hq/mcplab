@@ -48,9 +48,7 @@ export function sanitizeBrowserProviderLearningTrace(
               ? source.changedCandidateCount
               : undefined,
           visibleControlCount:
-            typeof source.visibleControlCount === 'number'
-              ? source.visibleControlCount
-              : undefined,
+            typeof source.visibleControlCount === 'number' ? source.visibleControlCount : undefined,
           disabledControlCount:
             typeof source.disabledControlCount === 'number'
               ? source.disabledControlCount
@@ -72,17 +70,24 @@ export function sanitizeBrowserProviderLearningTrace(
             ? source.snapshot.slice(-64).flatMap((node) => {
                 if (!node || typeof node !== 'object') return [];
                 const item = node as Record<string, unknown>;
-                if (typeof item.selector !== 'string' || typeof item.tagName !== 'string') return [];
-                return [{
-                  selector: item.selector.slice(0, 500),
-                  tagName: item.tagName.slice(0, 80),
-                  ...(typeof item.role === 'string' ? { role: item.role.slice(0, 80) } : {}),
-                  ...(typeof item.ariaLabel === 'string' ? { ariaLabel: item.ariaLabel.slice(0, 200) } : {}),
-                  ...(typeof item.testId === 'string' ? { testId: item.testId.slice(0, 200) } : {}),
-                  visible: item.visible === true,
-                  disabled: item.disabled === true,
-                  textLength: typeof item.textLength === 'number' ? item.textLength : 0
-                }];
+                if (typeof item.selector !== 'string' || typeof item.tagName !== 'string')
+                  return [];
+                return [
+                  {
+                    selector: item.selector.slice(0, 500),
+                    tagName: item.tagName.slice(0, 80),
+                    ...(typeof item.role === 'string' ? { role: item.role.slice(0, 80) } : {}),
+                    ...(typeof item.ariaLabel === 'string'
+                      ? { ariaLabel: item.ariaLabel.slice(0, 200) }
+                      : {}),
+                    ...(typeof item.testId === 'string'
+                      ? { testId: item.testId.slice(0, 200) }
+                      : {}),
+                    visible: item.visible === true,
+                    disabled: item.disabled === true,
+                    textLength: typeof item.textLength === 'number' ? item.textLength : 0
+                  }
+                ];
               })
             : undefined
         };
