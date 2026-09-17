@@ -276,6 +276,7 @@ export function createRunQueueService(params: {
   }
 
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
+    if (job.runParams.executionType === 'rover') clearRoverLease(job);
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
     state.admittingJobIds.delete(job.id);

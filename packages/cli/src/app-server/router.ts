@@ -46,6 +46,7 @@ import {
   readLibraries,
   writeBrowserProviderAndAgent,
   writeBrowserProviderProfiles,
+  writeBrowserProviderLearningArtifact,
   writeLibraries
 } from './libraries-store.js';
 import {
@@ -114,6 +115,11 @@ import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
+import {
+  proposeBrowserProviderProfile,
+  sanitizeBrowserProviderLearningTrace,
+  sanitizeBrowserProviderProposalDiagnostics
+} from './browser-provider-learning.js';
 import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
 import { createRoverConnectionService } from './rover-connection.js';
 import type { RoverSocketMessage } from './rover-connection.js';
@@ -557,6 +563,12 @@ export async function startAppServer(options: AppServerOptions) {
                   url: String(agentBody.url)
                 }
               : undefined;
+          const learningArtifact = {
+            trace: sanitizeBrowserProviderLearningTrace(body.trace ?? {}),
+            proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(body.proposalDiagnostics),
+            savedAt: new Date().toISOString()
+          };
+          let responseBody: Record<string, unknown>;
           if (agent) {
             const created = writeBrowserProviderAndAgent(
               settings.librariesDir,
@@ -564,24 +576,56 @@ export async function startAppServer(options: AppServerOptions) {
               agent
             );
             roverConnection.send({ type: 'provider_updated', provider: created.profile });
-            asJson(res, wasExisting ? 200 : 201, {
+            responseBody = {
               provider: created.profile,
               agent: created.agent,
               revision: profile.learned.updatedAt,
               operation: wasExisting ? 'updated' : 'created'
-            });
+            };
           } else {
             writeBrowserProviderProfiles(settings.librariesDir, {
               ...existing,
               [storedProfile.id]: storedProfile
             });
             roverConnection.send({ type: 'provider_updated', provider: storedProfile });
-            asJson(res, wasExisting ? 200 : 201, {
+            responseBody = {
               provider: storedProfile,
               revision: storedProfile.learned.updatedAt,
               operation: wasExisting ? 'updated' : 'created'
-            });
+            };
           }
+          writeBrowserProviderLearningArtifact(settings.librariesDir, storedProfile.id, learningArtifact);
+          asJson(res, wasExisting ? 200 : 201, responseBody);
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+
+      if (pathname === '/api/browser-providers/propose' && method === 'POST') {
+        const body = await parseBody(req);
+        try {
+          const libraries = readLibraries(settings.librariesDir);
+          const judge = resolveEvaluationJudge({
+            agents: libraries.agents,
+            evaluationJudgeAgentName:
+              typeof body.agentName === 'string'
+                ? body.agentName
+                : settings.evaluationJudgeAgentName
+          });
+          if (!judge || judge.agent.type !== 'llm') {
+            asJson(res, 400, {
+              error: 'Configure an LLM evaluation judge before requesting a provider proposal.'
+            });
+            return;
+          }
+          const profile = validateBrowserProviderProfile(body.profile);
+          const proposal = await proposeBrowserProviderProfile({
+            agent: judge.agent,
+            profile,
+            trace: (body.trace ?? {}) as { events?: unknown; observedGeneration?: unknown }
+          });
+          asJson(res, 200, proposal);
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
         }

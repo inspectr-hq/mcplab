@@ -522,6 +522,30 @@ describe('Rover run queue domain', () => {
     expect(service.assignRoverJob('claude', send)?.id).toBe(jobId);
   });
 
+  it('clears a paused Rover lease when the job is stopped', () => {
+    vi.useFakeTimers();
+    try {
+      const service = createRunQueueServiceForTest();
+      const send = vi.fn(() => true);
+      const { jobId } = service.enqueueRun(roverParams());
+      service.assignRoverJob('claude', send, {
+        connectionId: 'connection-1',
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      });
+      service.pauseRoverJob(jobId);
+      expect(service.jobs.get(jobId)?.roverLease).toBeDefined();
+
+      expect(service.stopJob(jobId)).toMatchObject({ ok: true, status: 'stopped' });
+      expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+      vi.advanceTimersByTime(31_000);
+      expect(service.jobs.get(jobId)?.status).toBe('stopped');
+      expect(service.state.queue).not.toContain(jobId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('ignores a stale disconnect for a lease owned by another connection', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

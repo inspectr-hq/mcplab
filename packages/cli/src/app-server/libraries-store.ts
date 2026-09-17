@@ -16,6 +16,7 @@ import {
   validateBrowserProviderProfile
 } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
+import { sanitizeBrowserProviderProposalDiagnostics } from './browser-provider-learning.js';
 
 const TEST_CASES_DIR_NAME = 'test-cases';
 const LEGACY_SCENARIOS_DIR_NAME = 'scenarios';
@@ -141,6 +142,33 @@ export function writeBrowserProviderAndAgent(
     scenarios: current.scenarios
   });
   return { profile: storedProfile, agent: browserAgent };
+}
+
+export function writeBrowserProviderLearningArtifact(
+  librariesDir: string,
+  providerId: string,
+  artifact: { trace?: unknown; proposalDiagnostics?: unknown; savedAt: string }
+): void {
+  const root = resolve(librariesDir);
+  const directory = join(root, 'browser-provider-learning');
+  mkdirSync(directory, { recursive: true });
+  const target = join(directory, `${safeFileName(providerId)}.json`);
+  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(
+    temporary,
+    `${JSON.stringify(
+      {
+        providerId,
+        trace: artifact.trace,
+        proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(artifact.proposalDiagnostics),
+        savedAt: artifact.savedAt
+      },
+      null,
+      2
+    )}\n`,
+    'utf8'
+  );
+  renameSync(temporary, target);
 }
 
 export function writeLibraries(

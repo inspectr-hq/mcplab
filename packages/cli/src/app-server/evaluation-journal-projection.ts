@@ -36,8 +36,7 @@ export function projectEvaluationJournal(params: {
       (event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]
     );
   const roverTraceEvents = events
-    .filter((event) => event.type === 'rover_event')
-    .map(({ type: _type, ...event }) => ({ type: 'rover_event', ...event }));
+    .filter((event) => event.type === 'rover_event');
   const traceRecords = [...executionTraceRecords, ...roverTraceEvents].sort((a, b) => {
     const timestamp = (record: { ts?: unknown; ts_start?: unknown }) =>
       typeof record.ts === 'string'

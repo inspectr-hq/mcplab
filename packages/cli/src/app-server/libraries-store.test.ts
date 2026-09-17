@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import {
   readLibraries,
   writeBrowserProviderAndAgent,
+  writeBrowserProviderLearningArtifact,
   writeBrowserProviderProfiles,
   writeLibraries
 } from './libraries-store.js';
@@ -21,6 +22,27 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('persists redacted provider learning diagnostics separately from the profile', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeBrowserProviderLearningArtifact(librariesDir, 'learned/provider', {
+      trace: { observedGeneration: true },
+      proposalDiagnostics: {
+        rationale: ['stable', 'x'.repeat(600), { raw: 'drop me' }],
+        warnings: []
+      },
+      savedAt: '2026-09-17T00:00:00.000Z'
+    });
+    const artifact = JSON.parse(
+      readFileSync(join(librariesDir, 'browser-provider-learning', 'learned-provider.json'), 'utf8')
+    );
+    expect(artifact).toMatchObject({
+      providerId: 'learned/provider',
+      trace: { observedGeneration: true },
+      proposalDiagnostics: { rationale: ['stable', 'x'.repeat(500)], warnings: [] }
+    });
+    expect(JSON.stringify(artifact)).not.toContain('drop me');
+  });
+
   it('loads and atomically writes declarative browser provider profiles', () => {
     const librariesDir = makeTempLibrariesDir();
     writeFileSync(
