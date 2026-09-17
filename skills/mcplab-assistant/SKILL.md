@@ -157,6 +157,21 @@ When the request is about analyzing results, the assistant must:
 14. For evaluation configs, pass the complete config object to the confirmation-required `mcplab_create_evaluation_config`; it writes under `mcplab/evals/` and normalizes collisions automatically.
 15. Verify persistence by checking the returned `path`/`relative_path` and then validate the created config with `mcplab_validate_config` when a config path is available.
 
+## Browser Agent Workflow
+
+Use this workflow when an evaluation must run in a browser chat through MCPLab Rover.
+
+1. Inspect the workspace library with `mcplab_list_library` using `kind: "agents"` and `kind: "browser_providers"`, with `includeContent: true` when the profile details are needed.
+2. A browser agent is an execution target in `agents.yaml`. It has `type: browser`, a `provider` id, a browser `url`, and an optional `new_conversation_between_scenarios` setting.
+3. A browser provider profile is the deterministic interaction contract in `browser-providers.yaml`. It describes origin matching, composer input mode and locator, submit behavior, assistant message selection, completion signals and stability, optional new-conversation behavior, and learning metadata.
+4. Do not invent selectors or copy provider-specific values from unrelated examples. If a matching provider profile does not exist, ask the user to capture it with Rover Learn, then inspect the resulting profile and interaction trace.
+5. Use `mcplab_generate_browser_agent_entry` to draft a linked browser agent entry. Persist it only through the approved library workflow.
+6. Create or update an evaluation config with the browser agent id in the scenario `agent` field. Queue it with `mcplab_queue_run`; Rover must be connected to the matching provider.
+7. Treat browser runs as response-only unless Inspectr telemetry is explicitly present. Tool-dependent checks without observations are `not_evaluated`.
+8. Keep the Evaluation Judge separate. It is an LLM agent selected in workspace settings and is used for semantic `agent_assertions` and optional AI-assisted provider refinement. A browser agent must never be used as the Evaluation Judge.
+
+For the complete profile field reference and a generic complex example, load `references/browser-agents.md` with `mcplab_get_skill` when available.
+
 ## CLI Workflow
 
 Use this workflow when MCP execution tools are not available or when the user explicitly asks for shell commands.

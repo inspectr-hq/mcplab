@@ -315,6 +315,23 @@ describe('mcp tool contracts', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('generates a Rover browser agent entry', async () => {
+    const tool = setupTools().get('mcplab_generate_browser_agent_entry');
+    expect(tool).toBeDefined();
+    const result = await tool!.cb({
+      id: 'custom-chat-browser',
+      name: 'Custom Chat browser',
+      provider: 'custom-chat',
+      url: 'https://chat.example',
+      new_conversation_between_scenarios: true
+    });
+    expect(result.structuredContent.entry).toMatchObject({
+      type: 'browser',
+      provider: 'custom-chat'
+    });
+    expect(result.structuredContent.yaml).toContain('type: browser');
+  });
+
   it('mcplab_generate_server_entry exposes required inputs and enforces auth requirements at runtime', async () => {
     const tools = setupTools();
     const tool = tools.get('mcplab_generate_server_entry');
