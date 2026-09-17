@@ -44,6 +44,7 @@ import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
 import {
   readLibraries,
+  preserveBrowserProviderCreatedAt,
   writeBrowserProviderAndAgent,
   writeBrowserProviderProfiles,
   writeBrowserProviderLearningArtifact,
@@ -545,12 +546,7 @@ export async function startAppServer(options: AppServerOptions) {
           const profile = validateBrowserProviderProfile(rawProfile);
           const existing = readLibraries(settings.librariesDir).browserProviders;
           const wasExisting = Boolean(existing[profile.id]);
-          const storedProfile = existing[profile.id]
-            ? {
-                ...profile,
-                learned: { ...profile.learned, createdAt: existing[profile.id].learned.createdAt }
-              }
-            : profile;
+          const storedProfile = preserveBrowserProviderCreatedAt(profile, existing[profile.id]);
           const agentBody = body.agent as
             | { id?: unknown; name?: unknown; url?: unknown }
             | undefined;
@@ -661,10 +657,7 @@ export async function startAppServer(options: AppServerOptions) {
             ...(body.profile ?? body),
             id: providerId
           });
-          const storedProfile = {
-            ...profile,
-            learned: { ...profile.learned, createdAt: existing[providerId].learned.createdAt }
-          };
+          const storedProfile = preserveBrowserProviderCreatedAt(profile, existing[providerId]);
           writeBrowserProviderProfiles(settings.librariesDir, {
             ...existing,
             [providerId]: storedProfile

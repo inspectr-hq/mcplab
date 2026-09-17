@@ -108,6 +108,15 @@ export function writeBrowserProviderProfiles(
   renameSync(temporary, target);
 }
 
+export function preserveBrowserProviderCreatedAt(
+  profile: BrowserProviderProfile,
+  existingProfile?: BrowserProviderProfile
+): BrowserProviderProfile {
+  return existingProfile
+    ? { ...profile, learned: { ...profile.learned, createdAt: existingProfile.learned.createdAt } }
+    : profile;
+}
+
 export function writeBrowserProviderAndAgent(
   librariesDir: string,
   profile: BrowserProviderProfile,
@@ -122,9 +131,7 @@ export function writeBrowserProviderAndAgent(
     throw new Error(`Agent '${agent.id}' already exists with a different configuration.`);
   }
   const existingProfile = current.browserProviders[profile.id];
-  const storedProfile = existingProfile
-    ? { ...profile, learned: { ...profile.learned, createdAt: existingProfile.learned.createdAt } }
-    : profile;
+  const storedProfile = preserveBrowserProviderCreatedAt(profile, existingProfile);
   const browserAgent = {
     id: agent.id,
     type: 'browser' as const,
