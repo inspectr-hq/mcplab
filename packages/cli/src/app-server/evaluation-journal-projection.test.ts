@@ -39,6 +39,14 @@ describe('projectEvaluationJournal', () => {
         ts: new Date().toISOString(),
         results: result('rover-1', 0)
       });
+      appendExecutionEvent(join(root, 'run-1'), {
+        eventId: 'rover-event-1',
+        type: 'rover_event',
+        ts: new Date().toISOString(),
+        executionId: 'rover-1',
+        roverType: 'stage',
+        stage: 'response_captured'
+      });
       const projected = projectEvaluationJournal({
         runsDir: root,
         evaluationRunId: 'run-1',
@@ -47,6 +55,9 @@ describe('projectEvaluationJournal', () => {
       expect(projected?.metadata.run_id).toBe('run-1');
       expect(projected?.metadata.config_name).toBe('Batch quality');
       expect(projected?.summary.total_runs).toBe(2);
+      expect(readFileSync(join(root, 'run-1', 'trace.jsonl'), 'utf8')).toContain(
+        '"roverType":"stage"'
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

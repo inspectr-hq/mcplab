@@ -113,6 +113,32 @@ export function createRunQueueService(params: {
   const { settings, oauthSessionManager, deps } = params;
   const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  function appendRoverTraceEvent(
+    job: RunJob | undefined,
+    message: RoverSocketMessage,
+    provider: string
+  ): void {
+    if (!job?.runParams.evaluationRunId) return;
+    const evaluationRunId = job.runParams.evaluationRunId;
+    const details = Object.fromEntries(
+      Object.entries(message).filter(
+        ([key, value]) =>
+          !['type', 'prompt', 'text', 'response', 'result', 'content'].includes(key) &&
+          (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+      )
+    );
+    appendExecutionEvent(join(settings.runsDir, evaluationRunId), {
+      eventId: `rover-${job.id}-${randomUUID()}`,
+      type: 'rover_event',
+      ts: new Date().toISOString(),
+      evaluationRunId,
+      executionId: job.id,
+      roverType: message.type,
+      provider,
+      ...details
+    });
+  }
+
   function emit(): void {
     emitQueueEvent(jobs, state, deps.sendSseEvent);
   }
@@ -814,6 +840,7 @@ export function createRunQueueService(params: {
         if (index !== -1) state.queue.splice(index, 0, job.id);
         return null;
       }
+      appendRoverTraceEvent(job, assignment, provider);
       deps.addJobEvent(job, {
         type: 'started',
         ts: new Date().toISOString(),
@@ -943,6 +970,9 @@ export function createRunQueueService(params: {
       return { ok: true, status: 'stopped' };
     },
     handleRoverMessage(message, provider, send, worker) {
+      const messageJob =
+        typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
+      appendRoverTraceEvent(messageJob, message, provider);
       const leaseControlMessage = [
         'assignment_accept',
         'assignment_reject',

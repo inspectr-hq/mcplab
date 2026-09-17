@@ -30,11 +30,23 @@ export function projectEvaluationJournal(params: {
       .filter((event) => event.type === 'execution_stopped')
       .map((event) => event.executionId ?? event.eventId)
   );
-  const traceRecords = events
+  const executionTraceRecords = events
     .filter((event) => event.type === 'execution_completed' && Array.isArray(event.traceRecords))
     .flatMap(
       (event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]
     );
+  const roverTraceEvents = events
+    .filter((event) => event.type === 'rover_event')
+    .map(({ type: _type, ...event }) => ({ type: 'rover_event', ...event }));
+  const traceRecords = [...executionTraceRecords, ...roverTraceEvents].sort((a, b) => {
+    const timestamp = (record: { ts?: unknown; ts_start?: unknown }) =>
+      typeof record.ts === 'string'
+        ? Date.parse(record.ts)
+        : typeof record.ts_start === 'string'
+          ? Date.parse(record.ts_start)
+          : 0;
+    return timestamp(a) - timestamp(b);
+  });
   const results = projectEvaluationResult({
     evaluationRunId: params.evaluationRunId,
     runId: params.evaluationRunId,

@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createRunQueueServiceForTest, createQueuedJob } from './runs-routes.test-helpers.js';
+import { readExecutionEvents } from './execution-journal.js';
 
 function roverParams(provider: 'claude' | 'trendminer' = 'claude') {
   return {
@@ -696,6 +700,46 @@ describe('Rover run queue domain', () => {
     expect(events.at(-1)).toMatchObject({
       payload: { message: expect.stringContaining('[agent=claude]') }
     });
+  });
+
+  it('persists redacted Rover protocol events for an evaluation run', () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-rover-events-'));
+    try {
+      const service = createRunQueueServiceForTest({ settings: { runsDir } });
+      const send = vi.fn(() => true);
+      const queued = service.enqueueRun({
+        ...roverParams(),
+        evaluationRunId: 'evaluation-events'
+      });
+      service.assignRoverJob('claude', send);
+      service.handleRoverMessage(
+        {
+          type: 'stage',
+          jobId: queued.jobId,
+          scenarioId: 's1',
+          stage: 'prompt_sent',
+          prompt: 'must not be persisted'
+        },
+        'claude',
+        send
+      );
+
+      const events = readExecutionEvents(join(runsDir, 'evaluation-events'));
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'rover_event',
+            roverType: 'stage',
+            executionId: queued.jobId,
+            scenarioId: 's1',
+            stage: 'prompt_sent'
+          })
+        ])
+      );
+      expect(JSON.stringify(events)).not.toContain('must not be persisted');
+    } finally {
+      rmSync(runsDir, { recursive: true, force: true });
+    }
   });
 
   it('sends a scenario-specific stop command for a Rover child', () => {
