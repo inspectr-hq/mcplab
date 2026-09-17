@@ -594,7 +594,18 @@ export async function startAppServer(options: AppServerOptions) {
               operation: wasExisting ? 'updated' : 'created'
             };
           }
-          writeBrowserProviderLearningArtifact(settings.librariesDir, storedProfile.id, learningArtifact);
+          try {
+            writeBrowserProviderLearningArtifact(
+              settings.librariesDir,
+              storedProfile.id,
+              learningArtifact
+            );
+          } catch (artifactError: unknown) {
+            console.warn(
+              `[mcplab] Failed to persist learning diagnostics for '${storedProfile.id}':`,
+              artifactError
+            );
+          }
           asJson(res, wasExisting ? 200 : 201, responseBody);
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
