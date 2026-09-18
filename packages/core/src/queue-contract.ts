@@ -69,12 +69,14 @@ export interface McplabQueueRunParams extends QueueRunParamsBase {
   executionType: 'mcplab';
   roverAgent?: never;
   roverNewConversationBetweenScenarios?: never;
+  roverNewConversationBeforeStart?: never;
 }
 
 export interface RoverQueueRunParams extends QueueRunParamsBase {
   executionType: 'rover';
   roverAgent: RoverAgentRef;
   roverNewConversationBetweenScenarios?: boolean;
+  roverNewConversationBeforeStart?: boolean;
 }
 
 export type QueueRunParams = McplabQueueRunParams | RoverQueueRunParams;

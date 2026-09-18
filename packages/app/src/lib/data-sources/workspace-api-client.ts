@@ -357,6 +357,7 @@ export const workspaceApiClient = {
     agents?: string[];
     runNote?: string;
     newConversationBetweenScenarios?: boolean;
+    newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) =>

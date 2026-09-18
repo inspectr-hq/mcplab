@@ -373,6 +373,7 @@ const RunEvaluation = () => {
         ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
           ? { newConversationBetweenScenarios: conversationMode === 'new' }
           : {}),
+        ...(selectedBrowserAgents.length > 0 ? { newConversationBeforeStart: true } : {}),
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),

@@ -21,6 +21,7 @@ export type McplabRunParams = RunParamsBase & {
   roverAgent?: never;
   roverScenarios?: never;
   roverNewConversationBetweenScenarios?: never;
+  roverNewConversationBeforeStart?: never;
 };
 
 export type RoverRunParams = RunParamsBase & {
@@ -28,6 +29,7 @@ export type RoverRunParams = RunParamsBase & {
   roverAgent: RoverAgentRef;
   roverScenarios?: Scenario[];
   roverNewConversationBetweenScenarios?: boolean;
+  roverNewConversationBeforeStart?: boolean;
 };
 
 export type RunParams = McplabRunParams | RoverRunParams;

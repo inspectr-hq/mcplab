@@ -70,6 +70,7 @@ type RunRequestBody = {
   agents?: unknown;
   runNote?: unknown;
   newConversationBetweenScenarios?: unknown;
+  newConversationBeforeStart?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
 };
@@ -486,6 +487,8 @@ export async function handleRunsRoutes(params: {
       typeof body.newConversationBetweenScenarios === 'boolean'
         ? body.newConversationBetweenScenarios
         : undefined;
+    const newConversationBeforeStart =
+      typeof body.newConversationBeforeStart === 'boolean' ? body.newConversationBeforeStart : true;
     const evaluationRunId = createRunId();
     const baseRunParams = {
       evaluationRunId,
@@ -522,7 +525,8 @@ export async function handleRunsRoutes(params: {
               },
               roverScenarios: structuredClone(selectedConfig.scenarios),
               roverNewConversationBetweenScenarios:
-                conversationOverride ?? agent.newConversationBetweenScenarios ?? true
+                conversationOverride ?? agent.newConversationBetweenScenarios ?? true,
+              roverNewConversationBeforeStart: newConversationBeforeStart
             }))
           ];
     const responses = runParamsList.map((runParams) =>
