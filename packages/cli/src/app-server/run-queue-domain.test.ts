@@ -112,6 +112,9 @@ describe('Rover run queue domain', () => {
     expect(service.assignRoverJob('claude', send)?.id).toBe(jobId);
     expect(service.jobs.get(jobId)?.status).toBe('running');
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'assignment', jobId }));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'assignment', newConversationBeforeStart: true })
+    );
   });
 
   it('reports only queued evaluations waiting for the connected provider', () => {

@@ -811,6 +811,8 @@ export function createRunQueueService(params: {
         agentName: job.runParams.roverAgent!.name,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
+        newConversationBeforeStart:
+          job.runParams.roverNewConversationBetweenScenarios !== false,
         newConversationBetweenScenarios:
           job.runParams.roverNewConversationBetweenScenarios !== false
       };

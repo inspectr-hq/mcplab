@@ -1277,6 +1277,9 @@ const ResultDetail = () => {
                                           const notEvaluatedChecks = checks.filter(
                                             (c) => c.status === 'not_evaluated'
                                           );
+                                          const notApplicableChecks = checks.filter(
+                                            (c) => c.status === 'not_applicable'
+                                          );
                                           return (
                                             <>
                                               <div className="flex items-center gap-2 flex-wrap">
@@ -1396,6 +1399,15 @@ const ResultDetail = () => {
                                                           >
                                                             {notEvaluatedChecks.length} not
                                                             evaluated
+                                                          </Badge>
+                                                        )}
+                                                        {notApplicableChecks.length > 0 && (
+                                                          <Badge
+                                                            variant="outline"
+                                                            className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
+                                                          >
+                                                            {notApplicableChecks.length} not
+                                                            applicable
                                                           </Badge>
                                                         )}
                                                       </button>

@@ -92,8 +92,7 @@ export async function evaluateScenarioObservation({
   const checkResults = [...evaluated.check_results, ...(hasToolTelemetry ? [] : unobservedChecks)];
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
-    : observation.executionSource !== 'rover' &&
-        checkResults.some((check) => check.status === 'not_evaluated')
+    : checkResults.some((check) => check.status === 'not_evaluated')
       ? 'incomplete'
       : 'passed';
   const toolUsage: Record<string, number> = {};
