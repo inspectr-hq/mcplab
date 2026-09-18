@@ -21,7 +21,7 @@ import {
   runAgentScenario,
   type AgentRunProgressEvent
 } from './agent.js';
-import { buildNotEvaluatedCheckResults, normalizeToolConstraintAliases } from './eval.js';
+import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
 import { aggregateResults } from './results.js';
 import { evaluateScenarioObservation } from './scenario-observation.js';
 import { persistEvaluationArtifacts } from './artifacts.js';
@@ -387,7 +387,7 @@ export async function runAll(
             outcome: 'error',
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
-            check_results: buildNotEvaluatedCheckResults(scenario.eval),
+            check_results: buildNotExecutedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],

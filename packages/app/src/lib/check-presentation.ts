@@ -26,7 +26,7 @@ export function buildCheckItems({
   if (scenarioError) {
     return evalRules.map((rule) => ({
       rule,
-      status: 'not_evaluated' as const,
+      status: 'not_executed' as const,
       failureReason: undefined
     }));
   }
@@ -35,7 +35,7 @@ export function buildCheckItems({
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
       return {
         rule,
-        status: match?.status ?? ('not_evaluated' as const),
+        status: match?.status ?? ('not_executed' as const),
         failureReason: match?.reason
       };
     });

@@ -96,7 +96,7 @@ export interface EvalRule {
 export interface CheckResult {
   type: string;
   label: string;
-  status: 'passed' | 'failed' | 'not_evaluated' | 'not_applicable';
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
   reason?: string;
   metadata?: Record<string, unknown>;
 }

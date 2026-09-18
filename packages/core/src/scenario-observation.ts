@@ -7,8 +7,8 @@ import type {
   ToolCall
 } from './types.js';
 import {
+  buildNotExecutedCheckResults,
   buildNotEvaluatedCheckResults,
-  buildNotApplicableCheckResults,
   evaluateScenarioWithAgentChecks,
   extractValues,
   type EvaluateScenarioWithAgentChecksOptions
@@ -38,7 +38,7 @@ export function deriveRunOutcome(
 ): RunOutcome {
   if (run.error) return 'error';
   if (run.check_results?.some((check) => check.status === 'failed')) return 'failed';
-  if (run.check_results?.some((check) => check.status === 'not_evaluated')) return 'incomplete';
+  if (run.check_results?.some((check) => check.status === 'not_executed')) return 'incomplete';
   return run.pass ? 'passed' : 'failed';
 }
 
@@ -87,12 +87,12 @@ export async function evaluateScenarioObservation({
   );
   const unobservedChecks =
     observation.executionSource === 'rover'
-      ? buildNotApplicableCheckResults(unobservedToolRules(scenario.eval))
-      : buildNotEvaluatedCheckResults(unobservedToolRules(scenario.eval));
+      ? buildNotEvaluatedCheckResults(unobservedToolRules(scenario.eval))
+      : buildNotExecutedCheckResults(unobservedToolRules(scenario.eval));
   const checkResults = [...evaluated.check_results, ...(hasToolTelemetry ? [] : unobservedChecks)];
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
-    : checkResults.some((check) => check.status === 'not_evaluated')
+    : checkResults.some((check) => check.status === 'not_executed')
       ? 'incomplete'
       : 'passed';
   const toolUsage: Record<string, number> = {};

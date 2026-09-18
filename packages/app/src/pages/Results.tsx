@@ -1193,8 +1193,8 @@ const Results = () => {
                                     ? `, ${item.run.checkCounts.not_evaluated} not evaluated`
                                     : ''
                                 }${
-                                  (item.run.checkCounts.not_applicable ?? 0) > 0
-                                    ? `, ${item.run.checkCounts.not_applicable} not applicable`
+                                  (item.run.checkCounts.not_executed ?? 0) > 0
+                                    ? `, ${item.run.checkCounts.not_executed} not executed`
                                     : ''
                                 }`}
                                 title={`${item.run.checkCounts.passed} passed · ${
@@ -1204,8 +1204,8 @@ const Results = () => {
                                     ? ` · ${item.run.checkCounts.not_evaluated} not evaluated`
                                     : ''
                                 }${
-                                  (item.run.checkCounts.not_applicable ?? 0) > 0
-                                    ? ` · ${item.run.checkCounts.not_applicable} not applicable`
+                                  (item.run.checkCounts.not_executed ?? 0) > 0
+                                    ? ` · ${item.run.checkCounts.not_executed} not executed`
                                     : ''
                                 }`}
                               >

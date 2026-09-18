@@ -26,11 +26,11 @@ describe('evaluateScenarioObservation', () => {
     expect(result.pass).toBe(false);
     expect(result.check_results).toEqual([
       expect.objectContaining({ type: 'response_contains', status: 'passed' }),
-      expect.objectContaining({ type: 'required_tool', status: 'not_evaluated' })
+      expect.objectContaining({ type: 'required_tool', status: 'not_executed' })
     ]);
   });
 
-  it('marks unsupported Rover tool checks not applicable and still passes', async () => {
+  it('marks unsupported Rover tool checks not evaluated and still passes', async () => {
     const result = await evaluateScenarioObservation({
       scenario: {
         id: 'browser-search',
@@ -56,7 +56,7 @@ describe('evaluateScenarioObservation', () => {
       expect.objectContaining({ type: 'response_contains', status: 'passed' }),
       expect.objectContaining({
         type: 'required_tool',
-        status: 'not_applicable',
+        status: 'not_evaluated',
         reason: expect.stringContaining('Tool telemetry')
       })
     ]);

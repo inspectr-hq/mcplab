@@ -90,7 +90,7 @@ describe('listRuns filters', () => {
       passed: 1,
       failed: 1,
       not_evaluated: 1,
-      not_applicable: 0,
+      not_executed: 0,
       total: 3
     });
   });

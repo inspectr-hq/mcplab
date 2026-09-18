@@ -218,7 +218,13 @@ export interface EvalRules {
   agent_context?: AgentContext;
 }
 
-export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated' | 'not_applicable';
+export type CheckResultStatus =
+  | 'passed'
+  | 'failed'
+  | 'not_evaluated'
+  | 'not_executed'
+  /** @deprecated Persisted results used this name for capability-limited checks. */
+  | 'not_applicable';
 
 export interface CheckResult {
   type: string;
@@ -231,8 +237,11 @@ export interface CheckResult {
 export interface CheckCounts {
   passed: number;
   failed: number;
+  /** Checks intentionally outside the execution source's capabilities. */
   not_evaluated: number;
-  /** Count of checks outside the execution source's capabilities. Older results may omit it. */
+  /** Checks expected to run but skipped because execution ended early. */
+  not_executed?: number;
+  /** Legacy field retained when reading older result summaries. */
   not_applicable?: number;
   total: number;
 }

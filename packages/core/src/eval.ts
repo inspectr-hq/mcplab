@@ -36,14 +36,14 @@ export interface EvaluateScenarioWithAgentChecksOptions {
   scenarioPrompt?: string;
 }
 
-export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
+export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
     results.push({
       type: rule.type,
       label: rule.label,
-      status: 'not_evaluated',
+      status: 'not_executed',
       reason: undefined
     });
   }
@@ -52,20 +52,20 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
     results.push({
       type: 'tool_sequence',
       label: formatToolSequenceLabel(sequence),
-      status: 'not_evaluated',
+      status: 'not_executed',
       metadata: { actual: [], expected: sequence }
     });
   }
   for (const rule of (evalRules.response_assertions ?? []).map(
     toCheckResultTemplateForResponseAssertion
   )) {
-    results.push({ ...rule, status: 'not_evaluated', reason: undefined });
+    results.push({ ...rule, status: 'not_executed', reason: undefined });
   }
   for (const rule of evalRules.tool_input_assertions ?? []) {
     results.push({
       type: toolInputAssertionType(rule),
       label: formatToolInputAssertionLabel(rule),
-      status: 'not_evaluated',
+      status: 'not_executed',
       metadata: {
         tool: rule.tool,
         ...(rule.type === 'jsonpath' ? { path: rule.path } : {})
@@ -76,20 +76,20 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
     results.push({
       type: 'agent_check',
       label: assertion.label,
-      status: 'not_evaluated'
+      status: 'not_executed'
     });
   }
   return results;
 }
 
-export function buildNotApplicableCheckResults(evalRules?: EvalRules): CheckResult[] {
+export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
     results.push({
       type: rule.type,
       label: rule.label,
-      status: 'not_applicable',
+      status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.'
     });
   }
@@ -97,7 +97,7 @@ export function buildNotApplicableCheckResults(evalRules?: EvalRules): CheckResu
     results.push({
       type: 'tool_sequence',
       label: formatToolSequenceLabel(evalRules.tool_sequence),
-      status: 'not_applicable',
+      status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.',
       metadata: { actual: [], expected: evalRules.tool_sequence }
     });
@@ -106,7 +106,7 @@ export function buildNotApplicableCheckResults(evalRules?: EvalRules): CheckResu
     results.push({
       type: toolInputAssertionType(rule),
       label: formatToolInputAssertionLabel(rule),
-      status: 'not_applicable',
+      status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.',
       metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
     });

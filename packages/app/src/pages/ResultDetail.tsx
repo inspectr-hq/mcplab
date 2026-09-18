@@ -989,11 +989,11 @@ const ResultDetail = () => {
               failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
             />
             <OutcomeCard
-              title="Checks Pass / Fail / N/A"
+              title="Checks Pass / Fail / Not evaluated / Not executed"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}
-              notApplicable={checkCounts.not_applicable}
+              notExecuted={checkCounts.not_executed}
             />
 
             <Card className="lg:col-span-2">
@@ -1130,8 +1130,8 @@ const ResultDetail = () => {
                                         ? ` · ${checkCounts.not_evaluated} not evaluated`
                                         : ''
                                     }${
-                                      checkCounts.not_applicable
-                                        ? ` · ${checkCounts.not_applicable} not applicable`
+                                      checkCounts.not_executed
+                                        ? ` · ${checkCounts.not_executed} not executed`
                                         : ''
                                     }`}
                                     aria-label={`${checkCounts.passed} checks passed, ${
@@ -1141,8 +1141,8 @@ const ResultDetail = () => {
                                         ? `, ${checkCounts.not_evaluated} not evaluated`
                                         : ''
                                     }${
-                                      checkCounts.not_applicable
-                                        ? `, ${checkCounts.not_applicable} not applicable`
+                                      checkCounts.not_executed
+                                        ? `, ${checkCounts.not_executed} not executed`
                                         : ''
                                     }`}
                                   >
@@ -1155,10 +1155,10 @@ const ResultDetail = () => {
                                         <span>{checkCounts.not_evaluated} ?</span>
                                       </>
                                     )}
-                                    {checkCounts.not_applicable > 0 && (
+                                    {checkCounts.not_executed > 0 && (
                                       <>
                                         <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_applicable} N/A</span>
+                                        <span>{checkCounts.not_executed} not executed</span>
                                       </>
                                     )}
                                   </span>
@@ -1196,8 +1196,8 @@ const ResultDetail = () => {
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {hasCheckResults
                                           ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
-                                              checkCounts.not_applicable
-                                                ? ` · ${checkCounts.not_applicable} N/A`
+                                              checkCounts.not_executed
+                                                ? ` · ${checkCounts.not_executed} not executed`
                                                 : ''
                                             } · `
                                           : ''}
@@ -1281,8 +1281,8 @@ const ResultDetail = () => {
                                           const notEvaluatedChecks = checks.filter(
                                             (c) => c.status === 'not_evaluated'
                                           );
-                                          const notApplicableChecks = checks.filter(
-                                            (c) => c.status === 'not_applicable'
+                                          const notExecutedChecks = checks.filter(
+                                            (c) => c.status === 'not_executed'
                                           );
                                           return (
                                             <>
@@ -1405,22 +1405,21 @@ const ResultDetail = () => {
                                                             evaluated
                                                           </Badge>
                                                         )}
-                                                        {notApplicableChecks.length > 0 && (
+                                                        {notExecutedChecks.length > 0 && (
                                                           <Badge
                                                             variant="outline"
                                                             className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
                                                           >
-                                                            {notApplicableChecks.length} not
-                                                            applicable
+                                                            {notExecutedChecks.length} not executed
                                                           </Badge>
                                                         )}
                                                       </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
-                                                      {notEvaluatedChecks.length > 0 && (
+                                                      {notExecutedChecks.length > 0 && (
                                                         <p className="mb-2 text-[11px] text-muted-foreground">
-                                                          Checks were not evaluated because this run
-                                                          failed before evaluation.
+                                                          Checks were not executed because this run
+                                                          ended before evaluation.
                                                         </p>
                                                       )}
                                                       <div className="space-y-1">
@@ -1434,16 +1433,22 @@ const ResultDetail = () => {
                                                             className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
-                                                                : check.status !== 'passed'
-                                                                  ? 'border-muted-foreground/20 bg-muted/40'
-                                                                  : 'border-success/20 bg-success/5'
+                                                                : check.status === 'not_executed'
+                                                                  ? 'border-amber-500/20 bg-amber-500/5'
+                                                                  : check.status === 'not_evaluated'
+                                                                    ? 'border-muted-foreground/20 bg-muted/40'
+                                                                    : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
                                                             <div className="min-w-0">
                                                               <div className="flex items-center gap-2">
                                                                 {check.status === 'failed' ? (
                                                                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                                                                ) : check.status !== 'passed' ? (
+                                                                ) : check.status ===
+                                                                  'not_executed' ? (
+                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                                                ) : check.status ===
+                                                                  'not_evaluated' ? (
                                                                   <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                                                 ) : (
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
@@ -1465,9 +1470,12 @@ const ResultDetail = () => {
                                                               className={`shrink-0 text-[10px] ${
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
-                                                                  : check.status !== 'passed'
-                                                                    ? 'border-muted-foreground/30 text-muted-foreground'
-                                                                    : 'border-success/30 text-success'
+                                                                  : check.status === 'not_executed'
+                                                                    ? 'border-amber-500/30 text-amber-600'
+                                                                    : check.status ===
+                                                                        'not_evaluated'
+                                                                      ? 'border-muted-foreground/30 text-muted-foreground'
+                                                                      : 'border-success/30 text-success'
                                                               }`}
                                                             >
                                                               {check.status}
@@ -2806,7 +2814,7 @@ function buildRunCheckItems(
   checkResults?: Array<{
     type: string;
     label: string;
-    status: 'passed' | 'failed' | 'not_evaluated' | 'not_applicable';
+    status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
     reason?: string;
   }>
 ) {

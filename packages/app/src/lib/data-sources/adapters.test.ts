@@ -726,14 +726,14 @@ describe('fromCoreResultsJson check counts', () => {
       passed: 1,
       failed: 1,
       not_evaluated: 1,
-      not_applicable: 0,
+      not_executed: 0,
       total: 3
     });
     expect(mapped.scenarios[0]?.checkCounts).toEqual({
       passed: 1,
       failed: 1,
       not_evaluated: 1,
-      not_applicable: 0,
+      not_executed: 0,
       total: 3
     });
   });

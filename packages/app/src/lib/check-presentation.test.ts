@@ -133,10 +133,10 @@ describe('buildCheckItems', () => {
       ]
     });
 
-    expect(result[0]).toMatchObject({ rule, status: 'not_evaluated' });
+    expect(result[0]).toMatchObject({ rule, status: 'not_executed' });
   });
 
-  it('marks all checks not evaluated when run fails before evaluation', () => {
+  it('marks all checks not executed when run fails before evaluation', () => {
     const result = buildCheckItems({
       evalRules,
       failureReasons: ['Scenario error: boom'],
@@ -144,8 +144,8 @@ describe('buildCheckItems', () => {
     });
 
     expect(result).toEqual([
-      { rule: evalRules[0], status: 'not_evaluated', failureReason: undefined },
-      { rule: evalRules[1], status: 'not_evaluated', failureReason: undefined }
+      { rule: evalRules[0], status: 'not_executed', failureReason: undefined },
+      { rule: evalRules[1], status: 'not_executed', failureReason: undefined }
     ]);
   });
 
