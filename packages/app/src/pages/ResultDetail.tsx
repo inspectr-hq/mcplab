@@ -1152,13 +1152,13 @@ const ResultDetail = () => {
                                     {checkCounts.not_evaluated > 0 && (
                                       <>
                                         <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_evaluated} ?</span>
+                                        <span>{checkCounts.not_evaluated} ○</span>
                                       </>
                                     )}
                                     {checkCounts.not_executed > 0 && (
                                       <>
                                         <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_executed} not executed</span>
+                                        <span>{checkCounts.not_executed} ⊘</span>
                                       </>
                                     )}
                                   </span>
@@ -1196,8 +1196,12 @@ const ResultDetail = () => {
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {hasCheckResults
                                           ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
+                                              checkCounts.not_evaluated
+                                                ? ` · ${checkCounts.not_evaluated} ○`
+                                                : ''
+                                            }${
                                               checkCounts.not_executed
-                                                ? ` · ${checkCounts.not_executed} not executed`
+                                                ? ` · ${checkCounts.not_executed} ⊘`
                                                 : ''
                                             } · `
                                           : ''}

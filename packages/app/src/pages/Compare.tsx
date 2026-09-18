@@ -138,6 +138,18 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
       <span className="text-success">{counts.passed} ✓</span>
       <span className="text-muted-foreground"> · </span>
       <span className="text-destructive">{counts.failed} ✕</span>
+      {counts.not_evaluated > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_evaluated} ○</span>
+        </>
+      )}
+      {counts.not_executed > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_executed} ⊘</span>
+        </>
+      )}
     </>
   );
 }
