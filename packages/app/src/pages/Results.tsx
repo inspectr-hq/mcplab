@@ -1188,12 +1188,24 @@ const Results = () => {
                             {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
                               <span
                                 className="font-mono text-[11px] leading-none"
-                                aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed`}
+                                aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed${
+                                  item.run.checkCounts.not_evaluated > 0
+                                    ? `, ${item.run.checkCounts.not_evaluated} not evaluated`
+                                    : ''
+                                }${
+                                  (item.run.checkCounts.not_applicable ?? 0) > 0
+                                    ? `, ${item.run.checkCounts.not_applicable} not applicable`
+                                    : ''
+                                }`}
                                 title={`${item.run.checkCounts.passed} passed · ${
                                   item.run.checkCounts.failed
                                 } failed${
                                   item.run.checkCounts.not_evaluated > 0
                                     ? ` · ${item.run.checkCounts.not_evaluated} not evaluated`
+                                    : ''
+                                }${
+                                  (item.run.checkCounts.not_applicable ?? 0) > 0
+                                    ? ` · ${item.run.checkCounts.not_applicable} not applicable`
                                     : ''
                                 }`}
                               >

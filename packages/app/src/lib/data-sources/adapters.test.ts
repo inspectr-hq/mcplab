@@ -722,11 +722,18 @@ describe('fromCoreResultsJson check counts', () => {
 
     const mapped = fromCoreResultsJson(results);
 
-    expect(mapped.checkCounts).toEqual({ passed: 1, failed: 1, not_evaluated: 1, total: 3 });
+    expect(mapped.checkCounts).toEqual({
+      passed: 1,
+      failed: 1,
+      not_evaluated: 1,
+      not_applicable: 0,
+      total: 3
+    });
     expect(mapped.scenarios[0]?.checkCounts).toEqual({
       passed: 1,
       failed: 1,
       not_evaluated: 1,
+      not_applicable: 0,
       total: 3
     });
   });

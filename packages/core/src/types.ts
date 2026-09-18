@@ -218,7 +218,7 @@ export interface EvalRules {
   agent_context?: AgentContext;
 }
 
-export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated';
+export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated' | 'not_applicable';
 
 export interface CheckResult {
   type: string;
@@ -232,6 +232,8 @@ export interface CheckCounts {
   passed: number;
   failed: number;
   not_evaluated: number;
+  /** Count of checks outside the execution source's capabilities. Older results may omit it. */
+  not_applicable?: number;
   total: number;
 }
 

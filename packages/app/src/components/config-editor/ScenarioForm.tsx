@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  Clock3,
   ChevronDown,
   ChevronUp,
   Edit,
@@ -1198,13 +1199,17 @@ function ScenarioCard({
                                     className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                       check.status === 'failed'
                                         ? 'border-destructive/20 bg-destructive/5'
-                                        : 'border-success/20 bg-success/5'
+                                        : check.status !== 'passed'
+                                          ? 'border-muted-foreground/20 bg-muted/40'
+                                          : 'border-success/20 bg-success/5'
                                     }`}
                                   >
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
                                         {check.status === 'failed' ? (
                                           <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                        ) : check.status !== 'passed' ? (
+                                          <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                         ) : (
                                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                         )}
@@ -1223,7 +1228,9 @@ function ScenarioCard({
                                       className={`shrink-0 text-[10px] ${
                                         check.status === 'failed'
                                           ? 'border-destructive/30 text-destructive'
-                                          : 'border-success/30 text-success'
+                                          : check.status !== 'passed'
+                                            ? 'border-muted-foreground/30 text-muted-foreground'
+                                            : 'border-success/30 text-success'
                                       }`}
                                     >
                                       {check.status}
@@ -1965,7 +1972,7 @@ function buildPreviewCheckItems(
   checkResults?: Array<{
     type: string;
     label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
+    status: 'passed' | 'failed' | 'not_evaluated' | 'not_applicable';
     reason?: string;
   }>
 ) {

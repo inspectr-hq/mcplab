@@ -82,6 +82,38 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
   return results;
 }
 
+export function buildNotApplicableCheckResults(evalRules?: EvalRules): CheckResult[] {
+  if (!evalRules) return [];
+  const results: CheckResult[] = [];
+  for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
+    results.push({
+      type: rule.type,
+      label: rule.label,
+      status: 'not_applicable',
+      reason: 'Tool telemetry is not available for this execution source.'
+    });
+  }
+  if (evalRules.tool_sequence?.length) {
+    results.push({
+      type: 'tool_sequence',
+      label: formatToolSequenceLabel(evalRules.tool_sequence),
+      status: 'not_applicable',
+      reason: 'Tool telemetry is not available for this execution source.',
+      metadata: { actual: [], expected: evalRules.tool_sequence }
+    });
+  }
+  for (const rule of evalRules.tool_input_assertions ?? []) {
+    results.push({
+      type: toolInputAssertionType(rule),
+      label: formatToolInputAssertionLabel(rule),
+      status: 'not_applicable',
+      reason: 'Tool telemetry is not available for this execution source.',
+      metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
+    });
+  }
+  return results;
+}
+
 export function evaluateScenario(
   finalText: string,
   toolSequence: string[],

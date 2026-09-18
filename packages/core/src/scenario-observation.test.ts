@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluateScenarioObservation } from './scenario-observation.js';
 
 describe('evaluateScenarioObservation', () => {
-  it('marks tool checks not evaluated when telemetry is absent', async () => {
+  it('marks tool checks not evaluated when telemetry is absent for a normal run', async () => {
     const result = await evaluateScenarioObservation({
       scenario: {
         id: 'external-search',
@@ -17,7 +17,7 @@ describe('evaluateScenarioObservation', () => {
         finalText: 'Antwerp is in Belgium.',
         startedAt: '2026-09-08T10:00:00.000Z',
         completedAt: '2026-09-08T10:00:01.000Z',
-        executionSource: 'rover',
+        executionSource: 'mcplab',
         client: 'claude'
       }
     });
@@ -27,6 +27,38 @@ describe('evaluateScenarioObservation', () => {
     expect(result.check_results).toEqual([
       expect.objectContaining({ type: 'response_contains', status: 'passed' }),
       expect.objectContaining({ type: 'required_tool', status: 'not_evaluated' })
+    ]);
+  });
+
+  it('marks unsupported Rover tool checks not applicable and still passes', async () => {
+    const result = await evaluateScenarioObservation({
+      scenario: {
+        id: 'browser-search',
+        servers: ['search'],
+        prompt: 'Find Antwerp',
+        eval: {
+          tool_constraints: { required_tools: ['search'] },
+          response_assertions: [{ type: 'contains', value: 'Antwerp' }]
+        }
+      },
+      observation: {
+        finalText: 'Antwerp is in Belgium.',
+        startedAt: '2026-09-08T10:00:00.000Z',
+        completedAt: '2026-09-08T10:00:01.000Z',
+        executionSource: 'rover',
+        client: 'trendminer'
+      }
+    });
+
+    expect(result.outcome).toBe('passed');
+    expect(result.pass).toBe(true);
+    expect(result.check_results).toEqual([
+      expect.objectContaining({ type: 'response_contains', status: 'passed' }),
+      expect.objectContaining({
+        type: 'required_tool',
+        status: 'not_applicable',
+        reason: expect.stringContaining('Tool telemetry')
+      })
     ]);
   });
 

@@ -44,6 +44,7 @@ export interface RunSummary {
     passed: number;
     failed: number;
     not_evaluated: number;
+    not_applicable?: number;
     total: number;
   };
 }

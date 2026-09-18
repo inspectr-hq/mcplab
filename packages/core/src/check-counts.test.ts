@@ -8,8 +8,9 @@ describe('tallyCheckCounts', () => {
         { status: 'passed' },
         { status: 'failed' },
         { status: 'not_evaluated' },
+        { status: 'not_applicable' },
         { status: 'legacy_status' }
       ])
-    ).toEqual({ passed: 1, failed: 1, not_evaluated: 1, total: 3 });
+    ).toEqual({ passed: 1, failed: 1, not_evaluated: 1, not_applicable: 1, total: 4 });
   });
 });

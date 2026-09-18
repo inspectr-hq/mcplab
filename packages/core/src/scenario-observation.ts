@@ -8,6 +8,7 @@ import type {
 } from './types.js';
 import {
   buildNotEvaluatedCheckResults,
+  buildNotApplicableCheckResults,
   evaluateScenarioWithAgentChecks,
   extractValues,
   type EvaluateScenarioWithAgentChecksOptions
@@ -84,13 +85,15 @@ export async function evaluateScenarioObservation({
       judgeAgentAssertions
     }
   );
-  const checkResults = [
-    ...evaluated.check_results,
-    ...(hasToolTelemetry ? [] : buildNotEvaluatedCheckResults(unobservedToolRules(scenario.eval)))
-  ];
+  const unobservedChecks =
+    observation.executionSource === 'rover'
+      ? buildNotApplicableCheckResults(unobservedToolRules(scenario.eval))
+      : buildNotEvaluatedCheckResults(unobservedToolRules(scenario.eval));
+  const checkResults = [...evaluated.check_results, ...(hasToolTelemetry ? [] : unobservedChecks)];
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
-    : checkResults.some((check) => check.status === 'not_evaluated')
+    : observation.executionSource !== 'rover' &&
+        checkResults.some((check) => check.status === 'not_evaluated')
       ? 'incomplete'
       : 'passed';
   const toolUsage: Record<string, number> = {};

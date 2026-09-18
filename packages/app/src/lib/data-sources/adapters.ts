@@ -1441,10 +1441,11 @@ export function fromCoreResultsJson(
       counts.passed += scenario.checkCounts?.passed ?? 0;
       counts.failed += scenario.checkCounts?.failed ?? 0;
       counts.not_evaluated += scenario.checkCounts?.not_evaluated ?? 0;
+      counts.not_applicable += scenario.checkCounts?.not_applicable ?? 0;
       counts.total += scenario.checkCounts?.total ?? 0;
       return counts;
     },
-    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+    { passed: 0, failed: 0, not_evaluated: 0, not_applicable: 0, total: 0 }
   );
 
   return {
