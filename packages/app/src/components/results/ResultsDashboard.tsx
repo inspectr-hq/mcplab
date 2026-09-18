@@ -179,7 +179,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           failed={summary.failedRuns}
         />
         <OutcomeCard
-          title="Checks Pass / Fail"
+          title="Checks Pass / Fail / N/A"
           passed={summary.checkCounts.passed}
           failed={summary.checkCounts.failed}
           notEvaluated={summary.checkCounts.not_evaluated}

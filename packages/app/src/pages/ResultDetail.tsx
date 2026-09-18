@@ -989,7 +989,7 @@ const ResultDetail = () => {
               failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
             />
             <OutcomeCard
-              title="Checks Pass / Fail"
+              title="Checks Pass / Fail / N/A"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}
@@ -1195,7 +1195,11 @@ const ResultDetail = () => {
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {hasCheckResults
-                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
+                                              checkCounts.not_applicable
+                                                ? ` · ${checkCounts.not_applicable} N/A`
+                                                : ''
+                                            } · `
                                           : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}

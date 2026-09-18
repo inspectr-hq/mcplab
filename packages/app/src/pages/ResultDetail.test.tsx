@@ -197,7 +197,13 @@ describe('ResultDetail conversation toggle', () => {
     result.scenarios[0].runs[0].checkResults = [
       { type: 'required_tool', label: 'Required tool · search_tags', status: 'passed' },
       { type: 'response_contains', label: 'Text contains · ready', status: 'passed' },
-      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' }
+      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' },
+      {
+        type: 'required_tool',
+        label: 'Required tool · get_tag_profile',
+        status: 'not_applicable',
+        reason: 'Tool telemetry is not available for this execution source.'
+      }
     ];
     getResultMock.mockResolvedValue(result);
 
@@ -211,11 +217,12 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
-    expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+    expect(screen.getByTitle('2 passed · 1 failed · 1 not applicable')).toBeInTheDocument();
     expect(screen.getByText('2 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText(/Checks 2 ✓ · 1 ✕/)).toBeInTheDocument();
+    expect(screen.getByText(/Checks 2 ✓ · 1 ✕ · 1 N\/A/)).toBeInTheDocument();
+    expect(screen.getByText('1 not applicable')).toBeInTheDocument();
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
