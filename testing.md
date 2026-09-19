@@ -11,7 +11,7 @@ Inspectr telemetry is intentionally excluded. Browser tool checks should remain 
 
 ## Prerequisites
 
-- Node.js 20.19 or newer.
+- Node.js 22.12 or newer.
 - npm dependencies installed in both repositories.
 - Chrome 116 or newer for service-worker WebSocket support.
 - A local MCPLab configuration with at least one response-only scenario.

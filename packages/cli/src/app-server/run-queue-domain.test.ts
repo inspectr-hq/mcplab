@@ -781,6 +781,7 @@ describe('Rover run queue domain', () => {
     });
     service.assignRoverJob('claude', send);
     expect(service.stopRoverScenario(jobId, 's1')).toMatchObject({ ok: true, status: 'stopped' });
+    expect(service.jobs.get(jobId)?.status).toBe('stopped');
   });
 
   it('aborts only the selected LLM child', () => {

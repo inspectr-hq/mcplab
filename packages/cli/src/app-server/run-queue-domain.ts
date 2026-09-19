@@ -934,6 +934,14 @@ export function createRunQueueService(params: {
         status: 'stopped' as const
       };
       job.childProgress = upsertQueueChildProgress(progress, { ...next });
+      const children = job.childProgress ?? [];
+      const aggregateTerminal =
+        children.length > 0 &&
+        children.every((entry) => ['completed', 'error', 'stopped'].includes(entry.status));
+      if (aggregateTerminal) {
+        finalizeRoverJob(job, { kind: 'stopped', reason: 'Run stopped by user' });
+        return { ok: true, status: 'stopped' };
+      }
       emit();
       return { ok: true, status: 'stopped' };
     },
