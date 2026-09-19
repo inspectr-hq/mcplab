@@ -1,5 +1,6 @@
 import type {
   AgentContext,
+  AgentConfig,
   ConversationItem,
   AgentEntry,
   CheckCounts,
@@ -24,7 +25,11 @@ import {
   attachmentTypeFromMediaType,
   inferAttachmentMediaType
 } from '../../../../core/src/attachments';
-import type { ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
+import type {
+  AgentConfig as CoreAgentConfig,
+  ScenarioAttachment,
+  SourceScenarioAttachment
+} from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -41,6 +46,61 @@ import { toComparableString } from '../value-normalization';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
+}
+
+function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
+  if (agent.type === 'browser') {
+    return {
+      id,
+      name: String(agent.name || id),
+      type: 'browser',
+      provider: agent.provider,
+      model: '',
+      maxTokens: 0,
+      url: agent.url,
+      newConversationBetweenScenarios: agent.newConversationBetweenScenarios
+    };
+  }
+  return {
+    id,
+    name: String(agent.name || id),
+    type: 'llm',
+    provider: agent.provider === 'azure_openai' ? 'azure' : agent.provider,
+    model: agent.model,
+    ...withOptionalTemperature(agent.temperature),
+    maxTokens: agent.max_tokens ?? 2048,
+    maxTurns: agent.max_turns,
+    systemPrompt: agent.system
+  };
+}
+
+function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
+  if (agent.type === 'browser')
+    return {
+      id: agent.id,
+      name: agent.name,
+      type: 'browser',
+      provider: agent.provider,
+      url: agent.url,
+      ...(agent.newConversationBetweenScenarios === undefined
+        ? {}
+        : { new_conversation_between_scenarios: agent.newConversationBetweenScenarios })
+    };
+  return {
+    id: agent.id,
+    name: agent.name,
+    provider:
+      agent.provider === 'azure'
+        ? 'azure_openai'
+        : agent.provider === 'anthropic'
+          ? 'anthropic'
+          : 'openai',
+    model: agent.model,
+    ...withOptionalTemperature(agent.temperature),
+    max_tokens: agent.maxTokens,
+    max_turns: agent.maxTurns,
+    system: agent.systemPrompt
+  };
 }
 
 function normalizeText(value: unknown): string | undefined {
@@ -327,18 +387,18 @@ function toUiServerConfigFromMcpEntry(
     authType: (auth?.type === 'bearer'
       ? 'bearer'
       : auth?.type === 'api_key'
-      ? 'api-key'
-      : auth?.type === 'oauth_client_credentials'
-      ? 'api-key'
-      : auth?.type === 'oauth_authorization_code'
-      ? 'oauth2'
-      : 'none') as 'none' | 'bearer' | 'api-key' | 'oauth2',
+        ? 'api-key'
+        : auth?.type === 'oauth_client_credentials'
+          ? 'api-key'
+          : auth?.type === 'oauth_authorization_code'
+            ? 'oauth2'
+            : 'none') as 'none' | 'bearer' | 'api-key' | 'oauth2',
     authValue:
       auth?.type === 'bearer'
         ? String(auth.token || '') || (auth.env ? `\${${auth.env}}` : undefined)
         : auth?.type === 'api_key'
-        ? String(auth.value || '')
-        : undefined,
+          ? String(auth.value || '')
+          : undefined,
     apiKeyHeaderName: auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
     oauthClientId:
       auth?.type === 'oauth_authorization_code'
@@ -408,12 +468,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       entry.auth?.type === 'bearer'
         ? 'bearer'
         : entry.auth?.type === 'api_key'
-        ? 'api-key'
-        : entry.auth?.type === 'oauth_client_credentials'
-        ? 'api-key'
-        : entry.auth?.type === 'oauth_authorization_code'
-        ? 'oauth2'
-        : 'none';
+          ? 'api-key'
+          : entry.auth?.type === 'oauth_client_credentials'
+            ? 'api-key'
+            : entry.auth?.type === 'oauth_authorization_code'
+              ? 'oauth2'
+              : 'none';
     const mappedServer = {
       id,
       name: String(entry.name || inlineId),
@@ -422,10 +482,10 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       authType,
       authValue:
         entry.auth?.type === 'bearer'
-          ? entry.auth.token ?? (entry.auth.env ? `\${${entry.auth.env}}` : undefined)
+          ? (entry.auth.token ?? (entry.auth.env ? `\${${entry.auth.env}}` : undefined))
           : entry.auth?.type === 'api_key'
-          ? entry.auth.value
-          : undefined,
+            ? entry.auth.value
+            : undefined,
       apiKeyHeaderName: entry.auth?.type === 'api_key' ? entry.auth.header_name : undefined,
       oauthClientId:
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_id : undefined,
@@ -437,8 +497,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         entry.auth?.type === 'oauth_authorization_code'
           ? entry.auth.scope
           : entry.auth?.type === 'oauth_client_credentials'
-          ? entry.auth.scope
-          : undefined,
+            ? entry.auth.scope
+            : undefined,
       oauthMode: entry.auth?.type === 'oauth_authorization_code' ? entry.auth.mode : undefined,
       oauthAuthorizationUrl:
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.authorization_url : undefined,
@@ -468,18 +528,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
-    const provider: 'openai' | 'anthropic' | 'azure' =
-      entry.provider === 'azure_openai' ? 'azure' : entry.provider;
-    const mappedAgent = {
-      id,
-      name: String(entry.name || inlineId),
-      provider,
-      model: entry.model,
-      ...withOptionalTemperature(entry.temperature),
-      maxTokens: entry.max_tokens ?? 2048,
-      maxTurns: entry.max_turns,
-      systemPrompt: entry.system
-    };
+    const mappedAgent = fromCoreAgent(id, entry);
     agents.push(mappedAgent);
     mixedAgentEntries.push({ kind: 'inline', agent: mappedAgent });
   }
@@ -633,13 +682,7 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
       })) as unknown as CoreSourceEvalConfig['servers'],
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
         id: name,
-        name: normalizeText(agent.name) || name,
-        provider: agent.provider,
-        model: agent.model,
-        temperature: agent.temperature,
-        max_tokens: agent.max_tokens,
-        max_turns: agent.max_turns,
-        system: agent.system
+        ...agent
       })) as unknown as CoreSourceEvalConfig['agents'],
       scenarios: libraries.scenarios.map((scenario, index) => ({
         ...scenario,
@@ -651,7 +694,8 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
   return {
     servers: mapped.servers,
     agents: mapped.agents,
-    scenarios: mapped.scenarios
+    scenarios: mapped.scenarios,
+    browserProviders: libraries.browserProviders ?? {}
   };
 }
 
@@ -671,41 +715,41 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
             return { type: 'bearer' as const, token: trimmedAuthValue };
           })()
         : server.authType === 'api-key' && !server.oauthTokenUrl
-        ? {
-            type: 'api_key' as const,
-            ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
-            value: (() => {
-              if (!trimmedAuthValue) {
-                throw new Error(`Server '${sourceId}' is missing API key value`);
+          ? {
+              type: 'api_key' as const,
+              ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
+              value: (() => {
+                if (!trimmedAuthValue) {
+                  throw new Error(`Server '${sourceId}' is missing API key value`);
+                }
+                return trimmedAuthValue;
+              })()
+            }
+          : server.authType === 'api-key'
+            ? {
+                type: 'oauth_client_credentials' as const,
+                token_url: server.oauthTokenUrl || '',
+                client_id_env: server.oauthClientIdEnv || '',
+                client_secret_env: server.oauthClientSecretEnv || '',
+                ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
               }
-              return trimmedAuthValue;
-            })()
-          }
-        : server.authType === 'api-key'
-        ? {
-            type: 'oauth_client_credentials' as const,
-            token_url: server.oauthTokenUrl || '',
-            client_id_env: server.oauthClientIdEnv || '',
-            client_secret_env: server.oauthClientSecretEnv || '',
-            ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-            ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
-          }
-        : server.authType === 'oauth2'
-        ? {
-            type: 'oauth_authorization_code' as const,
-            ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
-            ...(server.oauthMode !== 'dcr' && server.oauthClientId
-              ? { client_id: server.oauthClientId }
-              : {}),
-            ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
-            ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-            ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-            ...(server.oauthAuthorizationUrl
-              ? { authorization_url: server.oauthAuthorizationUrl }
-              : {}),
-            ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
-          }
-        : undefined;
+            : server.authType === 'oauth2'
+              ? {
+                  type: 'oauth_authorization_code' as const,
+                  ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+                  ...(server.oauthMode !== 'dcr' && server.oauthClientId
+                    ? { client_id: server.oauthClientId }
+                    : {}),
+                  ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
+                  ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
+                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                  ...(server.oauthAuthorizationUrl
+                    ? { authorization_url: server.oauthAuthorizationUrl }
+                    : {}),
+                  ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
+                }
+              : undefined;
     return {
       id: sourceId,
       ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
@@ -737,22 +781,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   );
 
   const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
-    const sourceId = agent.id;
-    return {
-      id: sourceId,
-      ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
-      provider:
-        agent.provider === 'azure'
-          ? 'azure_openai'
-          : agent.provider === 'anthropic'
-          ? 'anthropic'
-          : 'openai',
-      model: agent.model,
-      ...withOptionalTemperature(agent.temperature),
-      max_tokens: agent.maxTokens,
-      max_turns: agent.maxTurns,
-      system: agent.systemPrompt
-    } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
+    return toCoreAgent(agent) as NonNullable<CoreSourceEvalConfig['agents']>[number];
   };
 
   const mixedAgentEntries =
@@ -822,7 +851,8 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 }
 
 export function toCoreLibraries(
-  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>
+  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'> &
+    Pick<LibraryBundle, 'browserProviders'>
 ): CoreLibraryBundle {
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
@@ -843,64 +873,57 @@ export function toCoreLibraries(
                   return { type: 'bearer' as const, token: trimmedAuthValue };
                 })()
               : server.authType === 'api-key' && !server.oauthTokenUrl
-              ? {
-                  type: 'api_key' as const,
-                  ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
-                  value: (() => {
-                    if (!trimmedAuthValue) {
-                      throw new Error(`Server '${server.id}' is missing API key value`);
+                ? {
+                    type: 'api_key' as const,
+                    ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
+                    value: (() => {
+                      if (!trimmedAuthValue) {
+                        throw new Error(`Server '${server.id}' is missing API key value`);
+                      }
+                      return trimmedAuthValue;
+                    })()
+                  }
+                : server.authType === 'api-key'
+                  ? {
+                      type: 'oauth_client_credentials' as const,
+                      token_url: server.oauthTokenUrl || '',
+                      client_id_env: server.oauthClientIdEnv || '',
+                      client_secret_env: server.oauthClientSecretEnv || '',
+                      ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                      ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
                     }
-                    return trimmedAuthValue;
-                  })()
-                }
-              : server.authType === 'api-key'
-              ? {
-                  type: 'oauth_client_credentials' as const,
-                  token_url: server.oauthTokenUrl || '',
-                  client_id_env: server.oauthClientIdEnv || '',
-                  client_secret_env: server.oauthClientSecretEnv || '',
-                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                  ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
-                }
-              : server.authType === 'oauth2'
-              ? {
-                  type: 'oauth_authorization_code' as const,
-                  ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
-                  ...(server.oauthMode !== 'dcr' && server.oauthClientId
-                    ? { client_id: server.oauthClientId }
-                    : {}),
-                  ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
-                  ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                  ...(server.oauthAuthorizationUrl
-                    ? { authorization_url: server.oauthAuthorizationUrl }
-                    : {}),
-                  ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
-                }
-              : undefined
+                  : server.authType === 'oauth2'
+                    ? {
+                        type: 'oauth_authorization_code' as const,
+                        ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+                        ...(server.oauthMode !== 'dcr' && server.oauthClientId
+                          ? { client_id: server.oauthClientId }
+                          : {}),
+                        ...(server.oauthClientSecret
+                          ? { client_secret: server.oauthClientSecret }
+                          : {}),
+                        ...(server.oauthRedirectUrl
+                          ? { redirect_url: server.oauthRedirectUrl }
+                          : {}),
+                        ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                        ...(server.oauthAuthorizationUrl
+                          ? { authorization_url: server.oauthAuthorizationUrl }
+                          : {}),
+                        ...(server.oauthTokenEndpoint
+                          ? { token_url: server.oauthTokenEndpoint }
+                          : {})
+                      }
+                    : undefined
         };
       })()
     ])
   ) as CoreEvalConfig['servers'];
 
   const agents = Object.fromEntries(
-    input.agents.map((agent) => [
-      agent.id,
-      {
-        ...(agent.name && agent.name !== agent.id ? { name: agent.name } : {}),
-        provider:
-          agent.provider === 'azure'
-            ? 'azure_openai'
-            : agent.provider === 'anthropic'
-            ? 'anthropic'
-            : 'openai',
-        model: agent.model,
-        ...withOptionalTemperature(agent.temperature),
-        max_tokens: agent.maxTokens,
-        max_turns: agent.maxTurns,
-        system: agent.systemPrompt
-      }
-    ])
+    input.agents.map((agent) => {
+      const { id: _id, ...libraryAgent } = toCoreAgent(agent);
+      return [agent.id, libraryAgent];
+    })
   ) as CoreEvalConfig['agents'];
 
   return {
@@ -911,7 +934,8 @@ export function toCoreLibraries(
         scenario,
         scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined
       )
-    ) as CoreEvalConfig['scenarios']
+    ) as CoreEvalConfig['scenarios'],
+    browserProviders: input.browserProviders
   };
 }
 
@@ -1341,6 +1365,7 @@ export function fromCoreResultsJson(
       return {
         runIndex: run.run_index,
         passed: run.pass,
+        outcome: run.outcome,
         error: run.error,
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
@@ -1353,7 +1378,9 @@ export function fromCoreResultsJson(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
         ),
         failureReasons: run.failures,
-        checkResults: run.check_results
+        checkResults: run.check_results?.map((check) =>
+          check.status === 'not_applicable' ? { ...check, status: 'not_evaluated' } : check
+        )
       };
     });
 
@@ -1416,10 +1443,11 @@ export function fromCoreResultsJson(
       counts.passed += scenario.checkCounts?.passed ?? 0;
       counts.failed += scenario.checkCounts?.failed ?? 0;
       counts.not_evaluated += scenario.checkCounts?.not_evaluated ?? 0;
+      counts.not_executed += scenario.checkCounts?.not_executed ?? 0;
       counts.total += scenario.checkCounts?.total ?? 0;
       return counts;
     },
-    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+    { passed: 0, failed: 0, not_evaluated: 0, not_executed: 0, total: 0 }
   );
 
   return {
@@ -1452,7 +1480,11 @@ export function fromCoreResultsJson(
             0,
             (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
           )
-        : 0
+        : 0,
+    outcomes: results.summary.outcomes,
+    executionSource: results.metadata.execution_source,
+    executionClient: results.metadata.execution_client,
+    evaluationRunId: results.metadata.evaluation_run_id ?? results.metadata.evaluation_group_id
   };
 }
 
@@ -1464,6 +1496,7 @@ export function fromCoreScenarioRunPreview(
   return {
     runIndex: run.run_index,
     passed: run.pass,
+    outcome: run.outcome,
     error: run.error,
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,

@@ -152,7 +152,8 @@ export interface RunDeps {
 }
 
 export interface AppRouteDeps
-  extends HttpDeps,
+  extends
+    HttpDeps,
     JobStreamDeps,
     ToolAnalysisDeps,
     OAuthDebuggerDeps,

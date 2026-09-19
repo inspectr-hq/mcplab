@@ -6,6 +6,7 @@ describe('summaryToResult', () => {
   it('preserves MCP server versions', () => {
     const summary: WorkspaceRunSummary = {
       runId: 'run-1',
+      evaluationRunId: 'evaluation-1',
       path: '/tmp/run-1',
       timestamp: '2026-03-10T10:00:00.000Z',
       configHash: 'hash',
@@ -18,5 +19,6 @@ describe('summaryToResult', () => {
     };
 
     expect(summaryToResult(summary).mcpServerVersions).toEqual({ api: '1.2.3', docs: null });
+    expect(summaryToResult(summary).evaluationRunId).toBe('evaluation-1');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { executeRunJob } from './run-queue-executor.js';
+import { executeRunJob, getCompletedRunId } from './run-queue-executor.js';
 import {
   createQueuedJob,
   createOauthEvalFixture,
@@ -7,6 +7,13 @@ import {
 } from './runs-routes.test-helpers.js';
 
 describe('executeRunJob', () => {
+  it('uses the evaluation ID for grouped completion results', () => {
+    expect(
+      getCompletedRunId({ runParams: { evaluationRunId: 'evaluation-1' } } as any, 'execution-1')
+    ).toBe('evaluation-1');
+    expect(getCompletedRunId({ runParams: {} } as any, 'execution-1')).toBe('execution-1');
+  });
+
   it('fails early when evaluation judge setting points to a missing agent', async () => {
     const fixture = createOauthEvalFixture();
     try {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { listRuns } from './runs-store.js';
 
-function writeRun(runsDir: string, runId: string, timestamp: string) {
+function writeRun(runsDir: string, runId: string, timestamp: string, evaluationRunId?: string) {
   const runDir = join(runsDir, runId);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(
@@ -13,7 +13,8 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
       metadata: {
         run_id: runId,
         timestamp,
-        config_hash: `hash-${runId}`
+        config_hash: `hash-${runId}`,
+        ...(evaluationRunId ? { evaluation_run_id: evaluationRunId } : {})
       },
       summary: {
         total_scenarios: 1,
@@ -26,6 +27,7 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
         {
           scenario_id: 'scn-default',
           scenario_name: 'Default Scenario',
+          agent: 'm365.cloud.microsoft',
           runs: [
             {
               check_results: [
@@ -43,6 +45,16 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
 }
 
 describe('listRuns filters', () => {
+  it('exposes the parent evaluation run identity in summaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'child-run', '2026-03-10T10:00:00.000Z', 'evaluation-1');
+
+    expect(listRuns(runsDir)[0]?.evaluationRunId).toBe('evaluation-1');
+  });
+
   it('includes MCP server versions in run summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');
@@ -57,6 +69,16 @@ describe('listRuns filters', () => {
     expect(listRuns(runsDir)[0]?.mcpServerVersions).toEqual({ api: '1.2.3', docs: null });
   });
 
+  it('includes agents in run summaries for list views', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-agent', '2026-03-10T10:00:00.000Z');
+
+    expect(listRuns(runsDir)[0]?.agentIds).toEqual(['m365.cloud.microsoft']);
+  });
+
   it('aggregates check counts for dashboard summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');
@@ -68,6 +90,7 @@ describe('listRuns filters', () => {
       passed: 1,
       failed: 1,
       not_evaluated: 1,
+      not_executed: 0,
       total: 3
     });
   });

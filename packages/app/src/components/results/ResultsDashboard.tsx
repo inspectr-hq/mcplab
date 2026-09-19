@@ -14,6 +14,7 @@ type ResultsDashboardProps = {
 const PASS_COLOR = 'hsl(152, 69%, 40%)';
 const FAIL_COLOR = 'hsl(0, 72%, 51%)';
 const NOT_EVALUATED_COLOR = 'hsl(215, 16%, 47%)';
+const NOT_EXECUTED_COLOR = 'hsl(38, 92%, 50%)';
 
 function formatNumber(value: number, fractionDigits = 0): string {
   return value.toLocaleString(undefined, {
@@ -26,18 +27,23 @@ export function OutcomeCard({
   title,
   passed,
   failed,
-  notEvaluated = 0
+  notEvaluated = 0,
+  notExecuted = 0
 }: {
   title: string;
   passed: number;
   failed: number;
   notEvaluated?: number;
+  notExecuted?: number;
 }) {
   const data = [
     { name: 'Passed', value: passed, color: PASS_COLOR },
     { name: 'Failed', value: failed, color: FAIL_COLOR },
     ...(notEvaluated > 0
       ? [{ name: 'Not evaluated', value: notEvaluated, color: NOT_EVALUATED_COLOR }]
+      : []),
+    ...(notExecuted > 0
+      ? [{ name: 'Not executed', value: notExecuted, color: NOT_EXECUTED_COLOR }]
       : [])
   ];
 
@@ -86,6 +92,15 @@ export function OutcomeCard({
               {formatNumber(notEvaluated)} not evaluated
             </div>
           )}
+          {notExecuted > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: NOT_EXECUTED_COLOR }}
+              />
+              {formatNumber(notExecuted)} not executed
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -106,10 +121,11 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
         counts.passed += run.checkCounts?.passed ?? 0;
         counts.failed += run.checkCounts?.failed ?? 0;
         counts.not_evaluated += run.checkCounts?.not_evaluated ?? 0;
+        counts.not_executed += run.checkCounts?.not_executed ?? 0;
         counts.total += run.checkCounts?.total ?? 0;
         return counts;
       },
-      { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+      { passed: 0, failed: 0, not_evaluated: 0, not_executed: 0, total: 0 }
     );
     const weighted = (selector: (run: EvalResult) => number) =>
       totalRuns === 0
@@ -163,10 +179,11 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           failed={summary.failedRuns}
         />
         <OutcomeCard
-          title="Checks Pass / Fail"
+          title="Checks Pass / Fail / Not evaluated / Not executed"
           passed={summary.checkCounts.passed}
           failed={summary.checkCounts.failed}
           notEvaluated={summary.checkCounts.not_evaluated}
+          notExecuted={summary.checkCounts.not_executed}
         />
 
         <div className="grid self-start content-start gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-4">

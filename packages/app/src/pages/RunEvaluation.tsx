@@ -29,10 +29,11 @@ import {
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
-import type { QueueEntry } from '@/lib/data-sources/types';
+import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
+type ConversationMode = 'agent_default' | 'new' | 'same';
 
 function displayConfigName(config: { configName?: string; name: string }): string {
   return config.configName?.trim() || config.name;
@@ -51,6 +52,15 @@ function nowTime(): string {
   return new Date().toLocaleTimeString();
 }
 
+function queueChildRows(evaluation: EvaluationQueueItem): Array<{
+  job: QueueEntry;
+  child?: QueueChildProgress;
+}> {
+  return evaluation.jobs.flatMap((job) =>
+    job.childProgress?.length ? job.childProgress.map((child) => ({ job, child })) : [{ job }]
+  );
+}
+
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState('');
@@ -63,6 +73,7 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [conversationMode, setConversationMode] = useState<ConversationMode>('agent_default');
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
   const [globalServerOverrideIds, setGlobalServerOverrideIds] = useState<string[]>([]);
@@ -76,6 +87,9 @@ const RunEvaluation = () => {
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationQueueItem[]>([]);
+  const [expandedEvaluationRunId, setExpandedEvaluationRunId] = useState<string | null>(null);
+  const [stoppingEvaluationRunId, setStoppingEvaluationRunId] = useState<string | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -108,6 +122,20 @@ const RunEvaluation = () => {
     [configs, libraryScenarios]
   );
   const activeQueueEntry = activeQueueEntries[0] ?? null;
+  const activeEvaluation = useMemo(
+    () =>
+      evaluations.find((evaluation) => evaluation.jobs.some((job) => job.jobId === activeJobId)) ??
+      null,
+    [evaluations, activeJobId]
+  );
+  const visibleProgress = activeEvaluation
+    ? Math.max(
+        progress,
+        activeEvaluation.totalJobs > 0
+          ? Math.round((activeEvaluation.completedJobs / activeEvaluation.totalJobs) * 100)
+          : 0
+      )
+    : progress;
   const requestedConfigId = searchParams.get('configId');
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
@@ -149,6 +177,23 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
+  const selectedBrowserAgents = useMemo(
+    () =>
+      availableAgents.filter(
+        (agent) => agent.type === 'browser' && selectedAgentIds.includes(agent.id)
+      ),
+    [availableAgents, selectedAgentIds]
+  );
+  const agentGroups = useMemo(
+    () => [
+      { label: 'LLM Agents', agents: availableAgents.filter((agent) => agent.type !== 'browser') },
+      {
+        label: 'Browser Agents',
+        agents: availableAgents.filter((agent) => agent.type === 'browser')
+      }
+    ],
+    [availableAgents]
+  );
   const availableServers = useMemo(() => {
     const byId = new Map<string, { id: string; name?: string }>();
     for (const server of libraryServers) {
@@ -174,6 +219,7 @@ const RunEvaluation = () => {
     prevConfigKeyRef.current = configKey;
     if (!selectedConfig) {
       setSelectedAgentIds([]);
+      setConversationMode('agent_default');
       setSelectedScenarioIds([]);
       setGlobalServerOverrideEnabled(false);
       setGlobalServerOverrideIds([]);
@@ -185,6 +231,7 @@ const RunEvaluation = () => {
     setSelectedAgentIds(
       configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
     );
+    setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
     setGlobalServerOverrideIds([]);
@@ -323,6 +370,10 @@ const RunEvaluation = () => {
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
+        ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
+          ? { newConversationBetweenScenarios: conversationMode === 'new' }
+          : {}),
+        ...(selectedBrowserAgents.length > 0 ? { newConversationBeforeStart: true } : {}),
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),
@@ -423,6 +474,7 @@ const RunEvaluation = () => {
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
+      setEvaluations(q.evaluations ?? []);
       // Restore blocked-auth state for the currently attached job on page-load / reconnect
       // scenarios where SSE was missed. Do not surface a global OAuth banner for unrelated
       // queued jobs; those keep their own per-job queue action.
@@ -471,9 +523,14 @@ const RunEvaluation = () => {
       refreshConfigAndLibraries();
       void refreshQueue();
     };
+    const handleQueueChanged = () => {
+      void refreshQueue();
+    };
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('mcplab:run-queue-changed', handleQueueChanged);
     return () => {
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('mcplab:run-queue-changed', handleQueueChanged);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload, reloadLibraries]);
@@ -500,6 +557,59 @@ const RunEvaluation = () => {
       }
     }
     void refreshQueue();
+  };
+
+  const connectEvaluationOAuth = async (evaluation: EvaluationQueueItem) => {
+    const servers = Array.from(
+      new Set(evaluation.jobs.flatMap((job) => job.requiredServers ?? []))
+    );
+    if (servers.length === 0 || oauthConnectingRef.current) return;
+    oauthConnectingRef.current = true;
+    setOauthAuthInProgress(true);
+    try {
+      await ensureOAuthForServers({ serverNames: servers, source });
+      await source.resumeQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not connect OAuth',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      oauthConnectingRef.current = false;
+      setOauthAuthInProgress(false);
+      void refreshQueue();
+    }
+  };
+
+  const stopEvaluation = async (evaluationRunId: string) => {
+    if (stoppingEvaluationRunId === evaluationRunId) return;
+    setStoppingEvaluationRunId(evaluationRunId);
+    try {
+      await source.stopEvaluationRun(evaluationRunId);
+      await refreshQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not stop run',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setStoppingEvaluationRunId(null);
+    }
+  };
+
+  const removeEvaluation = async (evaluationRunId: string) => {
+    try {
+      await source.removeEvaluationRun(evaluationRunId);
+      await refreshQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not remove run',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
   };
 
   const attachRunJob = (jobId: string) => {
@@ -578,23 +688,78 @@ const RunEvaluation = () => {
         }
       }
       if (event.type === 'completed') {
-        const nextRunId = String(event.payload.runId ?? '').trim();
-        setOauthRequired(null);
-        oauthConnectingRef.current = false;
-        setLogs((prev) => {
-          const line = `[${ts}] Run completed.`;
-          return prev.includes(line) ? prev : [...prev, line];
-        });
-        setProgress(100);
-        setRunning(false);
-        setDone(true);
-        setStopped(false);
-        setRunId(nextRunId);
-        clearActiveRunJob();
-        setActiveJobId(null);
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
-        void refreshQueue();
+        const completedJobId = activeJobId;
+        const evaluationRunId = String(event.payload.runId ?? '').trim();
+        void source
+          .getRunQueue()
+          .then((queue) => {
+            const evaluation =
+              queue.evaluations?.find((item) => item.evaluationRunId === evaluationRunId) ??
+              queue.evaluations?.find((item) =>
+                item.jobs.some((job) => job.jobId === completedJobId)
+              );
+            const nextJob = evaluation?.jobs.find(
+              (job) =>
+                job.jobId !== completedJobId &&
+                ['queued', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
+            );
+
+            if (nextJob && evaluation) {
+              const completedLine = `[${ts}] Subtask completed. ${
+                evaluation.completedJobs
+              }/${evaluation.totalJobs} complete. Continuing with the remaining run tasks...`;
+              setLogs((prev) => (prev.includes(completedLine) ? prev : [...prev, completedLine]));
+              setProgress((prev) =>
+                Math.max(
+                  prev,
+                  evaluation.totalJobs > 0
+                    ? Math.round((evaluation.completedJobs / evaluation.totalJobs) * 100)
+                    : prev
+                )
+              );
+              setOauthRequired(null);
+              oauthConnectingRef.current = false;
+              setRunning(true);
+              setDone(false);
+              setStopped(false);
+              setActiveJobId(nextJob.jobId);
+              setActiveRunJob(nextJob.jobId);
+              void refreshQueue();
+              attachRunJob(nextJob.jobId);
+              return;
+            }
+
+            const nextRunId = String(event.payload.runId ?? '').trim();
+            setOauthRequired(null);
+            oauthConnectingRef.current = false;
+            setLogs((prev) => {
+              const line = `[${ts}] Run completed.`;
+              return prev.includes(line) ? prev : [...prev, line];
+            });
+            setProgress(100);
+            setRunning(false);
+            setDone(true);
+            setStopped(false);
+            setRunId(nextRunId);
+            clearActiveRunJob();
+            setActiveJobId(null);
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            void refreshQueue();
+          })
+          .catch(() => {
+            // Preserve the existing completion behavior if queue reconciliation fails.
+            setProgress(100);
+            setRunning(false);
+            setDone(true);
+            setStopped(false);
+            setRunId(evaluationRunId);
+            clearActiveRunJob();
+            setActiveJobId(null);
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            void refreshQueue();
+          });
       }
       if (event.type === 'error') {
         const message = String(event.payload.message ?? 'Unknown error');
@@ -615,6 +780,18 @@ const RunEvaluation = () => {
         void refreshQueue();
       }
     });
+  };
+
+  const selectQueueJob = (jobId: string) => {
+    if (activeJobId === jobId && unsubscribeRef.current) return;
+    setActiveJobId(jobId);
+    setActiveRunJob(jobId);
+    setRunning(true);
+    setDone(false);
+    setStopped(false);
+    setLogs([`[${nowTime()}] Attached to running job ${jobId}...`]);
+    setProgress(10);
+    attachRunJob(jobId);
   };
 
   return (
@@ -711,28 +888,60 @@ const RunEvaluation = () => {
                   </button>
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {availableAgents.map((agent) => {
-                  const checked = selectedAgentIds.includes(agent.id);
-                  return (
-                    <label
-                      key={agent.id}
-                      className="flex items-center gap-2 text-sm rounded-md border p-2"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(value) => {
-                          const isChecked = value === true;
-                          setSelectedAgentIds((prev) =>
-                            isChecked ? [...prev, agent.id] : prev.filter((id) => id !== agent.id)
+              <div className="space-y-3">
+                {agentGroups.map((group) =>
+                  group.agents.length > 0 ? (
+                    <div key={group.label} className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {group.agents.map((agent) => {
+                          const checked = selectedAgentIds.includes(agent.id);
+                          return (
+                            <label
+                              key={agent.id}
+                              className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(value) => {
+                                  const isChecked = value === true;
+                                  setSelectedAgentIds((prev) =>
+                                    isChecked
+                                      ? [...prev, agent.id]
+                                      : prev.filter((id) => id !== agent.id)
+                                  );
+                                }}
+                              />
+                              <span>{agent.name || agent.id}</span>
+                            </label>
                           );
-                        }}
-                      />
-                      <span>{agent.name || agent.id}</span>
-                    </label>
-                  );
-                })}
+                        })}
+                      </div>
+                    </div>
+                  ) : null
+                )}
               </div>
+              {selectedBrowserAgents.length > 0 && (
+                <div className="space-y-1.5 rounded-md border bg-muted/20 p-3">
+                  <Label htmlFor="conversation-behavior">Conversation behavior</Label>
+                  <Select
+                    value={conversationMode}
+                    onValueChange={(value) => setConversationMode(value as ConversationMode)}
+                  >
+                    <SelectTrigger id="conversation-behavior">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="agent_default">Use agent default</SelectItem>
+                      <SelectItem value="new">Start a new conversation</SelectItem>
+                      <SelectItem value="same">Continue the same conversation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    This setting is frozen into the Rover job. Rover cannot change it locally.
+                  </p>
+                </div>
+              )}
               {availableAgents.length === 0 && (
                 <p className="text-xs text-muted-foreground">
                   No agents available. Add agents to your workspace library, or define inline agents
@@ -963,12 +1172,48 @@ const RunEvaluation = () => {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Progress</CardTitle>
               <span className="text-xs text-muted-foreground font-mono">
-                {Math.round(progress)}%
+                {Math.round(visibleProgress)}%
               </span>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Progress value={progress} className="h-2" />
+            <Progress value={visibleProgress} className="h-2" />
+            {(activeEvaluation || activeQueueEntry) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {activeEvaluation ? (
+                  <>
+                    <span>
+                      {activeEvaluation.completedJobs}/{activeEvaluation.totalJobs} subtasks
+                      complete
+                    </span>
+                    {activeEvaluation.failedJobs - activeEvaluation.stoppedJobs > 0 && (
+                      <span className="font-medium text-destructive">
+                        {activeEvaluation.failedJobs - activeEvaluation.stoppedJobs} failed
+                      </span>
+                    )}
+                    {activeEvaluation.stoppedJobs > 0 && (
+                      <span className="font-medium text-muted-foreground">
+                        {activeEvaluation.stoppedJobs} stopped
+                      </span>
+                    )}
+                    {activeEvaluation.pausedJobs > 0 && (
+                      <span className="font-medium text-yellow-700 dark:text-yellow-400">
+                        {activeEvaluation.pausedJobs} paused
+                      </span>
+                    )}
+                    <Badge variant="outline" className="capitalize">
+                      {activeEvaluation.status}
+                    </Badge>
+                  </>
+                ) : (
+                  <span>
+                    {activeQueueEntry?.roverProgress
+                      ? `${activeQueueEntry.roverProgress.completed}/${activeQueueEntry.roverProgress.total} scenarios complete`
+                      : 'Attached to active run'}
+                  </span>
+                )}
+              </div>
+            )}
             {oauthRequired && (
               <div className="flex items-center justify-between rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm">
                 <span className="text-yellow-700 dark:text-yellow-400">
@@ -1032,8 +1277,8 @@ const RunEvaluation = () => {
                     log.includes('✓')
                       ? 'text-success'
                       : log.includes('aborted')
-                      ? 'text-destructive'
-                      : 'text-foreground'
+                        ? 'text-destructive'
+                        : 'text-foreground'
                   }
                 >
                   {log}
@@ -1057,172 +1302,326 @@ const RunEvaluation = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {!activeQueueEntry && admittingQueueEntries.length === 0 && queuedJobs.length === 0 ? (
+          {!activeQueueEntry &&
+          admittingQueueEntries.length === 0 &&
+          queuedJobs.length === 0 &&
+          evaluations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No active or queued runs. Start a run above.
             </p>
           ) : (
             <div className="space-y-2">
-              {activeQueueEntries.map((entry) => (
+              {evaluations.map((evaluation) => (
                 <div
-                  key={entry.jobId}
-                  role="button"
-                  tabIndex={0}
-                  className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${
-                    activeJobId === entry.jobId ? 'ring-2 ring-primary/40' : ''
-                  }`}
+                  key={evaluation.evaluationRunId}
                   onClick={() => {
-                    if (activeJobId === entry.jobId) return;
-                    setActiveJobId(entry.jobId);
-                    setActiveRunJob(entry.jobId);
-                    setRunning(true);
-                    setDone(false);
-                    setStopped(false);
-                    setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
-                    setProgress(10);
-                    attachRunJob(entry.jobId);
+                    const selectedJob = evaluation.jobs.find(
+                      (job) =>
+                        job.status === 'running' ||
+                        job.status === 'waiting_for_rover' ||
+                        job.status === 'paused_rover'
+                    );
+                    if (selectedJob) selectQueueJob(selectedJob.jobId);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (activeJobId === entry.jobId) return;
-                    e.preventDefault();
-                    setActiveJobId(entry.jobId);
-                    setActiveRunJob(entry.jobId);
-                    setRunning(true);
-                    setDone(false);
-                    setStopped(false);
-                    setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
-                    setProgress(10);
-                    attachRunJob(entry.jobId);
-                  }}
-                  title="Click to view progress"
+                  className={`rounded-md border p-3 text-sm ${
+                    evaluation.status === 'failed'
+                      ? 'border-destructive/40 bg-destructive/5'
+                      : evaluation.status === 'stopped'
+                        ? 'border-muted-foreground/30 bg-muted/40'
+                        : evaluation.status === 'partial'
+                          ? 'border-yellow-500/40 bg-yellow-500/5'
+                          : evaluation.status === 'running'
+                            ? 'border-primary/20 bg-primary/5'
+                            : 'border-border bg-background'
+                  }`}
                 >
-                  <div className="min-w-0 flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      Running
-                    </span>
-                    <span className="text-xs font-bold">
-                      {queueEvalNameBySourcePath.get(entry.runParams.configPath) ||
-                        formatQueueScenarioLabel(
-                          entry.runParams.scenarioIds,
-                          queueScenarioLabelByConfigPath,
-                          entry.runParams.configPath
-                        )}
-                    </span>
-                    <span className="font-mono text-xs">
-                      {formatQueueConfigPath(
-                        entry.runParams.configPath,
-                        queueRelativePathBySourcePath
-                      )}
-                    </span>
-                    {entry.runParams.agents && (
-                      <span className="text-xs text-muted-foreground">
-                        agents: {entry.runParams.agents.join(', ')}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">
+                        {evaluation.evaluationName || 'Evaluation'}
                       </span>
-                    )}
-                    {entry.runParams.runNote && (
-                      <span className="text-xs text-muted-foreground truncate">
-                        note: {entry.runParams.runNote}
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void source.stopRun(entry.jobId);
-                      void refreshQueue();
-                    }}
-                    title="Stop running job"
-                  >
-                    <Square className="mr-1 h-3 w-3" />
-                    Stop
-                  </Button>
-                </div>
-              ))}
-              {admittingQueueEntries.map((entry) => {
-                const configName = formatQueueConfigPath(
-                  entry.runParams.configPath,
-                  queueRelativePathBySourcePath
-                );
-                const scenarioLabel = formatQueueScenarioLabel(
-                  entry.runParams.scenarioIds,
-                  queueScenarioLabelByConfigPath,
-                  entry.runParams.configPath
-                );
-                const evalLabel =
-                  queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
-                const isBlockedRetry = entry.status === 'blocked_auth';
-                return (
-                  <div
-                    key={entry.jobId}
-                    className={`flex items-center justify-between rounded-md border p-2 text-sm ${
-                      isBlockedRetry
-                        ? 'border-yellow-500/40 bg-yellow-500/5'
-                        : 'border-primary/20 bg-primary/5'
-                    }`}
-                  >
-                    <div className="min-w-0 flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          isBlockedRetry
-                            ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
-                            : 'bg-primary/10 text-primary'
+                      <Badge
+                        variant="outline"
+                        className={`capitalize ${
+                          evaluation.status === 'running'
+                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            : ''
                         }`}
                       >
-                        {isBlockedRetry ? 'Retrying OAuth' : 'Starting'}
+                        {evaluation.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {evaluation.completedJobs}/{evaluation.totalJobs} scenario-agent runs
+                        complete
                       </span>
-                      <span className="text-xs font-bold">{evalLabel}</span>
-                      <span className="font-mono text-xs">{configName}</span>
-                      {isBlockedRetry && (entry.requiredServers ?? []).length > 0 && (
-                        <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                          OAuth: {entry.requiredServers!.join(', ')}
-                        </span>
+                    </div>
+                    <div
+                      className="flex items-center gap-1"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {evaluation.jobs.some((job) => job.status === 'blocked_auth') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-yellow-500/50 text-yellow-700 dark:text-yellow-400"
+                          disabled={oauthAuthInProgress}
+                          onClick={() => void connectEvaluationOAuth(evaluation)}
+                        >
+                          {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() =>
+                          setExpandedEvaluationRunId((current) =>
+                            current === evaluation.evaluationRunId
+                              ? null
+                              : evaluation.evaluationRunId
+                          )
+                        }
+                        aria-label={`${
+                          expandedEvaluationRunId === evaluation.evaluationRunId
+                            ? 'Collapse'
+                            : 'Expand'
+                        } evaluation details`}
+                      >
+                        {expandedEvaluationRunId === evaluation.evaluationRunId
+                          ? 'Hide'
+                          : 'Details'}
+                      </Button>
+                      {evaluation.jobs.length > 0 &&
+                        evaluation.jobs.every((job) =>
+                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(
+                            job.status
+                          )
+                        ) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => void removeEvaluation(evaluation.evaluationRunId)}
+                            title={
+                              evaluation.status === 'stopped'
+                                ? 'Remove stopped run from the queue'
+                                : 'Remove evaluation from queue'
+                            }
+                            aria-label={
+                              evaluation.status === 'stopped'
+                                ? 'Remove stopped run from queue'
+                                : 'Remove evaluation from queue'
+                            }
+                          >
+                            <X className="mr-1 h-3 w-3" />
+                            {evaluation.status === 'stopped' ? 'Remove run' : 'Remove'}
+                          </Button>
+                        )}
+                      {evaluation.jobs.some((job) =>
+                        ['blocked_auth', 'waiting_for_rover', 'paused_rover', 'running'].includes(
+                          job.status
+                        )
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          disabled={stoppingEvaluationRunId === evaluation.evaluationRunId}
+                          onClick={() => void stopEvaluation(evaluation.evaluationRunId)}
+                          title="Stop this evaluation run and its queued or running tasks"
+                        >
+                          <Square className="mr-1 h-3 w-3" />
+                          {stoppingEvaluationRunId === evaluation.evaluationRunId
+                            ? 'Stopping run...'
+                            : 'Stop run'}
+                        </Button>
                       )}
                     </div>
                   </div>
-                );
-              })}
-              {queuedJobs.map((entry, i) => {
-                const configName = formatQueueConfigPath(
-                  entry.runParams.configPath,
-                  queueRelativePathBySourcePath
-                );
-                const scenarioLabel = formatQueueScenarioLabel(
-                  entry.runParams.scenarioIds,
-                  queueScenarioLabelByConfigPath,
-                  entry.runParams.configPath
-                );
-                const evalLabel =
-                  queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
-                const isBlocked = entry.status === 'blocked_auth';
-                return (
+                  {expandedEvaluationRunId === evaluation.evaluationRunId && (
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {queueChildRows(evaluation).map(({ job, child }) => (
+                        <div
+                          key={`${job.jobId}:${child?.scenarioId ?? 'job'}:${
+                            child?.agentName ?? 'job'
+                          }`}
+                          className={`flex items-center justify-between gap-2 rounded px-2 py-1 ${
+                            child?.status === 'completed'
+                              ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                              : child?.status === 'error' || child?.status === 'stopped'
+                                ? 'border border-destructive/30 bg-destructive/5'
+                                : 'bg-background'
+                          }`}
+                          onClick={() => selectQueueJob(job.jobId)}
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 truncate">
+                            {child?.status === 'completed' && (
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            )}
+                            {(child?.status === 'error' || child?.status === 'stopped') && (
+                              <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                            )}
+                            {child
+                              ? `${child.scenarioId} · ${child.agentName}: `
+                              : `${
+                                  job.roverAgent?.name ??
+                                  job.runParams.agents?.join(', ') ??
+                                  'Agent'
+                                }: `}
+                            {child?.status === 'queued'
+                              ? 'queued'
+                              : child?.status === 'running'
+                                ? 'running'
+                                : child?.status === 'completed'
+                                  ? 'completed'
+                                  : child?.status === 'error'
+                                    ? 'failed'
+                                    : child?.status === 'stopped'
+                                      ? 'stopped'
+                                      : job.status === 'waiting_for_rover'
+                                        ? 'waiting for Rover'
+                                        : job.status === 'paused_rover'
+                                          ? 'paused'
+                                          : job.status.replaceAll('_', ' ')}
+                            {child
+                              ? ` (${child.completed}/${child.total} attempts)`
+                              : job.roverProgress &&
+                                ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
+                            {!child &&
+                              job.roverProgress?.lastDurationMs != null &&
+                              ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
+                            {child?.error && ` · ${child.error}`}
+                            {!child && job.roverProgress?.error && ` · ${job.roverProgress.error}`}
+                          </span>
+                          <span
+                            className="flex shrink-0 items-center gap-1"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {!child &&
+                              job.executionType === 'rover' &&
+                              job.status === 'waiting_for_rover' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-1.5 text-[11px]"
+                                  onClick={() => {
+                                    void source.openRover(job.jobId).then((result) => {
+                                      if (result.url)
+                                        window.open(result.url, '_blank', 'noopener,noreferrer');
+                                      void refreshQueue();
+                                    });
+                                  }}
+                                >
+                                  Connect to Rover
+                                </Button>
+                              )}
+                            {!child &&
+                              job.executionType === 'rover' &&
+                              job.status === 'paused_rover' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-1.5 text-[11px]"
+                                  onClick={() => {
+                                    void source
+                                      .resumeRover(job.jobId)
+                                      .then(() => void refreshQueue());
+                                  }}
+                                >
+                                  Resume
+                                </Button>
+                              )}
+                            {((child &&
+                              (child.status === 'running' || child.status === 'queued')) ||
+                              (!child && job.status === 'queued') ||
+                              (!child &&
+                                job.executionType === 'rover' &&
+                                (job.status === 'waiting_for_rover' ||
+                                  job.status === 'paused_rover' ||
+                                  job.status === 'running'))) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1.5 text-[11px] text-destructive"
+                                onClick={() => {
+                                  void (
+                                    child
+                                      ? source.stopScenario(
+                                          job.jobId,
+                                          child.scenarioId,
+                                          child.agentName
+                                        )
+                                      : source.stopRun(job.jobId)
+                                  ).then(() => void refreshQueue());
+                                }}
+                              >
+                                {child?.status === 'queued' || job.status === 'queued'
+                                  ? 'Remove'
+                                  : 'Stop'}
+                              </Button>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {activeQueueEntries
+                .filter((entry) => !entry.evaluationRunId)
+                .map((entry) => (
                   <div
                     key={entry.jobId}
-                    className={`flex items-center justify-between rounded-md border p-2 text-sm ${
-                      isBlocked ? 'border-yellow-500/40 bg-yellow-500/5' : ''
+                    role="button"
+                    tabIndex={0}
+                    className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${
+                      activeJobId === entry.jobId ? 'ring-2 ring-primary/40' : ''
                     }`}
+                    onClick={() => {
+                      if (activeJobId === entry.jobId) return;
+                      setActiveJobId(entry.jobId);
+                      setActiveRunJob(entry.jobId);
+                      setRunning(true);
+                      setDone(false);
+                      setStopped(false);
+                      setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
+                      setProgress(10);
+                      attachRunJob(entry.jobId);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      if (activeJobId === entry.jobId) return;
+                      e.preventDefault();
+                      setActiveJobId(entry.jobId);
+                      setActiveRunJob(entry.jobId);
+                      setRunning(true);
+                      setDone(false);
+                      setStopped(false);
+                      setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
+                      setProgress(10);
+                      attachRunJob(entry.jobId);
+                    }}
+                    title="Click to view progress"
                   >
-                    <div className="min-w-0 flex items-center gap-2 flex-wrap">
-                      {isBlocked ? (
-                        <span className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
-                          #{i + 1} Blocked
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                          #{i + 1} Queued
-                        </span>
-                      )}
-                      <span className="text-xs font-bold">{evalLabel}</span>
-                      <span className="font-mono text-xs">{configName}</span>
-                      {isBlocked && (entry.requiredServers ?? []).length > 0 && (
-                        <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                          OAuth: {entry.requiredServers!.join(', ')}
-                        </span>
-                      )}
-                      {!isBlocked && entry.runParams.agents && (
+                    <div className="min-w-0 flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        Running
+                      </span>
+                      <span className="text-xs font-bold">
+                        {queueEvalNameBySourcePath.get(entry.runParams.configPath) ||
+                          formatQueueScenarioLabel(
+                            entry.runParams.scenarioIds,
+                            queueScenarioLabelByConfigPath,
+                            entry.runParams.configPath
+                          )}
+                      </span>
+                      <span className="font-mono text-xs">
+                        {formatQueueConfigPath(
+                          entry.runParams.configPath,
+                          queueRelativePathBySourcePath
+                        )}
+                      </span>
+                      {entry.runParams.agents && (
                         <span className="text-xs text-muted-foreground">
                           agents: {entry.runParams.agents.join(', ')}
                         </span>
@@ -1233,70 +1632,184 @@ const RunEvaluation = () => {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isBlocked && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-yellow-500/50 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
-                          disabled={oauthAuthInProgress}
-                          onClick={() => {
-                            if (oauthConnectingRef.current) return;
-                            const servers = entry.requiredServers ?? [];
-                            if (servers.length === 0) return;
-                            oauthConnectingRef.current = true;
-                            setOauthRequired({ jobId: entry.jobId, servers });
-                            setOauthAuthInProgress(true);
-                            void ensureOAuthForServers({
-                              serverNames: servers,
-                              source,
-                              onServerAuthStart: (serverName) => {
-                                setLogs((prev) => [
-                                  ...prev,
-                                  `[${nowTime()}] OAuth sign-in opened for '${serverName}'...`
-                                ]);
-                              }
-                            })
-                              .then(() => source.resumeQueue())
-                              .then(() => {
-                                setLogs((prev) => [
-                                  ...prev,
-                                  `[${nowTime()}] OAuth complete. Resuming run...`
-                                ]);
-                                setActiveJobId(entry.jobId);
-                                setActiveRunJob(entry.jobId);
-                                setRunning(true);
-                                setDone(false);
-                                attachRunJob(entry.jobId);
-                              })
-                              .catch((err: unknown) => {
-                                const msg = err instanceof Error ? err.message : String(err);
-                                setLogs((prev) => [...prev, `[${nowTime()}] OAuth error: ${msg}`]);
-                                oauthConnectingRef.current = false;
-                              })
-                              .finally(() => {
-                                setOauthAuthInProgress(false);
-                              });
-                          }}
-                        >
-                          {oauthAuthInProgress && oauthRequired?.jobId === entry.jobId
-                            ? 'Connecting...'
-                            : 'Connect & Resume'}
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => void removeQueuedJob(entry.jobId)}
-                        title="Remove from queue"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void source.stopRun(entry.jobId);
+                        void refreshQueue();
+                      }}
+                      title="Stop running job"
+                    >
+                      <Square className="mr-1 h-3 w-3" />
+                      Stop
+                    </Button>
                   </div>
-                );
-              })}
+                ))}
+              {admittingQueueEntries
+                .filter((entry) => !entry.evaluationRunId)
+                .map((entry) => {
+                  const configName = formatQueueConfigPath(
+                    entry.runParams.configPath,
+                    queueRelativePathBySourcePath
+                  );
+                  const scenarioLabel = formatQueueScenarioLabel(
+                    entry.runParams.scenarioIds,
+                    queueScenarioLabelByConfigPath,
+                    entry.runParams.configPath
+                  );
+                  const evalLabel =
+                    queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
+                  const isBlockedRetry = entry.status === 'blocked_auth';
+                  return (
+                    <div
+                      key={entry.jobId}
+                      className={`flex items-center justify-between rounded-md border p-2 text-sm ${
+                        isBlockedRetry
+                          ? 'border-yellow-500/40 bg-yellow-500/5'
+                          : 'border-border bg-background'
+                      }`}
+                    >
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            isBlockedRetry
+                              ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
+                              : 'bg-primary/10 text-primary'
+                          }`}
+                        >
+                          {isBlockedRetry ? 'Retrying OAuth' : 'Starting'}
+                        </span>
+                        <span className="text-xs font-bold">{evalLabel}</span>
+                        <span className="font-mono text-xs">{configName}</span>
+                        {isBlockedRetry && (entry.requiredServers ?? []).length > 0 && (
+                          <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                            OAuth: {entry.requiredServers!.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              {queuedJobs
+                .filter((entry) => !entry.evaluationRunId)
+                .map((entry, i) => {
+                  const configName = formatQueueConfigPath(
+                    entry.runParams.configPath,
+                    queueRelativePathBySourcePath
+                  );
+                  const scenarioLabel = formatQueueScenarioLabel(
+                    entry.runParams.scenarioIds,
+                    queueScenarioLabelByConfigPath,
+                    entry.runParams.configPath
+                  );
+                  const evalLabel =
+                    queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
+                  const isBlocked = entry.status === 'blocked_auth';
+                  return (
+                    <div
+                      key={entry.jobId}
+                      className={`flex items-center justify-between rounded-md border p-2 text-sm ${
+                        isBlocked ? 'border-yellow-500/40 bg-yellow-500/5' : ''
+                      }`}
+                    >
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                        {isBlocked ? (
+                          <span className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                            #{i + 1} Blocked
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            #{i + 1} Queued
+                          </span>
+                        )}
+                        <span className="text-xs font-bold">{evalLabel}</span>
+                        <span className="font-mono text-xs">{configName}</span>
+                        {isBlocked && (entry.requiredServers ?? []).length > 0 && (
+                          <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                            OAuth: {entry.requiredServers!.join(', ')}
+                          </span>
+                        )}
+                        {!isBlocked && entry.runParams.agents && (
+                          <span className="text-xs text-muted-foreground">
+                            agents: {entry.runParams.agents.join(', ')}
+                          </span>
+                        )}
+                        {entry.runParams.runNote && (
+                          <span className="text-xs text-muted-foreground truncate">
+                            note: {entry.runParams.runNote}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isBlocked && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-yellow-500/50 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                            disabled={oauthAuthInProgress}
+                            onClick={() => {
+                              if (oauthConnectingRef.current) return;
+                              const servers = entry.requiredServers ?? [];
+                              if (servers.length === 0) return;
+                              oauthConnectingRef.current = true;
+                              setOauthRequired({ jobId: entry.jobId, servers });
+                              setOauthAuthInProgress(true);
+                              void ensureOAuthForServers({
+                                serverNames: servers,
+                                source,
+                                onServerAuthStart: (serverName) => {
+                                  setLogs((prev) => [
+                                    ...prev,
+                                    `[${nowTime()}] OAuth sign-in opened for '${serverName}'...`
+                                  ]);
+                                }
+                              })
+                                .then(() => source.resumeQueue())
+                                .then(() => {
+                                  setLogs((prev) => [
+                                    ...prev,
+                                    `[${nowTime()}] OAuth complete. Resuming run...`
+                                  ]);
+                                  setActiveJobId(entry.jobId);
+                                  setActiveRunJob(entry.jobId);
+                                  setRunning(true);
+                                  setDone(false);
+                                  attachRunJob(entry.jobId);
+                                })
+                                .catch((err: unknown) => {
+                                  const msg = err instanceof Error ? err.message : String(err);
+                                  setLogs((prev) => [
+                                    ...prev,
+                                    `[${nowTime()}] OAuth error: ${msg}`
+                                  ]);
+                                  oauthConnectingRef.current = false;
+                                })
+                                .finally(() => {
+                                  setOauthAuthInProgress(false);
+                                });
+                            }}
+                          >
+                            {oauthAuthInProgress && oauthRequired?.jobId === entry.jobId
+                              ? 'Connecting...'
+                              : 'Connect & Resume'}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => void removeQueuedJob(entry.jobId)}
+                          title="Remove from queue"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </CardContent>

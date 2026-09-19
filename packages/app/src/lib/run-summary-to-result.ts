@@ -6,6 +6,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     typeof summary.toolTokensTotal === 'number' ? summary.toolTokensTotal : null;
   return {
     id: summary.runId,
+    evaluationRunId: summary.evaluationRunId,
     configId: '',
     configHash: summary.configHash,
     configPath: summary.configPath,
@@ -21,8 +22,8 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     scenarios: (summary.scenarioIds ?? []).map((scenarioId, index) => ({
       scenarioId,
       scenarioName: summary.scenarioNames?.[index] ?? scenarioId,
-      agentId: '',
-      agentName: '',
+      agentId: summary.agentIds?.[index] ?? '',
+      agentName: summary.agentIds?.[index] ?? '',
       runs: [],
       passRate: 0,
       avgToolCalls: 0,
@@ -50,6 +51,9 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
       typeof summary.totalToolDurationMs === 'number'
         ? Math.max(0, summary.totalToolDurationMs)
         : undefined,
+    outcomes: summary.outcomes,
+    executionSource: summary.executionSource,
+    executionClient: summary.executionClient,
     checkCounts: summary.checkCounts
   };
 }

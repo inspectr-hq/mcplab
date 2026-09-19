@@ -1,16 +1,18 @@
-import { writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { rmSync } from 'node:fs';
 import {
   applyRuntimeServerOverrides,
   hashConfig,
   loadConfig,
-  renderSummaryMarkdown,
   runAll,
+  upsertQueueChildProgress,
   type EvalConfig,
+  type QueueChildProgress,
   type RunProgressEvent,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
-import { renderReport } from '@inspectr/mcplab-reporting';
+import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { recordEvaluationExecution } from './evaluation-journal-writer.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -18,6 +20,10 @@ import {
 } from './oauth-session-manager.js';
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
+
+export function getCompletedRunId(job: Pick<RunJob, 'runParams'>, executionRunId: string): string {
+  return job.runParams.evaluationRunId ?? executionRunId;
+}
 
 export function mergeLibraryEntriesIntoConfig(
   config: EvalConfig,
@@ -78,8 +84,8 @@ export function resolveOAuthServersForJob(job: RunJob, librariesDir: string): st
     const selected = job.runParams.scenarioIds?.length
       ? selectScenarioIdsFromParams(loaded.config, job.runParams)
       : job.runParams.scenarioId
-      ? selectScenarioIdsFromParams(loaded.config, job.runParams)
-      : loaded.config;
+        ? selectScenarioIdsFromParams(loaded.config, job.runParams)
+        : loaded.config;
     const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
       selected,
       job.runParams.scenarioServerOverrides
@@ -116,8 +122,8 @@ function selectScenarioIdsFromParams(config: EvalConfig, runParams: RunParams): 
     runParams.scenarioIds && runParams.scenarioIds.length > 0
       ? runParams.scenarioIds
       : runParams.scenarioId
-      ? [runParams.scenarioId]
-      : undefined;
+        ? [runParams.scenarioId]
+        : undefined;
   if (!ids || ids.length === 0) return config;
   return {
     ...config,
@@ -217,8 +223,8 @@ export async function executeRunJob(params: {
           scenarioIds && scenarioIds.length > 0
             ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
             : scenarioId
-            ? `Selecting requested scenario: ${scenarioId}`
-            : 'Using all scenarios from config'
+              ? `Selecting requested scenario: ${scenarioId}`
+              : 'Using all scenarios from config'
       }
     });
     const selectedBaseScenarios = selectScenarioIds(
@@ -269,12 +275,25 @@ export async function executeRunJob(params: {
           requestedAgents && requestedAgents.length > 0
             ? `Using requested agents: ${resolvedAgents.join(', ')}`
             : runtimeOverriddenConfig.run_defaults?.selected_agents &&
-              runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
-            ? `Using run default agents: ${resolvedAgents.join(', ')}`
-            : `Using config-declared agents: ${resolvedAgents.join(', ')}`
+                runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
+              ? `Using run default agents: ${resolvedAgents.join(', ')}`
+              : `Using config-declared agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
+    job.childAbortControllers = new Map(
+      expandedConfig.scenarios.map((scenario) => [
+        `${scenario.id}:${scenario.agent}`,
+        new AbortController()
+      ])
+    );
+    job.childProgress = expandedConfig.scenarios.map((scenario) => ({
+      scenarioId: scenario.id,
+      agentName: scenario.agent,
+      completed: 0,
+      total: runsPerScenario,
+      status: 'queued' as const
+    }));
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -340,7 +359,11 @@ export async function executeRunJob(params: {
             }
           : undefined,
       signal: job.abortController.signal,
+      scenarioSignal: (scenario) =>
+        job.childAbortControllers?.get(`${scenario.id}:${scenario.agent}`)?.signal,
+      persistArtifacts: !job.runParams.evaluationRunId,
       onProgress: async (event: RunProgressEvent) => {
+        updateChildProgress(job, event);
         const message = formatRunProgressMessage(event);
         if (!message) return;
         addJobEvent(job, {
@@ -361,6 +384,9 @@ export async function executeRunJob(params: {
     results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
       (scenario) => scenario.id
     );
+    if (job.runParams.evaluationRunId) {
+      results.metadata.evaluation_run_id = job.runParams.evaluationRunId;
+    }
     if (serverOverrideAll && serverOverrideAll.length > 0) {
       results.metadata.rerun_server_override_all = [...serverOverrideAll];
     } else {
@@ -392,10 +418,25 @@ export async function executeRunJob(params: {
       results.metadata.run_id,
       settings.runsDir
     ) as ScenarioRunTraceRecord[];
+    if (job.runParams.evaluationRunId) {
+      rmSync(runDir, { recursive: true, force: true });
+    }
     results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
-    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    if (!job.runParams.evaluationRunId) {
+      persistAppRunArtifacts({ runDir, results });
+    }
+    if (job.runParams.evaluationRunId) {
+      recordEvaluationExecution({
+        runsDir: settings.runsDir,
+        evaluationRunId: job.runParams.evaluationRunId,
+        evaluationName: job.runParams.evaluationName,
+        executionId: results.metadata.run_id,
+        executionSource: 'mcplab',
+        results,
+        traceRecords,
+        eventId: `llm-result-${results.metadata.run_id}`
+      });
+    }
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -409,12 +450,12 @@ export async function executeRunJob(params: {
       type: 'completed',
       ts: new Date().toISOString(),
       payload: {
-        runId: results.metadata.run_id,
+        runId: getCompletedRunId(job, results.metadata.run_id),
         runDir,
         summary: results.summary
       }
     });
-    return { status: 'completed' };
+    return { status: 'completed', runId: getCompletedRunId(job, results.metadata.run_id) };
   } catch (error: unknown) {
     if (error instanceof OAuthAuthorizationRequiredError) {
       const blockedServers = Array.from(
@@ -449,8 +490,8 @@ export async function executeRunJob(params: {
         message: aborted
           ? 'Run aborted by user'
           : normalizedError instanceof Error
-          ? normalizedError.message
-          : String(normalizedError)
+            ? normalizedError.message
+            : String(normalizedError)
       }
     });
     return { status: aborted ? 'stopped' : 'error' };
@@ -526,6 +567,35 @@ function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number |
     }
   }
   return hasAny ? total : null;
+}
+
+function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
+  if (event.type !== 'scenario_run_started' && event.type !== 'scenario_run_finished') return;
+  const existing = job.childProgress ?? [];
+  const index = existing.findIndex(
+    (child) => child.scenarioId === event.scenarioId && child.agentName === event.agentName
+  );
+  const current =
+    index >= 0
+      ? existing[index]!
+      : {
+          scenarioId: event.scenarioId,
+          agentName: event.agentName,
+          completed: 0,
+          total: event.runsPerScenario,
+          status: 'queued' as const
+        };
+  const next: QueueChildProgress = {
+    ...current,
+    total: event.runsPerScenario,
+    ...(event.type === 'scenario_run_started'
+      ? { status: 'running' as const, currentRunIndex: event.runIndex }
+      : {
+          status: current.completed + 1 >= event.runsPerScenario ? 'completed' : 'running',
+          completed: Math.min(event.runsPerScenario, current.completed + 1)
+        })
+  };
+  job.childProgress = upsertQueueChildProgress(existing, next);
 }
 
 function formatRunProgressMessage(event: RunProgressEvent): string | null {

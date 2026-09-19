@@ -84,7 +84,11 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
-import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import {
+  buildCheckItems,
+  formatCheckStatusLabel,
+  formatEvalRuleLabel
+} from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
@@ -809,6 +813,19 @@ const ResultDetail = () => {
                     Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
                   </span>
                 ) : null}
+                {result.executionSource ? (
+                  <>
+                    {(resultEvalName || resultConfigPath || resultConfigLabel) && (
+                      <span className="mx-1">·</span>
+                    )}
+                    <span className="inline-flex items-center align-middle">
+                      Source: <span className="ml-1 font-medium">{result.executionSource}</span>
+                      {result.executionClient ? (
+                        <span className="ml-1">({result.executionClient})</span>
+                      ) : null}
+                    </span>
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
@@ -976,10 +993,11 @@ const ResultDetail = () => {
               failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
             />
             <OutcomeCard
-              title="Checks Pass / Fail"
+              title="Checks Pass / Fail / Not evaluated / Not executed"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}
+              notExecuted={checkCounts.not_executed}
             />
 
             <Card className="lg:col-span-2">
@@ -1115,12 +1133,20 @@ const ResultDetail = () => {
                                       checkCounts.not_evaluated
                                         ? ` · ${checkCounts.not_evaluated} not evaluated`
                                         : ''
+                                    }${
+                                      checkCounts.not_executed
+                                        ? ` · ${checkCounts.not_executed} not executed`
+                                        : ''
                                     }`}
                                     aria-label={`${checkCounts.passed} checks passed, ${
                                       checkCounts.failed
                                     } checks failed${
                                       checkCounts.not_evaluated
                                         ? `, ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }${
+                                      checkCounts.not_executed
+                                        ? `, ${checkCounts.not_executed} not executed`
                                         : ''
                                     }`}
                                   >
@@ -1130,7 +1156,13 @@ const ResultDetail = () => {
                                     {checkCounts.not_evaluated > 0 && (
                                       <>
                                         <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_evaluated} ?</span>
+                                        <span>{checkCounts.not_evaluated} ○</span>
+                                      </>
+                                    )}
+                                    {checkCounts.not_executed > 0 && (
+                                      <>
+                                        <span className="text-muted-foreground"> </span>
+                                        <span>{checkCounts.not_executed} ⊘</span>
                                       </>
                                     )}
                                   </span>
@@ -1167,7 +1199,15 @@ const ResultDetail = () => {
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {hasCheckResults
-                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
+                                              checkCounts.not_evaluated
+                                                ? ` · ${checkCounts.not_evaluated} ○`
+                                                : ''
+                                            }${
+                                              checkCounts.not_executed
+                                                ? ` · ${checkCounts.not_executed} ⊘`
+                                                : ''
+                                            } · `
                                           : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}
@@ -1219,7 +1259,9 @@ const ResultDetail = () => {
                                       className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                                     >
                                       <div className="mt-0.5">
-                                        {run.passed ? (
+                                        {run.outcome === 'incomplete' ? (
+                                          <Clock3 className="h-4 w-4 text-amber-500" />
+                                        ) : run.passed ? (
                                           <CheckCircle2 className="h-4 w-4 text-success" />
                                         ) : (
                                           <XCircle className="h-4 w-4 text-destructive" />
@@ -1247,6 +1289,9 @@ const ResultDetail = () => {
                                           const notEvaluatedChecks = checks.filter(
                                             (c) => c.status === 'not_evaluated'
                                           );
+                                          const notExecutedChecks = checks.filter(
+                                            (c) => c.status === 'not_executed'
+                                          );
                                           return (
                                             <>
                                               <div className="flex items-center gap-2 flex-wrap">
@@ -1268,14 +1313,21 @@ const ResultDetail = () => {
                                                   )}{' '}
                                                   tool tokens
                                                 </span>
-                                                {!run.passed && (
+                                                {run.outcome === 'incomplete' ? (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-amber-500/30 bg-amber-500/10 text-amber-600 text-[10px]"
+                                                  >
+                                                    Incomplete
+                                                  </Badge>
+                                                ) : !run.passed ? (
                                                   <Badge
                                                     variant="outline"
                                                     className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]"
                                                   >
                                                     Failed
                                                   </Badge>
-                                                )}
+                                                ) : null}
                                               </div>
                                               {run.failureReasons.length > 0 && (
                                                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
@@ -1361,13 +1413,21 @@ const ResultDetail = () => {
                                                             evaluated
                                                           </Badge>
                                                         )}
+                                                        {notExecutedChecks.length > 0 && (
+                                                          <Badge
+                                                            variant="outline"
+                                                            className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
+                                                          >
+                                                            {notExecutedChecks.length} not executed
+                                                          </Badge>
+                                                        )}
                                                       </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
-                                                      {notEvaluatedChecks.length > 0 && (
+                                                      {notExecutedChecks.length > 0 && (
                                                         <p className="mb-2 text-[11px] text-muted-foreground">
-                                                          Checks were not evaluated because this run
-                                                          failed before evaluation.
+                                                          Checks were not executed because this run
+                                                          ended before evaluation.
                                                         </p>
                                                       )}
                                                       <div className="space-y-1">
@@ -1381,15 +1441,20 @@ const ResultDetail = () => {
                                                             className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
-                                                                : check.status === 'not_evaluated'
-                                                                ? 'border-muted-foreground/20 bg-muted/40'
-                                                                : 'border-success/20 bg-success/5'
+                                                                : check.status === 'not_executed'
+                                                                  ? 'border-amber-500/20 bg-amber-500/5'
+                                                                  : check.status === 'not_evaluated'
+                                                                    ? 'border-muted-foreground/20 bg-muted/40'
+                                                                    : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
                                                             <div className="min-w-0">
                                                               <div className="flex items-center gap-2">
                                                                 {check.status === 'failed' ? (
                                                                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                                ) : check.status ===
+                                                                  'not_executed' ? (
+                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
                                                                 ) : check.status ===
                                                                   'not_evaluated' ? (
                                                                   <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1413,12 +1478,15 @@ const ResultDetail = () => {
                                                               className={`shrink-0 text-[10px] ${
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
-                                                                  : check.status === 'not_evaluated'
-                                                                  ? 'border-muted-foreground/30 text-muted-foreground'
-                                                                  : 'border-success/30 text-success'
+                                                                  : check.status === 'not_executed'
+                                                                    ? 'border-amber-500/30 text-amber-600'
+                                                                    : check.status ===
+                                                                        'not_evaluated'
+                                                                      ? 'border-muted-foreground/30 text-muted-foreground'
+                                                                      : 'border-success/30 text-success'
                                                               }`}
                                                             >
-                                                              {check.status}
+                                                              {formatCheckStatusLabel(check.status)}
                                                             </Badge>
                                                           </div>
                                                         ))}
@@ -1785,15 +1853,12 @@ const ResultDetail = () => {
                                                     openAssistantWithPrompt(
                                                       `Explain Run #${
                                                         run.runIndex + 1
-                                                      } for scenario '${scenarioLabel}'. It ${
-                                                        run.passed ? 'passed' : 'failed'
+                                                      } for scenario '${scenarioLabel}'. Its outcome was ${
+                                                        run.outcome ??
+                                                        (run.passed ? 'passed' : 'failed')
                                                       } in ${
                                                         run.duration
-                                                      }ms. Focus on the tool sequence and ${
-                                                        run.passed
-                                                          ? 'why it passed'
-                                                          : 'what caused the failure'
-                                                      }.`,
+                                                      }ms. Focus on the tool sequence and evaluated checks.`,
                                                       { scenarioId: sc.scenarioId }
                                                     )
                                                   }
@@ -2048,10 +2113,10 @@ const ResultDetail = () => {
                             isUser
                               ? 'border-primary/20 bg-primary/10'
                               : isSystem
-                              ? 'border-amber-400/30 bg-amber-50/70'
-                              : isTool
-                              ? 'border-blue-300/30 bg-blue-50/50'
-                              : 'border-border/80 bg-background shadow-sm'
+                                ? 'border-amber-400/30 bg-amber-50/70'
+                                : isTool
+                                  ? 'border-blue-300/30 bg-blue-50/50'
+                                  : 'border-border/80 bg-background shadow-sm'
                           }`}
                         >
                           {!(isUser || isSystem) && (
@@ -2490,8 +2555,8 @@ const ResultDetail = () => {
                 {applyReportPending
                   ? 'Writing...'
                   : applyReportIsManual
-                  ? 'Save Report'
-                  : 'Approve & Write'}
+                    ? 'Save Report'
+                    : 'Approve & Write'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2757,7 +2822,7 @@ function buildRunCheckItems(
   checkResults?: Array<{
     type: string;
     label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
+    status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
     reason?: string;
   }>
 ) {

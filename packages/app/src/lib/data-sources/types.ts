@@ -18,8 +18,14 @@ import type {
   HealthMcpConnectionInfo,
   QueueEntry,
   QueueResponse,
+  QueueChildProgress,
+  EvaluationQueueItem,
   RunQueueEvent,
-  ToolDefinitionTokenEstimates
+  ToolDefinitionTokenEstimates,
+  RoverAgentProvider,
+  RunOutcome,
+  ExecutionSource,
+  BrowserProviderProfile
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -50,6 +56,9 @@ export type {
   HealthMcpConnectionInfo,
   ScenarioAttachment
 };
+export type { RunOutcome, ExecutionSource, RoverAgentProvider };
+export type { EvaluationQueueItem };
+export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
 export type ScenarioRunTraceMessage = CoreTraceMessage;
@@ -70,6 +79,7 @@ export interface WorkspaceConfigRecord {
 
 export interface WorkspaceRunSummary {
   runId: string;
+  evaluationRunId?: string;
   path: string;
   timestamp: string;
   runNote?: string;
@@ -81,6 +91,7 @@ export interface WorkspaceRunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  agentIds?: string[];
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
@@ -93,6 +104,9 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
   checkCounts?: CoreCheckCounts;
 }
 
@@ -171,12 +185,14 @@ export interface LibraryBundle {
   servers: EvalConfig['servers'];
   agents: EvalConfig['agents'];
   scenarios: EvalConfig['scenarios'];
+  browserProviders: Record<string, BrowserProviderProfile>;
 }
 
 export interface CoreLibraryBundle {
   servers: CoreEvalConfig['servers'];
   agents: CoreEvalConfig['agents'];
   scenarios: CoreEvalConfig['scenarios'];
+  browserProviders?: Record<string, BrowserProviderProfile>;
 }
 
 export interface ScenarioAssistantSuggestionBundle {
@@ -739,10 +755,26 @@ export interface EvalDataSource {
     scenarioIds?: string[];
     agents?: string[];
     runNote?: string;
+    newConversationBetweenScenarios?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
+  stopScenario: (
+    jobId: string,
+    scenarioId: string,
+    agentName: string
+  ) => Promise<{ ok: boolean; status: string }>;
+  stopEvaluationRun: (evaluationRunId: string) => Promise<void>;
+  removeEvaluationRun: (evaluationRunId: string) => Promise<void>;
+  openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;
+  resumeRover: (jobId: string) => Promise<{ ok: boolean }>;
+  getRoverStatus: () => Promise<{
+    connected: boolean;
+    provider?: string;
+    pageUrl?: string;
+    activeJobId?: string | null;
+  }>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;

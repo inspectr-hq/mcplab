@@ -40,7 +40,9 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('6')).toBeInTheDocument();
     expect(screen.getByText('Avg Tool Calls')).toBeInTheDocument();
     expect(screen.getByText('Runs Pass / Fail')).toBeInTheDocument();
-    expect(screen.getByText('Checks Pass / Fail')).toBeInTheDocument();
+    expect(
+      screen.getByText('Checks Pass / Fail / Not evaluated / Not executed')
+    ).toBeInTheDocument();
   });
 
   it('shows not-evaluated checks in the checks card', () => {
@@ -52,5 +54,20 @@ describe('ResultsDashboard', () => {
     );
 
     expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+  });
+
+  it('shows not-executed checks separately from passed checks', () => {
+    render(
+      <ResultsDashboard
+        runs={[
+          makeRun({
+            checkCounts: { passed: 2, failed: 0, not_evaluated: 0, not_executed: 1, total: 3 }
+          })
+        ]}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByText('1 not executed')).toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ import type {
   TraceMessageContentBlock,
   TraceMessageUsage
 } from './types.js';
+import { isLlmAgent } from './types.js';
 import type { McpClientManager } from './mcp.js';
 import { isAbortError, throwIfAborted } from './abort.js';
 import type { ScenarioTraceSpan } from './langsmith-tracing.js';
@@ -213,9 +214,11 @@ export async function runAgentScenario(params: {
   trace?: ScenarioTraceSpan;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
+  if (!isLlmAgent(agent))
+    throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
   const serverRequestHeaders =
     typeof params.resolveServerRequestHeaders === 'function'
-      ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
+      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
       : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
@@ -510,6 +513,7 @@ export async function chatWithAgent(params: {
   responseFormat?: JsonSchemaResponseFormat;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
+  if (!isLlmAgent(agent)) throw new Error('Browser agents cannot be used for LLM chat.');
   const tools = params.tools ?? [];
   const adapter = createAdapter(agent);
   return adapter.chat(messages, tools, {
@@ -522,7 +526,9 @@ export async function chatWithAgent(params: {
   });
 }
 
-function createAdapter(agent: AgentConfig): LlmAdapter {
+function createAdapter(
+  agent: Extract<AgentConfig, { provider: 'openai' | 'anthropic' | 'azure_openai' }>
+): LlmAdapter {
   if (agent.provider === 'openai') {
     return new OpenAiAdapter(process.env.OPENAI_API_KEY);
   }
@@ -880,17 +886,19 @@ function toOpenAiMessage(message: LlmMessage) {
                 image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
               }
             : att.media_type === 'application/pdf'
-            ? {
-                type: 'file' as const,
-                file: {
-                  filename: att.name ?? 'document.pdf',
-                  file_data: att.data ? `data:${att.media_type};base64,${att.data}` : att.url ?? ''
+              ? {
+                  type: 'file' as const,
+                  file: {
+                    filename: att.name ?? 'document.pdf',
+                    file_data: att.data
+                      ? `data:${att.media_type};base64,${att.data}`
+                      : (att.url ?? '')
+                  }
                 }
-              }
-            : {
-                type: 'text' as const,
-                text: attachmentToText(att)
-              }
+              : {
+                  type: 'text' as const,
+                  text: attachmentToText(att)
+                }
         )
       ]
     };

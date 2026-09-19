@@ -28,6 +28,17 @@ function MockResults() {
 
 vi.mock('./pages/Results', () => ({ default: MockResults }));
 
+vi.mock('./pages/Agents', () => ({
+  default: () => <output data-testid="agents-route">agents</output>
+}));
+
+vi.mock('./pages/AgentDetail', () => ({
+  default: () => {
+    const { agentName } = useParams<{ agentName?: string }>();
+    return <output data-testid="agent-detail-route">{agentName ?? ''}</output>;
+  }
+}));
+
 describe('App route tree compatibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,6 +76,16 @@ describe('App route tree compatibility', () => {
     );
 
     expect(screen.getByTestId('scenario-query')).toHaveTextContent('scenario-42');
+  });
+
+  it('keeps an agent named browser on the dynamic detail route', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/agents/browser']}>
+        <AppRouteTree />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('agent-detail-route')).toHaveTextContent('browser');
   });
 
   it('preserves encoded backslashes and navigates to an internal route', () => {

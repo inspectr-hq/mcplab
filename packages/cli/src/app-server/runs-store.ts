@@ -1,11 +1,19 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tallyCheckCounts } from '@inspectr/mcplab-core';
-import type { EvalConfig, ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
+import type {
+  EvalConfig,
+  ExecutionSource,
+  ResultsJson,
+  RunOutcome,
+  ScenarioRunTraceRecord
+} from '@inspectr/mcplab-core';
 import { ensureInsideRoot } from './store-utils.js';
 
 export interface RunSummary {
   runId: string;
+  /** Parent evaluation identity for queue/grouped runs, when present. */
+  evaluationRunId?: string;
   path: string;
   timestamp: string;
   runNote?: string;
@@ -17,6 +25,7 @@ export interface RunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  agentIds?: string[];
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
@@ -28,10 +37,14 @@ export interface RunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Record<RunOutcome, number>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
   checkCounts: {
     passed: number;
     failed: number;
     not_evaluated: number;
+    not_executed?: number;
     total: number;
   };
 }
@@ -87,6 +100,7 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
       );
       summaries.push({
         runId: results.metadata.run_id,
+        evaluationRunId: results.metadata.evaluation_run_id ?? results.metadata.evaluation_group_id,
         path: dir,
         timestamp: results.metadata.timestamp,
         runNote: results.metadata.run_note,
@@ -98,7 +112,7 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         toolTokensTotal:
           typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total ===
           'number'
-            ? (results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null
+            ? ((results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null)
             : null,
         scenarioIds: scenarioItems
           .map((scenario) => String(scenario.scenario_id ?? ''))
@@ -106,6 +120,7 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         scenarioNames: scenarioItems
           .map((scenario) => String(scenario.scenario_name ?? ''))
           .filter(Boolean),
+        agentIds: scenarioItems.map((scenario) => String(scenario.agent ?? '')).filter(Boolean),
         rerunAgents: results.metadata.rerun_agents,
         rerunScenarioIds: results.metadata.rerun_scenario_ids,
         rerunServerOverrideAll: results.metadata.rerun_server_override_all,
@@ -132,6 +147,9 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
                 (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0
               )
             : undefined,
+        outcomes: results.summary.outcomes,
+        executionSource: results.metadata.execution_source,
+        executionClient: results.metadata.execution_client,
         checkCounts
       });
     } catch {

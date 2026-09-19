@@ -32,6 +32,7 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  parseBrowserProviderProfiles,
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   updateEvaluationConfigFile,
@@ -191,6 +192,14 @@ const AgentEntrySchema = z.object({
   system: z.string().optional()
 });
 
+const BrowserAgentEntrySchema = z.object({
+  type: z.literal('browser'),
+  name: z.string().optional(),
+  provider: z.string(),
+  url: z.string(),
+  new_conversation_between_scenarios: z.boolean().optional()
+});
+
 const LibraryServerEntryContentSchema = z
   .object({
     transport: z.string().optional(),
@@ -209,13 +218,19 @@ const LibraryServerEntrySchema = z.object({
 
 const LibraryAgentEntrySchema = z.object({
   id: z.string(),
-  entry: AgentEntrySchema.optional()
+  entry: z.union([AgentEntrySchema, BrowserAgentEntrySchema]).optional()
+});
+
+const LibraryBrowserProviderEntrySchema = z.object({
+  id: z.string(),
+  entry: GenericObjectSchema.optional()
 });
 
 const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
   servers: z.array(LibraryServerEntrySchema),
   agents: z.array(LibraryAgentEntrySchema),
+  browser_providers: z.array(LibraryBrowserProviderEntrySchema),
   test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
@@ -769,7 +784,7 @@ export async function startMcplabMcpServer(
   const sessions = new Map<string, SessionRuntime>();
   const httpServer = createServer(async (req, res) => {
     try {
-      await handleHttpRequest(req, res, sessions, options.path);
+      await handleHttpRequest(req, res, sessions, options.path, logger);
     } catch (error) {
       logger.error('[mcplab-mcp] request error:', error);
       if (!res.headersSent) {
@@ -904,8 +919,8 @@ export function registerTools(server: McpServer): void {
       args: InputArgs extends ZodRawShapeCompat
         ? ShapeOutput<InputArgs>
         : InputArgs extends AnySchema
-        ? SchemaOutput<InputArgs>
-        : never
+          ? SchemaOutput<InputArgs>
+          : never
     ) => unknown
   ): void => {
     const resolvedTitle = resolveToolTitle(name, config.title, config.annotations?.title);
@@ -1303,7 +1318,7 @@ export function registerTools(server: McpServer): void {
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
-          .enum(['all', 'servers', 'agents', 'test_cases', 'scenarios'])
+          .enum(['all', 'servers', 'agents', 'browser_providers', 'test_cases', 'scenarios'])
           .optional()
           .describe('Which library category to list. Defaults to all.'),
         includeContent: z
@@ -1314,9 +1329,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ kind, includeContent }) => {
       return withToolHandling(async () => {
-        const root = resolveBundleRoot();
-        const data = readLibrary(root, Boolean(includeContent));
         const selectedKind = kind ?? 'all';
+        const root = resolveBundleRoot();
+        const data = readLibrary(root, Boolean(includeContent), selectedKind);
         const structured =
           selectedKind === 'all'
             ? data
@@ -1324,6 +1339,8 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
+                browser_providers:
+                  selectedKind === 'browser_providers' ? data.browser_providers : [],
                 test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
@@ -1340,7 +1357,7 @@ export function registerTools(server: McpServer): void {
         'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
       outputSchema: {
         bundleRoot: z.string(),
-        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
+        kind: z.enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
         yaml: z.string(),
@@ -1348,7 +1365,7 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         kind: z
-          .enum(['servers', 'agents', 'test_cases', 'scenarios'])
+          .enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios'])
           .describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
@@ -1418,6 +1435,50 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+
+  registerTool(
+    'mcplab_generate_browser_agent_entry',
+    {
+      description:
+        'Generate an agents.yaml entry for a Rover browser agent. Browser agents reference a validated browser provider profile and are executed by Rover, not by an LLM API.',
+      outputSchema: {
+        id: z.string(),
+        entry: z.object({
+          type: z.literal('browser'),
+          name: z.string().optional(),
+          provider: z.string(),
+          url: z.string(),
+          new_conversation_between_scenarios: z.boolean().optional()
+        }),
+        yaml: z.string()
+      },
+      inputSchema: {
+        id: z.string().describe('Browser agent id key (kebab-case recommended).'),
+        name: z.string().optional().describe('Human-readable browser agent name.'),
+        provider: z.string().min(1).describe('Provider id from browser-providers.yaml.'),
+        url: z.string().url().describe('Browser origin where Rover should execute the agent.'),
+        new_conversation_between_scenarios: z
+          .boolean()
+          .optional()
+          .describe('Whether Rover should start a new conversation between scenarios.')
+      }
+    },
+    async ({ id, name, provider, url, new_conversation_between_scenarios }) =>
+      withToolHandling(async () => {
+        const entry = removeUndefined({
+          type: 'browser' as const,
+          name,
+          provider,
+          url,
+          new_conversation_between_scenarios
+        });
+        return ok(`Generated browser agent entry '${id}'`, {
+          id,
+          entry,
+          yaml: stringifyYaml({ [id]: entry }).trimEnd()
+        });
+      })
   );
 
   registerTool(
@@ -2075,7 +2136,7 @@ export function registerTools(server: McpServer): void {
         const matching = listRunsWithFallback(resolveRunsDir(), undefined, true).filter((entry) => {
           const timestamp = String(
             entry.metadata && typeof entry.metadata === 'object'
-              ? (entry.metadata as any).timestamp ?? ''
+              ? ((entry.metadata as any).timestamp ?? '')
               : ''
           );
           const time = new Date(timestamp).getTime();
@@ -3331,20 +3392,20 @@ function inferToolAnnotations(
         openWorldHint: openWorld
       }
     : DESTRUCTIVE_TOOLS.has(toolName)
-    ? {
-        title,
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      }
-    : {
-        title,
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      };
+      ? {
+          title,
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        }
+      : {
+          title,
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        };
   return {
     ...baseHints,
     ...override,
@@ -3404,18 +3465,24 @@ function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): E
 
 function readLibrary(
   bundleRoot: string,
-  includeContent: boolean
+  includeContent: boolean,
+  kind: 'all' | 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios' = 'all'
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
+  const browserProvidersPath = join(bundleRoot, 'browser-providers.yaml');
   const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
-    ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
   const agents = existsSync(agentsPath)
-    ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
+  const browserProviders =
+    (kind === 'all' || kind === 'browser_providers') && existsSync(browserProvidersPath)
+      ? parseBrowserProviderProfiles(parseYaml(readFileSync(browserProvidersPath, 'utf8')) ?? {})
+      : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
@@ -3450,6 +3517,14 @@ function readLibrary(
         id,
         ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
       })),
+    browser_providers: Object.keys(browserProviders)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent
+          ? { entry: browserProviders[id] as unknown as Record<string, unknown> }
+          : {})
+      })),
     test_cases: scenarioEntries,
     scenarios: scenarioEntries
   };
@@ -3458,11 +3533,14 @@ function readLibrary(
 
 function getLibraryItem(
   bundleRoot: string,
-  kind: 'servers' | 'agents' | 'test_cases' | 'scenarios',
+  kind: 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
-  if (kind === 'servers' || kind === 'agents') {
-    const file = join(bundleRoot, `${kind}.yaml`);
+  if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
+    const file = join(
+      bundleRoot,
+      kind === 'browser_providers' ? 'browser-providers.yaml' : `${kind}.yaml`
+    );
     if (!existsSync(file)) {
       throw new Error(`Library file not found: ${file}`);
     }
@@ -3472,12 +3550,14 @@ function getLibraryItem(
       throw new Error(`'${id}' not found in ${file}`);
     }
     const entry = parsed[id];
+    const normalizedEntry =
+      kind === 'browser_providers' ? parseBrowserProviderProfiles({ [id]: entry })[id] : entry;
     return {
       bundleRoot,
       kind,
       id,
-      yaml: stringifyYaml({ [id]: entry }).trimEnd(),
-      content: entry as Record<string, unknown>
+      yaml: stringifyYaml({ [id]: normalizedEntry }).trimEnd(),
+      content: normalizedEntry as Record<string, unknown>
     };
   }
 
@@ -3573,18 +3653,18 @@ function listEvaluationConfigs(params: {
       sortBy === 'scenarios'
         ? a.scenario_count
         : sortBy === 'agents'
-        ? a.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(a.updated_at)
-        : a.name;
+          ? a.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(a.updated_at)
+            : a.name;
     const right =
       sortBy === 'scenarios'
         ? b.scenario_count
         : sortBy === 'agents'
-        ? b.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(b.updated_at)
-        : b.name;
+          ? b.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(b.updated_at)
+            : b.name;
     const comparison =
       typeof left === 'number' && typeof right === 'number'
         ? left - right
@@ -4334,8 +4414,8 @@ function buildConversationTimeline(
             message.role === 'assistant'
               ? 'agent_message'
               : message.role === 'user'
-              ? 'user_message'
-              : 'tool_text',
+                ? 'user_message'
+                : 'tool_text',
           role: message.role,
           ts: message.ts,
           message_index: messageIndex,
@@ -4490,16 +4570,23 @@ export async function handleMcplabMcpHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  options?: { path?: string }
+  options?: { path?: string; logger?: Pick<Console, 'log' | 'error'> }
 ): Promise<void> {
-  await handleHttpRequest(req, res, sessions, options?.path ?? DEFAULT_MCP_PATH);
+  await handleHttpRequest(
+    req,
+    res,
+    sessions,
+    options?.path ?? DEFAULT_MCP_PATH,
+    options?.logger ?? console
+  );
 }
 
 async function handleHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  mcpPath: string
+  mcpPath: string,
+  logger: Pick<Console, 'log' | 'error'> = console
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const pathname = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`).pathname;
@@ -4537,14 +4624,32 @@ async function handleHttpRequest(
     }
 
     if (isInitializeRequest(body)) {
+      const clientInfo =
+        body.params && typeof body.params === 'object' && 'clientInfo' in body.params
+          ? body.params.clientInfo
+          : undefined;
+      const clientName =
+        clientInfo && typeof clientInfo === 'object' && 'name' in clientInfo
+          ? String(clientInfo.name)
+          : 'unknown';
+      const clientVersion =
+        clientInfo && typeof clientInfo === 'object' && 'version' in clientInfo
+          ? String(clientInfo.version)
+          : undefined;
       let runtime!: SessionRuntime;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           sessions.set(sid, runtime);
+          logger.log(
+            `[mcplab-mcp] client connected: ${clientName}${
+              clientVersion ? `/${clientVersion}` : ''
+            } (session ${sid})`
+          );
         },
         onsessionclosed: (sid) => {
           sessions.delete(sid);
+          logger.log(`[mcplab-mcp] client disconnected: session ${sid}`);
         }
       });
       const mcpServer = createConfiguredServer();

@@ -1,0 +1,72 @@
+---
+import { ArrowRight, Bot, Download, PanelRightOpen, Route, ShieldCheck } from 'lucide-react';
+
+const benefits = [
+  {
+    Icon: PanelRightOpen,
+    title: 'Work in the real browser UI',
+    description: 'Rover injects a compact sidebar with managed runs, one-off Live Tests, local queues, and a manual fallback.'
+  },
+  {
+    Icon: Route,
+    title: 'Use one evaluation pipeline',
+    description: 'MCPLab owns matching, assertions, outcomes, history, and result artifacts.'
+  },
+  {
+    Icon: ShieldCheck,
+    title: 'Keep execution controlled',
+    description: 'Tab binding, stop controls, reconnect handling, and stale-result checks protect managed runs.'
+  }
+];
+---
+
+<section class="border-t border-border/50 bg-muted/20 py-20">
+  <div class="container mx-auto px-4">
+    <div class="mx-auto max-w-6xl rounded-2xl border border-border bg-card p-6 sm:p-8 lg:p-10">
+      <div class="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
+          <div class="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Bot className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <p class="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary">MCPLab Rover</p>
+          <h2 class="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+            Evaluate browser agents with the same tests
+          </h2>
+          <p class="mt-4 max-w-xl text-muted-foreground leading-7">
+            Run MCPLab evaluations in browser-based agents, capture the new assistant response, and send it back through MCPLab's normal evaluation and reporting pipeline.
+          </p>
+          <div class="mt-7 flex flex-col gap-3 sm:flex-row">
+            <a
+              href="/docs/app/rover/"
+              class="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              Explore Rover <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <a
+              href="https://github.com/inspectr-hq/mcplab-rover/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] border border-border bg-background px-5 text-sm font-semibold transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" /> Download extension
+            </a>
+          </div>
+        </div>
+
+        <div class="grid gap-4">
+          {benefits.map(({ Icon, title, description }) => (
+            <div class="flex gap-4 rounded-xl border border-border bg-background/60 p-5">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 class="font-display font-semibold">{title}</h3>
+                <p class="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

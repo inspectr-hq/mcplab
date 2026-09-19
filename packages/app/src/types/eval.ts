@@ -1,5 +1,11 @@
 // Core mcp-lab types
-import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
+import type {
+  CoreCheckCounts,
+  ScenarioAttachment,
+  ExecutionSource,
+  RoverAgentProvider,
+  RunOutcome
+} from '@/lib/data-sources/types';
 export { tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
@@ -35,9 +41,10 @@ export type ServerEntry =
   | { kind: 'inline'; server: ServerConfig }
   | { kind: 'referenced'; ref: string };
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
   id: string;
   name: string;
+  type?: 'llm';
   provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
   model: string;
   temperature?: number;
@@ -45,6 +52,19 @@ export interface AgentConfig {
   maxTurns?: number;
   systemPrompt?: string;
 }
+
+export interface BrowserAgentConfig {
+  id: string;
+  name: string;
+  type: 'browser';
+  provider: RoverAgentProvider;
+  model: string;
+  maxTokens: number;
+  url: string;
+  newConversationBetweenScenarios?: boolean;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
 
 export interface EvalRule {
   type:
@@ -76,7 +96,7 @@ export interface EvalRule {
 export interface CheckResult {
   type: string;
   label: string;
-  status: 'passed' | 'failed' | 'not_evaluated';
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
   reason?: string;
   metadata?: Record<string, unknown>;
 }
@@ -168,6 +188,7 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
+  outcome?: RunOutcome;
   error?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
@@ -223,6 +244,10 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
+  evaluationRunId?: string;
   checkCounts?: CheckCounts;
 }
 

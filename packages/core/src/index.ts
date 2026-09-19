@@ -11,8 +11,16 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
-export { runAll, type RunProgressEvent } from './runner.js';
-export { renderSummaryMarkdown } from './results.js';
+export { createRunId, judgeAgentAssertions, runAll, type RunProgressEvent } from './runner.js';
+export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';
+export { aggregateResults, renderSummaryMarkdown } from './results.js';
+export { persistEvaluationArtifacts, type PersistEvaluationArtifactsParams } from './artifacts.js';
+export {
+  deriveRunOutcome,
+  evaluateScenarioObservation,
+  type EvaluateScenarioObservationParams,
+  type ScenarioObservation
+} from './scenario-observation.js';
 export {
   estimateToolDefinitionTokens,
   type ToolDefinitionForTokenEstimate,
@@ -59,3 +67,10 @@ export {
   type TraceSpan
 } from './langsmith-tracing.js';
 export * from './queue-contract.js';
+export {
+  parseBrowserProviderProfiles,
+  validateBrowserProviderProfile,
+  type BrowserProviderProfile,
+  type BrowserProviderConfidence,
+  type ShadowLocator
+} from './browser-providers.js';

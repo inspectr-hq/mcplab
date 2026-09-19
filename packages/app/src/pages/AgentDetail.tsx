@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, Loader2, RefreshCw, Wifi, X } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronDown,
+  Globe2,
+  Loader2,
+  RefreshCw,
+  Wifi,
+  X
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,7 +48,9 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
+import { createEmptyAgent } from '@/lib/agent-factory';
 import type { AgentConfig } from '@/types/eval';
+import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const modelSuggestions: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
@@ -61,28 +73,24 @@ type ConnectState =
   | { status: 'error'; message: string; testedAt: string }
   | { status: 'unsupported' };
 
-const emptyAgent = (): AgentConfig => ({
-  id: `agt-${Date.now()}`,
-  name: '',
-  provider: 'openai',
-  model: 'gpt-4o',
-  temperature: DEFAULT_AGENT_TEMPERATURE,
-  maxTokens: 4096
-});
-
 const AgentDetail = () => {
   const { agentName } = useParams<{ agentName: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { agents, setAgents } = useLibraries();
+  const { agents, setAgents, browserProviders } = useLibraries();
   const { source } = useDataSource();
+  const roverStatus = useRoverStatus();
 
   const isNew = agentName === 'new';
   const decodedParam = agentName ? decodeURIComponent(agentName) : '';
   const existingAgent = isNew
     ? null
-    : agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam);
+    : (agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam));
 
-  const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? emptyAgent());
+  const requestedType = searchParams.get('type') === 'browser' ? 'browser' : 'llm';
+  const [form, setForm] = useState<AgentConfig>(
+    () => existingAgent ?? createEmptyAgent(requestedType)
+  );
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: 'idle' });
@@ -92,12 +100,19 @@ const AgentDetail = () => {
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
   const hydratedRouteRef = useRef<string | null>(null);
+  const browserProviderOptions = [
+    { id: 'claude', name: 'Claude' },
+    { id: 'trendminer', name: 'TrendMiner' },
+    ...Object.values(browserProviders)
+      .filter((provider) => !['claude', 'trendminer'].includes(provider.id))
+      .map((provider) => ({ id: provider.id, name: provider.name }))
+  ];
 
   useEffect(() => {
     const routeKey = isNew ? `new:${decodedParam || 'new'}` : `agt:${decodedParam}`;
     if (hydratedRouteRef.current === routeKey) return;
     if (isNew) {
-      setForm(emptyAgent());
+      setForm(createEmptyAgent(requestedType));
       hydratedRouteRef.current = routeKey;
       return;
     }
@@ -118,6 +133,14 @@ const AgentDetail = () => {
 
   const handleConnect = async () => {
     setShowConnectPanel(true);
+    if (form.type === 'browser') {
+      setConnectState({ status: 'unsupported' });
+      toast({
+        title: 'Browser Agent connection is handled by Rover',
+        description: 'Open Rover and connect the configured browser provider.'
+      });
+      return;
+    }
     if (form.provider === 'google' || form.provider === 'custom') {
       setConnectState({ status: 'unsupported' });
       return;
@@ -177,6 +200,10 @@ const AgentDetail = () => {
       toast({ title: 'Name is required', variant: 'destructive' });
       return;
     }
+    if (form.type === 'browser' && !form.url?.trim()) {
+      toast({ title: 'Browser agent URL is required', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       if (isNew) {
@@ -217,6 +244,8 @@ const AgentDetail = () => {
     );
   }
 
+  const roverConnected = roverStatus.connected && roverStatus.provider === form.provider;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -228,13 +257,42 @@ const AgentDetail = () => {
           >
             <ArrowLeft className="h-4 w-4" /> Agents
           </Link>
-          <h1 className="text-2xl font-bold">{isNew ? 'New Agent' : form.name}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            {form.type === 'browser' ? (
+              <Globe2 className="h-6 w-6 text-sky-600" aria-hidden="true" />
+            ) : (
+              <Bot className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+            )}
+            {isNew ? 'New Agent' : form.name}
+          </h1>
         </div>
-        {!isNew && (
-          <Button type="button" onClick={() => void handleConnect()}>
-            <Wifi className="mr-2 h-4 w-4" />
-            Test Connection
-          </Button>
+        {!isNew && form.type === 'browser' ? (
+          <div className="flex items-center gap-2">
+            {roverConnected && roverStatus.pageUrl ? (
+              <a
+                href={roverStatus.pageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="max-w-xs rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                title={`Open ${roverStatus.pageUrl}`}
+              >
+                <span className="block truncate">{roverStatus.pageUrl}</span>
+              </a>
+            ) : null}
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${roverConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
+              />
+              <span>{roverConnected ? 'Rover connected' : 'Rover not connected'}</span>
+            </div>
+          </div>
+        ) : (
+          !isNew && (
+            <Button type="button" onClick={() => void handleConnect()}>
+              <Wifi className="mr-2 h-4 w-4" />
+              Test Connection
+            </Button>
+          )
         )}
       </div>
 
@@ -337,205 +395,314 @@ const AgentDetail = () => {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Provider</Label>
+              <Label>Agent type</Label>
               <Select
-                value={form.provider}
+                value={form.type ?? 'llm'}
                 onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    provider: v as AgentConfig['provider'],
-                    model: modelSuggestions[v]?.[0] || ''
-                  }))
+                  setForm((f) =>
+                    v === 'browser'
+                      ? {
+                          id: f.id,
+                          name: f.name,
+                          type: 'browser',
+                          provider: 'claude',
+                          model: '',
+                          maxTokens: 0,
+                          url: f.type === 'browser' ? f.url : '',
+                          newConversationBetweenScenarios:
+                            f.type === 'browser' ? f.newConversationBetweenScenarios : true
+                        }
+                      : {
+                          id: f.id,
+                          name: f.name,
+                          type: 'llm',
+                          provider: 'openai',
+                          model: f.model || 'gpt-4o',
+                          maxTokens: f.maxTokens || 4096,
+                          temperature: f.type === 'llm' ? f.temperature : DEFAULT_AGENT_TEMPERATURE,
+                          maxTurns: f.type === 'llm' ? f.maxTurns : undefined,
+                          systemPrompt: f.type === 'llm' ? f.systemPrompt : undefined
+                        }
+                  )
                 }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
-                  <SelectItem value="azure">Azure OpenAI</SelectItem>
-                  <SelectItem value="google">Google</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="llm">LLM Agent</SelectItem>
+                  <SelectItem value="browser">Browser Agent</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label>Provider</Label>
+              <Select
+                value={form.provider}
+                onValueChange={(v) =>
+                  setForm((f) =>
+                    f.type === 'browser'
+                      ? { ...f, provider: v as 'claude' | 'trendminer' }
+                      : {
+                          ...f,
+                          provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom',
+                          model: modelSuggestions[v]?.[0] || ''
+                        }
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {form.type === 'browser' ? (
+                    browserProviderOptions.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="azure">Azure OpenAI</SelectItem>
+                      <SelectItem value="google">Google</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.type === 'browser' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-conversation-behavior">Conversation behavior</Label>
+                <Select
+                  value={form.newConversationBetweenScenarios === false ? 'same' : 'new'}
+                  onValueChange={(value) =>
+                    setForm((current) =>
+                      current.type === 'browser'
+                        ? {
+                            ...current,
+                            newConversationBetweenScenarios: value !== 'same'
+                          }
+                        : current
+                    )
+                  }
+                >
+                  <SelectTrigger id="agent-conversation-behavior">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Start a new conversation between scenarios</SelectItem>
+                    <SelectItem value="same">Continue the same conversation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Default for queue runs. It can be overridden when starting an evaluation.
+                </p>
+              </div>
+            )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {form.type === 'browser' && (
             <div className="space-y-1.5">
-              <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
-              <div className="flex items-center gap-2">
-                <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openModelPicker}
-                      aria-controls="agent-model-command-list"
-                      className="h-9 flex-1 justify-between font-mono text-xs"
-                    >
-                      <span className="truncate text-left">{form.model || 'Select model...'}</span>
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[420px] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder={`Search ${
-                          form.provider === 'azure' ? 'deployments' : 'models'
-                        }...`}
-                      />
-                      <CommandList id="agent-model-command-list">
-                        <CommandEmpty>
-                          No {form.provider === 'azure' ? 'deployments' : 'models'} found.
-                        </CommandEmpty>
-                        <CommandGroup
-                          heading={form.provider === 'azure' ? 'Deployments' : 'Models'}
-                        >
-                          {modelOptions.map((modelName) => (
+              <Label>Browser agent URL</Label>
+              <Input
+                value={form.url ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+                placeholder="https://claude.ai or TrendMiner URL"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Rover opens this URL when the queued Browser Agent needs attention.
+              </p>
+            </div>
+          )}
+
+          {form.type !== 'browser' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
+                <div className="flex items-center gap-2">
+                  <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openModelPicker}
+                        aria-controls="agent-model-command-list"
+                        className="h-9 flex-1 justify-between font-mono text-xs"
+                      >
+                        <span className="truncate text-left">
+                          {form.model || 'Select model...'}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[420px] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder={`Search ${
+                            form.provider === 'azure' ? 'deployments' : 'models'
+                          }...`}
+                        />
+                        <CommandList id="agent-model-command-list">
+                          <CommandEmpty>
+                            No {form.provider === 'azure' ? 'deployments' : 'models'} found.
+                          </CommandEmpty>
+                          <CommandGroup
+                            heading={form.provider === 'azure' ? 'Deployments' : 'Models'}
+                          >
+                            {modelOptions.map((modelName) => (
+                              <CommandItem
+                                key={modelName}
+                                value={modelName}
+                                onSelect={(value) => {
+                                  setForm((f) => ({ ...f, model: value }));
+                                  setShowManualInput(false);
+                                  setOpenModelPicker(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    form.model === modelName ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <span className="font-mono text-xs">{modelName}</span>
+                              </CommandItem>
+                            ))}
                             <CommandItem
-                              key={modelName}
-                              value={modelName}
-                              onSelect={(value) => {
-                                setForm((f) => ({ ...f, model: value }));
-                                setShowManualInput(false);
+                              value="__custom_model_id__"
+                              onSelect={() => {
+                                setShowManualInput(true);
                                 setOpenModelPicker(false);
                               }}
                             >
-                              <Check
-                                className={cn(
-                                  'mr-2 h-4 w-4',
-                                  form.model === modelName ? 'opacity-100' : 'opacity-0'
-                                )}
-                              />
-                              <span className="font-mono text-xs">{modelName}</span>
+                              <span className="font-medium">
+                                {form.provider === 'azure'
+                                  ? 'Custom deployment ID...'
+                                  : 'Custom model ID...'}
+                              </span>
                             </CommandItem>
-                          ))}
-                          <CommandItem
-                            value="__custom_model_id__"
-                            onSelect={() => {
-                              setShowManualInput(true);
-                              setOpenModelPicker(false);
-                            }}
-                          >
-                            <span className="font-medium">
-                              {form.provider === 'azure'
-                                ? 'Custom deployment ID...'
-                                : 'Custom model ID...'}
-                            </span>
-                          </CommandItem>
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {supportsDiscovery && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 shrink-0 text-xs"
-                    onClick={() => void fetchModels()}
-                    disabled={loadingModels}
-                    title={
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {supportsDiscovery && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 text-xs"
+                      onClick={() => void fetchModels()}
+                      disabled={loadingModels}
+                      title={
+                        form.provider === 'azure'
+                          ? 'Fetch Azure OpenAI deployments'
+                          : `Fetch ${form.provider} models`
+                      }
+                    >
+                      {loadingModels ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                      )}
+                      {form.provider === 'azure' ? 'Fetch Deployments' : 'Fetch Models'}
+                    </Button>
+                  )}
+                </div>
+                {showManualField && (
+                  <Input
+                    value={form.model}
+                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                    placeholder={
                       form.provider === 'azure'
-                        ? 'Fetch Azure OpenAI deployments'
-                        : `Fetch ${form.provider} models`
+                        ? 'Type deployment name manually'
+                        : 'Type model name manually'
                     }
-                  >
-                    {loadingModels ? (
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="mr-1 h-3 w-3" />
-                    )}
-                    {form.provider === 'azure' ? 'Fetch Deployments' : 'Fetch Models'}
-                  </Button>
+                    className="font-mono text-xs"
+                  />
+                )}
+                {providerModels.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Loaded {providerModels.length}{' '}
+                    {form.provider === 'azure' ? 'deployment names' : 'models'} from provider
+                    discovery.
+                  </p>
                 )}
               </div>
-              {showManualField && (
+              <div className="space-y-1.5">
+                <Label>Max Tokens</Label>
                 <Input
-                  value={form.model}
-                  onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                  placeholder={
-                    form.provider === 'azure'
-                      ? 'Type deployment name manually'
-                      : 'Type model name manually'
+                  type="number"
+                  min={1}
+                  max={128000}
+                  value={form.maxTokens}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, maxTokens: parseInt(e.target.value) || 0 }))
                   }
                   className="font-mono text-xs"
                 />
-              )}
-              {providerModels.length > 0 && (
+              </div>
+            </div>
+          )}
+
+          {form.type !== 'browser' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Max Turns</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={form.maxTurns ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
+                  }}
+                  placeholder="30 (default)"
+                  className="font-mono text-xs"
+                />
                 <p className="text-[11px] text-muted-foreground">
-                  Loaded {providerModels.length}{' '}
-                  {form.provider === 'azure' ? 'deployment names' : 'models'} from provider
-                  discovery.
+                  Maximum number of LLM round-trips (tool calls + final answer) per eval run.
                 </p>
-              )}
+              </div>
             </div>
+          )}
+
+          {form.type !== 'browser' && (
             <div className="space-y-1.5">
-              <Label>Max Tokens</Label>
-              <Input
-                type="number"
-                min={1}
-                max={128000}
-                value={form.maxTokens}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, maxTokens: parseInt(e.target.value) || 0 }))
-                }
-                className="font-mono text-xs"
+              <div className="flex items-center justify-between">
+                <Label>Temperature</Label>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {resolveAgentTemperature(form.temperature).toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                value={[resolveAgentTemperature(form.temperature)]}
+                onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
+                min={0}
+                max={2}
+                step={0.01}
               />
             </div>
-          </div>
+          )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {form.type !== 'browser' && (
             <div className="space-y-1.5">
-              <Label>Max Turns</Label>
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                value={form.maxTurns ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value.trim();
-                  setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
-                }}
-                placeholder="30 (default)"
-                className="font-mono text-xs"
+              <Label>System Prompt</Label>
+              <Textarea
+                value={form.systemPrompt || ''}
+                onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+                placeholder="Optional system prompt..."
+                rows={3}
+                className="text-xs"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Maximum number of LLM round-trips (tool calls + final answer) per eval run.
-              </p>
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Temperature</Label>
-              <span className="font-mono text-xs text-muted-foreground">
-                {resolveAgentTemperature(form.temperature).toFixed(2)}
-              </span>
-            </div>
-            <Slider
-              value={[resolveAgentTemperature(form.temperature)]}
-              onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
-              min={0}
-              max={2}
-              step={0.01}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>System Prompt</Label>
-            <Textarea
-              value={form.systemPrompt || ''}
-              onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-              placeholder="Optional system prompt..."
-              rows={3}
-              className="text-xs"
-            />
-          </div>
+          )}
 
           <div className="flex items-center justify-between pt-2">
             <div>

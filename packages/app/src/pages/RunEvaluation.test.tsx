@@ -327,6 +327,72 @@ describe('RunEvaluation', () => {
     );
   });
 
+  it('groups Browser Agents and sends an explicit conversation override', async () => {
+    const llmAgent: AgentConfig = {
+      id: 'agent-llm',
+      name: 'LLM Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const browserAgent: AgentConfig = {
+      id: 'agent-browser',
+      name: 'Browser Agent',
+      type: 'browser',
+      provider: 'chatgpt-com',
+      model: '',
+      maxTokens: 0,
+      url: 'https://chatgpt.com',
+      newConversationBetweenScenarios: false
+    };
+    const scenario = {
+      id: 'scenario-1',
+      name: 'Scenario 1',
+      prompt: 'Do thing',
+      serverIds: [],
+      evalRules: [],
+      extractRules: []
+    };
+    configsRef.value = [
+      {
+        id: 'test-config',
+        name: 'Test Config',
+        agents: [llmAgent, browserAgent],
+        scenarios: [scenario],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        sourcePath: '/path/to/test.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('LLM Agents')).toBeInTheDocument();
+      expect(screen.getByText('Browser Agents')).toBeInTheDocument();
+      expect(screen.getByText('Conversation behavior')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agents: ['agent-llm', 'agent-browser'],
+        newConversationBetweenScenarios: true
+      })
+    );
+  });
+
   it('advances progress for config-declared agent runs', async () => {
     const testConfig: EvalConfig = {
       id: 'test-config',
@@ -482,6 +548,79 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Starting')).toBeInTheDocument();
       expect(screen.getByText('#1 Queued')).toBeInTheDocument();
     });
+  });
+
+  it('highlights only running evaluations and hides stop for queued evaluations', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-queued',
+          evaluationName: 'Queued evaluation',
+          status: 'queued',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-queued',
+              status: 'queued',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            }
+          ]
+        },
+        {
+          evaluationRunId: 'evaluation-running',
+          evaluationName: 'Running evaluation',
+          status: 'running',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-running',
+              status: 'running',
+              runParams: { configPath: '/tmp/eval-2.yaml', runsPerScenario: 1 }
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const queued = await screen.findByText('Queued evaluation');
+    const queuedCard = queued.closest('div.rounded-md.border');
+    expect(queuedCard).toBeTruthy();
+    expect(queuedCard).not.toHaveClass('bg-primary/5');
+    expect(queuedCard).toHaveTextContent('Remove');
+    expect(queuedCard).not.toHaveTextContent('Stop run');
+    const queuedActions = Array.from(queuedCard!.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim()
+    );
+    expect(queuedActions.indexOf('Details')).toBeLessThan(queuedActions.indexOf('Remove'));
+
+    const running = screen.getByText('Running evaluation');
+    const runningCard = running.closest('div.rounded-md.border');
+    expect(runningCard).toHaveClass('bg-primary/5');
+    expect(runningCard).toHaveTextContent('Stop run');
+    const runningBadge = Array.from(runningCard?.querySelectorAll('div') ?? []).find(
+      (node) => node.textContent?.trim() === 'running'
+    );
+    expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
   });
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {

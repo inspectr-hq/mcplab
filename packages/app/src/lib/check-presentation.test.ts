@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCheckItems,
+  formatCheckStatusLabel,
   formatEvalRuleLabel,
   matchFailureReasonForRule
 } from './check-presentation';
@@ -45,6 +46,15 @@ describe('formatEvalRuleLabel', () => {
         equals: 'Paris'
       })
     ).toBe('Tool input · stats JSONPath $.city == Paris');
+  });
+});
+
+describe('formatCheckStatusLabel', () => {
+  it('uses human-readable labels for persisted check statuses', () => {
+    expect(formatCheckStatusLabel('not_evaluated')).toBe('Not evaluated');
+    expect(formatCheckStatusLabel('not_executed')).toBe('Not executed');
+    expect(formatCheckStatusLabel('passed')).toBe('Passed');
+    expect(formatCheckStatusLabel('failed')).toBe('Failed');
   });
 });
 
@@ -133,10 +143,10 @@ describe('buildCheckItems', () => {
       ]
     });
 
-    expect(result[0]).toMatchObject({ rule, status: 'not_evaluated' });
+    expect(result[0]).toMatchObject({ rule, status: 'not_executed' });
   });
 
-  it('marks all checks not evaluated when run fails before evaluation', () => {
+  it('marks all checks not executed when run fails before evaluation', () => {
     const result = buildCheckItems({
       evalRules,
       failureReasons: ['Scenario error: boom'],
@@ -144,8 +154,8 @@ describe('buildCheckItems', () => {
     });
 
     expect(result).toEqual([
-      { rule: evalRules[0], status: 'not_evaluated', failureReason: undefined },
-      { rule: evalRules[1], status: 'not_evaluated', failureReason: undefined }
+      { rule: evalRules[0], status: 'not_executed', failureReason: undefined },
+      { rule: evalRules[1], status: 'not_executed', failureReason: undefined }
     ]);
   });
 
@@ -162,8 +172,8 @@ describe('buildCheckItems', () => {
           input.type === 'tool_input_contains'
             ? `contains ${input.value}`
             : input.type === 'tool_input_regex'
-            ? `regex ${input.value}`
-            : `JSONPath ${input.path} == ${String(input.equals)}`
+              ? `regex ${input.value}`
+              : `JSONPath ${input.path} == ${String(input.equals)}`
         })`
       ]
     });

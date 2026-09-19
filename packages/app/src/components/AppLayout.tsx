@@ -233,8 +233,8 @@ export function AppLayout() {
                   streamStatus === 'disconnected'
                     ? 'Retry queue connection'
                     : streamStatus === 'connecting'
-                    ? 'Connecting to queue stream...'
-                    : 'Queue stream connected'
+                      ? 'Connecting to queue stream...'
+                      : 'Queue stream connected'
                 }
               >
                 <span
@@ -242,8 +242,8 @@ export function AppLayout() {
                     streamStatus === 'connected'
                       ? 'bg-emerald-500'
                       : streamStatus === 'connecting'
-                      ? 'bg-amber-400'
-                      : 'bg-rose-500'
+                        ? 'bg-amber-400'
+                        : 'bg-rose-500'
                   }`}
                   aria-hidden="true"
                 />
@@ -252,8 +252,8 @@ export function AppLayout() {
                     streamStatus === 'connected'
                       ? 'text-emerald-700'
                       : streamStatus === 'connecting'
-                      ? 'text-muted-foreground'
-                      : 'text-destructive'
+                        ? 'text-muted-foreground'
+                        : 'text-destructive'
                   }`}
                 >
                   {streamStatus}

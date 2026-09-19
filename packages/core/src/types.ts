@@ -59,7 +59,8 @@ export interface ServerRefEntry {
 
 export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
+  type?: 'llm';
   name?: string;
   provider: 'openai' | 'anthropic' | 'azure_openai';
   model: string;
@@ -69,16 +70,39 @@ export interface AgentConfig {
   system?: string;
 }
 
-export interface AgentInlineEntry extends AgentConfig {
+export interface BrowserAgentConfig {
+  type: 'browser';
+  name?: string;
+  provider: string;
+  url: string;
+  newConversationBetweenScenarios?: boolean;
+}
+
+export type RoverAgentProvider = string;
+
+export interface RoverAgentRef {
+  name: string;
+  provider: RoverAgentProvider;
+  url: string;
+  providerRevision?: string;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
+
+export type AgentInlineEntry = (LlmAgentConfig | BrowserAgentConfig) & {
   id: string;
   name?: string;
-}
+};
 
 export interface AgentRefEntry {
   ref: string;
 }
 
 export type AgentListEntry = AgentInlineEntry | AgentRefEntry;
+
+export function isLlmAgent(agent: AgentConfig): agent is LlmAgentConfig {
+  return agent.type !== 'browser';
+}
 
 export interface ToolConstraints {
   required_tools?: string[];
@@ -194,7 +218,13 @@ export interface EvalRules {
   agent_context?: AgentContext;
 }
 
-export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated';
+export type CheckResultStatus =
+  | 'passed'
+  | 'failed'
+  | 'not_evaluated'
+  | 'not_executed'
+  /** @deprecated Persisted results used this name for capability-limited checks. */
+  | 'not_applicable';
 
 export interface CheckResult {
   type: string;
@@ -207,7 +237,12 @@ export interface CheckResult {
 export interface CheckCounts {
   passed: number;
   failed: number;
+  /** Checks intentionally outside the execution source's capabilities. */
   not_evaluated: number;
+  /** Checks expected to run but skipped because execution ended early. */
+  not_executed?: number;
+  /** Legacy field retained when reading older result summaries. */
+  not_applicable?: number;
   total: number;
 }
 
@@ -380,6 +415,7 @@ export interface ScenarioRunTraceRecord {
   ts_start: string;
   ts_end: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
   messages: TraceMessage[];
   metrics?: {
@@ -387,6 +423,10 @@ export interface ScenarioRunTraceRecord {
     total_tool_duration_ms: number;
   };
 }
+
+export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error';
+
+export type ExecutionSource = 'mcplab' | 'rover';
 
 export interface TraceFileLegacyMeta {
   type: 'trace_meta';
@@ -404,6 +444,7 @@ export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
   failures: string[];
   check_results?: CheckResult[];
@@ -475,6 +516,14 @@ export interface ResultsJson {
     total_tool_duration_ms?: number;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
+    execution_source?: ExecutionSource;
+    execution_client?: string;
+    /** @deprecated Read legacy results only. New evaluations use evaluation_run_id. */
+    evaluation_group_id?: string;
+    evaluation_run_id?: string;
+    /** @deprecated Read legacy parent-result projections only. */
+    child_run_ids?: string[];
+    execution_status?: 'stopped';
   };
   summary: {
     total_scenarios: number;
@@ -482,6 +531,7 @@ export interface ResultsJson {
     pass_rate: number;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
+    outcomes?: Record<RunOutcome, number>;
   };
   scenarios: ScenarioAggregate[];
 }

@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -6,14 +7,15 @@ import {
   McpClientManager,
   loadConfig,
   hashConfig,
+  createRunId,
   runAll,
-  renderSummaryMarkdown,
   applyRuntimeServerOverrides,
   type EvalConfig,
+  type BrowserAgentConfig,
   type ScenarioAttachment,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
-import { renderReport } from '@inspectr/mcplab-reporting';
+import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -67,6 +69,8 @@ type RunRequestBody = {
   scenarioIds?: unknown;
   agents?: unknown;
   runNote?: unknown;
+  newConversationBetweenScenarios?: unknown;
+  newConversationBeforeStart?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
 };
@@ -232,7 +236,13 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     for (const event of job.events) sendSseEvent(res, event);
-    if (job.status !== 'running' && job.status !== 'queued' && job.status !== 'blocked_auth') {
+    const keepsSubscriptionOpen =
+      job.status === 'running' ||
+      job.status === 'queued' ||
+      job.status === 'blocked_auth' ||
+      job.status === 'waiting_for_rover' ||
+      job.status === 'paused_rover';
+    if (!keepsSubscriptionOpen) {
       res.end();
       return true;
     }
@@ -243,11 +253,54 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
-  if (pathname.startsWith('/api/runs/jobs/') && pathname.endsWith('/stop') && method === 'POST') {
+  if (
+    pathname.startsWith('/api/runs/jobs/') &&
+    pathname.endsWith('/stop') &&
+    pathname.split('/').length === 6 &&
+    method === 'POST'
+  ) {
     const jobId = pathname.split('/')[4];
     const result = runQueueService.stopJob(jobId, { hostHeader: req.headers.host });
     if (!result) {
       asJson(res, 404, { error: 'Job not found' });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  const roverScenarioStopMatch = pathname.match(
+    /^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)(?:\/agents\/([^/]+))?\/stop$/
+  );
+  if (roverScenarioStopMatch && method === 'POST') {
+    const result = runQueueService.stopScenario(
+      decodeURIComponent(roverScenarioStopMatch[1]!),
+      decodeURIComponent(roverScenarioStopMatch[2]!),
+      roverScenarioStopMatch[3] ? decodeURIComponent(roverScenarioStopMatch[3]) : undefined
+    );
+    if (!result) {
+      asJson(res, 404, { error: 'Rover job not found' });
+      return true;
+    }
+    if ('error' in result) {
+      asJson(res, result.statusCode, { error: result.error });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/runs/evaluations/') &&
+    pathname.endsWith('/stop') &&
+    method === 'POST'
+  ) {
+    const evaluationRunId = pathname.split('/')[4];
+    const result = runQueueService.stopEvaluationRun(evaluationRunId, {
+      hostHeader: req.headers.host
+    });
+    if (!result) {
+      asJson(res, 404, { error: 'Evaluation run not found' });
       return true;
     }
     asJson(res, 200, result);
@@ -280,6 +333,23 @@ export async function handleRunsRoutes(params: {
     const result = runQueueService.removeQueuedJob(jobId, { hostHeader: req.headers.host });
     if (!result) {
       asJson(res, 404, { error: 'Job not found' });
+      return true;
+    }
+    if ('error' in result) {
+      asJson(res, result.statusCode, { error: result.error });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  if (pathname.startsWith('/api/runs/queue/evaluations/') && method === 'DELETE') {
+    const evaluationRunId = pathname.split('/')[5];
+    const result = runQueueService.removeEvaluationRun(evaluationRunId, {
+      hostHeader: req.headers.host
+    });
+    if (!result) {
+      asJson(res, 404, { error: 'Evaluation run not found' });
       return true;
     }
     if ('error' in result) {
@@ -367,15 +437,18 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: `Config not found: ${configPath}` });
       return true;
     }
+    let selectedConfig: EvalConfig;
+    let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
       const libraries = readLibraries(settings.librariesDir);
+      browserProviders = libraries.browserProviders;
       applyLibraryEntries(loaded, libraries.agents, libraries.servers);
       const selected = scenarioIds?.length
         ? deps.selectScenarioIds(loaded.config, scenarioIds)
         : scenarioId
-        ? deps.selectScenarioIds(loaded.config, [scenarioId])
-        : loaded.config;
+          ? deps.selectScenarioIds(loaded.config, [scenarioId])
+          : loaded.config;
       const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
         selected,
         scenarioServerOverrides
@@ -384,6 +457,7 @@ export async function handleRunsRoutes(params: {
         serverOverrideAll,
         scenarioServerOverrides: filteredScenarioOverrides
       });
+      selectedConfig = selected;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
@@ -392,19 +466,79 @@ export async function handleRunsRoutes(params: {
     // Resolve lazily in advanceQueue so runtime overrides are always reflected.
     const oauthServerNames: string[] | undefined = undefined;
 
-    const runParamsObj = {
+    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents);
+    const selectedAgents = selectedAgentNames.map((name) => ({
+      name,
+      agent: selectedConfig.agents[name]
+    }));
+    const missingAgents = selectedAgents.filter((entry) => !entry.agent).map((entry) => entry.name);
+    if (missingAgents.length > 0) {
+      asJson(res, 400, { error: `Unknown agents: ${missingAgents.join(', ')}` });
+      return true;
+    }
+    const browserAgents = selectedAgents.filter(
+      (entry): entry is { name: string; agent: BrowserAgentConfig } =>
+        entry.agent?.type === 'browser'
+    );
+    const llmAgentNames = selectedAgents
+      .filter((entry) => entry.agent?.type !== 'browser')
+      .map((entry) => entry.name);
+    const conversationOverride =
+      typeof body.newConversationBetweenScenarios === 'boolean'
+        ? body.newConversationBetweenScenarios
+        : undefined;
+    const newConversationBeforeStart =
+      typeof body.newConversationBeforeStart === 'boolean' ? body.newConversationBeforeStart : true;
+    const evaluationRunId = createRunId();
+    const baseRunParams = {
+      evaluationRunId,
+      evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,
       runsPerScenario,
       scenarioId,
       scenarioIds,
-      requestedAgents,
       runNote,
       oauthServerNames,
       serverOverrideAll,
       scenarioServerOverrides
     };
-    const response = runQueueService.enqueueRun(runParamsObj, { hostHeader: req.headers.host });
-    asJson(res, 202, response);
+    const runParamsList =
+      browserAgents.length === 0
+        ? [{ ...baseRunParams, requestedAgents }]
+        : [
+            ...(llmAgentNames.length > 0
+              ? [{ ...baseRunParams, requestedAgents: llmAgentNames }]
+              : []),
+            ...browserAgents.map(({ name, agent }) => ({
+              ...baseRunParams,
+              requestedAgents: [name],
+              executionType: 'rover' as const,
+              roverAgent: {
+                name,
+                provider: agent.provider,
+                url: agent.url,
+                ...(browserProviders[agent.provider]
+                  ? {
+                      providerRevision: browserProviders[agent.provider].learned.updatedAt
+                    }
+                  : {})
+              },
+              roverScenarios: structuredClone(selectedConfig.scenarios),
+              roverNewConversationBetweenScenarios:
+                conversationOverride ?? agent.newConversationBetweenScenarios ?? true,
+              roverNewConversationBeforeStart: newConversationBeforeStart
+            }))
+          ];
+    const responses = runParamsList.map((runParams) =>
+      runQueueService.enqueueRun(runParams, { hostHeader: req.headers.host })
+    );
+    asJson(res, 202, {
+      ...responses[0],
+      jobs: responses.map((response, index) => ({
+        ...response,
+        agents: runParamsList[index]?.requestedAgents ?? null
+      }))
+    });
     return true;
   }
 
@@ -648,9 +782,7 @@ export async function handleRunsRoutes(params: {
     } else {
       delete results.metadata.run_note;
     }
-    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    persistAppRunArtifacts({ runDir, results });
     asJson(res, 200, { ok: true, runId, runNote: runNote ?? null });
     return true;
   }

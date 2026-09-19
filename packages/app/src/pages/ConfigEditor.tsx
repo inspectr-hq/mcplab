@@ -37,6 +37,7 @@ import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import { safeText } from '@/lib/utils';
 import { getConfigDisplayPath } from '@/lib/config-file-path';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
+import { createEmptyAgent } from '@/lib/agent-factory';
 import type {
   AgentConfig,
   AgentEntry,
@@ -283,8 +284,8 @@ const ConfigEditor = () => {
   const title = isNew
     ? 'New MCP Evaluation'
     : editing
-    ? `Editing: ${displayConfigName}`
-    : displayConfigName;
+      ? `Editing: ${displayConfigName}`
+      : displayConfigName;
   const configBasePath = isNew
     ? '/mcp-evaluations/new'
     : `/mcp-evaluations/${encodeURIComponent(config.id || id || '')}`;
@@ -336,15 +337,7 @@ const ConfigEditor = () => {
   };
 
   const addInlineAgentEntry = () => {
-    const createdAt = Date.now();
-    const inlineAgent: AgentConfig = {
-      id: `agt-${createdAt}`,
-      name: '',
-      provider: 'openai',
-      model: 'gpt-4o',
-      temperature: DEFAULT_AGENT_TEMPERATURE,
-      maxTokens: 4096
-    };
+    const inlineAgent: AgentConfig = createEmptyAgent('llm');
     setAgentEntries([{ kind: 'inline', agent: inlineAgent }, ...agentEntries]);
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineAgent.id]: true }));
   };
@@ -1134,83 +1127,118 @@ const ConfigEditor = () => {
                             </Button>
                           </div>
                         </div>
-                        {entry.kind === 'inline' && inlineExpanded && (
-                          <div className="border-t px-3 py-3 space-y-3">
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1.5">
-                                <Label className="text-xs">Name</Label>
-                                <Input
-                                  value={entry.agent.name}
-                                  onChange={(e) => {
-                                    const nextEntries = [...agentEntries];
-                                    nextEntries[index] = {
-                                      kind: 'inline',
-                                      agent: { ...entry.agent, name: e.target.value }
-                                    };
-                                    setAgentEntries(nextEntries);
-                                  }}
-                                  placeholder="e.g. GPT-5 Mini custom"
-                                />
+                        {entry.kind === 'inline' &&
+                          (entry.agent.type ?? 'llm') === 'llm' &&
+                          inlineExpanded && (
+                            <div className="border-t px-3 py-3 space-y-3">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Name</Label>
+                                  <Input
+                                    value={entry.agent.name}
+                                    onChange={(e) => {
+                                      const nextEntries = [...agentEntries];
+                                      nextEntries[index] = {
+                                        kind: 'inline',
+                                        agent: { ...entry.agent, name: e.target.value }
+                                      };
+                                      setAgentEntries(nextEntries);
+                                    }}
+                                    placeholder="e.g. GPT-5 Mini custom"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Provider</Label>
+                                  <Select
+                                    value={entry.agent.provider}
+                                    onValueChange={(value) => {
+                                      const current = entry.agent;
+                                      if (current.type !== 'llm') return;
+                                      const nextEntries = [...agentEntries];
+                                      nextEntries[index] = {
+                                        kind: 'inline',
+                                        agent: {
+                                          ...current,
+                                          provider: value as
+                                            | 'openai'
+                                            | 'anthropic'
+                                            | 'azure'
+                                            | 'google'
+                                            | 'custom'
+                                        }
+                                      };
+                                      setAgentEntries(nextEntries);
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="openai">OpenAI</SelectItem>
+                                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                                      <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                      <SelectItem value="google">Google</SelectItem>
+                                      <SelectItem value="custom">Custom</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Model</Label>
+                                  <Input
+                                    value={entry.agent.model}
+                                    onChange={(e) => {
+                                      const nextEntries = [...agentEntries];
+                                      nextEntries[index] = {
+                                        kind: 'inline',
+                                        agent: { ...entry.agent, model: e.target.value }
+                                      };
+                                      setAgentEntries(nextEntries);
+                                    }}
+                                    className="font-mono text-xs"
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs">Max Tokens</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={128000}
+                                    value={entry.agent.maxTokens}
+                                    onChange={(e) => {
+                                      const nextEntries = [...agentEntries];
+                                      nextEntries[index] = {
+                                        kind: 'inline',
+                                        agent: {
+                                          ...entry.agent,
+                                          maxTokens: parseInt(e.target.value) || 0
+                                        }
+                                      };
+                                      setAgentEntries(nextEntries);
+                                    }}
+                                    className="font-mono text-xs"
+                                  />
+                                </div>
                               </div>
                               <div className="space-y-1.5">
-                                <Label className="text-xs">Provider</Label>
-                                <Select
-                                  value={entry.agent.provider}
-                                  onValueChange={(value) => {
-                                    const nextEntries = [...agentEntries];
-                                    nextEntries[index] = {
-                                      kind: 'inline',
-                                      agent: {
-                                        ...entry.agent,
-                                        provider: value as AgentConfig['provider']
-                                      }
-                                    };
-                                    setAgentEntries(nextEntries);
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="openai">OpenAI</SelectItem>
-                                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                                    <SelectItem value="azure">Azure OpenAI</SelectItem>
-                                    <SelectItem value="google">Google</SelectItem>
-                                    <SelectItem value="custom">Custom</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1.5">
-                                <Label className="text-xs">Model</Label>
-                                <Input
-                                  value={entry.agent.model}
-                                  onChange={(e) => {
-                                    const nextEntries = [...agentEntries];
-                                    nextEntries[index] = {
-                                      kind: 'inline',
-                                      agent: { ...entry.agent, model: e.target.value }
-                                    };
-                                    setAgentEntries(nextEntries);
-                                  }}
-                                  className="font-mono text-xs"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label className="text-xs">Max Tokens</Label>
+                                <Label className="text-xs">Temperature</Label>
                                 <Input
                                   type="number"
-                                  min={1}
-                                  max={128000}
-                                  value={entry.agent.maxTokens}
+                                  min={0}
+                                  max={2}
+                                  step={0.01}
+                                  value={resolveAgentTemperature(entry.agent.temperature)}
                                   onChange={(e) => {
+                                    const current = entry.agent;
+                                    if (current.type !== 'llm') return;
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
                                       kind: 'inline',
                                       agent: {
-                                        ...entry.agent,
-                                        maxTokens: parseInt(e.target.value) || 0
+                                        ...current,
+                                        temperature:
+                                          Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
                                       }
                                     };
                                     setAgentEntries(nextEntries);
@@ -1218,48 +1246,26 @@ const ConfigEditor = () => {
                                   className="font-mono text-xs"
                                 />
                               </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">System Prompt</Label>
+                                <Textarea
+                                  value={entry.agent.systemPrompt || ''}
+                                  onChange={(e) => {
+                                    const current = entry.agent;
+                                    if (current.type !== 'llm') return;
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: 'inline',
+                                      agent: { ...current, systemPrompt: e.target.value }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  rows={3}
+                                  className="text-xs"
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-xs">Temperature</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                max={2}
-                                step={0.01}
-                                value={resolveAgentTemperature(entry.agent.temperature)}
-                                onChange={(e) => {
-                                  const nextEntries = [...agentEntries];
-                                  nextEntries[index] = {
-                                    kind: 'inline',
-                                    agent: {
-                                      ...entry.agent,
-                                      temperature:
-                                        Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
-                                    }
-                                  };
-                                  setAgentEntries(nextEntries);
-                                }}
-                                className="font-mono text-xs"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-xs">System Prompt</Label>
-                              <Textarea
-                                value={entry.agent.systemPrompt || ''}
-                                onChange={(e) => {
-                                  const nextEntries = [...agentEntries];
-                                  nextEntries[index] = {
-                                    kind: 'inline',
-                                    agent: { ...entry.agent, systemPrompt: e.target.value }
-                                  };
-                                  setAgentEntries(nextEntries);
-                                }}
-                                rows={3}
-                                className="text-xs"
-                              />
-                            </div>
-                          </div>
-                        )}
+                          )}
                       </div>
                     );
                   })}
@@ -1343,9 +1349,11 @@ const ConfigEditor = () => {
                             <Badge variant="outline" className="text-xs font-mono">
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
-                            <Badge variant="outline" className="text-xs font-mono">
-                              temperature: {resolveAgentTemperature(row.agent.temperature)}
-                            </Badge>
+                            {(row.agent.type ?? 'llm') === 'llm' && (
+                              <Badge variant="outline" className="text-xs font-mono">
+                                temperature: {resolveAgentTemperature(row.agent.temperature)}
+                              </Badge>
+                            )}
                           </div>
                         )}
                       </div>

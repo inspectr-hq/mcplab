@@ -188,4 +188,20 @@ describe('ConfigEditor', () => {
       expect.objectContaining({ id: 'library-server' })
     ]);
   });
+
+  it('renders editable fields when adding an inline LLM agent', () => {
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/new/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Agents' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+
+    expect(screen.getAllByRole('textbox').length).toBeGreaterThan(2);
+    expect(screen.getByText('Model')).toBeInTheDocument();
+  });
 });

@@ -197,7 +197,13 @@ describe('ResultDetail conversation toggle', () => {
     result.scenarios[0].runs[0].checkResults = [
       { type: 'required_tool', label: 'Required tool · search_tags', status: 'passed' },
       { type: 'response_contains', label: 'Text contains · ready', status: 'passed' },
-      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' }
+      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' },
+      {
+        type: 'required_tool',
+        label: 'Required tool · get_tag_profile',
+        status: 'not_executed',
+        reason: 'Tool telemetry is not available for this execution source.'
+      }
     ];
     getResultMock.mockResolvedValue(result);
 
@@ -211,11 +217,12 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
-    expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+    expect(screen.getByTitle('2 passed · 1 failed · 1 not executed')).toBeInTheDocument();
     expect(screen.getByText('2 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText(/Checks 2 ✓ · 1 ✕/)).toBeInTheDocument();
+    expect(screen.getByText(/Checks 2 ✓ · 1 ✕ · 1 ⊘/)).toBeInTheDocument();
+    expect(screen.getAllByText('1 not executed').length).toBeGreaterThan(0);
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
@@ -592,7 +599,7 @@ describe('ResultDetail conversation toggle', () => {
     });
   });
 
-  it('marks checks as not evaluated when the run failed before evaluation and shows the scenario clock icon', async () => {
+  it('marks checks as not executed when the run failed before evaluation and shows the scenario clock icon', async () => {
     const result = makeResult();
     result.configId = 'cfg-with-scenario';
     result.overallPassRate = 0;
@@ -638,13 +645,13 @@ describe('ResultDetail conversation toggle', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/429 Too Many Requests/)).toBeInTheDocument();
-      expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+      expect(screen.getByText('2 not executed')).toBeInTheDocument();
     });
     expect(screen.getAllByText('0 passed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('0 failed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('not_evaluated')).toHaveLength(2);
+    expect(screen.getAllByText('Not executed')).toHaveLength(2);
     expect(
-      screen.getByText('Checks were not evaluated because this run failed before evaluation.')
+      screen.getByText('Checks were not executed because this run ended before evaluation.')
     ).toBeInTheDocument();
     expect(screen.getByText('Required tool · navigate_asset_hierarchy')).toBeInTheDocument();
     expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();
