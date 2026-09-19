@@ -161,12 +161,20 @@ export function writeBrowserProviderLearningArtifact(
   mkdirSync(directory, { recursive: true });
   const target = join(directory, `${safeFileName(providerId)}.json`);
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+  const persistedTrace =
+    artifact.trace && typeof artifact.trace === 'object' && !Array.isArray(artifact.trace)
+      ? Object.fromEntries(
+          Object.entries(artifact.trace as Record<string, unknown>).filter(
+            ([key]) => key !== 'selectorValidation'
+          )
+        )
+      : artifact.trace;
   writeFileSync(
     temporary,
     `${JSON.stringify(
       {
         providerId,
-        trace: artifact.trace,
+        trace: persistedTrace,
         proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(
           artifact.proposalDiagnostics
         ),

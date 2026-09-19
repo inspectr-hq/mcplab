@@ -25,7 +25,10 @@ describe('libraries-store test-case directory migration', () => {
   it('persists redacted provider learning diagnostics separately from the profile', () => {
     const librariesDir = makeTempLibrariesDir();
     writeBrowserProviderLearningArtifact(librariesDir, 'learned/provider', {
-      trace: { observedGeneration: true },
+      trace: {
+        observedGeneration: true,
+        selectorValidation: { rawPageContent: 'do not persist' }
+      },
       proposalDiagnostics: {
         rationale: ['stable', 'x'.repeat(600), { raw: 'drop me' }],
         warnings: []
@@ -40,7 +43,9 @@ describe('libraries-store test-case directory migration', () => {
       trace: { observedGeneration: true },
       proposalDiagnostics: { rationale: ['stable', 'x'.repeat(500)], warnings: [] }
     });
+    expect(artifact.trace).not.toHaveProperty('selectorValidation');
     expect(JSON.stringify(artifact)).not.toContain('drop me');
+    expect(JSON.stringify(artifact)).not.toContain('do not persist');
   });
 
   it('loads and atomically writes declarative browser provider profiles', () => {
