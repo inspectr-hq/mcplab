@@ -612,6 +612,19 @@ const RunEvaluation = () => {
     }
   };
 
+  const openRoverJob = async (jobId: string) => {
+    try {
+      await source.openRover(jobId);
+      await refreshQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not open browser agent',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
   const attachRunJob = (jobId: string) => {
     if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
@@ -1370,6 +1383,29 @@ const RunEvaluation = () => {
                           {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
                         </Button>
                       )}
+                      {evaluation.jobs.some(
+                        (job) =>
+                          job.executionType === 'rover' &&
+                          (job.status === 'queued' || job.status === 'waiting_for_rover')
+                      ) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            const job = evaluation.jobs.find(
+                              (candidate) =>
+                                candidate.executionType === 'rover' &&
+                                (candidate.status === 'queued' ||
+                                  candidate.status === 'waiting_for_rover')
+                            );
+                            if (job) void openRoverJob(job.jobId);
+                          }}
+                          title="Open the browser-agent URL, then activate the Rover extension"
+                        >
+                          Open browser agent
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1497,22 +1533,17 @@ const RunEvaluation = () => {
                             className="flex shrink-0 items-center gap-1"
                             onClick={(event) => event.stopPropagation()}
                           >
-                            {!child &&
-                              job.executionType === 'rover' &&
-                              job.status === 'waiting_for_rover' && (
+                            {job.executionType === 'rover' &&
+                              (job.status === 'queued' || job.status === 'waiting_for_rover') &&
+                              (!child ||
+                                job.childProgress?.[0]?.scenarioId === child.scenarioId) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="h-6 px-1.5 text-[11px]"
-                                  onClick={() => {
-                                    void source.openRover(job.jobId).then((result) => {
-                                      if (result.url)
-                                        window.open(result.url, '_blank', 'noopener,noreferrer');
-                                      void refreshQueue();
-                                    });
-                                  }}
+                                  onClick={() => void openRoverJob(job.jobId)}
                                 >
-                                  Connect to Rover
+                                  Open browser agent
                                 </Button>
                               )}
                             {!child &&
