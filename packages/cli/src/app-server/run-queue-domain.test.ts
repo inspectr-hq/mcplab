@@ -115,6 +115,8 @@ describe('Rover run queue domain', () => {
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'assignment', newConversationBeforeStart: true })
     );
+    expect(service.assignRoverJob('claude', send)).toBeNull();
+    expect(send.mock.calls.filter(([message]) => message.type === 'assignment')).toHaveLength(1);
   });
 
   it('reports only queued evaluations waiting for the connected provider', () => {
