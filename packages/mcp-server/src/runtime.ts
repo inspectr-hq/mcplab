@@ -1365,7 +1365,7 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         kind: z
-          .enum(['servers', 'agents', 'test_cases', 'scenarios'])
+          .enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios'])
           .describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
