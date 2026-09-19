@@ -16,6 +16,7 @@ import {
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { invalidateRunSummaryCache } from './runs-store.js';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -46,6 +47,18 @@ export type RunsRouteDeps = Pick<
   | 'pickDefaultAssistantAgentName'
   | 'pkgVersion'
 >;
+
+function respondWithRunStoreError(
+  res: ServerResponse,
+  asJson: (res: ServerResponse, status: number, body: unknown) => void,
+  error: unknown
+): boolean {
+  if (!(error instanceof Error) || !('statusCode' in error)) return false;
+  const statusCode = (error as Error & { statusCode?: unknown }).statusCode;
+  if (typeof statusCode !== 'number') return false;
+  asJson(res, statusCode, { error: error.message });
+  return true;
+}
 
 // Backward-compatible exports used by existing tests/imports.
 export function mergeLibraryAgentsIntoConfig(
@@ -217,7 +230,11 @@ export async function handleRunsRoutes(params: {
 
   if (pathname.startsWith('/api/runs/') && pathname.endsWith('/trace') && method === 'GET') {
     const runId = pathname.split('/')[3];
-    asJson(res, 200, { runId, records: getScenarioRunTraceRecords(runId, settings.runsDir) });
+    try {
+      asJson(res, 200, { runId, records: getScenarioRunTraceRecords(runId, settings.runsDir) });
+    } catch (error) {
+      if (!respondWithRunStoreError(res, asJson, error)) throw error;
+    }
     return true;
   }
 
@@ -758,7 +775,11 @@ export async function handleRunsRoutes(params: {
 
   if (pathname.startsWith('/api/runs/') && method === 'GET') {
     const runId = pathname.replace('/api/runs/', '');
-    asJson(res, 200, { runId, results: getRunResults(runId, settings.runsDir) });
+    try {
+      asJson(res, 200, { runId, results: getRunResults(runId, settings.runsDir) });
+    } catch (error) {
+      if (!respondWithRunStoreError(res, asJson, error)) throw error;
+    }
     return true;
   }
 
@@ -776,7 +797,13 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Run not found' });
       return true;
     }
-    const results = getRunResults(runId, settings.runsDir);
+    let results;
+    try {
+      results = getRunResults(runId, settings.runsDir);
+    } catch (error) {
+      if (!respondWithRunStoreError(res, asJson, error)) throw error;
+      return true;
+    }
     if (runNote) {
       results.metadata.run_note = runNote;
     } else {
@@ -799,6 +826,7 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     rmSync(runDir, { recursive: true, force: true });
+    invalidateRunSummaryCache(settings.runsDir, runId);
     asJson(res, 200, { ok: true });
     return true;
   }

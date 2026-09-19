@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendExecutionEvent } from './execution-journal.js';
-import { recoverJournalSnapshots } from './app-run-artifacts.js';
+import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
+import { listRuns } from './runs-store.js';
 
 describe('recoverJournalSnapshots', () => {
   it('rebuilds missing result projections from the latest snapshot', () => {
@@ -36,6 +37,40 @@ describe('recoverJournalSnapshots', () => {
       unlinkSync(join(runDir, 'summary.md'));
       expect(recoverJournalSnapshots(root)).toBe(1);
       expect(existsSync(join(runDir, 'summary.md'))).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('persistAppRunArtifacts', () => {
+  it('invalidates the cached summary for the persisted directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-artifacts-'));
+    const runsDir = join(root, 'runs');
+    const runDir = join(runsDir, 'run-1');
+    const results = {
+      metadata: {
+        run_id: 'run-1',
+        timestamp: new Date().toISOString(),
+        config_hash: 'x',
+        cli_version: 'test',
+        mcp_server_versions: {}
+      },
+      summary: {
+        total_scenarios: 0,
+        total_runs: 0,
+        pass_rate: 0,
+        avg_tool_calls_per_run: 0,
+        avg_tool_latency_ms: null
+      },
+      scenarios: []
+    } as any;
+    try {
+      persistAppRunArtifacts({ runDir, results });
+      expect(listRuns(runsDir)[0]?.totalRuns).toBe(0);
+      results.summary.total_runs = 2;
+      persistAppRunArtifacts({ runDir, results });
+      expect(listRuns(runsDir)[0]?.totalRuns).toBe(2);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

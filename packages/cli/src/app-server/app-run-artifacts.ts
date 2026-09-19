@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
   persistEvaluationArtifacts,
   type PersistEvaluationArtifactsParams
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { appendExecutionEvent, readLatestResultSnapshot } from './execution-journal.js';
+import { invalidateRunSummaryCache } from './runs-store.js';
 
 export function persistAppRunArtifacts(params: PersistEvaluationArtifactsParams): void {
   appendExecutionEvent(params.runDir, {
@@ -22,6 +23,7 @@ export function persistAppRunArtifacts(params: PersistEvaluationArtifactsParams)
   const temporaryPath = `${reportPath}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(temporaryPath, renderReport(params.results), 'utf8');
   renameSync(temporaryPath, reportPath);
+  invalidateRunSummaryCache(dirname(params.runDir), basename(params.runDir));
 }
 
 export function recoverJournalSnapshots(runsDir: string): number {
@@ -57,6 +59,7 @@ export function recoverJournalSnapshots(runsDir: string): number {
     const temporaryPath = `${reportPath}.tmp-${process.pid}-${Date.now()}`;
     writeFileSync(temporaryPath, renderReport(params.results), 'utf8');
     renameSync(temporaryPath, reportPath);
+    invalidateRunSummaryCache(runsDir, entry);
     recovered += 1;
   }
   return recovered;

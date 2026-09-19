@@ -834,7 +834,14 @@ export async function startAppServer(options: AppServerOptions) {
         asText
       });
     } catch (error: unknown) {
-      asJson(res, 500, {
+      const statusCode =
+        error &&
+        typeof error === 'object' &&
+        'statusCode' in error &&
+        typeof error.statusCode === 'number'
+          ? error.statusCode
+          : 500;
+      asJson(res, statusCode, {
         error: error instanceof Error ? error.message : String(error)
       });
     }

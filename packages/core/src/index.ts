@@ -40,6 +40,7 @@ export { formatAssistantToolName } from './assistant-tools.js';
 export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
+export * from './run-directory-snapshots.js';
 export { applyRuntimeServerOverrides, type RuntimeServerOverrides } from './runtime-overrides.js';
 export {
   createEvaluationConfigFile,

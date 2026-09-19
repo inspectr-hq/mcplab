@@ -1,8 +1,8 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { listRuns } from './runs-store.js';
+import { getRunResults, listRuns, RunNotFoundError, RunValidationError } from './runs-store.js';
 
 function writeRun(runsDir: string, runId: string, timestamp: string, evaluationRunId?: string) {
   const runDir = join(runsDir, runId);
@@ -45,6 +45,55 @@ function writeRun(runsDir: string, runId: string, timestamp: string, evaluationR
 }
 
 describe('listRuns filters', () => {
+  it('uses the directory name as the canonical run id', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, 'directory-id', '2026-03-10T10:00:00.000Z');
+    const resultsPath = join(runsDir, 'directory-id', 'results.json');
+    const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+    results.metadata.run_id = 'metadata-id';
+    writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
+
+    expect(listRuns(runsDir)).toEqual([]);
+    expect(() => getRunResults('directory-id', runsDir)).toThrow(RunValidationError);
+  });
+
+  it('discovers added runs and evicts deleted runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, 'run-a', '2026-03-10T10:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-a']);
+
+    writeRun(runsDir, 'run-b', '2026-03-10T11:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-b', 'run-a']);
+
+    rmSync(join(runsDir, 'run-a'), { recursive: true, force: true });
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-b']);
+  });
+
+  it('does not cache malformed or incomplete runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(join(runsDir, 'malformed'), { recursive: true });
+    writeFileSync(join(runsDir, 'malformed', 'results.json'), '{bad json', 'utf8');
+    mkdirSync(join(runsDir, 'incomplete'), { recursive: true });
+
+    expect(listRuns(runsDir)).toEqual([]);
+    writeRun(runsDir, 'malformed', '2026-03-10T10:00:00.000Z');
+    writeRun(runsDir, 'incomplete', '2026-03-10T11:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['incomplete', 'malformed']);
+  });
+
+  it('returns typed not-found errors for missing runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    expect(() => getRunResults('missing', runsDir)).toThrow(RunNotFoundError);
+  });
+
   it('exposes the parent evaluation run identity in summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');

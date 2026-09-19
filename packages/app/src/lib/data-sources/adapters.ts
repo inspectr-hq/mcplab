@@ -1343,7 +1343,8 @@ function countChecks(runs: ScenarioRun[]): CheckCounts {
 
 export function fromCoreResultsJson(
   results: CoreResultsJson,
-  traceRecords: ScenarioRunTraceRecord[] = []
+  traceRecords: ScenarioRunTraceRecord[] = [],
+  canonicalRunId?: string
 ): EvalResult {
   const traceByScenario = new Map<string, ScenarioRunTraceRecord[]>();
   for (const record of traceRecords) {
@@ -1451,7 +1452,7 @@ export function fromCoreResultsJson(
   );
 
   return {
-    id: results.metadata.run_id,
+    id: canonicalRunId ?? results.metadata.run_id,
     configId: '',
     configHash: results.metadata.config_hash,
     configPath: results.metadata.config_path,
