@@ -1354,7 +1354,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_get_library_item',
     {
       description:
-        'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
+        'Get a specific reusable server, agent, browser provider, test case, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
       outputSchema: {
         bundleRoot: z.string(),
         kind: z.enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios']),
