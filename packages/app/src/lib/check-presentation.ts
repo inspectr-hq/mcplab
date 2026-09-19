@@ -15,6 +15,14 @@ export interface CheckPresentationInput {
   checkResults?: CheckResult[];
 }
 
+export function formatCheckStatusLabel(
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed'
+): string {
+  if (status === 'not_evaluated') return 'Not evaluated';
+  if (status === 'not_executed') return 'Not executed';
+  return status === 'passed' ? 'Passed' : 'Failed';
+}
+
 export function buildCheckItems({
   evalRules,
   failureReasons,

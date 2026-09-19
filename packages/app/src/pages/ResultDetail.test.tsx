@@ -649,7 +649,7 @@ describe('ResultDetail conversation toggle', () => {
     });
     expect(screen.getAllByText('0 passed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('0 failed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('not_executed')).toHaveLength(2);
+    expect(screen.getAllByText('Not executed')).toHaveLength(2);
     expect(
       screen.getByText('Checks were not executed because this run ended before evaluation.')
     ).toBeInTheDocument();

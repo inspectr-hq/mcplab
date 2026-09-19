@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCheckItems,
+  formatCheckStatusLabel,
   formatEvalRuleLabel,
   matchFailureReasonForRule
 } from './check-presentation';
@@ -45,6 +46,15 @@ describe('formatEvalRuleLabel', () => {
         equals: 'Paris'
       })
     ).toBe('Tool input · stats JSONPath $.city == Paris');
+  });
+});
+
+describe('formatCheckStatusLabel', () => {
+  it('uses human-readable labels for persisted check statuses', () => {
+    expect(formatCheckStatusLabel('not_evaluated')).toBe('Not evaluated');
+    expect(formatCheckStatusLabel('not_executed')).toBe('Not executed');
+    expect(formatCheckStatusLabel('passed')).toBe('Passed');
+    expect(formatCheckStatusLabel('failed')).toBe('Failed');
   });
 });
 

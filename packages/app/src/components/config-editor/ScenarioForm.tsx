@@ -48,7 +48,11 @@ import {
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
   SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
 } from '@/lib/attachment-policy';
-import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import {
+  buildCheckItems,
+  formatCheckStatusLabel,
+  formatEvalRuleLabel
+} from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {
@@ -1239,7 +1243,7 @@ function ScenarioCard({
                                               : 'border-success/30 text-success'
                                       }`}
                                     >
-                                      {check.status}
+                                      {formatCheckStatusLabel(check.status)}
                                     </Badge>
                                   </div>
                                 ))}

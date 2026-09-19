@@ -84,7 +84,11 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
-import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import {
+  buildCheckItems,
+  formatCheckStatusLabel,
+  formatEvalRuleLabel
+} from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
@@ -1482,7 +1486,7 @@ const ResultDetail = () => {
                                                                       : 'border-success/30 text-success'
                                                               }`}
                                                             >
-                                                              {check.status}
+                                                              {formatCheckStatusLabel(check.status)}
                                                             </Badge>
                                                           </div>
                                                         ))}
