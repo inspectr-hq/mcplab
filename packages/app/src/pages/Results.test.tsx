@@ -205,6 +205,7 @@ describe('Results', () => {
     const timestampHeader = screen.getByRole('columnheader', { name: 'Timestamp' });
     const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
     const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
+    const avgToolsHeader = screen.getByRole('columnheader', { name: 'Avg Tools' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
     const evaluationName = within(runCell).getByText('Search evaluation');
     const note = within(runCell).getByText(
@@ -223,7 +224,10 @@ describe('Results', () => {
     expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
     expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
     expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
+    expect(scenariosHeader).toHaveClass('hidden', 'md:table-cell');
+    expect(avgToolsHeader).toHaveClass('hidden', 'lg:table-cell');
     expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
+    expect(toolTokensHeader).toHaveClass('hidden', 'xl:table-cell');
     expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass(
       'w-[9rem]',
       'min-w-[9rem]',

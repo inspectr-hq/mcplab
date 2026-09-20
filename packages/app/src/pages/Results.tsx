@@ -1048,7 +1048,7 @@ const Results = () => {
                       {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right">
+                  <TableHead className="hidden w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right md:table-cell">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1058,7 +1058,7 @@ const Results = () => {
                       {sortIcon('scenarios')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
+                  <TableHead className="hidden w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right lg:table-cell">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1068,7 +1068,7 @@ const Results = () => {
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
+                  <TableHead className="hidden w-[9rem] min-w-[9rem] max-w-[9rem] text-right xl:table-cell">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1221,13 +1221,13 @@ const Results = () => {
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
-                        <TableCell className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm">
+                        <TableCell className="hidden w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm md:table-cell">
                           {item.run.totalScenarios}
                         </TableCell>
-                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center font-mono text-sm">
+                        <TableCell className="hidden w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center font-mono text-sm lg:table-cell">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
+                        <TableCell className="hidden w-[9rem] min-w-[9rem] max-w-[9rem] text-right xl:table-cell">
                           <div className="space-y-0.5">
                             <div className="font-mono text-sm">
                               {formatToolTokenTotal(item.run)}
