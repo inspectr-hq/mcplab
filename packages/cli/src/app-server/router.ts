@@ -18,12 +18,14 @@ import type {
   EvalConfig,
   ExecutableEvalConfig,
   LlmMessage,
+  LlmAgentConfig,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
   expandConfigForAgents,
+  isLlmAgent,
   loadConfig,
   McpClientManager,
   validateBrowserProviderProfile,
@@ -127,6 +129,10 @@ import type { RoverSocketMessage } from './rover-connection.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
+
+export function isEvaluationJudgeAgent(agent: AgentConfig | undefined): agent is LlmAgentConfig {
+  return agent !== undefined && isLlmAgent(agent);
+}
 
 export async function startAppServer(options: AppServerOptions) {
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -622,7 +628,7 @@ export async function startAppServer(options: AppServerOptions) {
                 ? body.agentName
                 : settings.evaluationJudgeAgentName
           });
-          if (!judge || judge.agent.type !== 'llm') {
+          if (!judge || !isEvaluationJudgeAgent(judge.agent)) {
             asJson(res, 400, {
               error: 'Configure an LLM evaluation judge before requesting a provider proposal.'
             });
