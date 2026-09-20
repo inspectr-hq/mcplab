@@ -48,19 +48,34 @@ describe('libraries-store test-case directory migration', () => {
     expect(JSON.stringify(artifact)).not.toContain('do not persist');
   });
 
-  it('loads and atomically writes declarative browser provider profiles', () => {
+  it('loads provider profiles from individual files and derives timestamps from file metadata', () => {
     const librariesDir = makeTempLibrariesDir();
+    mkdirSync(join(librariesDir, 'browser-providers'));
     writeFileSync(
-      join(librariesDir, 'browser-providers.yaml'),
-      `trendminer:\n  schema_version: 1\n  name: TrendMiner\n  match:\n    origins:\n      - https://tm-pipeline-aa01.trendminer.net\n  composer:\n    locator:\n      segments:\n        - '[data-test="composer"]'\n    input_mode: contenteditable\n  submit:\n    action: enter\n  assistant_messages:\n    locator:\n      segments:\n        - '.assistant'\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://tm-pipeline-aa01.trendminer.net\n    confidence:\n      composer: high\n`,
+      join(librariesDir, 'browser-providers', 'trendminer.yaml'),
+      `schema_version: 1\nname: TrendMiner\nmatch:\n  origins:\n    - https://tm-pipeline-aa01.trendminer.net\ncomposer:\n  locator:\n    segments:\n      - '[data-test="composer"]'\n  input_mode: contenteditable\nsubmit:\n  action: enter\nassistant_messages:\n  locator:\n    segments:\n      - '.assistant'\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://tm-pipeline-aa01.trendminer.net\n  confidence:\n    composer: high\n`,
       'utf8'
     );
 
-    expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
+    const loaded = readLibraries(librariesDir).browserProviders.trendminer;
+    expect(loaded.name).toBe('TrendMiner');
+    expect(loaded.learned.createdAt).toEqual(expect.any(String));
+    expect(loaded.learned.updatedAt).toEqual(expect.any(String));
+    expect(Date.parse(loaded.learned.createdAt)).not.toBeNaN();
+    expect(Date.parse(loaded.learned.updatedAt)).not.toBeNaN();
+
+    const firstCreatedAt = loaded.learned.createdAt;
     writeBrowserProviderProfiles(librariesDir, readLibraries(librariesDir).browserProviders);
     expect(readLibraries(librariesDir).browserProviders.trendminer.composer.inputMode).toBe(
       'contenteditable'
     );
+    expect(readLibraries(librariesDir).browserProviders.trendminer.learned.createdAt).toBe(
+      firstCreatedAt
+    );
+    expect(existsSync(join(librariesDir, 'browser-providers.yaml'))).toBe(false);
+    expect(
+      readFileSync(join(librariesDir, 'browser-providers', 'trendminer.yaml'), 'utf8')
+    ).not.toMatch(/created_at|updated_at/);
   });
 
   it('links a learned provider to a browser agent', () => {
@@ -128,9 +143,9 @@ describe('libraries-store test-case directory migration', () => {
     expect(readLibraries(librariesDir).browserProviders['claude-learned'].name).toBe(
       'Claude learned v2'
     );
-    expect(readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt).toBe(
-      '2026-09-10T00:00:00.000Z'
-    );
+    expect(
+      readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt
+    ).toEqual(expect.any(String));
     expect(profile).toEqual({});
   });
 
@@ -186,12 +201,7 @@ describe('libraries-store test-case directory migration', () => {
       submit: { action: 'enter' },
       assistantMessages: { locator: { segments: ['.message'] } },
       completion: { stabilityMs: 500 },
-      learned: {
-        sourceOrigin: 'https://custom.example',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        confidence: {}
-      }
+      learned: { sourceOrigin: 'https://custom.example', confidence: {} }
     };
 
     writeLibraries(librariesDir, {

@@ -13,9 +13,10 @@ afterEach(() => {
 function writeFixture(root: string): void {
   const bundle = join(root, 'mcplab');
   mkdirSync(bundle, { recursive: true });
+  mkdirSync(join(bundle, 'browser-providers'), { recursive: true });
   writeFileSync(
-    join(bundle, 'browser-providers.yaml'),
-    `custom-chat:\n  schema_version: 1\n  name: Custom Chat\n  match:\n    origins: [https://chat.example]\n  composer:\n    locator:\n      segments: ['textarea[data-role="composer"]']\n    input_mode: textarea\n  submit:\n    action: click\n    locator:\n      segments: ['button[data-action="send"]']\n  assistant_messages:\n    locator:\n      segments: ['[data-role="assistant-message"]']\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://chat.example\n    created_at: 2026-09-17T00:00:00.000Z\n    updated_at: 2026-09-17T00:00:00.000Z\n    confidence: {}\n`,
+    join(bundle, 'browser-providers', 'custom-chat.yaml'),
+    `schema_version: 1\nname: Custom Chat\nmatch:\n  origins: [https://chat.example]\ncomposer:\n  locator:\n    segments: ['textarea[data-role="composer"]']\n  input_mode: textarea\nsubmit:\n  action: click\n  locator:\n    segments: ['button[data-action="send"]']\nassistant_messages:\n  locator:\n    segments: ['[data-role="assistant-message"]']\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://chat.example\n  confidence: {}\n`,
     'utf8'
   );
 }
@@ -66,6 +67,8 @@ describe('browser provider library tools', () => {
       schemaVersion: 1,
       composer: { inputMode: 'textarea' }
     });
-    expect(item.structuredContent.yaml).toContain('schemaVersion: 1');
+    expect(item.structuredContent.yaml).toContain('schema_version: 1');
+    expect(item.structuredContent.yaml).not.toContain('created_at');
+    expect(item.structuredContent.yaml).not.toContain('updated_at');
   });
 });

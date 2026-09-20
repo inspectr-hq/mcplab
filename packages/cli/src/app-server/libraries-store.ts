@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
   readFileSync
@@ -20,6 +21,7 @@ import { sanitizeBrowserProviderProposalDiagnostics } from './browser-provider-l
 
 const TEST_CASES_DIR_NAME = 'test-cases';
 const LEGACY_SCENARIOS_DIR_NAME = 'scenarios';
+const BROWSER_PROVIDERS_DIR_NAME = 'browser-providers';
 
 function readYamlFile<T>(path: string, fallback: T): T {
   if (!existsSync(path)) return fallback;
@@ -59,62 +61,111 @@ export function readLibraries(librariesDir: string): {
       scenarios.push({ ...parsed, id });
     }
   }
-  const browserProviders = parseBrowserProviderProfiles(
-    readYamlFile<Record<string, unknown>>(join(root, 'browser-providers.yaml'), {})
-  );
+  const browserProviders = readBrowserProviderProfiles(root);
   return { servers, agents, scenarios, browserProviders };
+}
+
+function readBrowserProviderProfiles(root: string): Record<string, BrowserProviderProfile> {
+  const directory = join(root, BROWSER_PROVIDERS_DIR_NAME);
+  if (!existsSync(directory)) return {};
+  const profiles: Record<string, BrowserProviderProfile> = {};
+  const files = readdirSync(directory)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .sort((a, b) => a.localeCompare(b));
+  for (const file of files) {
+    const id = basename(file, extname(file));
+    const parsed = readYamlFile<Record<string, unknown> | null>(join(directory, file), null);
+    if (!parsed) continue;
+    const profile = parseBrowserProviderProfiles({ [id]: parsed })[id];
+    const stats = statSync(join(directory, file));
+    profiles[id] = {
+      ...profile,
+      learned: {
+        ...profile.learned,
+        createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
+        updatedAt: new Date(stats.mtimeMs).toISOString()
+      }
+    };
+  }
+  return profiles;
 }
 
 export function writeBrowserProviderProfiles(
   librariesDir: string,
   profiles: Record<string, BrowserProviderProfile>
-): void {
+): Record<string, BrowserProviderProfile> {
   const root = resolve(librariesDir);
   mkdirSync(root, { recursive: true });
-  const target = join(root, 'browser-providers.yaml');
-  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-  const yamlProfiles = Object.fromEntries(
-    Object.entries(profiles).map(([id, profile]) => [
-      id,
-      {
-        schema_version: profile.schemaVersion,
-        name: profile.name,
-        match: profile.match,
-        composer: {
-          locator: profile.composer.locator,
-          input_mode: profile.composer.inputMode
-        },
-        submit: profile.submit,
-        assistant_messages: {
-          locator: profile.assistantMessages.locator,
-          text_locator: profile.assistantMessages.textLocator
-        },
-        completion: {
-          generating_locator: profile.completion.generatingLocator,
-          idle_locator: profile.completion.idleLocator,
-          stability_ms: profile.completion.stabilityMs
-        },
-        new_conversation: profile.newConversation,
-        learned: {
-          source_origin: profile.learned.sourceOrigin,
-          created_at: profile.learned.createdAt,
-          updated_at: profile.learned.updatedAt,
-          confidence: profile.learned.confidence
-        }
+  const directory = join(root, BROWSER_PROVIDERS_DIR_NAME);
+  mkdirSync(directory, { recursive: true });
+  const desired = new Set<string>();
+  for (const [id, profile] of Object.entries(profiles)) {
+    const fileStem = safeFileName(id);
+    if (fileStem !== id) {
+      throw new Error(`Browser provider id '${id}' must be a safe filename.`);
+    }
+    const fileName = `${fileStem}.yaml`;
+    desired.add(fileName);
+    const target = join(directory, fileName);
+    const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+    const serialized = serializeBrowserProviderProfile(profile);
+    const existingRaw = readFileIfPresent(target);
+    let shouldWrite = existingRaw === undefined;
+    if (existingRaw !== undefined) {
+      try {
+        const existing = parseBrowserProviderProfiles({
+          [id]: parseYaml(existingRaw) as Record<string, unknown>
+        })[id];
+        shouldWrite = serializeBrowserProviderProfile(existing) !== serialized;
+      } catch {
+        shouldWrite = true;
       }
-    ])
-  );
-  writeFileSync(temporary, `${stringifyYaml(yamlProfiles)}\n`, 'utf8');
-  renameSync(temporary, target);
+    }
+    if (shouldWrite) {
+      writeFileSync(temporary, serialized, 'utf8');
+      renameSync(temporary, target);
+    }
+  }
+  for (const file of readdirSync(directory)) {
+    if (!(file.endsWith('.yaml') || file.endsWith('.yml')) || desired.has(file)) continue;
+    unlinkSync(join(directory, file));
+  }
+  return readBrowserProviderProfiles(root);
 }
 
-export function preserveBrowserProviderCreatedAt(
-  profile: BrowserProviderProfile,
-  existingProfile?: BrowserProviderProfile
-): BrowserProviderProfile {
-  return existingProfile
-    ? { ...profile, learned: { ...profile.learned, createdAt: existingProfile.learned.createdAt } }
-    : profile;
+function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {
+  return `${stringifyYaml({
+    schema_version: profile.schemaVersion,
+    name: profile.name,
+    match: profile.match,
+    composer: {
+      locator: profile.composer.locator,
+      input_mode: profile.composer.inputMode
+    },
+    submit: profile.submit,
+    assistant_messages: {
+      locator: profile.assistantMessages.locator,
+      text_locator: profile.assistantMessages.textLocator
+    },
+    completion: {
+      generating_locator: profile.completion.generatingLocator,
+      idle_locator: profile.completion.idleLocator,
+      stability_ms: profile.completion.stabilityMs
+    },
+    new_conversation: profile.newConversation,
+    learned: {
+      source_origin: profile.learned.sourceOrigin,
+      confidence: profile.learned.confidence
+    }
+  })}\n`;
+}
+
+function readFileIfPresent(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
 export function writeBrowserProviderAndAgent(
@@ -130,8 +181,6 @@ export function writeBrowserProviderAndAgent(
   ) {
     throw new Error(`Agent '${agent.id}' already exists with a different configuration.`);
   }
-  const existingProfile = current.browserProviders[profile.id];
-  const storedProfile = preserveBrowserProviderCreatedAt(profile, existingProfile);
   const browserAgent = {
     id: agent.id,
     type: 'browser' as const,
@@ -139,16 +188,16 @@ export function writeBrowserProviderAndAgent(
     provider: profile.id,
     url: agent.url
   };
-  writeBrowserProviderProfiles(librariesDir, {
+  const persistedProfiles = writeBrowserProviderProfiles(librariesDir, {
     ...current.browserProviders,
-    [profile.id]: storedProfile
+    [profile.id]: profile
   });
   writeLibraries(librariesDir, {
     servers: current.servers,
     agents: { ...current.agents, [agent.id]: browserAgent },
     scenarios: current.scenarios
   });
-  return { profile: storedProfile, agent: browserAgent };
+  return { profile: persistedProfiles[profile.id] ?? profile, agent: browserAgent };
 }
 
 export function writeBrowserProviderLearningArtifact(

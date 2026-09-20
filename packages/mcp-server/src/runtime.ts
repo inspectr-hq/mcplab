@@ -1456,7 +1456,10 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().describe('Browser agent id key (kebab-case recommended).'),
         name: z.string().optional().describe('Human-readable browser agent name.'),
-        provider: z.string().min(1).describe('Provider id from browser-providers.yaml.'),
+        provider: z
+          .string()
+          .min(1)
+          .describe('Provider id from browser-providers/<provider-id>.yaml.'),
         url: z.string().url().describe('Browser origin where Rover should execute the agent.'),
         new_conversation_between_scenarios: z
           .boolean()
@@ -3470,7 +3473,7 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const browserProvidersPath = join(bundleRoot, 'browser-providers.yaml');
+  const browserProvidersDir = join(bundleRoot, 'browser-providers');
   const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
@@ -3480,8 +3483,8 @@ function readLibrary(
     ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
   const browserProviders =
-    (kind === 'all' || kind === 'browser_providers') && existsSync(browserProvidersPath)
-      ? parseBrowserProviderProfiles(parseYaml(readFileSync(browserProvidersPath, 'utf8')) ?? {})
+    kind === 'all' || kind === 'browser_providers'
+      ? readBrowserProviderProfiles(browserProvidersDir)
       : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
@@ -3531,32 +3534,61 @@ function readLibrary(
   return out;
 }
 
+function readBrowserProviderProfiles(
+  directory: string
+): Record<string, ReturnType<typeof parseBrowserProviderProfiles>[string]> {
+  if (!existsSync(directory)) return {};
+  const profiles: Record<string, ReturnType<typeof parseBrowserProviderProfiles>[string]> = {};
+  const files = readdirSync(directory)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .sort();
+  for (const file of files) {
+    const id = basename(file, extname(file));
+    const fullPath = join(directory, file);
+    const parsed = (parseYaml(readFileSync(fullPath, 'utf8')) as Record<string, unknown>) ?? {};
+    const profile = parseBrowserProviderProfiles({ [id]: parsed })[id];
+    const stats = statSync(fullPath);
+    profiles[id] = {
+      ...profile,
+      learned: {
+        ...profile.learned,
+        createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
+        updatedAt: new Date(stats.mtimeMs).toISOString()
+      }
+    };
+  }
+  return profiles;
+}
+
 function getLibraryItem(
   bundleRoot: string,
   kind: 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
-    const file = join(
-      bundleRoot,
-      kind === 'browser_providers' ? 'browser-providers.yaml' : `${kind}.yaml`
-    );
+    const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
+    const file = directory
+      ? findBrowserProviderFile(directory, id)
+      : join(bundleRoot, `${kind}.yaml`);
     if (!existsSync(file)) {
       throw new Error(`Library file not found: ${file}`);
     }
     const raw = readFileSync(file, 'utf8');
     const parsed = (parseYaml(raw) as Record<string, unknown>) ?? {};
-    if (!(id in parsed)) {
+    if (kind !== 'browser_providers' && !(id in parsed)) {
       throw new Error(`'${id}' not found in ${file}`);
     }
-    const entry = parsed[id];
     const normalizedEntry =
-      kind === 'browser_providers' ? parseBrowserProviderProfiles({ [id]: entry })[id] : entry;
+      kind === 'browser_providers' ? readBrowserProviderProfiles(dirname(file))[id] : parsed[id];
+    if (!normalizedEntry) throw new Error(`'${id}' not found in ${file}`);
     return {
       bundleRoot,
       kind,
       id,
-      yaml: stringifyYaml({ [id]: normalizedEntry }).trimEnd(),
+      yaml:
+        kind === 'browser_providers'
+          ? raw.trimEnd()
+          : stringifyYaml({ [id]: normalizedEntry }).trimEnd(),
       content: normalizedEntry as Record<string, unknown>
     };
   }
@@ -3582,6 +3614,14 @@ function getLibraryItem(
     }
   }
   throw new Error(`Scenario '${id}' not found in ${dir}`);
+}
+
+function findBrowserProviderFile(directory: string, id: string): string {
+  if (!existsSync(directory)) return join(directory, `${id}.yaml`);
+  const file = readdirSync(directory)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .find((name) => basename(name, extname(name)) === id);
+  return join(directory, file ?? `${id}.yaml`);
 }
 
 function listEvaluationConfigs(params: {

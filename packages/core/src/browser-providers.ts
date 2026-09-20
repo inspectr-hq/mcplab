@@ -191,8 +191,6 @@ export function parseBrowserProviderProfiles(
       newConversation: profile.new_conversation,
       learned: {
         sourceOrigin: learned.source_origin,
-        createdAt: learned.created_at,
-        updatedAt: learned.updated_at,
         confidence: learned.confidence
       }
     });

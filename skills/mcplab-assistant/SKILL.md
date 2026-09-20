@@ -163,7 +163,7 @@ Use this workflow when an evaluation must run in a browser chat through MCPLab R
 
 1. Inspect the workspace library with `mcplab_list_library` using `kind: "agents"` and `kind: "browser_providers"`, with `includeContent: true` when the profile details are needed.
 2. A browser agent is an execution target in `agents.yaml`. It has `type: browser`, a `provider` id, a browser `url`, and an optional `new_conversation_between_scenarios` setting.
-3. A browser provider profile is the deterministic interaction contract in `browser-providers.yaml`. It describes origin matching, composer input mode and locator, submit behavior, assistant message selection, completion signals and stability, optional new-conversation behavior, and learning metadata.
+3. A browser provider profile is the deterministic interaction contract in `browser-providers/<provider-id>.yaml`. It describes origin matching, composer input mode and locator, submit behavior, assistant message selection, completion signals and stability, optional new-conversation behavior, and learning metadata.
 4. Do not invent selectors or copy provider-specific values from unrelated examples. If a matching provider profile does not exist, ask the user to capture it with Rover Learn, then inspect the resulting profile and interaction trace.
 5. Use `mcplab_generate_browser_agent_entry` to draft a linked browser agent entry. Persist it only through the approved library workflow.
 6. Create or update an evaluation config with the browser agent id in the scenario `agent` field. Queue it with `mcplab_queue_run`; Rover must be connected to the matching provider.

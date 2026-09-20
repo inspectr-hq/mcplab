@@ -15,13 +15,12 @@ custom-research-chat-browser:
   new_conversation_between_scenarios: true
 ```
 
-`browser-providers.yaml` contains the deterministic interaction profile. The profile is provider-specific and must come from Rover capture, local validation, or an explicitly reviewed update. Do not copy the example values below into a real workspace.
+`browser-providers/<provider-id>.yaml` contains one deterministic interaction profile per file. The profile is provider-specific and must come from Rover capture, local validation, or an explicitly reviewed update. Do not copy the example values below into a real workspace.
 
 ## Provider profile shape
 
 ```yaml
-custom-research-chat:
-  schema_version: 1
+schema_version: 1
   name: Custom Research Chat
   match:
     origins:
@@ -66,8 +65,6 @@ custom-research-chat:
         - button[data-testid="new-conversation"]
   learned:
     source_origin: https://chat.example.test
-    created_at: 2026-09-17T00:00:00.000Z
-    updated_at: 2026-09-17T00:00:00.000Z
     confidence:
       composer: high
       submit: high
@@ -95,7 +92,7 @@ The safe workflow is:
 1. Rover captures a redacted interaction trace and proposes an initial profile.
 2. MCPLab sends the profile and trace to the configured LLM Evaluation Judge when the user requests refinement.
 3. The returned proposal is validated against the original trace by Rover before Save is enabled.
-4. The validated profile is persisted to `browser-providers.yaml` and linked to a browser agent.
+4. The validated profile is persisted to `browser-providers/<provider-id>.yaml` and linked to a browser agent.
 
 The Evaluation Judge may suggest selectors, but it never bypasses Rover replay validation. Do not save a profile from model output alone.
 
@@ -117,7 +114,7 @@ scenarios:
 Before queueing, confirm that:
 
 - the browser agent id exists in `agents.yaml`;
-- its provider id exists in `browser-providers.yaml`;
+- its provider id has a matching file under `browser-providers/`;
 - Rover is connected to a matching browser origin;
 - response assertions are appropriate for browser output;
 - tool assertions are expected to be `not_evaluated` unless telemetry is available.
