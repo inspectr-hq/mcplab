@@ -688,6 +688,13 @@ export function createRunQueueService(params: {
           if (this.stopJob(job.id, options)?.status === 'stopped') stopped += 1;
         }
       }
+      if (
+        jobsForEvaluation.every((job) =>
+          ['completed', 'error', 'stopped'].includes(jobs.get(job.id)?.status ?? job.status)
+        )
+      ) {
+        for (const job of jobsForEvaluation) jobs.delete(job.id);
+      }
       void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
       return { ok: true, stopped };
     },

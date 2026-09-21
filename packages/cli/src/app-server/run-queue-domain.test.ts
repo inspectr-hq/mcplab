@@ -99,6 +99,28 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.has(stopped.id)).toBe(false);
   });
 
+  it('removes a mixed completed and stopped evaluation after an explicit stop', () => {
+    const completed = createQueuedJob('/tmp/eval.yaml', 'job-completed');
+    const stopped = createQueuedJob('/tmp/eval.yaml', 'job-stopped');
+    completed.status = 'completed';
+    stopped.status = 'stopped';
+    completed.runParams.evaluationRunId = 'evaluation-mixed-terminal';
+    stopped.runParams.evaluationRunId = 'evaluation-mixed-terminal';
+    const service = createRunQueueServiceForTest({
+      jobs: new Map([
+        [completed.id, completed],
+        [stopped.id, stopped]
+      ])
+    });
+
+    expect(service.stopEvaluationRun('evaluation-mixed-terminal')).toMatchObject({
+      ok: true,
+      stopped: 0
+    });
+    expect(service.jobs.has(completed.id)).toBe(false);
+    expect(service.jobs.has(stopped.id)).toBe(false);
+  });
+
   it('keeps Rover jobs waiting until a matching provider connects, then assigns them', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
