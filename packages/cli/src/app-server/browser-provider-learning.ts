@@ -4,8 +4,10 @@ import type { LlmMessage } from '@inspectr/mcplab-core';
 import { chatWithJsonRetry } from './assistant-common.js';
 
 export interface BrowserProviderLearningTraceInput {
+  evidenceVersion?: unknown;
   observedGeneration?: unknown;
   selectorValidation?: unknown;
+  newConversationEvidence?: unknown;
   events?: unknown;
 }
 
@@ -34,13 +36,84 @@ export function sanitizeBrowserProviderProposalDiagnostics(value: unknown): {
 export function sanitizeBrowserProviderLearningTrace(
   value: BrowserProviderLearningTraceInput
 ): Record<string, unknown> {
+  const object = (candidate: unknown): Record<string, unknown> | null =>
+    candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+      ? candidate as Record<string, unknown>
+      : null;
+  const short = (candidate: unknown, limit = 200) =>
+    typeof candidate === 'string' ? candidate.slice(0, limit) : undefined;
+  const count = (candidate: unknown) =>
+    typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0
+      ? candidate
+      : undefined;
+  const safeLocator = (candidate: unknown) => {
+    const segments = object(candidate)?.segments;
+    return Array.isArray(segments) && segments.length > 0 && segments.length <= 8 &&
+      segments.every((item) => typeof item === 'string')
+      ? { segments: segments.map((item) => String(item).slice(0, 500)) }
+      : undefined;
+  };
+  const safeSelectedElement = (candidate: unknown) => {
+    const item = object(candidate);
+    if (!item) return undefined;
+    const locator = safeLocator(item.locator);
+    if (!locator) return undefined;
+    const attributes = object(item.attributes);
+    const evaluations = object(item.selectorEvaluations);
+    return {
+      locator,
+      selectors: Array.isArray(item.selectors)
+        ? item.selectors.filter((selector): selector is string => typeof selector === 'string')
+            .slice(0, 12).map((selector) => selector.slice(0, 500))
+        : [],
+      visible: item.visible === true,
+      textLength: count(item.textLength) ?? 0,
+      ...(typeof item.changedFromBaseline === 'boolean'
+        ? { changedFromBaseline: item.changedFromBaseline } : {}),
+      ...(typeof item.changedAfterSubmission === 'boolean'
+        ? { changedAfterSubmission: item.changedAfterSubmission } : {}),
+      ...(typeof item.absentAtSubmission === 'boolean'
+        ? { absentAtSubmission: item.absentAtSubmission } : {}),
+      ...(typeof item.candidateScore === 'number' && Number.isFinite(item.candidateScore)
+        ? { candidateScore: item.candidateScore } : {}),
+      ...(attributes ? {
+        attributes: Object.fromEntries(
+          ['role', 'ariaLabel', 'testId', 'dataTest', 'authorRole']
+            .flatMap((key) => short(attributes[key]) === undefined ? [] : [[key, short(attributes[key])]])
+        )
+      } : {}),
+      ...(evaluations ? {
+        selectorEvaluations: Object.fromEntries(
+          Object.entries(evaluations).slice(0, 12).flatMap(([selector, raw]) => {
+            const entry = object(raw);
+            return entry ? [[selector.slice(0, 500), {
+              matchCount: count(entry.matchCount) ?? 0,
+              nonAssistantCount: count(entry.nonAssistantCount) ?? 0
+            }]] : [];
+          })
+        )
+      } : {})
+    };
+  };
   const events = Array.isArray(value.events)
     ? value.events.slice(-32).map((event) => {
         if (!event || typeof event !== 'object') return null;
         const source = event as Record<string, unknown>;
+        const selected = object(source.selectedElements);
         return {
           phase: typeof source.phase === 'string' ? source.phase : undefined,
           at: typeof source.at === 'string' ? source.at : undefined,
+          ...(typeof source.workingActive === 'boolean'
+            ? { workingActive: source.workingActive } : {}),
+          ...(selected ? {
+            selectedElements: Object.fromEntries(
+              ['composer', 'submit', 'assistant', 'generating', 'working', 'idle']
+                .flatMap((role) => {
+                  const element = safeSelectedElement(selected[role]);
+                  return element ? [[role, element]] : [];
+                })
+            )
+          } : {}),
           candidateCount:
             typeof source.candidateCount === 'number' ? source.candidateCount : undefined,
           changedCandidateCount:
@@ -94,8 +167,35 @@ export function sanitizeBrowserProviderLearningTrace(
       })
     : [];
   return {
+    ...(value.evidenceVersion === 1 ? { evidenceVersion: 1 } : {}),
     observedGeneration: value.observedGeneration === true,
-    selectorValidation: value.selectorValidation ?? null,
+    selectorValidation: Object.fromEntries(
+      ['composer', 'submit', 'assistant'].flatMap((role) => {
+        const entry = object(object(value.selectorValidation)?.[role]);
+        return entry ? [[role, {
+          valid: entry.valid === true,
+          matchCount: count(entry.matchCount) ?? 0,
+          visible: entry.visible === true
+        }]] : [];
+      })
+    ),
+    ...(object(value.newConversationEvidence) ? (() => {
+      const evidence = object(value.newConversationEvidence)!;
+      const controlLocator = safeLocator(evidence.controlLocator);
+      return controlLocator &&
+        ['url-changed', 'assistant-count-reduced'].includes(String(evidence.signal))
+        ? { newConversationEvidence: {
+            controlLocator,
+            controlSelectors: Array.isArray(evidence.controlSelectors)
+              ? evidence.controlSelectors.filter((selector): selector is string => typeof selector === 'string')
+                  .slice(0, 12).map((selector) => selector.slice(0, 500))
+              : [],
+            signal: evidence.signal,
+            beforeAssistantCount: count(evidence.beforeAssistantCount) ?? 0,
+            afterAssistantCount: count(evidence.afterAssistantCount) ?? 0
+          } }
+        : {};
+    })() : {}),
     events
   };
 }

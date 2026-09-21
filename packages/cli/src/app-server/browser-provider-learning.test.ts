@@ -75,6 +75,52 @@ describe('browser provider learning proposals', () => {
     expect(trace.observedGeneration).toBe(true);
   });
 
+  it('retains selected semantic evidence for the Judge without raw response text', () => {
+    const trace = sanitizeBrowserProviderLearningTrace({
+      evidenceVersion: 1,
+      observedGeneration: true,
+      newConversationEvidence: {
+        controlLocator: { segments: ['button[title="New chat"]'] },
+        controlSelectors: ['button[title="New chat"]'],
+        signal: 'assistant-count-reduced',
+        beforeAssistantCount: 1,
+        afterAssistantCount: 0
+      },
+      events: [{
+        phase: 'final',
+        workingActive: false,
+        selectedElements: {
+          assistant: {
+            locator: { segments: ['[data-testid="markdown-reply"]'] },
+            selectors: ['[data-testid="markdown-reply"]'],
+            visible: true,
+            textLength: 23,
+            changedAfterSubmission: true,
+            absentAtSubmission: true,
+            candidateScore: 21,
+            attributes: { testId: 'markdown-reply' },
+            rawText: 'secret answer must not survive'
+          }
+        }
+      }]
+    });
+    expect(trace).toMatchObject({
+      evidenceVersion: 1,
+      newConversationEvidence: { signal: 'assistant-count-reduced' },
+      events: [{
+        workingActive: false,
+        selectedElements: {
+          assistant: {
+            locator: { segments: ['[data-testid="markdown-reply"]'] },
+            changedAfterSubmission: true,
+            absentAtSubmission: true
+          }
+        }
+      }]
+    });
+    expect(JSON.stringify(trace)).not.toContain('secret answer must not survive');
+  });
+
   it('sanitizes proposal diagnostics before persistence', () => {
     const diagnostics = sanitizeBrowserProviderProposalDiagnostics({
       rationale: ['safe', { raw: 'drop me' }, 'x'.repeat(600)],

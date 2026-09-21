@@ -150,6 +150,7 @@ function serializeBrowserProviderProfile(profile: BrowserProviderProfile): strin
     completion: {
       generating_locator: profile.completion.generatingLocator,
       idle_locator: profile.completion.idleLocator,
+      working_locator: profile.completion.workingLocator,
       stability_ms: profile.completion.stabilityMs
     },
     new_conversation: profile.newConversation,

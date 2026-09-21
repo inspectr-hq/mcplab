@@ -24,12 +24,15 @@ export interface BrowserProviderProfile {
   completion: {
     generatingLocator?: ShadowLocator;
     idleLocator?: ShadowLocator;
+    workingLocator?: ShadowLocator;
     stabilityMs: number;
   };
   newConversation?: {
     action: 'click' | 'navigate';
     locator?: ShadowLocator;
+    locators?: ShadowLocator[];
     url?: string;
+    confirmation?: 'context-change';
   };
   learned: {
     sourceOrigin: string;
@@ -135,6 +138,7 @@ export function validateBrowserProviderProfile(value: unknown): BrowserProviderP
     completion: {
       generatingLocator: optionalLocator(completion.generatingLocator, 'generating'),
       idleLocator: optionalLocator(completion.idleLocator, 'idle'),
+      workingLocator: optionalLocator(completion.workingLocator, 'working'),
       stabilityMs: completion.stabilityMs
     },
     learned: {
@@ -155,9 +159,24 @@ export function validateBrowserProviderProfile(value: unknown): BrowserProviderP
       throw new Error('Browser provider new conversation locator is required.');
     if (newConversation.action === 'navigate' && typeof newConversation.url !== 'string')
       throw new Error('Browser provider navigation URL is required.');
+    if (
+      newConversation.confirmation !== undefined &&
+      newConversation.confirmation !== 'context-change'
+    )
+      throw new Error('Invalid browser provider new conversation confirmation.');
+    if (
+      newConversation.locators !== undefined &&
+      (!Array.isArray(newConversation.locators) ||
+        newConversation.locators.some((item) => !item || typeof item !== 'object'))
+    )
+      throw new Error('Invalid browser provider new conversation locators.');
     result.newConversation = {
       action: newConversation.action,
       locator: optionalLocator(newConversation.locator, 'newConversation'),
+      locators: Array.isArray(newConversation.locators)
+        ? newConversation.locators.map((item) => locator(item, 'newConversation alternative'))
+        : undefined,
+      confirmation: newConversation.confirmation as 'context-change' | undefined,
       url: typeof newConversation.url === 'string' ? newConversation.url : undefined
     };
   }
@@ -186,6 +205,7 @@ export function parseBrowserProviderProfiles(
       completion: {
         generatingLocator: completion.generating_locator,
         idleLocator: completion.idle_locator,
+        workingLocator: completion.working_locator,
         stabilityMs: completion.stability_ms
       },
       newConversation: profile.new_conversation,

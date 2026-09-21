@@ -22,6 +22,44 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('round-trips learned working and New Chat confirmation through YAML', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeBrowserProviderProfiles(librariesDir, {
+      'custom-chat': {
+        schemaVersion: 1,
+        id: 'custom-chat',
+        name: 'Custom Chat',
+        match: { origins: ['https://example.com'] },
+        composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' },
+        submit: { action: 'click', locator: { segments: ['button.send'] } },
+        assistantMessages: { locator: { segments: ['.assistant'] } },
+        completion: {
+          stabilityMs: 2500,
+          workingLocator: { segments: ['[aria-busy="true"]'] }
+        },
+        newConversation: {
+          action: 'click',
+          locator: { segments: ['button.new-chat'] },
+          locators: [{ segments: ['button.new-chat'] }],
+          confirmation: 'context-change'
+        },
+        learned: {
+          sourceOrigin: 'https://example.com',
+          createdAt: '2026-09-20T00:00:00.000Z',
+          updatedAt: '2026-09-20T00:00:00.000Z',
+          confidence: {}
+        }
+      }
+    });
+    expect(readLibraries(librariesDir).browserProviders['custom-chat']).toMatchObject({
+      completion: { workingLocator: { segments: ['[aria-busy="true"]'] } },
+      newConversation: {
+        locators: [{ segments: ['button.new-chat'] }],
+        confirmation: 'context-change'
+      }
+    });
+  });
+
   it('persists redacted provider learning diagnostics separately from the profile', () => {
     const librariesDir = makeTempLibrariesDir();
     writeBrowserProviderLearningArtifact(librariesDir, 'learned/provider', {
