@@ -78,7 +78,7 @@ export function sanitizeBrowserProviderLearningTrace(
         ? { candidateScore: item.candidateScore } : {}),
       ...(attributes ? {
         attributes: Object.fromEntries(
-          ['role', 'ariaLabel', 'testId', 'dataTest', 'authorRole']
+          ['role', 'ariaLabel', 'ariaBusy', 'testId', 'dataTest', 'authorRole']
             .flatMap((key) => short(attributes[key]) === undefined ? [] : [[key, short(attributes[key])]])
         )
       } : {}),
@@ -200,17 +200,107 @@ export function sanitizeBrowserProviderLearningTrace(
   };
 }
 
-export function parseBrowserProviderProposal(text: string): BrowserProviderProposal {
+function validateWorkingLocatorEvidence(
+  profile: BrowserProviderProfile,
+  trace: BrowserProviderLearningTraceInput
+): { profile: BrowserProviderProfile; warnings: string[] } {
+  const events = Array.isArray(trace.events)
+    ? trace.events.filter((event): event is Record<string, unknown> =>
+        Boolean(event && typeof event === 'object' && !Array.isArray(event)))
+    : [];
+  const submittedIndex = events.findIndex((event) => event.phase === 'submitted');
+  const postSubmissionEvents = events.slice(submittedIndex >= 0 ? submittedIndex + 1 : 0);
+  const workingEvents = postSubmissionEvents.filter((event) => event.workingActive === true);
+  const finalEvent = [...events].reverse().find((event) => event.phase === 'final');
+
+  if (workingEvents.length === 0) {
+    if (trace.observedGeneration === true && profile.completion.workingLocator) {
+      throw new Error('Working locator evidence is incomplete: no active working event was observed.');
+    }
+    return { profile, warnings: [] };
+  }
+  if (!finalEvent || finalEvent.workingActive !== false) {
+    throw new Error('Working locator evidence is incomplete: the final event is still active.');
+  }
+  if (!profile.completion.workingLocator) {
+    throw new Error('Working locator evidence is incomplete: the proposal omitted the working locator.');
+  }
+
+  const proposedSegments = profile.completion.workingLocator.segments;
+  const selectedWorking = workingEvents
+    .map((event) => {
+      const selected = event.selectedElements;
+      if (!selected || typeof selected !== 'object' || Array.isArray(selected)) return null;
+      const working = (selected as Record<string, unknown>).working;
+      return working && typeof working === 'object' && !Array.isArray(working)
+        ? working as Record<string, unknown>
+        : null;
+    })
+    .filter((working): working is Record<string, unknown> => working !== null);
+  const observedSelectors = selectedWorking.flatMap((working) => [
+    ...(Array.isArray(working.selectors)
+      ? working.selectors.filter((selector): selector is string => typeof selector === 'string')
+      : []),
+    ...((working.locator && typeof working.locator === 'object' && !Array.isArray(working.locator)
+      && Array.isArray((working.locator as Record<string, unknown>).segments))
+      ? ((working.locator as Record<string, unknown>).segments as unknown[])
+          .filter((segment): segment is string => typeof segment === 'string')
+      : [])
+  ]);
+  const observed = new Set(observedSelectors);
+  const proposedIsObserved = proposedSegments.every((segment) => {
+    if (observed.has(segment)) return true;
+    const parts = segment.match(/\[[^\]]+\]/g) ?? [];
+    return parts.length > 0 && parts.every((part) =>
+      observedSelectors.some((selector) => selector.includes(part))
+    );
+  });
+  if (proposedIsObserved && !proposedSegments.some((segment) => /aria-busy\s*=/.test(segment))) {
+    const transientSelector = observedSelectors.find((selector) => /aria-busy\s*=/.test(selector));
+    const baseSelector = proposedSegments.find((segment) => observed.has(segment));
+    if (transientSelector && baseSelector && !baseSelector.includes('aria-busy')) {
+      const condition = transientSelector.match(/\[[^\]]*aria-busy\s*=\s*["'][^"']+["'][^\]]*\]/i)?.[0];
+      if (condition) {
+        const narrowed = `${baseSelector}${condition}`;
+        return {
+          profile: {
+            ...profile,
+            completion: {
+              ...profile.completion,
+              workingLocator: { segments: [narrowed] }
+            }
+          },
+          warnings: [
+            'The working locator was narrowed to preserve the observed transient aria-busy state.'
+          ]
+        };
+      }
+    }
+  }
+  if (!proposedIsObserved) {
+    throw new Error('Working locator evidence is incomplete: the selector was not observed while working.');
+  }
+  return { profile, warnings: [] };
+}
+
+export function parseBrowserProviderProposal(
+  text: string,
+  trace?: BrowserProviderLearningTraceInput
+): BrowserProviderProposal {
   const parsed = JSON.parse(text) as Record<string, unknown>;
   const rawProfile = parsed.profile ?? parsed;
-  const profile = validateBrowserProviderProfile(rawProfile);
+  const parsedProfile = validateBrowserProviderProfile(rawProfile);
   const rationale = Array.isArray(parsed.rationale)
     ? parsed.rationale.filter((value): value is string => typeof value === 'string').slice(0, 8)
     : [];
   const warnings = Array.isArray(parsed.warnings)
     ? parsed.warnings.filter((value): value is string => typeof value === 'string').slice(0, 8)
     : [];
-  return { profile, rationale, warnings, validated: true };
+  const validated = trace
+    ? validateWorkingLocatorEvidence(parsedProfile, trace)
+    : { profile: parsedProfile, warnings: [] };
+  warnings.push(...validated.warnings);
+  return { profile: validated.profile, rationale, warnings: warnings.slice(0, 8), validated: true };
 }
 
 export async function proposeBrowserProviderProfile(params: {
@@ -224,6 +314,8 @@ export async function proposeBrowserProviderProfile(params: {
       content: [
         'Review this browser-provider learning trace and propose a corrected profile.',
         'Only change selectors or completion settings when supported by the observed lifecycle.',
+        'Treat workingActive as temporal evidence. A working locator must be active after submission and inactive in the final event.',
+        'Preserve transient attribute conditions such as [aria-busy="true"]. Never broaden a working locator to a persistent response container.',
         'Return one JSON object with profile, rationale (string array), and warnings (string array).',
         'Never add executable scripts, URLs outside the existing origin, or raw response content.',
         `Current profile:\n${JSON.stringify(params.profile)}`,
@@ -236,8 +328,8 @@ export async function proposeBrowserProviderProfile(params: {
     messages,
     tools: [],
     system:
-      'You are a browser automation profile reviewer. Preserve the existing profile shape and identity. Selectors must be CSS selectors observed in the trace. A generation selector must represent an active generating state, and an idle selector must represent an enabled completion state.',
-    parse: parseBrowserProviderProposal,
+      'You are a browser automation profile reviewer. Preserve the existing profile shape and identity. Selectors must be CSS selectors observed in the trace. A generation selector must represent an active generating state, an idle selector must represent an enabled completion state, and a working selector must describe the transient working state rather than a persistent response container.',
+    parse: (text) => parseBrowserProviderProposal(text, params.trace),
     toolCallFallbackText: () => 'Return the validated browser provider profile JSON.'
   });
   if ('type' in response) throw new Error('The provider proposal model returned a tool request.');

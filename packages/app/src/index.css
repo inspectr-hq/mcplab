@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+.results-table-container {
+  container: results-table / inline-size;
+}
+
+.results-table-column-scenarios,
+.results-table-column-avg-tools,
+.results-table-column-tool-tokens {
+  display: none;
+}
+
+@container results-table (min-width: 80rem) {
+  .results-table-column-scenarios {
+    display: table-cell;
+  }
+}
+
+@container results-table (min-width: 90rem) {
+  .results-table-column-avg-tools {
+    display: table-cell;
+  }
+}
+
+@container results-table (min-width: 100rem) {
+  .results-table-column-tool-tokens {
+    display: table-cell;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;

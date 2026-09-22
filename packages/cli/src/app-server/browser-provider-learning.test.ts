@@ -59,6 +59,97 @@ describe('browser provider learning proposals', () => {
     );
   });
 
+  it('narrows a persistent response container to the transient working condition', () => {
+    const trace = {
+      observedGeneration: true,
+      events: [
+        { phase: 'submitted', workingActive: false },
+        {
+          phase: 'working',
+          workingActive: true,
+          selectedElements: {
+            working: {
+              locator: { segments: ['[role="article"]'] },
+              selectors: ['[role="article"]', 'div[aria-busy="true"]', 'div'],
+              visible: true
+            }
+          }
+        },
+        { phase: 'final', workingActive: false }
+      ]
+    };
+
+    const proposal = parseBrowserProviderProposal(JSON.stringify({
+      profile: {
+        ...profile,
+        completion: {
+          ...profile.completion,
+          workingLocator: { segments: ['[role="article"]'] }
+        }
+      }
+    }), trace);
+
+    expect(proposal.profile.completion.workingLocator).toEqual({
+      segments: ['[role="article"][aria-busy="true"]']
+    });
+    expect(proposal.warnings).toContain(
+      'The working locator was narrowed to preserve the observed transient aria-busy state.'
+    );
+  });
+
+  it('rejects a working locator that is not active after submission and inactive at final', () => {
+    expect(() => parseBrowserProviderProposal(JSON.stringify({
+      profile: {
+        ...profile,
+        completion: {
+          ...profile.completion,
+          workingLocator: { segments: ['[role="article"]'] }
+        }
+      }
+    }), {
+      observedGeneration: true,
+      events: [
+        { phase: 'submitted', workingActive: false },
+        { phase: 'final', workingActive: false }
+      ]
+    })).toThrow('Working locator evidence is incomplete');
+  });
+
+  it('accepts the transient compound selector supported by the working trace', () => {
+    const trace = {
+      observedGeneration: true,
+      events: [
+        { phase: 'submitted', workingActive: false },
+        {
+          phase: 'working',
+          workingActive: true,
+          selectedElements: {
+            working: {
+              locator: { segments: ['[role="article"]'] },
+              selectors: ['[role="article"]', 'div[aria-busy="true"]'],
+              visible: true
+            }
+          }
+        },
+        { phase: 'final', workingActive: false }
+      ]
+    };
+
+    const proposal = parseBrowserProviderProposal(JSON.stringify({
+      profile: {
+        ...profile,
+        completion: {
+          ...profile.completion,
+          workingLocator: { segments: ['[role="article"][aria-busy="true"]'] }
+        }
+      }
+    }), trace);
+
+    expect(proposal.profile.completion.workingLocator?.segments).toEqual([
+      '[role="article"][aria-busy="true"]'
+    ]);
+  });
+
   it('sanitizes learning traces before they are sent to the model or persisted', () => {
     const trace = sanitizeBrowserProviderLearningTrace({
       observedGeneration: true,
