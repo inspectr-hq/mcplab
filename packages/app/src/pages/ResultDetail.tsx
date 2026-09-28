@@ -462,11 +462,16 @@ const ResultDetail = () => {
             scenario.agentId === requestedAgentId || scenario.agentName === requestedAgentId
         )
       : result.scenarios;
-    const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
-    const passCount = scenarios.reduce(
+    const scenarioRunCount = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+    const scenarioPassCount = scenarios.reduce(
       (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
       0
     );
+    const totalRuns = !requestedAgentId && result.outcomes ? result.totalRuns : scenarioRunCount;
+    const passCount =
+      !requestedAgentId && result.outcomes?.passed !== undefined
+        ? result.outcomes.passed
+        : scenarioPassCount;
     const totalToolCalls = scenarios.reduce(
       (sum, scenario) =>
         sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
@@ -509,6 +514,15 @@ const ResultDetail = () => {
   const checkCounts = tallyCheckCounts(
     filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
+  const runOutcomes = filteredScenarios.flatMap((scenario) => scenario.runs);
+  const incompleteRuns =
+    !requestedAgentId && result.outcomes?.incomplete !== undefined
+      ? result.outcomes.incomplete
+      : runOutcomes.filter((run) => run.outcome === 'incomplete').length;
+  const errorRuns =
+    !requestedAgentId && result.outcomes?.error !== undefined
+      ? result.outcomes.error
+      : runOutcomes.filter((run) => run.outcome === 'error').length;
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -988,9 +1002,14 @@ const ResultDetail = () => {
 
           <div className="grid gap-4 lg:grid-cols-4">
             <OutcomeCard
-              title="Runs Pass / Fail"
+              title="Runs Pass / Fail / Incomplete / Error"
               passed={filteredPassCount}
-              failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
+              failed={Math.max(
+                0,
+                filteredTotalRuns - filteredPassCount - incompleteRuns - errorRuns
+              )}
+              incomplete={incompleteRuns}
+              error={errorRuns}
             />
             <OutcomeCard
               title="Checks Pass / Fail / Not evaluated / Not executed"

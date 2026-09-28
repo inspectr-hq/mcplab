@@ -663,4 +663,67 @@ describe('RunEvaluation', () => {
 
     expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
   });
+
+  it('keeps an evaluation active when its remaining child needs OAuth', async () => {
+    sessionStorage.setItem(activeJobStorageKey, 'job-finished');
+    let onEvent:
+      | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
+      | undefined;
+    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+      if (jobId === 'job-finished') onEvent = callback;
+      return () => {};
+    });
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-1',
+          evaluationName: 'Mixed evaluation',
+          status: 'blocked_auth',
+          totalJobs: 2,
+          completedJobs: 1,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-finished',
+              status: 'completed',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            },
+            {
+              jobId: 'job-blocked',
+              status: 'blocked_auth',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(onEvent).toBeDefined());
+    await act(async () => {
+      onEvent?.({
+        type: 'completed',
+        ts: '2026-09-28T10:00:00.000Z',
+        payload: { runId: 'evaluation-1' }
+      });
+    });
+
+    await waitFor(() => {
+      expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith('job-blocked', expect.any(Function));
+    });
+    expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
+    expect(screen.queryByText(/Run completed\./)).toBeNull();
+  });
 });

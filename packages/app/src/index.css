@@ -30,6 +30,17 @@
   }
 }
 
+@container results-table (max-width: 48rem) {
+  .results-table-column-timestamp {
+    display: none;
+  }
+
+  .results-table-column-run-id {
+    width: 18rem;
+    max-width: 18rem;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;

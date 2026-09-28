@@ -118,6 +118,14 @@ describe('libraries-store test-case directory migration', () => {
 
   it('links a learned provider to a browser agent', () => {
     const librariesDir = makeTempLibrariesDir();
+    writeFileSync(
+      join(librariesDir, 'agents.yaml'),
+      'existing-browser:\n  type: browser\n  provider: existing\n  url: https://example.com\n  new_conversation_between_scenarios: false\n',
+      'utf8'
+    );
+    expect(readLibraries(librariesDir).agents['existing-browser']).toMatchObject({
+      newConversationBetweenScenarios: false
+    });
     const profile = readLibraries(librariesDir).browserProviders;
     const next = {
       id: 'claude-learned',
@@ -154,6 +162,9 @@ describe('libraries-store test-case directory migration', () => {
       provider: 'claude-learned'
     });
     expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
+    expect(readLibraries(librariesDir).agents['existing-browser']).toMatchObject({
+      newConversationBetweenScenarios: false
+    });
     const updated = writeBrowserProviderAndAgent(
       librariesDir,
       {

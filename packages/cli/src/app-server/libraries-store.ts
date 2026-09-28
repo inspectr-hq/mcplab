@@ -261,7 +261,22 @@ export function writeLibraries(
   mkdirSync(testCasesDir, { recursive: true });
 
   writeFileSync(join(root, 'servers.yaml'), `${stringifyYaml(libraries.servers ?? {})}\n`, 'utf8');
-  writeFileSync(join(root, 'agents.yaml'), `${stringifyYaml(libraries.agents ?? {})}\n`, 'utf8');
+  const agents = Object.fromEntries(
+    Object.entries(libraries.agents ?? {}).map(([id, agent]) => {
+      if (agent.type !== 'browser') return [id, agent];
+      const { newConversationBetweenScenarios, ...entry } = agent;
+      return [
+        id,
+        {
+          ...entry,
+          ...(typeof newConversationBetweenScenarios === 'boolean'
+            ? { new_conversation_between_scenarios: newConversationBetweenScenarios }
+            : {})
+        }
+      ];
+    })
+  );
+  writeFileSync(join(root, 'agents.yaml'), `${stringifyYaml(agents)}\n`, 'utf8');
   if (browserProviders) writeBrowserProviderProfiles(librariesDir, browserProviders);
 
   const desired = new Set<string>();

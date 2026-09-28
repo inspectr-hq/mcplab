@@ -146,4 +146,65 @@ describe('projectEvaluationJournal', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('keeps stopped children in the result after another child completes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-projection-late-completion-'));
+    try {
+      const result = (runId: string) => ({
+        metadata: {
+          run_id: runId,
+          timestamp: new Date().toISOString(),
+          config_hash: 'hash',
+          cli_version: 'test',
+          mcp_server_versions: {}
+        },
+        summary: {
+          total_scenarios: 1,
+          total_runs: 1,
+          pass_rate: 1,
+          avg_tool_calls_per_run: 0,
+          avg_tool_latency_ms: null,
+          outcomes: { passed: 1, failed: 0, incomplete: 0, error: 0 }
+        },
+        scenarios: []
+      });
+      const runDir = join(root, 'evaluation-1');
+      appendExecutionEvent(runDir, {
+        eventId: 'execution-a',
+        type: 'execution_completed',
+        ts: new Date().toISOString(),
+        executionId: 'job-a',
+        results: result('job-a')
+      });
+      appendExecutionEvent(runDir, {
+        eventId: 'stop-browser',
+        type: 'evaluation_stopped',
+        ts: new Date().toISOString(),
+        executionId: 'job-browser',
+        reason: 'Run stopped by user'
+      });
+      projectEvaluationJournal({ runsDir: root, evaluationRunId: 'evaluation-1' });
+      appendExecutionEvent(runDir, {
+        eventId: 'execution-b',
+        type: 'execution_completed',
+        ts: new Date().toISOString(),
+        executionId: 'job-b',
+        results: result('job-b')
+      });
+
+      const projected = projectEvaluationJournal({
+        runsDir: root,
+        evaluationRunId: 'evaluation-1'
+      });
+      expect(projected?.metadata.execution_status).toBe('stopped');
+      expect(projected?.summary.total_runs).toBe(3);
+      expect(projected?.summary.pass_rate).toBeCloseTo(2 / 3);
+      expect(projected?.summary.outcomes).toMatchObject({ passed: 2, error: 1 });
+      expect(
+        JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8')).metadata.execution_status
+      ).toBe('stopped');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

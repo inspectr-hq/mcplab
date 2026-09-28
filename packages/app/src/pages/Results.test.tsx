@@ -194,6 +194,8 @@ describe('Results', () => {
     );
 
     const runLink = await screen.findByText('run-with-mcp');
+    expect(screen.getByTestId('results-table')).toHaveClass('results-table-container');
+    expect(screen.getByRole('table')).toHaveClass('table-auto');
     const row = runLink.closest('tr');
     expect(row).not.toBeNull();
     const cells = within(row!).getAllByRole('cell');
@@ -213,26 +215,25 @@ describe('Results', () => {
     );
 
     expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
+    expect(runHeader).toHaveClass('results-table-column-run-id');
     expect(runHeader).toHaveClass('w-[25rem]', 'max-w-[25rem]');
-    expect(runHeader).not.toHaveClass('min-w-[25rem]');
-    expect(runCell).toHaveClass('w-[25rem]', 'max-w-[25rem]');
-    expect(runCell).not.toHaveClass('min-w-[25rem]');
+    expect(runCell).toHaveClass('results-table-column-run-id');
     expect(evaluationHeader).toHaveClass('min-w-0');
+    expect(evaluationHeader).toHaveClass('results-table-column-evaluation');
     expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
     expect(evaluationCell).toHaveClass('min-w-0');
     expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(timestampHeader).toHaveClass('results-table-column-timestamp');
     expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
     expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
     expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
-    expect(scenariosHeader).toHaveClass('hidden', 'md:table-cell');
-    expect(avgToolsHeader).toHaveClass('hidden', 'lg:table-cell');
+    expect(avgToolsHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
     expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
-    expect(toolTokensHeader).toHaveClass('hidden', 'xl:table-cell');
-    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass(
-      'w-[9rem]',
-      'min-w-[9rem]',
-      'max-w-[9rem]'
-    );
+    expect(passRateHeader).toHaveClass('results-table-column-pass-rate');
+    expect(scenariosHeader).toHaveClass('results-table-column-scenarios');
+    expect(avgToolsHeader).toHaveClass('results-table-column-avg-tools');
+    expect(toolTokensHeader).toHaveClass('results-table-column-tool-tokens');
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass('results-table-column-actions');
     expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);

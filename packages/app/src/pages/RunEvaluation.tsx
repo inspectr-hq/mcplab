@@ -711,11 +711,15 @@ const RunEvaluation = () => {
               queue.evaluations?.find((item) =>
                 item.jobs.some((job) => job.jobId === completedJobId)
               );
-            const nextJob = evaluation?.jobs.find(
-              (job) =>
-                job.jobId !== completedJobId &&
-                ['queued', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
-            );
+            const nextJob =
+              evaluation?.jobs.find(
+                (job) =>
+                  job.jobId !== completedJobId &&
+                  ['queued', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
+              ) ??
+              evaluation?.jobs.find(
+                (job) => job.jobId !== completedJobId && job.status === 'blocked_auth'
+              );
 
             if (nextJob && evaluation) {
               const completedLine = `[${ts}] Subtask completed. ${
@@ -730,7 +734,11 @@ const RunEvaluation = () => {
                     : prev
                 )
               );
-              setOauthRequired(null);
+              setOauthRequired(
+                nextJob.status === 'blocked_auth'
+                  ? { jobId: nextJob.jobId, servers: nextJob.requiredServers ?? [] }
+                  : null
+              );
               oauthConnectingRef.current = false;
               setRunning(true);
               setDone(false);

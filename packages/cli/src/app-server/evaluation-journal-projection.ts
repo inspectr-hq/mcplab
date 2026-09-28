@@ -27,7 +27,7 @@ export function projectEvaluationJournal(params: {
   );
   const stoppedExecutions = new Set(
     events
-      .filter((event) => event.type === 'execution_stopped')
+      .filter((event) => event.type === 'execution_stopped' || event.type === 'evaluation_stopped')
       .map((event) => event.executionId ?? event.eventId)
   );
   const executionTraceRecords = events
@@ -53,7 +53,8 @@ export function projectEvaluationJournal(params: {
     failedExecutions: failedExecutions.size,
     stoppedExecutions: stoppedExecutions.size
   });
-  if (params.executionStatus) results.metadata.execution_status = params.executionStatus;
+  if (params.executionStatus || stoppedExecutions.size > 0)
+    results.metadata.execution_status = 'stopped';
   persistAppRunArtifacts({
     runDir: join(params.runsDir, params.evaluationRunId),
     results,

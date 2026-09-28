@@ -192,6 +192,51 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('shows incomplete runs separately from failed runs in the outcome chart', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs.push({
+      ...result.scenarios[0].runs[0],
+      runIndex: 1,
+      passed: false,
+      outcome: 'incomplete',
+      failureReasons: []
+    });
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error')).toBeTruthy();
+    expect(screen.getByText('1 incomplete')).toBeTruthy();
+  });
+
+  it('includes a stopped child recorded only in aggregate outcomes', async () => {
+    const result = makeResult();
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    result.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 1 };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('1 error')).toBeTruthy();
+  });
+
   it('shows passed and failed check counts in the scenario table', async () => {
     const result = makeResult();
     result.scenarios[0].runs[0].checkResults = [
