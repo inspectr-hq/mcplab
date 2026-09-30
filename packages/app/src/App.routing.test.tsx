@@ -32,12 +32,12 @@ vi.mock('./pages/Agents', () => ({
   default: () => <output data-testid="agents-route">agents</output>
 }));
 
-vi.mock('./pages/AgentDetail', () => ({
-  default: () => {
-    const { agentName } = useParams<{ agentName?: string }>();
-    return <output data-testid="agent-detail-route">{agentName ?? ''}</output>;
-  }
-}));
+function MockAgentDetail() {
+  const { agentName } = useParams<{ agentName?: string }>();
+  return <output data-testid="agent-detail-route">{agentName ?? ''}</output>;
+}
+
+vi.mock('./pages/AgentDetail', () => ({ default: MockAgentDetail }));
 
 describe('App route tree compatibility', () => {
   beforeEach(() => {

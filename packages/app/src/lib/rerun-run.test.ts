@@ -43,7 +43,7 @@ describe('rerunWithSameSettings', () => {
       rerunAgents: ['agent-explicit-a', 'agent-explicit-b'],
       rerunScenarioIds: ['scn-1']
     };
-    (source.getResult as any).mockResolvedValue(detailed);
+    vi.mocked(source.getResult).mockResolvedValue(detailed);
 
     await rerunWithSameSettings(source, summary);
 

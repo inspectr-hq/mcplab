@@ -229,6 +229,15 @@ export function createRunQueueService(params: {
     job.roverLease = undefined;
   }
 
+  function settleUnfinishedRoverChildren(
+    job: RunJob,
+    status: 'completed' | 'error' | 'stopped'
+  ): void {
+    job.childProgress = job.childProgress?.map((child) =>
+      child.status === 'queued' || child.status === 'running' ? { ...child, status } : child
+    );
+  }
+
   function finalizeRoverJob(job: RunJob, disposition: RoverFinalDisposition): boolean {
     if (job.runParams.executionType !== 'rover') return false;
     state.activeJobIds.delete(job.id);
@@ -247,6 +256,14 @@ export function createRunQueueService(params: {
         payload: { message: `Rover assignment requeued: ${disposition.reason}` }
       });
     } else if (disposition.kind === 'completed') {
+      settleUnfinishedRoverChildren(
+        job,
+        disposition.payload?.outcome === 'error'
+          ? 'error'
+          : disposition.payload?.outcome === 'incomplete'
+            ? 'stopped'
+            : 'completed'
+      );
       job.status = 'completed';
       deps.addJobEvent(job, {
         type: 'completed',
@@ -255,11 +272,13 @@ export function createRunQueueService(params: {
       });
       closeJobClients(job);
     } else if (disposition.kind === 'stopped') {
+      settleUnfinishedRoverChildren(job, 'stopped');
       job.status = 'stopped';
       addStopEvent(job, disposition.reason);
       markEvaluationStopped(job, disposition.reason);
       closeJobClients(job);
     } else {
+      settleUnfinishedRoverChildren(job, 'error');
       job.status = 'error';
       deps.addJobEvent(job, {
         type: 'error',
@@ -276,7 +295,10 @@ export function createRunQueueService(params: {
   }
 
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
-    if (job.runParams.executionType === 'rover') clearRoverLease(job);
+    if (job.runParams.executionType === 'rover') {
+      clearRoverLease(job);
+      settleUnfinishedRoverChildren(job, 'stopped');
+    }
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
     state.admittingJobIds.delete(job.id);
@@ -988,7 +1010,6 @@ export function createRunQueueService(params: {
     },
     handleRoverMessage(message, provider, send, worker) {
       const messageJob = typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
-      appendRoverTraceEvent(messageJob, message, provider);
       const leaseControlMessage = [
         'assignment_accept',
         'assignment_reject',
@@ -1018,6 +1039,13 @@ export function createRunQueueService(params: {
           return null;
         }
       }
+      if (
+        messageJob?.roverLease &&
+        (message.leaseId !== messageJob.roverLease.leaseId ||
+          (worker && messageJob.roverLease.connectionId !== worker.connectionId))
+      )
+        return null;
+      appendRoverTraceEvent(messageJob, message, provider);
       if (
         (message.type === 'assignment_accept' ||
           message.type === 'assignment_reject' ||
@@ -1189,7 +1217,7 @@ export function createRunQueueService(params: {
               )
             }
           });
-          if (typeof message.error === 'string' && job.status === 'running') {
+          if (typeof message.error === 'string' && job.status === 'running' && !job.roverLease) {
             finalizeRoverJob(job, { kind: 'error', reason: message.error });
           }
           emit();

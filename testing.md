@@ -4,8 +4,8 @@ This guide covers automated verification and manual acceptance scenarios for the
 
 Repositories:
 
-- MCPLab: `/Users/tim.haselaars/Sites/mcp-evaluation`
-- Rover: `/Users/tim.haselaars/Sites/mcp-lab-rover`
+- MCPLab: `/path/to/mcplab`
+- Rover: `/path/to/mcp-lab-rover`
 
 Inspectr telemetry is intentionally excluded. Browser tool checks should remain `not_evaluated` until that separate phase is implemented.
 
@@ -16,14 +16,14 @@ Inspectr telemetry is intentionally excluded. Browser tool checks should remain 
 - Chrome 116 or newer for service-worker WebSocket support.
 - A local MCPLab configuration with at least one response-only scenario.
 - At least one Browser Agent in `mcplab/agents.yaml`.
-- A matching built-in or learned provider in `mcplab/browser-providers.yaml` when using a learned provider.
+- A matching built-in or learned provider in `mcplab/browser-providers/<provider-id>.yaml` when using a learned provider.
 
 Install dependencies if needed:
 
 ```bash
-cd /Users/tim.haselaars/Sites/mcp-evaluation
+cd /path/to/mcplab
 npm install
-cd /Users/tim.haselaars/Sites/mcp-lab-rover
+cd /path/to/mcp-lab-rover
 npm install
 ```
 
@@ -32,7 +32,7 @@ npm install
 ### MCPLab
 
 ```bash
-cd /Users/tim.haselaars/Sites/mcp-evaluation
+cd /path/to/mcplab
 npm test
 npm run build
 git diff --check
@@ -51,7 +51,7 @@ npm test -w @inspectr/mcplab-website
 ### Rover
 
 ```bash
-cd /Users/tim.haselaars/Sites/mcp-lab-rover
+cd /path/to/mcp-lab-rover
 npm test
 npm run typecheck
 npm run build
@@ -65,7 +65,7 @@ The production extension is written to Rover's `dist/` directory. Reload the unp
 1. Start MCPLab:
 
    ```bash
-   cd /Users/tim.haselaars/Sites/mcp-evaluation
+   cd /path/to/mcplab
    npm run app:dev
    ```
 
@@ -74,7 +74,7 @@ The production extension is written to Rover's `dist/` directory. Reload the unp
 2. Build Rover:
 
    ```bash
-   cd /Users/tim.haselaars/Sites/mcp-lab-rover
+   cd /path/to/mcp-lab-rover
    npm run build
    ```
 
@@ -130,7 +130,7 @@ Use this for a provider without a built-in adapter, such as M365 Copilot.
 6. Stop discovery after the response is complete.
 7. Review composer, send, response, completion, and new-conversation capabilities.
 8. Name the provider and choose **Save provider to MCPLab**.
-9. Verify `browser-providers.yaml` and the linked Browser Agent are created or updated.
+9. Verify `browser-providers/<provider-id>.yaml` and the linked Browser Agent are created or updated.
 10. Reload Rover and confirm the provider is available without learning again.
 
 Expected: the profile contains declarative locators and capabilities only. Re-learning updates the existing provider rather than creating a duplicate.

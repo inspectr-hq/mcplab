@@ -81,4 +81,37 @@ describe('browser provider profiles', () => {
       } as never)
     ).toThrow(/profile|script|composer/i);
   });
+
+  it('rejects new conversation navigation outside matched origins', () => {
+    const profile = {
+      schemaVersion: 1,
+      id: 'custom-chat',
+      name: 'Custom Chat',
+      match: { origins: ['https://example.com'] },
+      composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' },
+      submit: { action: 'enter' },
+      assistantMessages: { locator: { segments: ['.assistant'] } },
+      completion: { stabilityMs: 1000 },
+      learned: { sourceOrigin: 'https://example.com', confidence: {} }
+    };
+
+    expect(() =>
+      validateBrowserProviderProfile({
+        ...profile,
+        newConversation: { action: 'navigate', url: 'https://other.example/new' }
+      })
+    ).toThrow(/navigation URL/i);
+    expect(() =>
+      validateBrowserProviderProfile({
+        ...profile,
+        newConversation: { action: 'navigate', url: 'javascript:alert(1)' }
+      })
+    ).toThrow(/navigation URL/i);
+    expect(
+      validateBrowserProviderProfile({
+        ...profile,
+        newConversation: { action: 'navigate', url: '/new' }
+      }).newConversation?.url
+    ).toBe('/new');
+  });
 });

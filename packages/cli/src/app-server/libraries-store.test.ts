@@ -116,6 +116,22 @@ describe('libraries-store test-case directory migration', () => {
     ).not.toMatch(/created_at|updated_at/);
   });
 
+  it('reads legacy provider bundles until they are written as individual files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(
+      join(librariesDir, 'browser-providers.yaml'),
+      `trendminer:\n  schema_version: 1\n  name: TrendMiner\n  match:\n    origins:\n      - https://example.com\n  composer:\n    locator:\n      segments: [textarea]\n    input_mode: textarea\n  submit:\n    action: enter\n  assistant_messages:\n    locator:\n      segments: [.assistant]\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://example.com\n    created_at: 2026-09-10T00:00:00.000Z\n    updated_at: 2026-09-11T00:00:00.000Z\n    confidence: {}\n`,
+      'utf8'
+    );
+
+    const profiles = readLibraries(librariesDir).browserProviders;
+    expect(profiles.trendminer.name).toBe('TrendMiner');
+    expect(profiles.trendminer.learned.createdAt).toBe('2026-09-10T00:00:00.000Z');
+    writeBrowserProviderProfiles(librariesDir, profiles);
+    expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
+    expect(existsSync(join(librariesDir, 'browser-providers', 'trendminer.yaml'))).toBe(true);
+  });
+
   it('links a learned provider to a browser agent', () => {
     const librariesDir = makeTempLibrariesDir();
     writeFileSync(

@@ -421,7 +421,7 @@ describe('RunEvaluation', () => {
       updatedAt: '2024-01-01T00:00:00.000Z',
       sourcePath: '/path/to/test.yaml'
     };
-    let onEvent: ((event: any) => void) | null = null;
+    let onEvent: ((event: unknown) => void) | null = null;
     sourceMock.startRun.mockResolvedValueOnce({ jobId: 'job-1' });
     sourceMock.subscribeRunJob.mockImplementationOnce((_jobId, callback) => {
       onEvent = callback;

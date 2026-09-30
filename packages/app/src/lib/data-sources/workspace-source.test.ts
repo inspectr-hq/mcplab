@@ -50,7 +50,7 @@ describe('workspaceSource.listResults', () => {
         total_count: 3,
         next_offset: 2,
         prev_offset: null
-      } as any)
+      } as Awaited<ReturnType<typeof workspaceApiClient.listRuns>>)
       .mockResolvedValueOnce({
         object: 'list',
         url: '/api/runs?limit=2&offset=2',
@@ -71,7 +71,7 @@ describe('workspaceSource.listResults', () => {
         total_count: 3,
         next_offset: null,
         prev_offset: 0
-      } as any);
+      } as Awaited<ReturnType<typeof workspaceApiClient.listRuns>>);
 
     vi.mocked(workspaceApiClient.getRun).mockImplementation(async (runId: string) => ({
       runId,

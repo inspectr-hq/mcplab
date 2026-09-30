@@ -157,8 +157,17 @@ export function validateBrowserProviderProfile(value: unknown): BrowserProviderP
       throw new Error('Invalid browser provider new conversation action.');
     if (newConversation.action === 'click' && !newConversation.locator)
       throw new Error('Browser provider new conversation locator is required.');
-    if (newConversation.action === 'navigate' && typeof newConversation.url !== 'string')
-      throw new Error('Browser provider navigation URL is required.');
+    if (newConversation.action === 'navigate') {
+      const navigationUrl = stringValue(newConversation.url, 'navigation URL');
+      let navigationOrigin: string;
+      try {
+        navigationOrigin = new URL(navigationUrl, origins[0]).origin;
+      } catch {
+        throw new Error('Invalid browser provider navigation URL.');
+      }
+      if (!origins.includes(navigationOrigin))
+        throw new Error('Browser provider navigation URL must match a provider origin.');
+    }
     if (
       newConversation.confirmation !== undefined &&
       newConversation.confirmation !== 'context-change'
@@ -211,6 +220,8 @@ export function parseBrowserProviderProfiles(
       newConversation: profile.new_conversation,
       learned: {
         sourceOrigin: learned.source_origin,
+        createdAt: learned.created_at,
+        updatedAt: learned.updated_at,
         confidence: learned.confidence
       }
     });

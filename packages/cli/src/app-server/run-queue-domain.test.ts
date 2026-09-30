@@ -16,6 +16,26 @@ function roverParams(provider: 'claude' | 'trendminer' = 'claude') {
 }
 
 describe('Rover run queue domain', () => {
+  it('stops unfinished Rover children when the job is stopped', () => {
+    const service = createRunQueueServiceForTest();
+    const queued = service.enqueueRun({
+      ...roverParams(),
+      evaluationRunId: 'evaluation-stop-children',
+      roverScenarios: [
+        { id: 's1', prompt: 'first', agent: 'claude', servers: [] },
+        { id: 's2', prompt: 'second', agent: 'claude', servers: [] }
+      ]
+    });
+
+    service.stopJob(queued.jobId);
+
+    expect(service.jobs.get(queued.jobId)?.childProgress?.map((child) => child.status)).toEqual([
+      'stopped',
+      'stopped'
+    ]);
+    expect(service.getQueueState().evaluations?.[0]?.status).toBe('stopped');
+  });
+
   it('stops every unfinished child when stopping an evaluation run', () => {
     const first = createQueuedJob('/tmp/eval.yaml', 'job-1');
     const second = createQueuedJob('/tmp/eval.yaml', 'job-2');
@@ -670,6 +690,70 @@ describe('Rover run queue domain', () => {
       send
     );
     expect(service.jobs.get(queued.jobId)?.status).toBe('error');
+  });
+
+  it('keeps a Rover assignment running after one scenario reports an error', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun({
+      ...roverParams(),
+      roverScenarios: [
+        { id: 's1', prompt: 'first', agent: 'claude', servers: [] },
+        { id: 's2', prompt: 'second', agent: 'claude', servers: [] }
+      ]
+    });
+    service.assignRoverJob('claude', send, {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    });
+    const assignment = send.mock.calls[0]?.[0] as { leaseId: string };
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId: queued.jobId, leaseId: assignment.leaseId },
+      'claude',
+      send
+    );
+
+    service.handleRoverMessage(
+      {
+        type: 'progress',
+        jobId: queued.jobId,
+        leaseId: assignment.leaseId,
+        completed: 1,
+        total: 2,
+        error: 'First scenario failed'
+      },
+      'claude',
+      send
+    );
+
+    expect(service.jobs.get(queued.jobId)?.status).toBe('running');
+    expect(service.state.activeJobIds.has(queued.jobId)).toBe(true);
+  });
+
+  it('ignores job updates that omit the active lease ID', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    });
+
+    service.handleRoverMessage(
+      { type: 'scenario_status', jobId: queued.jobId, scenarioId: 's1', status: 'completed' },
+      'claude',
+      send
+    );
+    service.handleRoverMessage(
+      { type: 'complete', jobId: queued.jobId, outcome: 'passed' },
+      'claude',
+      send
+    );
+
+    expect(service.jobs.get(queued.jobId)?.status).toBe('running');
+    expect(service.jobs.get(queued.jobId)?.childProgress?.[0]?.status).toBe('queued');
   });
 
   it('tracks scenario-level Rover status updates', () => {
