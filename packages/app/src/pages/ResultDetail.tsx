@@ -548,8 +548,7 @@ const ResultDetail = () => {
       return next;
     });
   };
-  const isRunSectionOpen = (key: string) => {
-    const defaultOpen = !key.endsWith(':conversation');
+  const isRunSectionOpen = (key: string, defaultOpen = !key.endsWith(':conversation')) => {
     return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
   };
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
@@ -1524,7 +1523,8 @@ const ResultDetail = () => {
                                               sc.agentName,
                                               run.runIndex,
                                               'extracts'
-                                            )
+                                            ),
+                                            Object.keys(run.extractedValues ?? {}).length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
@@ -1552,7 +1552,8 @@ const ResultDetail = () => {
                                                           sc.agentName,
                                                           run.runIndex,
                                                           'extracts'
-                                                        )
+                                                        ),
+                                                        Object.keys(run.extractedValues ?? {}).length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''
@@ -1607,7 +1608,8 @@ const ResultDetail = () => {
                                               sc.agentName,
                                               run.runIndex,
                                               'tools'
-                                            )
+                                            ),
+                                            run.toolCalls.length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
@@ -1635,7 +1637,8 @@ const ResultDetail = () => {
                                                           sc.agentName,
                                                           run.runIndex,
                                                           'tools'
-                                                        )
+                                                        ),
+                                                        run.toolCalls.length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''

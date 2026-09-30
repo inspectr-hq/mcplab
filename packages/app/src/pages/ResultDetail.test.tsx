@@ -173,6 +173,58 @@ describe('ResultDetail conversation toggle', () => {
     mockResultAssistantState.resetAssistantSession.mockClear();
   });
 
+  it('starts empty extracted values and tool call sequence collapsed, but lets them open', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].toolCalls = [];
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    const extracts = screen.getByRole('button', { name: /Extracted values 0 total/i });
+    const tools = screen.getByRole('button', { name: /Tool call sequence 0 total/i });
+    expect(extracts).toHaveAttribute('aria-expanded', 'false');
+    expect(tools).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(extracts);
+    fireEvent.click(tools);
+    expect(extracts).toHaveAttribute('aria-expanded', 'true');
+    expect(tools).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('starts populated extracted values and tool call sequence expanded', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].extractedValues = { tag: 'TM5-BP2' };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByRole('button', { name: /Extracted values 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /Tool call sequence 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+  });
+
   it('shows run note placeholder for historical runs without note', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
@@ -378,6 +430,7 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
+    fireEvent.click(screen.getByRole('button', { name: /Tool call sequence 0 total/i }));
 
     await waitFor(() => {
       expect(screen.getByText('No tool calls captured for this run.')).toBeInTheDocument();
