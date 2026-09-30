@@ -104,12 +104,21 @@ export function listLiveTestCases(scenarios: Scenario[]): LiveTestCatalogItem[] 
 export interface LiveTestServiceOptions {
   runsDir: string;
   cliVersion: string;
-  readScenarios: () => Scenario[];
+  readScenarios: (input?: LiveTestStartInput) => Scenario[];
   persist: (params: PersistEvaluationArtifactsParams) => void;
   getEvaluationJudge?: () => { name: string; agent: AgentConfig } | undefined;
   ttlMs?: number;
   now?: () => Date;
   appendJournalEvent?: typeof appendExecutionEvent;
+}
+
+interface LiveTestStartInput {
+  testCaseId: string;
+  client: string;
+  evaluationRunId?: string;
+  configPath?: string;
+  configName?: string;
+  agentName?: string;
 }
 
 export class LiveTestService {
@@ -126,17 +135,10 @@ export class LiveTestService {
     return listLiveTestCases(this.options.readScenarios());
   }
 
-  start(input: {
-    testCaseId: string;
-    client: string;
-    evaluationRunId?: string;
-    configPath?: string;
-    configName?: string;
-    agentName?: string;
-  }): LiveTestSession {
+  start(input: LiveTestStartInput): LiveTestSession {
     this.cleanup();
     const scenario = this.options
-      .readScenarios()
+      .readScenarios(input)
       .find((candidate) => candidate.id === input.testCaseId);
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
     if (scenario.attachments?.length) {

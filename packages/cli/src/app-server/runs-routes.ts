@@ -497,6 +497,10 @@ export async function handleRunsRoutes(params: {
       (entry): entry is { name: string; agent: BrowserAgentConfig } =>
         entry.agent?.type === 'browser'
     );
+    if (browserAgents.length > 0 && runsPerScenario !== 1) {
+      asJson(res, 400, { error: 'Browser agents support one run per scenario.' });
+      return true;
+    }
     const llmAgentNames = selectedAgents
       .filter((entry) => entry.agent?.type !== 'browser')
       .map((entry) => entry.name);

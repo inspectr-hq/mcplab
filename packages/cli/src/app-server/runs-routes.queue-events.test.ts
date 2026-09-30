@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
@@ -7,6 +8,51 @@ import {
   createRunQueueState,
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
+
+describe('browser agent variance', () => {
+  it('rejects multiple runs before queueing a browser agent', async () => {
+    const fixture = createOauthEvalFixture();
+    writeFileSync(
+      fixture.configPath,
+      'name: Browser variance\nservers: []\nagents:\n  - id: browser\n    type: browser\n    provider: claude\n    url: https://claude.ai\nscenarios:\n  - id: s1\n    prompt: hello\n'
+    );
+    const response: { status?: number; body?: unknown } = {};
+    const deps = makeRunsRouteDeps({
+      parseBody: async () => ({
+        configPath: fixture.configPath,
+        runsPerScenario: 2,
+        agents: ['browser']
+      }),
+      asJson: (_res: unknown, status: number, body: unknown) => {
+        response.status = status;
+        response.body = body;
+      },
+      readLibraries: () => ({ agents: {}, servers: {}, browserProviders: {} }),
+      resolveRunSelectedAgents: () => ['browser']
+    });
+    const service = createRunQueueServiceForTest({ settings: fixture, deps });
+    try {
+      await handleRunsRoutes({
+        req: { url: '/api/runs', headers: {} } as never,
+        res: {} as never,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: { ...fixture, workspaceRoot: fixture.root } as never,
+        runQueueService: service,
+        oauthSessionManager: {} as never,
+        deps: deps as never
+      });
+
+      expect(response).toEqual({
+        status: 400,
+        body: { error: 'Browser agents support one run per scenario.' }
+      });
+      expect(service.jobs.size).toBe(0);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+});
 
 describe('run queue SSE endpoint', () => {
   it('streams initial queue_event and registers client', async () => {

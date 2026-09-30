@@ -184,6 +184,7 @@ const RunEvaluation = () => {
       ),
     [availableAgents, selectedAgentIds]
   );
+  const runsPerScenario = selectedBrowserAgents.length > 0 ? 1 : Number(varianceRuns);
   const agentGroups = useMemo(
     () => [
       { label: 'LLM Agents', agents: availableAgents.filter((agent) => agent.type !== 'browser') },
@@ -356,9 +357,9 @@ const RunEvaluation = () => {
       `[${nowTime()}] Starting evaluation run...`,
       `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents
         .map((a) => a.name || a.id)
-        .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
-        varianceRuns
-      )}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
+        .join(
+          ', '
+        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
         effectiveScenarioServerSummary || '(none)'
       }`
@@ -367,7 +368,7 @@ const RunEvaluation = () => {
     try {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
-        runsPerScenario: Number(varianceRuns),
+        runsPerScenario,
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
@@ -865,14 +866,21 @@ const RunEvaluation = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Variance Runs</Label>
+              <Label htmlFor="variance-runs">Variance Runs</Label>
               <Input
+                id="variance-runs"
                 type="number"
                 min="1"
                 max="10"
-                value={varianceRuns}
+                value={selectedBrowserAgents.length > 0 ? '1' : varianceRuns}
                 onChange={(e) => setVarianceRuns(e.target.value)}
+                disabled={selectedBrowserAgents.length > 0}
               />
+              {selectedBrowserAgents.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Browser agents support one run per scenario.
+                </p>
+              )}
             </div>
           </div>
           <div className="space-y-2">

@@ -176,7 +176,20 @@ export async function startAppServer(options: AppServerOptions) {
   const liveTestService = new LiveTestService({
     runsDir: settings.runsDir,
     cliVersion: pkgVersion,
-    readScenarios: () => readLibraries(settings.librariesDir).scenarios,
+    readScenarios: (input) => {
+      if (!input?.evaluationRunId) return readLibraries(settings.librariesDir).scenarios;
+      for (const job of jobs.values()) {
+        const run = job.runParams;
+        if (
+          run.executionType === 'rover' &&
+          run.evaluationRunId === input.evaluationRunId &&
+          run.roverAgent.provider === input.client &&
+          run.roverAgent.name === input.agentName
+        )
+          return run.roverScenarios ?? [];
+      }
+      return [];
+    },
     persist: persistAppRunArtifacts,
     getEvaluationJudge: () => {
       const libraries = readLibraries(settings.librariesDir);

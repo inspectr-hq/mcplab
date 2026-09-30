@@ -379,6 +379,14 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Browser Agents')).toBeInTheDocument();
       expect(screen.getByText('Conversation behavior')).toBeInTheDocument();
     });
+    const varianceInput = screen.getByRole('spinbutton', { name: 'Variance Runs' });
+    const browserCheckbox = screen.getByRole('checkbox', { name: 'Browser Agent' });
+    fireEvent.click(browserCheckbox);
+    expect(varianceInput).toBeEnabled();
+    fireEvent.change(varianceInput, { target: { value: '2' } });
+    fireEvent.click(browserCheckbox);
+    expect(varianceInput).toBeDisabled();
+    expect(varianceInput).toHaveValue(1);
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
     fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
@@ -388,6 +396,7 @@ describe('RunEvaluation', () => {
     expect(sourceMock.startRun).toHaveBeenCalledWith(
       expect.objectContaining({
         agents: ['agent-llm', 'agent-browser'],
+        runsPerScenario: 1,
         newConversationBetweenScenarios: true
       })
     );

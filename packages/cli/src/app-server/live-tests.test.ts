@@ -37,6 +37,54 @@ describe('Live Test catalog', () => {
 });
 
 describe('LiveTestService', () => {
+  it('uses the queued scenario snapshot for managed runs instead of a matching library ID', () => {
+    const libraryScenario = {
+      id: 'shared-id',
+      servers: [],
+      prompt: 'Library prompt',
+      eval: { response_assertions: [{ type: 'contains' as const, value: 'library' }] }
+    };
+    const queuedScenario = {
+      id: 'shared-id',
+      servers: [],
+      prompt: 'Queued prompt',
+      eval: { response_assertions: [{ type: 'contains' as const, value: 'queued' }] }
+    };
+    const inlineScenario = { id: 'inline-only', servers: [], prompt: 'Inline prompt' };
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: (run) =>
+        run?.evaluationRunId
+          ? run.evaluationRunId === 'evaluation-1'
+            ? [queuedScenario, inlineScenario]
+            : []
+          : [libraryScenario],
+      persist: () => undefined
+    });
+
+    const managed = service.start({
+      testCaseId: 'shared-id',
+      client: 'claude',
+      evaluationRunId: 'evaluation-1',
+      agentName: 'claude-browser'
+    });
+    expect(managed.testCase).toEqual(queuedScenario);
+    expect(service.start({ testCaseId: 'shared-id', client: 'claude' }).testCase).toEqual(
+      libraryScenario
+    );
+    expect(
+      service.start({
+        testCaseId: 'inline-only',
+        client: 'claude',
+        evaluationRunId: 'evaluation-1'
+      }).testCase
+    ).toEqual(inlineScenario);
+    expect(() =>
+      service.start({ testCaseId: 'shared-id', client: 'claude', evaluationRunId: 'unknown' })
+    ).toThrow('Test case not found');
+  });
+
   it('freezes a selected test case and completes idempotently', async () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-'));
     let persisted = 0;
