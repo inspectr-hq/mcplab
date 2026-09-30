@@ -116,7 +116,7 @@ describe('libraries-store test-case directory migration', () => {
     ).not.toMatch(/created_at|updated_at/);
   });
 
-  it('reads legacy provider bundles until they are written as individual files', () => {
+  it('ignores legacy provider bundles', () => {
     const librariesDir = makeTempLibrariesDir();
     writeFileSync(
       join(librariesDir, 'browser-providers.yaml'),
@@ -125,11 +125,8 @@ describe('libraries-store test-case directory migration', () => {
     );
 
     const profiles = readLibraries(librariesDir).browserProviders;
-    expect(profiles.trendminer.name).toBe('TrendMiner');
-    expect(profiles.trendminer.learned.createdAt).toBe('2026-09-10T00:00:00.000Z');
-    writeBrowserProviderProfiles(librariesDir, profiles);
-    expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
-    expect(existsSync(join(librariesDir, 'browser-providers', 'trendminer.yaml'))).toBe(true);
+    expect(profiles).toEqual({});
+    expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
   });
 
   it('links a learned provider to a browser agent', () => {

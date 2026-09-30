@@ -67,11 +67,7 @@ export function readLibraries(librariesDir: string): {
 
 function readBrowserProviderProfiles(root: string): Record<string, BrowserProviderProfile> {
   const directory = join(root, BROWSER_PROVIDERS_DIR_NAME);
-  if (!existsSync(directory)) {
-    return parseBrowserProviderProfiles(
-      readYamlFile<Record<string, unknown>>(join(root, 'browser-providers.yaml'), {})
-    );
-  }
+  if (!existsSync(directory)) return {};
   const profiles: Record<string, BrowserProviderProfile> = {};
   const files = readdirSync(directory)
     .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
