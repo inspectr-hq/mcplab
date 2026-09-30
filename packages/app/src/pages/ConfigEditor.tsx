@@ -1128,7 +1128,7 @@ const ConfigEditor = () => {
                           </div>
                         </div>
                         {entry.kind === 'inline' &&
-                          (entry.agent.type ?? 'llm') === 'llm' &&
+                          entry.agent.type !== 'browser' &&
                           inlineExpanded && (
                             <div className="border-t px-3 py-3 space-y-3">
                               <div className="grid gap-3 sm:grid-cols-2">
@@ -1153,7 +1153,7 @@ const ConfigEditor = () => {
                                     value={entry.agent.provider}
                                     onValueChange={(value) => {
                                       const current = entry.agent;
-                                      if (current.type !== 'llm') return;
+                                      if (current.type === 'browser') return;
                                       const nextEntries = [...agentEntries];
                                       nextEntries[index] = {
                                         kind: 'inline',
@@ -1231,7 +1231,7 @@ const ConfigEditor = () => {
                                   value={resolveAgentTemperature(entry.agent.temperature)}
                                   onChange={(e) => {
                                     const current = entry.agent;
-                                    if (current.type !== 'llm') return;
+                                    if (current.type === 'browser') return;
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
                                       kind: 'inline',
@@ -1349,7 +1349,7 @@ const ConfigEditor = () => {
                             <Badge variant="outline" className="text-xs font-mono">
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
-                            {(row.agent.type ?? 'llm') === 'llm' && (
+                            {row.agent.type !== 'browser' && (
                               <Badge variant="outline" className="text-xs font-mono">
                                 temperature: {resolveAgentTemperature(row.agent.temperature)}
                               </Badge>

@@ -4,6 +4,7 @@ import type {
   ConversationItem,
   AgentEntry,
   CheckCounts,
+  CheckResult,
   EvalConfig,
   EvalResult,
   EvalRule,
@@ -27,6 +28,7 @@ import {
 } from '../../../../core/src/attachments';
 import type {
   AgentConfig as CoreAgentConfig,
+  CheckResult as CoreCheckResult,
   ScenarioAttachment,
   SourceScenarioAttachment
 } from '@inspectr/mcplab-core';
@@ -1341,6 +1343,13 @@ function countChecks(runs: ScenarioRun[]): CheckCounts {
   return tallyCheckCounts(runs.flatMap((run) => run.checkResults ?? []));
 }
 
+function fromCoreCheckResults(checkResults?: CoreCheckResult[]): CheckResult[] | undefined {
+  return checkResults?.map((check) => ({
+    ...check,
+    status: check.status === 'not_applicable' ? 'not_evaluated' : check.status
+  }));
+}
+
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceRecords: ScenarioRunTraceRecord[] = [],
@@ -1379,9 +1388,7 @@ export function fromCoreResultsJson(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
         ),
         failureReasons: run.failures,
-        checkResults: run.check_results?.map((check) =>
-          check.status === 'not_applicable' ? { ...check, status: 'not_evaluated' } : check
-        )
+        checkResults: fromCoreCheckResults(run.check_results)
       };
     });
 
@@ -1510,6 +1517,6 @@ export function fromCoreScenarioRunPreview(
       Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
     ),
     failureReasons: run.failures,
-    checkResults: run.check_results
+    checkResults: fromCoreCheckResults(run.check_results)
   };
 }

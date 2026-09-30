@@ -53,6 +53,41 @@ describe('browser provider learning proposals', () => {
     expect(chatWithJsonRetryMock).toHaveBeenCalledOnce();
   });
 
+  it('preserves confirmed New Chat when a proposal omits confirmation', async () => {
+    const captured = {
+      ...profile,
+      newConversation: {
+        action: 'click' as const,
+        locator: { segments: ['button.new-chat'] },
+        confirmation: 'context-change' as const
+      }
+    };
+    const proposed = {
+      ...profile,
+      newConversation: {
+        action: 'click' as const,
+        locator: { segments: ['button[aria-label="New chat"]'] }
+      }
+    };
+    chatWithJsonRetryMock.mockResolvedValue({
+      profile: proposed,
+      rationale: [],
+      warnings: [],
+      validated: true
+    });
+
+    const result = await proposeBrowserProviderProfile({
+      agent: { type: 'llm', provider: 'openai', model: 'gpt-test' } as never,
+      profile: captured,
+      trace: { events: [] }
+    });
+
+    expect(result.profile.newConversation).toMatchObject({
+      locator: { segments: ['button[aria-label="New chat"]'] },
+      confirmation: 'context-change'
+    });
+  });
+
   it('rejects a proposal that is not a valid browser profile', async () => {
     expect(() => parseBrowserProviderProposal(JSON.stringify({ profile: { id: 'bad' } }))).toThrow(
       'Unsupported browser provider profile schema.'

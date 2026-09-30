@@ -3,6 +3,7 @@ import {
   fromCoreConfigYaml,
   fromCoreLibraries,
   fromCoreResultsJson,
+  fromCoreScenarioRunPreview,
   toCoreConfigYaml,
   toCoreLibraries
 } from './adapters';
@@ -675,7 +676,7 @@ describe('fromCoreResultsJson conversation mapping', () => {
 describe('library mapping', () => {
   it('preserves browser provider profiles from the workspace API', () => {
     const profile = {
-      schemaVersion: 1,
+      schemaVersion: 1 as const,
       id: 'custom-provider',
       name: 'Custom Provider',
       match: { origins: ['https://custom.example'] },
@@ -703,6 +704,17 @@ describe('library mapping', () => {
 });
 
 describe('fromCoreResultsJson check counts', () => {
+  it('normalizes legacy not_applicable checks in results and previews', () => {
+    const results = baseResults();
+    const run = results.scenarios[0]!.runs[0]!;
+    run.check_results = [{ type: 'agent_check', label: 'browser check', status: 'not_applicable' }];
+
+    expect(fromCoreResultsJson(results).scenarios[0]?.runs[0]?.checkResults?.[0]?.status).toBe(
+      'not_evaluated'
+    );
+    expect(fromCoreScenarioRunPreview(run).checkResults?.[0]?.status).toBe('not_evaluated');
+  });
+
   it('preserves an incomplete run outcome', () => {
     const results = baseResults();
     results.scenarios[0]!.runs[0]!.outcome = 'incomplete';
@@ -1916,6 +1928,7 @@ describe('config adapters round-trip', () => {
     const libraries = toCoreLibraries({
       servers: [],
       agents: [],
+      browserProviders: {},
       scenarios: [
         {
           id: 'scn-lib-extract',

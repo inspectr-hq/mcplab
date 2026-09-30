@@ -333,5 +333,11 @@ export async function proposeBrowserProviderProfile(params: {
     toolCallFallbackText: () => 'Return the validated browser provider profile JSON.'
   });
   if ('type' in response) throw new Error('The provider proposal model returned a tool request.');
+  if (
+    params.profile.newConversation?.confirmation === 'context-change' &&
+    response.profile.newConversation?.action === 'click'
+  ) {
+    response.profile.newConversation.confirmation = 'context-change';
+  }
   return response;
 }
