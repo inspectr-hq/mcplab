@@ -416,7 +416,8 @@ export async function executeRunJob(params: {
     });
     const traceRecords = getScenarioRunTraceRecords(
       results.metadata.run_id,
-      settings.runsDir
+      settings.runsDir,
+      { requireResults: false }
     ) as ScenarioRunTraceRecord[];
     if (job.runParams.evaluationRunId) {
       rmSync(runDir, { recursive: true, force: true });

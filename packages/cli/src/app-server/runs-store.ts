@@ -282,9 +282,13 @@ export function selectScenarioIds(config: EvalConfig, requestedScenarioIds?: str
 
 export function getScenarioRunTraceRecords(
   runId: string,
-  runsDir: string
+  runsDir: string,
+  options?: { requireResults?: boolean }
 ): ScenarioRunTraceRecord[] {
-  getRunResults(runId, runsDir);
+  if (options?.requireResults !== false) getRunResults(runId, runsDir);
+  else if (!runId.trim() || runId.includes('/') || runId.includes('\\')) {
+    throw new RunStoreError(400, 'Invalid run id');
+  }
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const tracePath = ensureInsideRoot(runsDir, join(runDir, 'trace.jsonl'));
   if (!existsSync(tracePath)) return [];

@@ -1444,11 +1444,13 @@ const RunEvaluation = () => {
                           : 'Details'}
                       </Button>
                       {evaluation.jobs.length > 0 &&
-                        evaluation.jobs.every((job) =>
-                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(
-                            job.status
-                          )
-                        ) && (
+                        (evaluation.jobs.every((job) =>
+                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(job.status)
+                        ) ||
+                          (evaluation.status === 'stopped' &&
+                            evaluation.jobs.every((job) =>
+                              ['completed', 'error', 'stopped'].includes(job.status)
+                            ))) && (
                           <Button
                             variant="ghost"
                             size="sm"

@@ -25,6 +25,7 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
         subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
+        removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
         startRun: vi.fn()
       }
     };
@@ -77,6 +78,7 @@ beforeEach(() => {
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
   sourceMock.stopRun.mockReset();
   sourceMock.removeQueuedRun.mockReset();
+  sourceMock.removeEvaluationRun.mockClear();
   sessionStorage.removeItem(activeJobStorageKey);
   sourceMock.getRunQueue.mockResolvedValue({
     active: null,
@@ -630,6 +632,49 @@ describe('RunEvaluation', () => {
       (node) => node.textContent?.trim() === 'running'
     );
     expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
+  });
+
+  it('offers removal when a stopped LLM child leaves its job completed', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-stopped',
+          evaluationName: 'Stopped LLM evaluation',
+          status: 'stopped',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 1,
+          stoppedJobs: 1,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'llm-completed',
+              status: 'completed',
+              executionType: 'mcplab',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
+              childProgress: [
+                { scenarioId: 'scenario-1', agentName: 'LLM', completed: 0, total: 1, status: 'stopped' }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove stopped run from queue' }));
+    expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
   });
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {

@@ -725,7 +725,13 @@ export function createRunQueueService(params: {
         (job) => job.runParams.evaluationRunId === evaluationRunId
       );
       if (jobsForEvaluation.length === 0) return null;
+      const stoppedEvaluation =
+        buildQueueState(jobs, state).evaluations?.find(
+          (evaluation) => evaluation.evaluationRunId === evaluationRunId
+        )?.status === 'stopped' &&
+        jobsForEvaluation.every((job) => ['completed', 'error', 'stopped'].includes(job.status));
       if (
+        !stoppedEvaluation &&
         jobsForEvaluation.some(
           (job) =>
             job.status !== 'queued' &&
@@ -741,7 +747,7 @@ export function createRunQueueService(params: {
       }
       let removed = 0;
       for (const job of jobsForEvaluation) {
-        if (job.status === 'stopped') {
+        if (stoppedEvaluation || job.status === 'stopped') {
           jobs.delete(job.id);
           removed += 1;
         } else if (this.removeQueuedJob(job.id, options)) {

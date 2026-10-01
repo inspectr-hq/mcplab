@@ -2,7 +2,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { getRunResults, listRuns, RunNotFoundError, RunValidationError } from './runs-store.js';
+import {
+  getRunResults,
+  getScenarioRunTraceRecords,
+  listRuns,
+  RunNotFoundError,
+  RunValidationError
+} from './runs-store.js';
 
 function writeRun(runsDir: string, runId: string, timestamp: string, evaluationRunId?: string) {
   const runDir = join(runsDir, runId);
@@ -45,6 +51,30 @@ function writeRun(runsDir: string, runId: string, timestamp: string, evaluationR
 }
 
 describe('listRuns filters', () => {
+  it('reads grouped execution traces without execution results.json', () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-grouped-trace-'));
+    try {
+      const runDir = join(runsDir, 'execution-1');
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(
+        join(runDir, 'trace.jsonl'),
+        `${JSON.stringify({
+          type: 'scenario_run',
+          trace_version: 3,
+          scenario_id: 'scenario-1',
+          agent: 'llm',
+          run_index: 0
+        })}\n`,
+        'utf8'
+      );
+
+      expect(
+        getScenarioRunTraceRecords('execution-1', runsDir, { requireResults: false })
+      ).toHaveLength(1);
+    } finally {
+      rmSync(runsDir, { recursive: true, force: true });
+    }
+  });
   it('uses the directory name as the canonical run id', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');

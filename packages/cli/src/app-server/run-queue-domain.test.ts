@@ -119,6 +119,23 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.has(stopped.id)).toBe(false);
   });
 
+  it('removes a stopped evaluation whose LLM job completed with only stopped children', () => {
+    const job = createQueuedJob('/tmp/eval.yaml', 'job-completed');
+    job.status = 'completed';
+    job.runParams.evaluationRunId = 'evaluation-stopped-child';
+    job.childProgress = [
+      { scenarioId: 'scenario-1', agentName: 'LLM', completed: 0, total: 1, status: 'stopped' }
+    ];
+    const service = createRunQueueServiceForTest({ jobs: new Map([[job.id, job]]) });
+
+    expect(service.getQueueState().evaluations?.[0]?.status).toBe('stopped');
+    expect(service.removeEvaluationRun('evaluation-stopped-child')).toMatchObject({
+      ok: true,
+      removed: 1
+    });
+    expect(service.jobs.has(job.id)).toBe(false);
+  });
+
   it('removes a mixed completed and stopped evaluation after an explicit stop', () => {
     const completed = createQueuedJob('/tmp/eval.yaml', 'job-completed');
     const stopped = createQueuedJob('/tmp/eval.yaml', 'job-stopped');
