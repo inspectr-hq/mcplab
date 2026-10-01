@@ -30,7 +30,7 @@ function appBaseUrl(req: IncomingMessage): string {
 }
 
 function acceptsTextPlain(acceptHeader: string | string[] | undefined): boolean {
-  const accept = Array.isArray(acceptHeader) ? acceptHeader.join(',') : acceptHeader ?? '';
+  const accept = Array.isArray(acceptHeader) ? acceptHeader.join(',') : (acceptHeader ?? '');
   return accept
     .toLowerCase()
     .split(',')

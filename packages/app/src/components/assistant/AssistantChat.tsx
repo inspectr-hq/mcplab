@@ -174,19 +174,19 @@ export function AssistantToolCallCard({
                 isPending
                   ? 'bg-amber-100 text-amber-900'
                   : call.status === 'error'
-                  ? 'bg-red-100 text-red-900'
-                  : call.status === 'denied'
-                  ? 'bg-gray-100 text-gray-700'
-                  : 'bg-muted text-muted-foreground'
+                    ? 'bg-red-100 text-red-900'
+                    : call.status === 'denied'
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-muted text-muted-foreground'
               }`}
             >
               {isPending
                 ? 'Needs approval'
                 : call.status === 'error'
-                ? 'Error'
-                : call.status === 'denied'
-                ? 'Denied'
-                : 'Approved'}
+                  ? 'Error'
+                  : call.status === 'denied'
+                    ? 'Denied'
+                    : 'Approved'}
             </span>
           </div>
         </div>

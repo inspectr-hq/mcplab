@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+.results-table-container {
+  container: results-table / inline-size;
+}
+
+.results-table-column-scenarios,
+.results-table-column-avg-tools,
+.results-table-column-tool-tokens {
+  display: none;
+}
+
+@container results-table (min-width: 80rem) {
+  .results-table-column-scenarios {
+    display: table-cell;
+  }
+}
+
+@container results-table (min-width: 90rem) {
+  .results-table-column-avg-tools {
+    display: table-cell;
+  }
+}
+
+@container results-table (min-width: 100rem) {
+  .results-table-column-tool-tokens {
+    display: table-cell;
+  }
+}
+
+@container results-table (max-width: 48rem) {
+  .results-table-column-timestamp {
+    display: none;
+  }
+
+  .results-table-column-run-id {
+    width: 18rem;
+    max-width: 18rem;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;
@@ -63,7 +102,8 @@
 
   code,
   .font-mono {
-    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
-      Consolas, monospace;
+    font-family:
+      'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+      monospace;
   }
 }

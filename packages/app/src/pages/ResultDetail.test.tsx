@@ -173,6 +173,58 @@ describe('ResultDetail conversation toggle', () => {
     mockResultAssistantState.resetAssistantSession.mockClear();
   });
 
+  it('starts empty extracted values and tool call sequence collapsed, but lets them open', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].toolCalls = [];
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    const extracts = screen.getByRole('button', { name: /Extracted values 0 total/i });
+    const tools = screen.getByRole('button', { name: /Tool call sequence 0 total/i });
+    expect(extracts).toHaveAttribute('aria-expanded', 'false');
+    expect(tools).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(extracts);
+    fireEvent.click(tools);
+    expect(extracts).toHaveAttribute('aria-expanded', 'true');
+    expect(tools).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('starts populated extracted values and tool call sequence expanded', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].extractedValues = { tag: 'TM5-BP2' };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByRole('button', { name: /Extracted values 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /Tool call sequence 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+  });
+
   it('shows run note placeholder for historical runs without note', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
@@ -192,12 +244,63 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('shows incomplete runs separately from failed runs in the outcome chart', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs.push({
+      ...result.scenarios[0].runs[0],
+      runIndex: 1,
+      passed: false,
+      outcome: 'incomplete',
+      failureReasons: []
+    });
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error')).toBeTruthy();
+    expect(screen.getByText('1 incomplete')).toBeTruthy();
+  });
+
+  it('includes a stopped child recorded only in aggregate outcomes', async () => {
+    const result = makeResult();
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    result.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 1 };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('1 error')).toBeTruthy();
+  });
+
   it('shows passed and failed check counts in the scenario table', async () => {
     const result = makeResult();
     result.scenarios[0].runs[0].checkResults = [
       { type: 'required_tool', label: 'Required tool · search_tags', status: 'passed' },
       { type: 'response_contains', label: 'Text contains · ready', status: 'passed' },
-      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' }
+      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' },
+      {
+        type: 'required_tool',
+        label: 'Required tool · get_tag_profile',
+        status: 'not_executed',
+        reason: 'Tool telemetry is not available for this execution source.'
+      }
     ];
     getResultMock.mockResolvedValue(result);
 
@@ -211,11 +314,12 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
-    expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+    expect(screen.getByTitle('2 passed · 1 failed · 1 not executed')).toBeInTheDocument();
     expect(screen.getByText('2 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText(/Checks 2 ✓ · 1 ✕/)).toBeInTheDocument();
+    expect(screen.getByText(/Checks 2 ✓ · 1 ✕ · 1 ⊘/)).toBeInTheDocument();
+    expect(screen.getAllByText('1 not executed').length).toBeGreaterThan(0);
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
@@ -326,6 +430,7 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
+    fireEvent.click(screen.getByRole('button', { name: /Tool call sequence 0 total/i }));
 
     await waitFor(() => {
       expect(screen.getByText('No tool calls captured for this run.')).toBeInTheDocument();
@@ -592,7 +697,7 @@ describe('ResultDetail conversation toggle', () => {
     });
   });
 
-  it('marks checks as not evaluated when the run failed before evaluation and shows the scenario clock icon', async () => {
+  it('marks checks as not executed when the run failed before evaluation and shows the scenario clock icon', async () => {
     const result = makeResult();
     result.configId = 'cfg-with-scenario';
     result.overallPassRate = 0;
@@ -638,13 +743,13 @@ describe('ResultDetail conversation toggle', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/429 Too Many Requests/)).toBeInTheDocument();
-      expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+      expect(screen.getByText('2 not executed')).toBeInTheDocument();
     });
     expect(screen.getAllByText('0 passed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('0 failed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('not_evaluated')).toHaveLength(2);
+    expect(screen.getAllByText('Not executed')).toHaveLength(2);
     expect(
-      screen.getByText('Checks were not evaluated because this run failed before evaluation.')
+      screen.getByText('Checks were not executed because this run ended before evaluation.')
     ).toBeInTheDocument();
     expect(screen.getByText('Required tool · navigate_asset_hierarchy')).toBeInTheDocument();
     expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();

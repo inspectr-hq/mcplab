@@ -15,6 +15,14 @@ export interface CheckPresentationInput {
   checkResults?: CheckResult[];
 }
 
+export function formatCheckStatusLabel(
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed'
+): string {
+  if (status === 'not_evaluated') return 'Not evaluated';
+  if (status === 'not_executed') return 'Not executed';
+  return status === 'passed' ? 'Passed' : 'Failed';
+}
+
 export function buildCheckItems({
   evalRules,
   failureReasons,
@@ -26,7 +34,7 @@ export function buildCheckItems({
   if (scenarioError) {
     return evalRules.map((rule) => ({
       rule,
-      status: 'not_evaluated' as const,
+      status: 'not_executed' as const,
       failureReason: undefined
     }));
   }
@@ -35,7 +43,7 @@ export function buildCheckItems({
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
       return {
         rule,
-        status: match?.status ?? ('not_evaluated' as const),
+        status: match?.status ?? ('not_executed' as const),
         failureReason: match?.reason
       };
     });
@@ -108,13 +116,13 @@ export function matchFailureReasonForRule(
       rule.type === 'tool_input_contains'
         ? { type: 'contains', tool: String(rule.tool ?? ''), value: String(rule.value ?? '') }
         : rule.type === 'tool_input_regex'
-        ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
-        : {
-            type: 'jsonpath',
-            tool: String(rule.tool ?? ''),
-            path: String(rule.path ?? ''),
-            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
-          };
+          ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
+          : {
+              type: 'jsonpath',
+              tool: String(rule.tool ?? ''),
+              path: String(rule.path ?? ''),
+              ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+            };
     const expectedReasons = [
       formatToolInputAssertionFailureReason(assertion, 'tool_not_used'),
       formatToolInputAssertionFailureReason(assertion, 'input_mismatch'),

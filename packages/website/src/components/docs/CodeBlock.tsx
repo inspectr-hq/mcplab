@@ -56,7 +56,7 @@ const CodeBlock = ({ code, language, title }: CodeBlockProps) => {
   };
 
   const baseLanguage = language
-    ? langMap[language.toLowerCase()] ?? language.toLowerCase()
+    ? (langMap[language.toLowerCase()] ?? language.toLowerCase())
     : inferLanguage(title, code);
 
   const resolvedLanguage =

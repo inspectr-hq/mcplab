@@ -1,7 +1,12 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildSearchIndex, indexNeedsRefresh, loadOrBuildSearchIndex } from './results/indexer.js';
+import {
+  buildSearchIndex,
+  getResultsIndexPaths,
+  indexNeedsRefresh,
+  loadOrBuildSearchIndex
+} from './results/indexer.js';
 import { getContext } from './results/context.js';
 import { makeSnippet, searchDocs, tokenize } from './results/search.js';
 import type { ResultsJson } from '@inspectr/mcplab-core';
@@ -54,6 +59,38 @@ describe('results index/search/context', () => {
     writeFileSync(resultsPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
 
     expect(indexNeedsRefresh(runsDir)).toBe(true);
+  });
+
+  it('detects a change to a non-newest indexed artifact', () => {
+    const { runsDir, runId } = createResultsRunFixture();
+    loadOrBuildSearchIndex(runsDir, true);
+    const resultsPath = join(runsDir, runId, 'results.json');
+    const tracePath = join(runsDir, runId, 'trace.jsonl');
+    const summaryPath = join(runsDir, runId, 'summary.md');
+    const base = new Date(1_700_000_000_000);
+    utimesSync(resultsPath, base, new Date(base.getTime() + 1_000));
+    utimesSync(summaryPath, base, new Date(base.getTime() + 2_000));
+    utimesSync(tracePath, base, new Date(base.getTime() + 3_000));
+    loadOrBuildSearchIndex(runsDir, true);
+
+    const results = readFileSync(resultsPath, 'utf8');
+    writeFileSync(resultsPath, results.replace('"total_runs": 1', '"total_runs": 2'), 'utf8');
+    utimesSync(resultsPath, base, new Date(base.getTime() + 1_500));
+
+    expect(indexNeedsRefresh(runsDir)).toBe(true);
+  });
+
+  it('treats the old max-mtime manifest format as stale', () => {
+    const { runsDir } = createResultsRunFixture();
+    loadOrBuildSearchIndex(runsDir, true);
+    const { manifestPath } = getResultsIndexPaths(runsDir);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.version = 1;
+    writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+
+    expect(indexNeedsRefresh(runsDir)).toBe(true);
+    loadOrBuildSearchIndex(runsDir);
+    expect(JSON.parse(readFileSync(manifestPath, 'utf8')).version).toBe(2);
   });
 
   it('returns bounded trace context around line', () => {

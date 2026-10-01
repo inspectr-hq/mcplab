@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromCoreConfigYaml,
+  fromCoreLibraries,
   fromCoreResultsJson,
+  fromCoreScenarioRunPreview,
   toCoreConfigYaml,
   toCoreLibraries
 } from './adapters';
@@ -671,7 +673,55 @@ describe('fromCoreResultsJson conversation mapping', () => {
   });
 });
 
+describe('library mapping', () => {
+  it('preserves browser provider profiles from the workspace API', () => {
+    const profile = {
+      schemaVersion: 1 as const,
+      id: 'custom-provider',
+      name: 'Custom Provider',
+      match: { origins: ['https://custom.example'] },
+      composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' as const },
+      submit: { action: 'enter' as const },
+      assistantMessages: { locator: { segments: ['.message'] } },
+      completion: { stabilityMs: 500 },
+      learned: {
+        sourceOrigin: 'https://custom.example',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        confidence: {}
+      }
+    };
+
+    const mapped = fromCoreLibraries({
+      servers: {},
+      agents: {},
+      scenarios: [],
+      browserProviders: { 'custom-provider': profile }
+    });
+
+    expect(mapped.browserProviders).toEqual({ 'custom-provider': profile });
+  });
+});
+
 describe('fromCoreResultsJson check counts', () => {
+  it('normalizes legacy not_applicable checks in results and previews', () => {
+    const results = baseResults();
+    const run = results.scenarios[0]!.runs[0]!;
+    run.check_results = [{ type: 'agent_check', label: 'browser check', status: 'not_applicable' }];
+
+    expect(fromCoreResultsJson(results).scenarios[0]?.runs[0]?.checkResults?.[0]?.status).toBe(
+      'not_evaluated'
+    );
+    expect(fromCoreScenarioRunPreview(run).checkResults?.[0]?.status).toBe('not_evaluated');
+  });
+
+  it('preserves an incomplete run outcome', () => {
+    const results = baseResults();
+    results.scenarios[0]!.runs[0]!.outcome = 'incomplete';
+    const mapped = fromCoreResultsJson(results);
+    expect(mapped.scenarios[0]?.runs[0]?.outcome).toBe('incomplete');
+  });
+
   it('derives run and scenario check totals from persisted check results', () => {
     const results = baseResults();
     results.scenarios[0]!.runs[0]!.check_results = [
@@ -684,11 +734,18 @@ describe('fromCoreResultsJson check counts', () => {
 
     const mapped = fromCoreResultsJson(results);
 
-    expect(mapped.checkCounts).toEqual({ passed: 1, failed: 1, not_evaluated: 1, total: 3 });
+    expect(mapped.checkCounts).toEqual({
+      passed: 1,
+      failed: 1,
+      not_evaluated: 1,
+      not_executed: 0,
+      total: 3
+    });
     expect(mapped.scenarios[0]?.checkCounts).toEqual({
       passed: 1,
       failed: 1,
       not_evaluated: 1,
+      not_executed: 0,
       total: 3
     });
   });
@@ -744,8 +801,44 @@ describe('config adapters round-trip', () => {
     const uiConfig = fromCoreConfigYaml(sourceRecord);
     const roundTripped = toCoreConfigYaml(uiConfig);
 
+    expect(uiConfig.agents[0]?.type).toBe('llm');
     expect(uiConfig.agents[0]).not.toHaveProperty('temperature');
     expect(roundTripped.agents?.[0]).not.toHaveProperty('temperature');
+  });
+
+  it('round-trips the Browser Agent conversation default', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-browser-conversation',
+      name: 'browser-conversation',
+      path: '/tmp/browser-conversation.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-browser-conversation',
+      config: {
+        servers: [],
+        agents: [
+          {
+            id: 'chatgpt-browser',
+            type: 'browser',
+            provider: 'chatgpt-com',
+            url: 'https://chatgpt.com',
+            newConversationBetweenScenarios: false
+          }
+        ],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const roundTripped = toCoreConfigYaml(uiConfig);
+
+    expect(uiConfig.agents[0]).toMatchObject({
+      type: 'browser',
+      newConversationBetweenScenarios: false
+    });
+    expect(roundTripped.agents?.[0]).toMatchObject({
+      type: 'browser',
+      new_conversation_between_scenarios: false
+    });
   });
 
   it('round-trips mixed inline/reference entries in stable order', () => {
@@ -1835,6 +1928,7 @@ describe('config adapters round-trip', () => {
     const libraries = toCoreLibraries({
       servers: [],
       agents: [],
+      browserProviders: {},
       scenarios: [
         {
           id: 'scn-lib-extract',

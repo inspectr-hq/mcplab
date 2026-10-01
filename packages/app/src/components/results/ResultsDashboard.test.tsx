@@ -39,8 +39,10 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('87.5%')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument();
     expect(screen.getByText('Avg Tool Calls')).toBeInTheDocument();
-    expect(screen.getByText('Runs Pass / Fail')).toBeInTheDocument();
-    expect(screen.getByText('Checks Pass / Fail')).toBeInTheDocument();
+    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error')).toBeInTheDocument();
+    expect(
+      screen.getByText('Checks Pass / Fail / Not evaluated / Not executed')
+    ).toBeInTheDocument();
   });
 
   it('shows not-evaluated checks in the checks card', () => {
@@ -52,5 +54,40 @@ describe('ResultsDashboard', () => {
     );
 
     expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+  });
+
+  it('shows not-executed checks separately from passed checks', () => {
+    render(
+      <ResultsDashboard
+        runs={[
+          makeRun({
+            checkCounts: { passed: 2, failed: 0, not_evaluated: 0, not_executed: 1, total: 3 }
+          })
+        ]}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByText('1 not executed')).toBeInTheDocument();
+  });
+
+  it('does not count incomplete and error outcomes as failed runs', () => {
+    render(
+      <ResultsDashboard
+        runs={[
+          makeRun({
+            totalRuns: 4,
+            overallPassRate: 0.25,
+            checkCounts: { passed: 4, failed: 0, not_evaluated: 0, total: 4 },
+            outcomes: { passed: 1, failed: 1, incomplete: 1, error: 1 }
+          })
+        ]}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByText('1 failed')).toBeTruthy();
+    expect(screen.getByText('1 incomplete')).toBeTruthy();
+    expect(screen.getByText('1 error')).toBeTruthy();
   });
 });

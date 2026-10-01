@@ -218,8 +218,8 @@ export function useResultAssistant(params: {
           description: isSessionNotFoundError(error)
             ? 'Assistant session expired. Ask a new question to start a fresh session.'
             : error instanceof Error
-            ? error.message
-            : String(error),
+              ? error.message
+              : String(error),
           variant: 'destructive'
         });
       } finally {
@@ -247,8 +247,8 @@ export function useResultAssistant(params: {
           description: isSessionNotFoundError(error)
             ? 'Assistant session expired. Ask a new question to start a fresh session.'
             : error instanceof Error
-            ? error.message
-            : String(error),
+              ? error.message
+              : String(error),
           variant: 'destructive'
         });
       } finally {

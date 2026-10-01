@@ -299,7 +299,10 @@ const ServerDetail = () => {
           >
             <ArrowLeft className="h-4 w-4" /> Servers
           </Link>
-          <h1 className="text-2xl font-bold">{isNew ? 'New Server' : displayName(form)}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <img src="/mcp.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            {isNew ? 'New Server' : displayName(form)}
+          </h1>
         </div>
         {!isNew && (
           <Button

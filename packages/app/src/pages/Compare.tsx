@@ -138,6 +138,18 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
       <span className="text-success">{counts.passed} ✓</span>
       <span className="text-muted-foreground"> · </span>
       <span className="text-destructive">{counts.failed} ✕</span>
+      {counts.not_evaluated > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_evaluated} ○</span>
+        </>
+      )}
+      {counts.not_executed > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_executed} ⊘</span>
+        </>
+      )}
     </>
   );
 }
@@ -397,8 +409,8 @@ const Compare = () => {
 
     const start = parseLocalDateTime(timeFilterStart)?.getTime() ?? null;
     const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
-    const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
-    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
+    const rangeStart = start !== null && end !== null ? Math.min(start, end) : (start ?? null);
+    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : (end ?? null);
     return scenarioFiltered.filter((run) => {
       const timestamp = new Date(run.timestamp).getTime();
       if (Number.isNaN(timestamp)) return false;

@@ -25,6 +25,7 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
         subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
+        removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
         startRun: vi.fn()
       }
     };
@@ -77,6 +78,7 @@ beforeEach(() => {
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
   sourceMock.stopRun.mockReset();
   sourceMock.removeQueuedRun.mockReset();
+  sourceMock.removeEvaluationRun.mockClear();
   sessionStorage.removeItem(activeJobStorageKey);
   sourceMock.getRunQueue.mockResolvedValue({
     active: null,
@@ -327,6 +329,81 @@ describe('RunEvaluation', () => {
     );
   });
 
+  it('groups Browser Agents and sends an explicit conversation override', async () => {
+    const llmAgent: AgentConfig = {
+      id: 'agent-llm',
+      name: 'LLM Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const browserAgent: AgentConfig = {
+      id: 'agent-browser',
+      name: 'Browser Agent',
+      type: 'browser',
+      provider: 'chatgpt-com',
+      model: '',
+      maxTokens: 0,
+      url: 'https://chatgpt.com',
+      newConversationBetweenScenarios: false
+    };
+    const scenario = {
+      id: 'scenario-1',
+      name: 'Scenario 1',
+      prompt: 'Do thing',
+      serverIds: [],
+      evalRules: [],
+      extractRules: []
+    };
+    configsRef.value = [
+      {
+        id: 'test-config',
+        name: 'Test Config',
+        agents: [llmAgent, browserAgent],
+        scenarios: [scenario],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        sourcePath: '/path/to/test.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('LLM Agents')).toBeInTheDocument();
+      expect(screen.getByText('Browser Agents')).toBeInTheDocument();
+      expect(screen.getByText('Conversation behavior')).toBeInTheDocument();
+    });
+    const varianceInput = screen.getByRole('spinbutton', { name: 'Variance Runs' });
+    const browserCheckbox = screen.getByRole('checkbox', { name: 'Browser Agent' });
+    fireEvent.click(browserCheckbox);
+    expect(varianceInput).toBeEnabled();
+    fireEvent.change(varianceInput, { target: { value: '2' } });
+    fireEvent.click(browserCheckbox);
+    expect(varianceInput).toBeDisabled();
+    expect(varianceInput).toHaveValue(1);
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agents: ['agent-llm', 'agent-browser'],
+        runsPerScenario: 1,
+        newConversationBetweenScenarios: true
+      })
+    );
+  });
+
   it('advances progress for config-declared agent runs', async () => {
     const testConfig: EvalConfig = {
       id: 'test-config',
@@ -355,7 +432,7 @@ describe('RunEvaluation', () => {
       updatedAt: '2024-01-01T00:00:00.000Z',
       sourcePath: '/path/to/test.yaml'
     };
-    let onEvent: ((event: any) => void) | null = null;
+    let onEvent: ((event: unknown) => void) | null = null;
     sourceMock.startRun.mockResolvedValueOnce({ jobId: 'job-1' });
     sourceMock.subscribeRunJob.mockImplementationOnce((_jobId, callback) => {
       onEvent = callback;
@@ -484,6 +561,122 @@ describe('RunEvaluation', () => {
     });
   });
 
+  it('highlights only running evaluations and hides stop for queued evaluations', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-queued',
+          evaluationName: 'Queued evaluation',
+          status: 'queued',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-queued',
+              status: 'queued',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            }
+          ]
+        },
+        {
+          evaluationRunId: 'evaluation-running',
+          evaluationName: 'Running evaluation',
+          status: 'running',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-running',
+              status: 'running',
+              runParams: { configPath: '/tmp/eval-2.yaml', runsPerScenario: 1 }
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const queued = await screen.findByText('Queued evaluation');
+    const queuedCard = queued.closest('div.rounded-md.border');
+    expect(queuedCard).toBeTruthy();
+    expect(queuedCard).not.toHaveClass('bg-primary/5');
+    expect(queuedCard).toHaveTextContent('Remove');
+    expect(queuedCard).not.toHaveTextContent('Stop run');
+    const queuedActions = Array.from(queuedCard!.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim()
+    );
+    expect(queuedActions.indexOf('Details')).toBeLessThan(queuedActions.indexOf('Remove'));
+
+    const running = screen.getByText('Running evaluation');
+    const runningCard = running.closest('div.rounded-md.border');
+    expect(runningCard).toHaveClass('bg-primary/5');
+    expect(runningCard).toHaveTextContent('Stop run');
+    const runningBadge = Array.from(runningCard?.querySelectorAll('div') ?? []).find(
+      (node) => node.textContent?.trim() === 'running'
+    );
+    expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
+  });
+
+  it('offers removal when a stopped LLM child leaves its job completed', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-stopped',
+          evaluationName: 'Stopped LLM evaluation',
+          status: 'stopped',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 1,
+          stoppedJobs: 1,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'llm-completed',
+              status: 'completed',
+              executionType: 'mcplab',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
+              childProgress: [
+                { scenarioId: 'scenario-1', agentName: 'LLM', completed: 0, total: 1, status: 'stopped' }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove stopped run from queue' }));
+    expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
+  });
+
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');
     sourceMock.getRunQueue.mockResolvedValueOnce({
@@ -523,5 +716,68 @@ describe('RunEvaluation', () => {
     });
 
     expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
+  });
+
+  it('keeps an evaluation active when its remaining child needs OAuth', async () => {
+    sessionStorage.setItem(activeJobStorageKey, 'job-finished');
+    let onEvent:
+      | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
+      | undefined;
+    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+      if (jobId === 'job-finished') onEvent = callback;
+      return () => {};
+    });
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-1',
+          evaluationName: 'Mixed evaluation',
+          status: 'blocked_auth',
+          totalJobs: 2,
+          completedJobs: 1,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-finished',
+              status: 'completed',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            },
+            {
+              jobId: 'job-blocked',
+              status: 'blocked_auth',
+              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(onEvent).toBeDefined());
+    await act(async () => {
+      onEvent?.({
+        type: 'completed',
+        ts: '2026-09-28T10:00:00.000Z',
+        payload: { runId: 'evaluation-1' }
+      });
+    });
+
+    await waitFor(() => {
+      expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith('job-blocked', expect.any(Function));
+    });
+    expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
+    expect(screen.queryByText(/Run completed\./)).toBeNull();
   });
 });

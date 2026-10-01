@@ -298,7 +298,7 @@ export default function OAuthDebuggerPage() {
   const canGoRun = Boolean(sessionId);
   const canGoReport = Boolean(
     session &&
-      (session.status === 'completed' || session.status === 'error' || session.status === 'stopped')
+    (session.status === 'completed' || session.status === 'error' || session.status === 'stopped')
   );
   const stepNumberById = useMemo(() => {
     const mapping = new Map<string, number>();
@@ -1196,10 +1196,10 @@ export default function OAuthDebuggerPage() {
                               s.status === 'failed'
                                 ? 'destructive'
                                 : s.status === 'completed'
-                                ? 'outline'
-                                : s.status === 'active'
-                                ? 'secondary'
-                                : 'outline'
+                                  ? 'outline'
+                                  : s.status === 'active'
+                                    ? 'secondary'
+                                    : 'outline'
                             }
                             className={
                               s.status === 'completed'
@@ -1611,10 +1611,10 @@ export default function OAuthDebuggerPage() {
                   {typeof session.summary?.accessTokenValidForSeconds === 'number'
                     ? `${formatDurationShort(session.summary.accessTokenValidForSeconds)} remaining`
                     : typeof session.summary?.accessTokenExpiresInSeconds === 'number'
-                    ? `${formatDurationShort(
-                        session.summary.accessTokenExpiresInSeconds
-                      )} from issuance`
-                    : 'No expiry advertised by token endpoint'}
+                      ? `${formatDurationShort(
+                          session.summary.accessTokenExpiresInSeconds
+                        )} from issuance`
+                      : 'No expiry advertised by token endpoint'}
                   {session.summary?.accessTokenExpiresAt ? (
                     <>
                       {' (until '}
@@ -1632,8 +1632,8 @@ export default function OAuthDebuggerPage() {
                   {session.summary?.accessTokenExpirySource === 'expires_in'
                     ? 'token endpoint expires_in'
                     : session.summary?.accessTokenExpirySource === 'jwt_exp'
-                    ? 'JWT exp claim'
-                    : 'not available'}
+                      ? 'JWT exp claim'
+                      : 'not available'}
                 </p>
               </div>
               <div>

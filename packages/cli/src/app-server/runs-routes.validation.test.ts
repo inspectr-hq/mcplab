@@ -28,6 +28,32 @@ import {
 } from './runs-routes.test-helpers.js';
 
 describe('run request validation', () => {
+  it('returns 404 when a run detail lookup races with directory deletion', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/missing', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/missing',
+      method: 'GET',
+      settings: { runsDir: '/tmp' } as any,
+      runQueueService: createRunQueueServiceForTest(),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        getRunResults: () => {
+          const error = new Error('Run not found: missing') as Error & { statusCode: number };
+          error.statusCode = 404;
+          throw error;
+        },
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        }
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses).toEqual([{ status: 404, payload: { error: 'Run not found: missing' } }]);
+  });
+
   it('returns 400 when serverOverrideAll is an empty array', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];
     const handled = await handleRunsRoutes({

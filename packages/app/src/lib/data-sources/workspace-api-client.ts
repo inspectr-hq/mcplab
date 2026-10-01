@@ -45,7 +45,10 @@ function getBaseUrl(): string {
 const BASE = getBaseUrl();
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -353,6 +356,8 @@ export const workspaceApiClient = {
     scenarioIds?: string[];
     agents?: string[];
     runNote?: string;
+    newConversationBetweenScenarios?: boolean;
+    newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) =>
@@ -666,6 +671,39 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'
     }),
+  stopEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; stopped: number }>(
+      `/api/runs/evaluations/${encodeURIComponent(evaluationRunId)}/stop`,
+      { method: 'POST' }
+    ),
+  stopScenario: (jobId: string, scenarioId: string, agentName: string) =>
+    request<{ ok: boolean; status: string }>(
+      `/api/runs/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(
+        scenarioId
+      )}/agents/${encodeURIComponent(agentName)}/stop`,
+      { method: 'POST' }
+    ),
+  removeEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; removed: number }>(
+      `/api/runs/queue/evaluations/${encodeURIComponent(evaluationRunId)}`,
+      { method: 'DELETE' }
+    ),
+  openRover: (jobId: string) =>
+    request<{ ok: boolean; url?: string }>('/api/rover/open', {
+      method: 'POST',
+      body: JSON.stringify({ jobId })
+    }),
+  resumeRover: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/rover/jobs/${encodeURIComponent(jobId)}/resume`, {
+      method: 'POST'
+    }),
+  getRoverStatus: () =>
+    request<{
+      connected: boolean;
+      provider?: string;
+      pageUrl?: string;
+      activeJobId?: string | null;
+    }>('/api/rover/status'),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {

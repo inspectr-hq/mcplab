@@ -1,7 +1,10 @@
 import type { ServerResponse } from 'node:http';
+import type { QueueChildProgress, RoverAgentRef, Scenario } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
-export type RunParams = {
+type RunParamsBase = {
+  evaluationRunId?: string;
+  evaluationName?: string;
   configPath: string;
   runsPerScenario: number;
   scenarioId?: string;
@@ -13,13 +16,45 @@ export type RunParams = {
   scenarioServerOverrides?: Record<string, string[]>;
 };
 
+export type McplabRunParams = RunParamsBase & {
+  executionType?: 'mcplab';
+  roverAgent?: never;
+  roverScenarios?: never;
+  roverNewConversationBetweenScenarios?: never;
+  roverNewConversationBeforeStart?: never;
+};
+
+export type RoverRunParams = RunParamsBase & {
+  executionType: 'rover';
+  roverAgent: RoverAgentRef;
+  roverScenarios?: Scenario[];
+  roverNewConversationBetweenScenarios?: boolean;
+  roverNewConversationBeforeStart?: boolean;
+};
+
+export type RunParams = McplabRunParams | RoverRunParams;
+
 export type RunJobStatus =
   | 'queued'
+  | 'waiting_for_rover'
+  | 'paused_rover'
   | 'blocked_auth'
   | 'running'
   | 'stopped'
   | 'completed'
   | 'error';
+
+export type RoverLeaseState = 'offered' | 'accepted' | 'running';
+
+export interface RoverLease {
+  leaseId: string;
+  connectionId: string;
+  state: RoverLeaseState;
+  expiresAt: string;
+  offeredAt: string;
+  acceptedAt?: string;
+  tabId?: number;
+}
 
 export type RunJob = {
   id: string;
@@ -29,6 +64,16 @@ export type RunJob = {
   abortController: AbortController;
   runParams: RunParams;
   blockedAuthServers?: string[];
+  roverProgress?: {
+    completed: number;
+    total: number;
+    currentScenarioId?: string;
+    lastDurationMs?: number;
+    error?: string;
+  };
+  childProgress?: QueueChildProgress[];
+  childAbortControllers?: Map<string, AbortController>;
+  roverLease?: RoverLease;
 };
 
 export interface RunQueueState {
@@ -49,7 +94,7 @@ export type QueueAdvanceOptions = {
 };
 
 export type ExecutionOutcome =
-  | { status: 'completed' }
+  | { status: 'completed'; runId?: string }
   | { status: 'error' | 'stopped' }
   | { status: 'blocked_auth'; blockedServers: string[] };
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ComponentProps } from 'react';
 import {
   LayoutDashboard,
   Settings,
@@ -7,7 +7,6 @@ import {
   NotepadText,
   NotebookTabs,
   GitCompare,
-  Database,
   Bot,
   FileCode,
   FlaskConical,
@@ -34,6 +33,10 @@ import {
   useSidebar
 } from '@/components/ui/sidebar';
 
+function McpIcon(props: ComponentProps<'img'>) {
+  return <img src="/mcp.svg" alt="" aria-hidden="true" {...props} />;
+}
+
 const navSections = [
   {
     title: 'Home',
@@ -51,7 +54,7 @@ const navSections = [
     title: 'Libraries',
     items: [
       { title: 'Test Cases', url: '/libraries/test-cases', icon: FileCode },
-      { title: 'MCP servers', url: '/libraries/servers', icon: Database },
+      { title: 'MCP servers', url: '/libraries/servers', icon: McpIcon },
       { title: 'Agents', url: '/libraries/agents', icon: Bot }
     ]
   },
@@ -127,8 +130,8 @@ export function AppSidebar(props: AppSidebarProps = { version: null }) {
                           item.url === '/'
                             ? location.pathname === '/'
                             : item.url === '/settings'
-                            ? location.pathname === '/settings'
-                            : location.pathname.startsWith(item.url)
+                              ? location.pathname === '/settings'
+                              : location.pathname.startsWith(item.url)
                         }
                         tooltip={item.title}
                       >

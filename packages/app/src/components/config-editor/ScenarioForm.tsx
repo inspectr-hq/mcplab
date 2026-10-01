@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  Clock3,
   ChevronDown,
   ChevronUp,
   Edit,
@@ -47,7 +48,11 @@ import {
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
   SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
 } from '@/lib/attachment-policy';
-import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import {
+  buildCheckItems,
+  formatCheckStatusLabel,
+  formatEvalRuleLabel
+} from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {
@@ -482,7 +487,7 @@ function ScenarioCard({
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
   const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence ?? [] : [];
+    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
 
   const updateToolSequence = (nextSequence: string[]) => {
@@ -867,8 +872,8 @@ function ScenarioCard({
                     agents.length === 0
                       ? 'Add at least one agent in the config'
                       : scenario.serverIds.length === 0
-                      ? 'Select at least one server for this scenario'
-                      : 'Open Scenario Assistant'
+                        ? 'Select at least one server for this scenario'
+                        : 'Open Scenario Assistant'
                   }
                 >
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -1198,13 +1203,21 @@ function ScenarioCard({
                                     className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                       check.status === 'failed'
                                         ? 'border-destructive/20 bg-destructive/5'
-                                        : 'border-success/20 bg-success/5'
+                                        : check.status === 'not_executed'
+                                          ? 'border-amber-500/20 bg-amber-500/5'
+                                          : check.status === 'not_evaluated'
+                                            ? 'border-muted-foreground/20 bg-muted/40'
+                                            : 'border-success/20 bg-success/5'
                                     }`}
                                   >
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
                                         {check.status === 'failed' ? (
                                           <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                        ) : check.status === 'not_executed' ? (
+                                          <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                        ) : check.status === 'not_evaluated' ? (
+                                          <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                         ) : (
                                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                         )}
@@ -1223,10 +1236,14 @@ function ScenarioCard({
                                       className={`shrink-0 text-[10px] ${
                                         check.status === 'failed'
                                           ? 'border-destructive/30 text-destructive'
-                                          : 'border-success/30 text-success'
+                                          : check.status === 'not_executed'
+                                            ? 'border-amber-500/30 text-amber-600'
+                                            : check.status === 'not_evaluated'
+                                              ? 'border-muted-foreground/30 text-muted-foreground'
+                                              : 'border-success/30 text-success'
                                       }`}
                                     >
-                                      {check.status}
+                                      {formatCheckStatusLabel(check.status)}
                                     </Badge>
                                   </div>
                                 ))}
@@ -1354,12 +1371,12 @@ function ScenarioCard({
                                     {rule.type === 'tool_input_contains'
                                       ? `${rule.tool} contains ${String(rule.value)}`
                                       : rule.type === 'tool_input_regex'
-                                      ? `${rule.tool} matches ${String(rule.value)}`
-                                      : `${rule.tool} · ${rule.path} · ${
-                                          rule.equals !== undefined
-                                            ? `== ${String(rule.equals)}`
-                                            : 'exists'
-                                        }`}
+                                        ? `${rule.tool} matches ${String(rule.value)}`
+                                        : `${rule.tool} · ${rule.path} · ${
+                                            rule.equals !== undefined
+                                              ? `== ${String(rule.equals)}`
+                                              : 'exists'
+                                          }`}
                                   </span>
                                 ) : (
                                   <span className="font-mono break-all">
@@ -1703,8 +1720,8 @@ function ScenarioCard({
                                         toolNamesLoading
                                           ? 'Loading tools...'
                                           : availableToolNames && availableToolNames.length > 0
-                                          ? 'Select tool to insert in value field'
-                                          : 'Load tools first'
+                                            ? 'Select tool to insert in value field'
+                                            : 'Load tools first'
                                       }
                                     />
                                   </SelectTrigger>
@@ -1728,8 +1745,8 @@ function ScenarioCard({
                                 {toolNamesLoading
                                   ? 'Loading...'
                                   : availableToolNames
-                                  ? 'Refresh tools'
-                                  : 'Load tools'}
+                                    ? 'Refresh tools'
+                                    : 'Load tools'}
                               </Button>
                             </div>
                             {!canLoadToolNames && (
@@ -1965,7 +1982,7 @@ function buildPreviewCheckItems(
   checkResults?: Array<{
     type: string;
     label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
+    status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
     reason?: string;
   }>
 ) {

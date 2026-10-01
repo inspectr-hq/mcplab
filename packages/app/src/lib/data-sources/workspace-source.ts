@@ -59,11 +59,11 @@ export const workspaceSource: EvalDataSource = {
       offset = page.next_offset;
     }
     const resultPromises = summaries.map(async (summary) => {
-      const [{ results }, trace] = await Promise.all([
+      const [{ runId, results }, trace] = await Promise.all([
         workspaceApiClient.getRun(summary.runId),
         workspaceApiClient.getRunTrace(summary.runId)
       ]);
-      return fromCoreResultsJson(results, trace.records);
+      return fromCoreResultsJson(results, trace.records, runId);
     });
     return Promise.all(resultPromises);
   },
@@ -87,11 +87,11 @@ export const workspaceSource: EvalDataSource = {
   },
   async getResult(id) {
     try {
-      const [{ results }, trace] = await Promise.all([
+      const [{ runId, results }, trace] = await Promise.all([
         workspaceApiClient.getRun(id),
         workspaceApiClient.getRunTrace(id)
       ]);
-      return fromCoreResultsJson(results, trace.records);
+      return fromCoreResultsJson(results, trace.records, runId);
     } catch {
       return undefined;
     }
@@ -151,6 +151,24 @@ export const workspaceSource: EvalDataSource = {
   },
   async stopRun(jobId) {
     await workspaceApiClient.stopRun(jobId);
+  },
+  async stopScenario(jobId, scenarioId, agentName) {
+    return workspaceApiClient.stopScenario(jobId, scenarioId, agentName);
+  },
+  async stopEvaluationRun(evaluationRunId) {
+    await workspaceApiClient.stopEvaluationRun(evaluationRunId);
+  },
+  async removeEvaluationRun(evaluationRunId) {
+    await workspaceApiClient.removeEvaluationRun(evaluationRunId);
+  },
+  async openRover(jobId) {
+    return workspaceApiClient.openRover(jobId);
+  },
+  async resumeRover(jobId) {
+    return workspaceApiClient.resumeRover(jobId);
+  },
+  async getRoverStatus() {
+    return workspaceApiClient.getRoverStatus();
   },
   async getRunQueue() {
     return workspaceApiClient.getRunQueue();

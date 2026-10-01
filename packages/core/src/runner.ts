@@ -11,6 +11,7 @@ import type {
   ExecutableScenario,
   ScenarioRunTraceRecord
 } from './types.js';
+import { isLlmAgent } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -20,13 +21,10 @@ import {
   runAgentScenario,
   type AgentRunProgressEvent
 } from './agent.js';
-import {
-  buildNotEvaluatedCheckResults,
-  evaluateScenarioWithAgentChecks,
-  extractValues,
-  normalizeToolConstraintAliases
-} from './eval.js';
-import { aggregateResults, renderSummaryMarkdown } from './results.js';
+import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
+import { aggregateResults } from './results.js';
+import { evaluateScenarioObservation } from './scenario-observation.js';
+import { persistEvaluationArtifacts } from './artifacts.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 import {
   createLangSmithTraceExporter,
@@ -54,8 +52,12 @@ export interface RunOptions {
     agent: AgentConfig;
   };
   signal?: AbortSignal;
+  /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
+  scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
   traceExporter?: TraceExporter;
+  /** Skip standard result projections when a caller owns shared persistence. */
+  persistArtifacts?: boolean;
 }
 
 export type RunProgressEvent =
@@ -207,10 +209,16 @@ export async function runAll(
       if (!agent) {
         throw new Error(`Agent not found: ${scenario.agent}`);
       }
+      if (!isLlmAgent(agent)) {
+        throw new Error(`Browser agent '${scenario.agent}' must be dispatched through Rover.`);
+      }
       const runs: ScenarioRunResult[] = [];
       let effectiveScenarioEval = scenario.eval;
+      const scenarioSignal = options.scenarioSignal?.(scenario, 0) ?? options.signal;
 
       for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
+        const runSignal = options.scenarioSignal?.(scenario, runIndex) ?? scenarioSignal;
+        if (runSignal?.aborted && !options.signal?.aborted) break;
         throwIfAborted(options.signal);
         let requestId: string;
         try {
@@ -264,14 +272,14 @@ export async function runAll(
             requestId,
             resolveServerRequestHeaders: async (serverNames) => {
               const [clientCredentialsHeaders, externalHeaders] = await Promise.all([
-                mcp.getRequestHeadersForServers(serverNames, options.signal),
-                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
+                mcp.getRequestHeadersForServers(serverNames, runSignal),
+                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: runSignal }) ??
                   Promise.resolve({})
               ]);
               return { ...clientCredentialsHeaders, ...externalHeaders };
             },
             maxTurns: agent.max_turns,
-            signal: options.signal,
+            signal: runSignal,
             trace: scenarioTrace,
             onProgress: async (event) => {
               await emitProgress({
@@ -282,58 +290,34 @@ export async function runAll(
               });
             }
           });
-          const evalResult = await evaluateScenarioWithAgentChecks(
-            runResult.finalText,
-            runResult.toolSequence,
-            (effectiveScenarioEval = normalizeToolConstraintAliases(
-              scenario.eval,
-              runResult.availableToolNames
-            )),
-            {
+          effectiveScenarioEval = normalizeToolConstraintAliases(
+            scenario.eval,
+            runResult.availableToolNames
+          );
+          const scenarioRun = await evaluateScenarioObservation({
+            scenario: { ...scenario, eval: effectiveScenarioEval },
+            runIndex,
+            observation: {
+              finalText: runResult.finalText,
               toolCalls: runResult.toolCalls,
+              toolDurationsMs: runResult.toolDurationsMs,
               availableToolNames: runResult.availableToolNames,
-              scenarioPrompt: scenario.prompt,
-              judgeAgentAssertions: options.evaluationJudge
-                ? async (input) => {
-                    return judgeAgentAssertions({
-                      assertions: input.assertions,
-                      context: input.context,
-                      finalText: runResult.finalText,
-                      judge: options.evaluationJudge!,
-                      signal: options.signal
-                    });
-                  }
-                : undefined
-            }
-          );
-          const extracted = extractValues(
-            runResult.finalText,
-            scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
-          );
-
-          const toolUsage: Record<string, number> = {};
-          for (const tool of runResult.toolSequence) {
-            toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
-          }
-
-          const scenarioRun: ScenarioRunResult = {
-            run_index: runIndex,
-            request_id: requestId,
-            pass: evalResult.pass,
-            failures: evalResult.failures,
-            check_results: evalResult.check_results,
-            tool_calls: runResult.toolSequence,
-            tool_call_count: runResult.toolSequence.length,
-            tool_sequence: runResult.toolSequence,
-            tool_usage: toolUsage,
-            tool_durations_ms: runResult.toolDurationsMs,
-            run_duration_ms: Math.max(
-              0,
-              Date.parse(runResult.traceEndedAt) - Date.parse(runResult.traceStartedAt)
-            ),
-            final_text: runResult.finalText,
-            extracted
-          };
+              startedAt: runResult.traceStartedAt,
+              completedAt: runResult.traceEndedAt,
+              requestId,
+              executionSource: 'mcplab'
+            },
+            judgeAgentAssertions: options.evaluationJudge
+              ? async (input) =>
+                  judgeAgentAssertions({
+                    assertions: input.assertions,
+                    context: input.context,
+                    finalText: runResult.finalText,
+                    judge: options.evaluationJudge!,
+                    signal: runSignal
+                  })
+              : undefined
+          });
           runs.push(scenarioRun);
           const traceRecord: ScenarioRunTraceRecord = {
             type: 'scenario_run',
@@ -346,7 +330,8 @@ export async function runAll(
             model: runResult.traceModel,
             ts_start: runResult.traceStartedAt,
             ts_end: runResult.traceEndedAt,
-            pass: evalResult.pass,
+            pass: scenarioRun.pass,
+            outcome: scenarioRun.outcome,
             messages: enrichTraceMessagesWithEstimatedTokens(
               runResult.traceMessages,
               runResult.traceModel
@@ -360,7 +345,7 @@ export async function runAll(
           await scenarioTrace.end({
             outputs: {
               finalText: runResult.finalText,
-              pass: evalResult.pass,
+              pass: scenarioRun.pass,
               messages: toLangSmithMessages(runResult.traceMessages),
               metrics: traceRecord.metrics
             }
@@ -373,15 +358,23 @@ export async function runAll(
             totalScenarioRuns,
             runIndex,
             runsPerScenario: options.runsPerScenario,
-            pass: evalResult.pass,
+            pass: scenarioRun.pass,
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
-          if (options.signal?.aborted || isAbortError(scenarioErr)) {
+          if (options.signal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
               outputs: { pass: false }
             });
+            throw scenarioErr;
+          }
+          if (isAbortError(scenarioErr)) {
+            await scenarioTrace.end({
+              error: String(scenarioErr?.message ?? scenarioErr),
+              outputs: { pass: false }
+            });
+            if (runSignal?.aborted) break;
             throw scenarioErr;
           }
           const errorMessage = scenarioErr?.message ?? String(scenarioErr);
@@ -391,9 +384,10 @@ export async function runAll(
             run_index: runIndex,
             request_id: requestId,
             pass: false,
+            outcome: 'error',
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
-            check_results: buildNotEvaluatedCheckResults(scenario.eval),
+            check_results: buildNotExecutedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],
@@ -416,6 +410,7 @@ export async function runAll(
             ts_start: tsStart,
             ts_end: tsEnd,
             pass: false,
+            outcome: 'error',
             error: errorMessage,
             messages: []
           };
@@ -435,15 +430,17 @@ export async function runAll(
         }
       }
 
-      scenarioRuns.push({
-        scenario_id: scenario.id,
-        scenario_name: scenario.name,
-        agent: scenario.agent,
-        provider: agent.provider,
-        model: agent.model,
-        eval: effectiveScenarioEval,
-        runs
-      });
+      if (runs.length > 0) {
+        scenarioRuns.push({
+          scenario_id: scenario.id,
+          scenario_name: scenario.name,
+          agent: scenario.agent,
+          provider: agent.provider,
+          model: agent.model,
+          eval: effectiveScenarioEval,
+          runs
+        });
+      }
     }
 
     const traceExport = await traceExporter.flush();
@@ -457,14 +454,12 @@ export async function runAll(
       cliVersion: options.cliVersion,
       langsmithTraceUrls: traceExport.traceUrls,
       mcpServerVersions,
+      executionSource: 'mcplab',
       scenarioRuns
     });
-
-    const resultsPath = join(runDir, 'results.json');
-    writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-
-    const summaryPath = join(runDir, 'summary.md');
-    writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
+    if (options.persistArtifacts !== false) {
+      persistEvaluationArtifacts({ runDir, results });
+    }
     await emitProgress({ type: 'run_finished', runId, totalScenarioRuns });
 
     return { runDir, results };
@@ -555,14 +550,14 @@ export function mapJudgeBatchResults(params: {
         trimmedReason.length > 0
           ? trimmedReason
           : matched.pass
-          ? `Agent check passed: ${check.label}`
-          : `Agent check failed: ${check.label}`,
+            ? `Agent check passed: ${check.label}`
+            : `Agent check failed: ${check.label}`,
       metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
     };
   });
 }
 
-async function judgeAgentAssertions(params: {
+export async function judgeAgentAssertions(params: {
   assertions: AgentAssertion[];
   finalText: string;
   context?: AgentJudgeContext;
@@ -606,6 +601,7 @@ async function judgeAgentAssertions(params: {
 }
 
 function buildJudgeCheckMetadata(judgeName: string, judgeAgent: AgentConfig, checkId: string) {
+  if (!isLlmAgent(judgeAgent)) throw new Error('Browser agents cannot be evaluation judges.');
   return {
     check_id: checkId,
     judge_agent: judgeName,

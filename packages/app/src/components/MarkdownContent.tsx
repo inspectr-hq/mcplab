@@ -166,8 +166,8 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number, variant: 'assi
       block.level === 1
         ? 'text-base font-semibold'
         : block.level === 2
-        ? 'text-sm font-semibold'
-        : 'text-sm font-medium';
+          ? 'text-sm font-semibold'
+          : 'text-sm font-medium';
     return <h4 className={className}>{renderInlineMarkdown(block.text, `${index}-h`)}</h4>;
   }
   if (block.type === 'paragraph') {

@@ -15,17 +15,21 @@ import { basename, extname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type {
   AgentConfig,
+  BrowserProviderProfile,
   EvalConfig,
   ExecutableEvalConfig,
   LlmMessage,
+  LlmAgentConfig,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
   expandConfigForAgents,
+  isLlmAgent,
   loadConfig,
   McpClientManager,
+  validateBrowserProviderProfile,
   runAll
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -41,7 +45,13 @@ import {
 } from './settings-store.js';
 import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
-import { readLibraries, writeLibraries } from './libraries-store.js';
+import {
+  readLibraries,
+  writeBrowserProviderAndAgent,
+  writeBrowserProviderProfiles,
+  writeBrowserProviderLearningArtifact,
+  writeLibraries
+} from './libraries-store.js';
 import {
   listRuns,
   getRunResults,
@@ -106,9 +116,23 @@ import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
+import { LiveTestService } from './live-tests.js';
+import { handleLiveTestRoutes } from './live-tests-routes.js';
+import {
+  proposeBrowserProviderProfile,
+  sanitizeBrowserProviderLearningTrace,
+  sanitizeBrowserProviderProposalDiagnostics
+} from './browser-provider-learning.js';
+import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
+import { createRoverConnectionService } from './rover-connection.js';
+import type { RoverSocketMessage } from './rover-connection.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
+
+export function isEvaluationJudgeAgent(agent: AgentConfig | undefined): agent is LlmAgentConfig {
+  return agent !== undefined && isLlmAgent(agent);
+}
 
 export async function startAppServer(options: AppServerOptions) {
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -125,6 +149,11 @@ export async function startAppServer(options: AppServerOptions) {
   };
   mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
+  const recoveredRuns = recoverJournalSnapshots(settings.runsDir);
+  if (recoveredRuns > 0)
+    console.log(
+      `[mcplab-app] Recovered ${recoveredRuns} result projection(s) from execution journals`
+    );
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
@@ -144,6 +173,32 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
+  const liveTestService = new LiveTestService({
+    runsDir: settings.runsDir,
+    cliVersion: pkgVersion,
+    readScenarios: (input) => {
+      if (!input?.evaluationRunId) return readLibraries(settings.librariesDir).scenarios;
+      for (const job of jobs.values()) {
+        const run = job.runParams;
+        if (
+          run.executionType === 'rover' &&
+          run.evaluationRunId === input.evaluationRunId &&
+          run.roverAgent.provider === input.client &&
+          run.roverAgent.name === input.agentName
+        )
+          return run.roverScenarios ?? [];
+      }
+      return [];
+    },
+    persist: persistAppRunArtifacts,
+    getEvaluationJudge: () => {
+      const libraries = readLibraries(settings.librariesDir);
+      return resolveEvaluationJudge({
+        agents: libraries.agents,
+        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+      });
+    }
+  });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
   const routeDeps: AppRouteDeps = {
     parseBody,
@@ -198,7 +253,131 @@ export async function startAppServer(options: AppServerOptions) {
     oauthSessionManager,
     deps: routeDeps,
     jobs: jobs as any,
-    state: runQueueState
+    state: runQueueState,
+    sendRoverMessage: (message) => roverConnection.send(message),
+    assignRoverJob: (provider, worker) => {
+      const connection = roverConnection.connection();
+      const effectiveWorker =
+        worker ??
+        (connection
+          ? {
+              connectionId: connection.connectionId,
+              provider: connection.registration.provider,
+              providerRevision: connection.registration.providerRevision,
+              capabilities: connection.registration.capabilities
+            }
+          : undefined);
+      const assigned = runQueueService.assignRoverJob(
+        provider,
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        effectiveWorker
+      );
+      if (assigned) activeRoverJobId = assigned.id;
+      return assigned;
+    },
+    onRoverJobReleased: (provider) => {
+      const connection = roverConnection.connection();
+      const next = runQueueService.assignRoverJob(
+        provider,
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        connection
+          ? {
+              connectionId: connection.connectionId,
+              provider: connection.registration.provider,
+              providerRevision: connection.registration.providerRevision,
+              capabilities: connection.registration.capabilities
+            }
+          : undefined
+      );
+      activeRoverJobId = next?.id ?? null;
+    }
+  });
+  let activeRoverJobId: string | null = null;
+  const roverConnection = createRoverConnectionService({
+    log: (message) => console.log(message),
+    onRegister: (connection) => {
+      const worker = {
+        connectionId: connection.connectionId,
+        provider: connection.registration.provider,
+        providerRevision: connection.registration.providerRevision,
+        capabilities: connection.registration.capabilities
+      };
+      runQueueService.rebindRoverLeases(connection.registration.provider, worker);
+      const assigned = runQueueService.assignRoverJob(
+        connection.registration.provider,
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        worker
+      );
+      roverConnection.send({
+        type: 'queue_waiting',
+        provider: connection.registration.provider,
+        jobs: runQueueService.getWaitingRoverJobs(connection.registration.provider)
+      });
+      activeRoverJobId = assigned?.id ?? null;
+    },
+    onMessage: (connection, message) => {
+      if (message.type === 'register_update' && !activeRoverJobId) {
+        const worker = {
+          connectionId: connection.connectionId,
+          provider: connection.registration.provider,
+          providerRevision: connection.registration.providerRevision,
+          capabilities: connection.registration.capabilities
+        };
+        const assigned = runQueueService.assignRoverJob(
+          connection.registration.provider,
+          (payload: RoverSocketMessage) => roverConnection.send(payload),
+          worker
+        );
+        activeRoverJobId = assigned?.id ?? null;
+        roverConnection.send({
+          type: 'queue_waiting',
+          provider: connection.registration.provider,
+          jobs: runQueueService.getWaitingRoverJobs(connection.registration.provider)
+        });
+      }
+      if (
+        message.type === 'progress' ||
+        message.type === 'complete' ||
+        message.type === 'stage' ||
+        message.type === 'scenario_status' ||
+        message.type === 'assignment_accept' ||
+        message.type === 'assignment_reject' ||
+        message.type === 'lease_renew' ||
+        message.type === 'lease_release'
+      ) {
+        const nextJobId = runQueueService.handleRoverMessage(
+          message,
+          connection.registration.provider,
+          (payload: RoverSocketMessage) => roverConnection.send(payload),
+          {
+            connectionId: connection.connectionId,
+            provider: connection.registration.provider,
+            providerRevision: connection.registration.providerRevision,
+            capabilities: connection.registration.capabilities
+          }
+        );
+        if (
+          message.type === 'complete' &&
+          typeof message.jobId === 'string' &&
+          activeRoverJobId === message.jobId
+        ) {
+          activeRoverJobId = nextJobId;
+        }
+      }
+    },
+    onDisconnect: (connection) => {
+      if (activeRoverJobId) {
+        const activeJob = runQueueService.jobs.get(activeRoverJobId);
+        const lease = activeJob?.roverLease;
+        if (!lease) {
+          runQueueService.pauseRoverJob(activeRoverJobId, connection.connectionId);
+          activeRoverJobId = null;
+        } else if (lease.connectionId === connection.connectionId) {
+          // Lease-capable workers use the lease expiry as the disconnect grace period.
+          activeRoverJobId = null;
+        }
+      }
+    }
   });
 
   const server = createServer(async (req, res) => {
@@ -274,6 +453,43 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (pathname === '/api/rover/status' && method === 'GET') {
+        const connection = roverConnection.connection();
+        asJson(res, 200, {
+          connected: Boolean(connection),
+          ...(connection
+            ? {
+                provider: connection.registration.provider,
+                pageUrl: connection.registration.pageUrl,
+                connectedAt: connection.connectedAt,
+                lastSeenAt: connection.lastSeenAt,
+                activeJobId: activeRoverJobId
+              }
+            : {})
+        });
+        return;
+      }
+
+      if (pathname === '/api/rover/open' && method === 'POST') {
+        const body = await parseBody(req);
+        const jobId = String(body.jobId ?? '').trim();
+        const job = runQueueService.jobs.get(jobId);
+        if (!job || job.runParams.executionType !== 'rover' || !job.runParams.roverAgent) {
+          asJson(res, 404, { error: 'Rover job not found.' });
+          return;
+        }
+        startBrowser(job.runParams.roverAgent.url);
+        asJson(res, 200, { ok: true, url: job.runParams.roverAgent.url });
+        return;
+      }
+
+      const roverResumeMatch = pathname.match(/^\/api\/rover\/jobs\/([^/]+)\/resume$/);
+      if (roverResumeMatch && method === 'POST') {
+        const resumed = runQueueService.resumeRoverJob(decodeURIComponent(roverResumeMatch[1]!));
+        asJson(res, resumed ? 200 : 404, { ok: resumed });
+        return;
+      }
+
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
         if (body.evalsDir) {
@@ -335,14 +551,157 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (pathname === '/api/rover/providers' && method === 'GET') {
+        asJson(res, 200, {
+          providers: Object.values(readLibraries(settings.librariesDir).browserProviders)
+        });
+        return;
+      }
+
+      if (pathname === '/api/browser-providers/learned' && method === 'POST') {
+        const body = await parseBody(req);
+        const rawProfile = body.profile ?? body;
+        try {
+          const profile = validateBrowserProviderProfile(rawProfile);
+          const existing = readLibraries(settings.librariesDir).browserProviders;
+          const wasExisting = Boolean(existing[profile.id]);
+          const agentBody = body.agent as
+            | { id?: unknown; name?: unknown; url?: unknown }
+            | undefined;
+          const agent =
+            agentBody?.id && agentBody.name && agentBody.url
+              ? {
+                  id: String(agentBody.id),
+                  name: String(agentBody.name),
+                  provider: profile.id,
+                  url: String(agentBody.url)
+                }
+              : undefined;
+          const learningArtifact = {
+            trace: sanitizeBrowserProviderLearningTrace(body.trace ?? {}),
+            proposalDiagnostics: sanitizeBrowserProviderProposalDiagnostics(
+              body.proposalDiagnostics
+            ),
+            savedAt: new Date().toISOString()
+          };
+          let storedProfile: BrowserProviderProfile;
+          let responseBody: Record<string, unknown>;
+          if (agent) {
+            const created = writeBrowserProviderAndAgent(settings.librariesDir, profile, agent);
+            storedProfile = created.profile;
+            roverConnection.send({ type: 'provider_updated', provider: created.profile });
+            responseBody = {
+              provider: created.profile,
+              agent: created.agent,
+              revision: created.profile.learned.updatedAt,
+              operation: wasExisting ? 'updated' : 'created'
+            };
+          } else {
+            const persistedProfiles = writeBrowserProviderProfiles(settings.librariesDir, {
+              ...existing,
+              [profile.id]: profile
+            });
+            storedProfile = persistedProfiles[profile.id]!;
+            roverConnection.send({ type: 'provider_updated', provider: storedProfile });
+            responseBody = {
+              provider: storedProfile,
+              revision: storedProfile.learned.updatedAt,
+              operation: wasExisting ? 'updated' : 'created'
+            };
+          }
+          try {
+            writeBrowserProviderLearningArtifact(
+              settings.librariesDir,
+              storedProfile.id,
+              learningArtifact
+            );
+          } catch (artifactError: unknown) {
+            console.warn(
+              `[mcplab] Failed to persist learning diagnostics for '${storedProfile.id}':`,
+              artifactError
+            );
+          }
+          asJson(res, wasExisting ? 200 : 201, responseBody);
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+
+      if (pathname === '/api/browser-providers/propose' && method === 'POST') {
+        const body = await parseBody(req);
+        try {
+          const libraries = readLibraries(settings.librariesDir);
+          const judge = resolveEvaluationJudge({
+            agents: libraries.agents,
+            evaluationJudgeAgentName:
+              typeof body.agentName === 'string'
+                ? body.agentName
+                : settings.evaluationJudgeAgentName
+          });
+          if (!judge || !isEvaluationJudgeAgent(judge.agent)) {
+            asJson(res, 400, {
+              error: 'Configure an LLM evaluation judge before requesting a provider proposal.'
+            });
+            return;
+          }
+          const profile = validateBrowserProviderProfile(body.profile);
+          const proposal = await proposeBrowserProviderProfile({
+            agent: judge.agent,
+            profile,
+            trace: (body.trace ?? {}) as { events?: unknown; observedGeneration?: unknown }
+          });
+          asJson(res, 200, proposal);
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+
+      const browserProviderUpdate = pathname.match(/^\/api\/browser-providers\/([^/]+)$/);
+      if (browserProviderUpdate && method === 'PUT') {
+        const providerId = decodeURIComponent(browserProviderUpdate[1]!);
+        const body = await parseBody(req);
+        try {
+          const existing = readLibraries(settings.librariesDir).browserProviders;
+          if (!existing[providerId]) {
+            asJson(res, 404, { error: 'Browser provider not found.' });
+            return;
+          }
+          if (body.revision && body.revision !== existing[providerId].learned.updatedAt) {
+            asJson(res, 409, { error: 'Browser provider was changed by another client.' });
+            return;
+          }
+          const profile = validateBrowserProviderProfile({
+            ...(body.profile ?? body),
+            id: providerId
+          });
+          const persistedProfiles = writeBrowserProviderProfiles(settings.librariesDir, {
+            ...existing,
+            [providerId]: profile
+          });
+          const storedProfile = persistedProfiles[providerId]!;
+          roverConnection.send({ type: 'provider_updated', provider: storedProfile });
+          asJson(res, 200, { provider: storedProfile, revision: storedProfile.learned.updatedAt });
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+
       if (pathname === '/api/libraries' && method === 'PUT') {
         const body = await parseBody(req);
-        writeLibraries(settings.librariesDir, {
-          servers: (body.servers as EvalConfig['servers']) ?? {},
-          agents: (body.agents as EvalConfig['agents']) ?? {},
-          scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
-        });
-        asJson(res, 200, { ok: true });
+        try {
+          writeLibraries(settings.librariesDir, {
+            servers: (body.servers as EvalConfig['servers']) ?? {},
+            agents: (body.agents as EvalConfig['agents']) ?? {},
+            scenarios: (body.scenarios as EvalConfig['scenarios']) ?? [],
+            browserProviders: body.browserProviders
+          });
+          asJson(res, 200, { ok: true });
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
 
@@ -447,6 +806,19 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (
+        await handleLiveTestRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          service: liveTestService,
+          deps: routeDeps
+        })
+      ) {
+        return;
+      }
+
+      if (
         await handleRunsRoutes({
           req,
           res,
@@ -479,10 +851,21 @@ export async function startAppServer(options: AppServerOptions) {
         asText
       });
     } catch (error: unknown) {
-      asJson(res, 500, {
+      const statusCode =
+        error &&
+        typeof error === 'object' &&
+        'statusCode' in error &&
+        typeof error.statusCode === 'number'
+          ? error.statusCode
+          : 500;
+      asJson(res, statusCode, {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+  });
+
+  server.on('upgrade', (req, socket, head) => {
+    if (!roverConnection.upgrade(req, socket, head)) socket.destroy();
   });
 
   await new Promise<void>((resolveReady) => {
@@ -491,6 +874,7 @@ export async function startAppServer(options: AppServerOptions) {
 
   server.on('close', () => {
     runQueueService.closeSubscribers();
+    roverConnection.close();
     devMcp?.stop();
   });
 

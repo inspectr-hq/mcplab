@@ -1,4 +1,11 @@
-import type { EvalRules, ResultsJson, ScenarioAggregate, ScenarioRunResult } from './types.js';
+import type {
+  EvalRules,
+  ResultsJson,
+  RunOutcome,
+  ScenarioAggregate,
+  ScenarioRunResult
+} from './types.js';
+import { deriveRunOutcome } from './scenario-observation.js';
 
 export function aggregateResults(params: {
   runId: string;
@@ -9,6 +16,8 @@ export function aggregateResults(params: {
   cliVersion: string;
   langsmithTraceUrls?: Record<string, string>;
   mcpServerVersions?: Record<string, string | null>;
+  executionSource?: ResultsJson['metadata']['execution_source'];
+  executionClient?: string;
   scenarioRuns: Array<{
     scenario_id: string;
     scenario_name?: string;
@@ -112,6 +121,15 @@ export function aggregateResults(params: {
       ),
     0
   );
+  const outcomes: Record<RunOutcome, number> = {
+    passed: 0,
+    failed: 0,
+    incomplete: 0,
+    error: 0
+  };
+  for (const run of scenarios.flatMap((scenario) => scenario.runs)) {
+    outcomes[run.outcome ?? deriveRunOutcome(run)] += 1;
+  }
   const totalDurationMs = scenarios.reduce(
     (sum, scenario) =>
       sum +
@@ -137,14 +155,17 @@ export function aggregateResults(params: {
       total_duration_ms: totalDurationMs,
       total_tool_duration_ms: totalToolDurationMs,
       cli_version: params.cliVersion,
-      mcp_server_versions: params.mcpServerVersions ?? {}
+      mcp_server_versions: params.mcpServerVersions ?? {},
+      execution_source: params.executionSource ?? 'mcplab',
+      execution_client: params.executionClient
     },
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
       pass_rate: totalRuns === 0 ? 0 : totalPasses / totalRuns,
       avg_tool_calls_per_run: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
-      avg_tool_latency_ms: avgLatency
+      avg_tool_latency_ms: avgLatency,
+      outcomes
     },
     scenarios
   };

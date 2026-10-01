@@ -108,6 +108,13 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_DEPLOYMENT=gpt-4o`
         }
       ]
+    },
+    {
+      id: 'rover-companion',
+      title: 'Optional: Rover Browser Agents',
+      paragraphs: [
+        'To evaluate Claude, ChatGPT, or a learned provider through a browser chat, install the MCPLab Rover extension and configure a browser agent. See [Rover Browser Agents](/docs/app/rover/) for the complete setup guide.'
+      ]
     }
   ]
 };
@@ -1283,7 +1290,7 @@ const appRunning: DocPage = {
       id: 'choose-agents',
       title: 'Choose Agents',
       paragraphs: [
-        'The agent picker shows agents defined in the selected config plus any agents loaded from the library. Select one or more agents — each selected agent runs every scenario.'
+        'The agent picker shows agents defined in the selected config plus any agents loaded from the library. Select one or more agents. LLM agents run through MCPLab, while browser agents are handed to Rover. See [Rover Browser Agents](/docs/app/rover/) for browser execution.'
       ]
     },
     {
@@ -1300,6 +1307,209 @@ const appRunning: DocPage = {
         'Hit Run to start the evaluation. The page shows live progress as scenarios complete. When all scenarios finish, the results are saved and you can navigate to the Result Detail.'
       ],
       screenshot: '/screenshots/run-evaluation-progress.png'
+    }
+  ]
+};
+
+const appRover: DocPage = {
+  slug: 'app-rover',
+  label: 'Rover Browser Agents',
+  href: '/docs/app/rover/',
+  description: 'Run and queue evaluations in supported browser chat applications.',
+  keywords: [
+    'rover',
+    'browser agent',
+    'claude',
+    'chatgpt',
+    'learned provider',
+    'queue',
+    'chrome extension'
+  ],
+  seoTitle: 'App | Rover Browser Agents',
+  track: 'app',
+  sections: [
+    {
+      id: 'what-rover-is',
+      title: 'What Rover Is',
+      paragraphs: [
+        'MCPLab Rover is a Chrome extension that injects a compact evaluation sidebar into a supported browser chat. It lets you evaluate responses from Claude, ChatGPT, and learned providers using the same assertions and result pipeline as normal MCPLab runs.',
+        'Use Rover when the agent runs in a browser interface instead of through an API that MCPLab can call directly.'
+      ],
+      bullets: [
+        'LLM agents call provider APIs directly from MCPLab.',
+        'Browser agents run through Rover in an active browser chat.',
+        'Both agent types produce the same MCPLab result format.',
+        'Rover includes Claude and ChatGPT adapters and can learn compatible browser providers.'
+      ]
+    },
+    {
+      id: 'boundaries',
+      title: 'What Rover Does Not Do',
+      bullets: [
+        'Rover is not an MCP proxy or replacement for the MCPLab MCP server.',
+        'Rover does not currently provide Inspectr tool telemetry.',
+        'A browser provider needs a built-in adapter or a valid provider profile learned through Rover.',
+        'Tool-dependent checks are not evaluated when Rover has no tool observations.',
+        'Attachment-based Live Tests are not eligible for Rover yet.'
+      ]
+    },
+    {
+      id: 'start-mcplab',
+      title: '1. Start MCPLab',
+      paragraphs: [
+        'Start the App with the directory that contains your shared agents and evaluations.'
+      ],
+      codeBlocks: [
+        {
+          title: 'start MCPLab with Rover support',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab app \\\n  --libraries-dir ./mcplab \\\n  --evals-dir ./mcplab/evals \\\n  --runs-dir ./mcplab/results/evaluation-runs \\\n  --port 8787 \\\n  --open'
+        }
+      ]
+    },
+    {
+      id: 'configure-browser-agent',
+      title: '2. Configure a Browser Agent',
+      paragraphs: [
+        'Add built-in browser agents to agents.yaml. Browser agents require type, provider, and url. They do not use model, temperature, max_tokens, or system settings. Providers learned through Rover are saved to the MCPLab library automatically.',
+        'Use new_conversation_between_scenarios to set the default conversation behavior. You can override it when starting an evaluation, and MCPLab freezes the choice into the Rover assignment.'
+      ],
+      codeBlocks: [
+        {
+          title: 'mcplab/agents.yaml',
+          language: 'yaml',
+          code: 'claude-browser:\n  type: browser\n  name: Claude browser\n  provider: claude\n  url: https://claude.ai\n  new_conversation_between_scenarios: true\n\nchatgpt-browser:\n  type: browser\n  name: ChatGPT browser\n  provider: chatgpt-com\n  url: https://chatgpt.com\n  new_conversation_between_scenarios: true'
+        }
+      ],
+      bullets: [
+        'Use provider: claude for Claude browser chats.',
+        'Use provider: chatgpt-com for ChatGPT browser chats.',
+        'Providers saved through Rover Learn are linked to a browser agent automatically.',
+        'Restart MCPLab after changing library files.'
+      ]
+    },
+    {
+      id: 'install-rover',
+      title: '3. Install Rover',
+      paragraphs: [
+        'Download the current extension ZIP from GitHub Releases, unzip it to a permanent directory, then load that directory as an unpacked extension. The Rover source repository also supports local development builds.'
+      ],
+      codeBlocks: [
+        {
+          title: 'build Rover locally',
+          language: 'bash',
+          code: 'cd /path/to/mcp-lab-rover\nnpm install\nnpm run build'
+        }
+      ],
+      bullets: [
+        'Use the Download Rover button above to open GitHub Releases.',
+        'Open chrome://extensions in Chrome.',
+        'Enable Developer mode.',
+        'Choose Load unpacked.',
+        'Select the unzipped release directory, or the Rover dist directory for a source build.',
+        'Reload the extension after rebuilding it.'
+      ]
+    },
+    {
+      id: 'connect-rover',
+      title: '4. Connect Rover to MCPLab',
+      paragraphs: [
+        'Open a supported browser chat, then click Rover in the Chrome toolbar. Rover injects a compact notch into the page and connects automatically. The indicator pulses green when MCPLab is reachable.',
+        'Rover connects to http://127.0.0.1:8787 by default. Use its settings only when you need another loopback port. This release accepts loopback HTTP origins such as 127.0.0.1, localhost, and ::1.'
+      ],
+      bullets: [
+        'A connection error usually means MCPLab is not running or the origin is incorrect.',
+        'Use the Manual tab for a one-off Live Test or when browser automation is unavailable.',
+        'Open the Learn tab when the current browser provider does not have a built-in adapter.'
+      ]
+    },
+    {
+      id: 'run-managed',
+      title: '5. Run an MCPLab-Managed Evaluation',
+      paragraphs: [
+        'Open Run Evaluation in MCPLab, select an evaluation and browser agent, then start the run. MCPLab-managed work waits in the central queue until a Rover connected to the matching provider is available.',
+        'Rover accepts one assignment, runs its scenarios sequentially in the bound browser tab, and captures each newly created or changed assistant response.',
+        'MCPLab evaluates response assertions, judge assertions, and extraction rules, then saves the result through the normal pipeline.'
+      ]
+    },
+    {
+      id: 'manual-live-test',
+      title: '6. Run a Live Test from Rover',
+      paragraphs: [
+        'Open the Manual tab in Rover, browse the MCPLab evaluation catalog, and select one evaluation. Review its prompt before running it in the active browser agent.',
+        'When the current page cannot be automated, use the manual fallback: copy the prompt, run it yourself, paste the final response into Rover, and submit it through the same MCPLab evaluation pipeline.'
+      ],
+      bullets: [
+        'The Manual tab runs one evaluation at a time.',
+        'Closing the injected panel does not cancel an active Live Test.',
+        'Attachment-based Live Tests remain disabled with an eligibility explanation.'
+      ]
+    },
+    {
+      id: 'queue-rover',
+      title: '7. Build a Local Queue in Rover',
+      paragraphs: [
+        'Rover also provides a local evaluation queue for the active provider. Add eligible evaluations from the MCPLab catalog, choose whether each evaluation should start a new conversation, then run the queue in the current tab.'
+      ],
+      bullets: [
+        'The queue survives closing and reopening the injected panel during the browser session.',
+        'Use Stop to cancel active work instead of only hiding the panel.',
+        'MCPLab-managed assignments remain authoritative and cannot be reordered locally.'
+      ]
+    },
+    {
+      id: 'learn-provider',
+      title: '8. Learn Another Browser Provider',
+      paragraphs: [
+        'Open Rover on the provider page and select Learn. Start learning, send one message yourself, then let Rover identify the composer, submission behavior, assistant responses, and completion signals.',
+        'Review the detected capabilities, give the provider a name, and save it to MCPLab. MCPLab stores the provider profile and links it to a browser agent for later matching.'
+      ],
+      bullets: [
+        'Learning observes one interaction; it does not send the teaching prompt for you.',
+        'Invalid or incomplete profiles are rejected instead of affecting built-in providers.',
+        'A changed learned profile receives a new revision so MCPLab can match it safely.'
+      ]
+    },
+    {
+      id: 'managed-controls',
+      title: '9. Monitor and Control Managed Work',
+      paragraphs: [
+        'MCPLab shows browser jobs as waiting for Rover, running, paused, completed, stopped, or failed. Use Connect to Rover to open the configured browser URL when a matching provider is not connected.'
+      ],
+      bullets: [
+        'Waiting assignments are delivered automatically after a matching Rover connects.',
+        'Paused Rover jobs require an explicit Resume action.',
+        'Stop is available for waiting, running, and paused jobs.',
+        'An accepted assignment remains bound to its original browser tab.'
+      ]
+    },
+    {
+      id: 'read-results',
+      title: '10. Read Rover Results',
+      paragraphs: [
+        'Rover results use the same result layout as normal MCPLab evaluations. Browser runs include Rover provenance, and outcomes are passed, failed, incomplete, or error.',
+        'Tool-dependent assertions are marked not evaluated because Rover does not currently report MCP tool observations.'
+      ],
+      codeBlocks: [
+        {
+          title: 'canonical result layout',
+          language: 'text',
+          code: 'results/\n  evaluation-run-id/\n    results.json\n    trace.jsonl\n    summary.md\n    resolved-config.yaml\n    report.html'
+        }
+      ]
+    },
+    {
+      id: 'troubleshooting',
+      title: 'Troubleshooting',
+      bullets: [
+        'Connection refused: start MCPLab and verify the Rover origin is http://127.0.0.1:8787.',
+        'Disconnected indicator: confirm the MCPLab App is running, then reopen Rover.',
+        'Unsupported page: use the Manual tab fallback, use Learn to create a provider profile, or switch to Claude or ChatGPT.',
+        'Provider not detected: navigate to the configured provider URL and refresh the page.',
+        'Missing URL: add a valid url and restart MCPLab.',
+        'Waiting for Rover: connect Rover using the same provider as the queued job.',
+        'Stale local build: run npm run build and reload the unpacked extension.'
+      ]
     }
   ]
 };
@@ -1460,7 +1670,8 @@ const appResults: DocPage = {
       title: 'Result Detail',
       paragraphs: [
         "Click a run to open the Result Detail. The detail view shows per-scenario pass/fail, the tool calls the agent made, which assertions passed, and the agent's final response.",
-        'Expand a scenario to inspect the full tool call trace — every LLM message and tool invocation in sequence.'
+        'Expand a scenario to inspect the full tool call trace, including every LLM message and tool invocation in sequence.',
+        'Rover runs show their execution source and provider in the run details. Tool-dependent checks are shown as not evaluated when Rover did not provide tool observations.'
       ],
       screenshot: '/screenshots/evaluation-results-run-detail.png'
     },
@@ -1875,7 +2086,7 @@ const appLibrary: DocPage = {
       title: 'Library Items in the UI',
       paragraphs: [
         'Library agents appear in the agent picker on the Run Evaluation page alongside agents defined in the selected config. Library servers appear in the server list when editing a config.',
-        'The Library section in the sidebar shows all loaded agents and servers with their full definitions.'
+        'The Library section in the sidebar shows all loaded agents and servers with their full definitions. Browser agents are identified by type and can be used by Rover.'
       ],
       screenshot: '/screenshots/agents-library.png'
     },
@@ -1916,9 +2127,28 @@ const refConfiguration: DocPage = {
       title: 'agents[ ]',
       bullets: [
         'id (string, required) — unique identifier referenced by scenarios.',
-        'provider (string, required) — LLM provider. One of: anthropic, openai, azure.',
-        'model (string, required) — model identifier as used by the provider API.',
-        'temperature (number, optional) — sampling temperature. Defaults to 0.'
+        'LLM agent: omit type or use `type: llm`; requires provider and model. Supported API providers are anthropic, openai, and azure_openai.',
+        'Browser agent type: `type: browser` (required). Browser agents are executed through Rover.',
+        'Browser agent provider (string, required): built-in or learned Rover provider identifier.',
+        'Browser agent url (string, required): page Rover opens when the agent needs attention.',
+        'new_conversation_between_scenarios (boolean, browser only, optional): defaults to starting a new conversation and can be overridden when a run starts.',
+        'temperature (number, LLM only, optional): sampling temperature. Defaults to 0.'
+      ],
+      codeBlocks: [
+        {
+          title: 'LLM and browser agents',
+          language: 'yaml',
+          code: `agents:
+  - id: api-agent
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+
+  - id: browser-agent
+    type: browser
+    provider: chatgpt-com
+    url: https://chatgpt.com
+    new_conversation_between_scenarios: true`
+        }
       ]
     },
     {
@@ -2310,6 +2540,7 @@ const pageIndex: DocPage[] = [
   appGettingStarted,
   appConfigurations,
   appRunning,
+  appRover,
   appLangSmith,
   appResults,
   appAssistants,
@@ -2357,6 +2588,10 @@ export const docsNavSections = [
       appToolAnalysis,
       appLibrary
     ]
+  },
+  {
+    title: 'Rover',
+    items: [appRover]
   },
   {
     title: 'Reference',

@@ -48,8 +48,8 @@ export function normalizeListedTool(tool: any): ToolDef {
     typeof tool.title === 'string'
       ? tool.title
       : typeof annotations?.title === 'string'
-      ? annotations.title
-      : undefined;
+        ? annotations.title
+        : undefined;
   return {
     name: tool.name,
     title: title,
@@ -151,8 +151,8 @@ export class McpClientManager {
         const tools = Array.isArray(result?.tools)
           ? result.tools
           : Array.isArray(result)
-          ? result
-          : [];
+            ? result
+            : [];
         return tools.map(normalizeListedTool);
       } catch (err: any) {
         throwIfAborted(signal);

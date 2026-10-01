@@ -466,8 +466,8 @@ async function fetchWithTrace(params: {
     to: label.toLowerCase().includes('token')
       ? 'Token Endpoint'
       : label.toLowerCase().includes('probe')
-      ? 'MCP/Resource'
-      : 'Auth Server',
+        ? 'MCP/Resource'
+        : 'Auth Server',
     label,
     stepId
   });
@@ -719,8 +719,8 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   const issuerFromMetadata = session.context.resourceMetadata?.authorization_servers?.[0]
     ? String(session.context.resourceMetadata.authorization_servers[0])
     : session.context.resourceMetadata?.authorization_server
-    ? String(session.context.resourceMetadata.authorization_server)
-    : undefined;
+      ? String(session.context.resourceMetadata.authorization_server)
+      : undefined;
   const metadataCandidates = overrideMetadataUrl
     ? [overrideMetadataUrl]
     : authServerMetadataCandidates(
@@ -788,8 +788,8 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
     const discovered = Array.isArray(fromResource)
       ? (fromResource as string[])
       : Array.isArray(fromAuthServer)
-      ? (fromAuthServer as string[])
-      : [];
+        ? (fromAuthServer as string[])
+        : [];
     if (discovered.length > 0) {
       session.config.runtime.scopes = discovered;
     }
@@ -1282,8 +1282,8 @@ export function createOAuthDebuggerSession(params: {
                     'OAuth client_secret'
                   )
                 : serverOauth?.client_secret
-                ? resolveConfigValue(serverOauth.client_secret, 'OAuth client_secret')
-                : undefined,
+                  ? resolveConfigValue(serverOauth.client_secret, 'OAuth client_secret')
+                  : undefined,
             tokenEndpointAuthMethod:
               params.config.clientConfig.preRegistered?.tokenEndpointAuthMethod
           }
@@ -1305,8 +1305,8 @@ export function createOAuthDebuggerSession(params: {
           runtime.scopes && runtime.scopes.length > 0
             ? runtime.scopes
             : serverOauth?.scope
-            ? serverOauth.scope.split(/\s+/).filter(Boolean)
-            : []
+              ? serverOauth.scope.split(/\s+/).filter(Boolean)
+              : []
       },
       display: {
         showSensitiveValues: params.config.display?.showSensitiveValues !== false
@@ -1340,22 +1340,22 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
     typeof expiresInRaw === 'number'
       ? Math.max(0, Math.floor(expiresInRaw))
       : typeof expiresInRaw === 'string' && /^\d+$/.test(expiresInRaw)
-      ? Math.max(0, Math.floor(Number(expiresInRaw)))
-      : undefined;
+        ? Math.max(0, Math.floor(Number(expiresInRaw)))
+        : undefined;
   const jwtExpSecondsRaw = jwtClaims?.exp;
   const jwtExpSeconds =
     typeof jwtExpSecondsRaw === 'number'
       ? Math.floor(jwtExpSecondsRaw)
       : typeof jwtExpSecondsRaw === 'string' && /^\d+$/.test(jwtExpSecondsRaw)
-      ? Math.floor(Number(jwtExpSecondsRaw))
-      : undefined;
+        ? Math.floor(Number(jwtExpSecondsRaw))
+        : undefined;
   const tokenReceivedAt = session.context.tokenReceivedAt ?? session.updatedAt;
   const expiresAtMs =
     typeof expiresInSeconds === 'number'
       ? tokenReceivedAt + expiresInSeconds * 1000
       : typeof jwtExpSeconds === 'number'
-      ? jwtExpSeconds * 1000
-      : undefined;
+        ? jwtExpSeconds * 1000
+        : undefined;
   const validForSeconds =
     typeof expiresAtMs === 'number'
       ? Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000))
@@ -1364,8 +1364,8 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
     typeof expiresInSeconds === 'number'
       ? 'expires_in'
       : typeof jwtExpSeconds === 'number'
-      ? 'jwt_exp'
-      : 'none';
+        ? 'jwt_exp'
+        : 'none';
   return {
     id: session.id,
     status: session.status,
@@ -1386,10 +1386,10 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
         session.status === 'configuring'
           ? 'start'
           : session.status === 'waiting_for_user'
-          ? 'paste_callback_url'
-          : session.status === 'waiting_for_browser_callback'
-          ? 'open_authorize_url'
-          : 'none',
+            ? 'paste_callback_url'
+            : session.status === 'waiting_for_browser_callback'
+              ? 'open_authorize_url'
+              : 'none',
       authorizationUrl: session.context.authorizationRequestUrl,
       callbackMode: session.config.runtime.redirectMode,
       callbackUrl: session.context.callbackUrl

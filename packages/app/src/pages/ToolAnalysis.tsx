@@ -827,14 +827,14 @@ const ToolAnalysisPage = () => {
                               tool.safetyClassification === 'read_only'
                                 ? 'read-only'
                                 : isWriteDelete
-                                ? 'write/delete'
-                                : 'unsafe/unknown';
+                                  ? 'write/delete'
+                                  : 'unsafe/unknown';
                             const safetyVariantClass =
                               tool.safetyClassification === 'read_only'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : isWriteDelete
-                                ? 'border-amber-300 bg-amber-50 text-amber-800'
-                                : 'border-slate-300 bg-slate-100 text-slate-700';
+                                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                  : 'border-slate-300 bg-slate-100 text-slate-700';
                             return (
                               <label
                                 key={`${server.serverName}-${tool.name}`}
@@ -1017,12 +1017,12 @@ const ToolAnalysisPage = () => {
                   {activeJobId
                     ? 'Live tool-analysis job events:'
                     : report
-                    ? 'Analysis finished. Review the summary below or open the saved report details.'
-                    : runState === 'stopped'
-                    ? 'Analysis was stopped. You can return to Configure Analysis.'
-                    : runState === 'error'
-                    ? 'Analysis ended with an error. Review the log and go back to Configure Analysis.'
-                    : 'Analysis finished.'}
+                      ? 'Analysis finished. Review the summary below or open the saved report details.'
+                      : runState === 'stopped'
+                        ? 'Analysis was stopped. You can return to Configure Analysis.'
+                        : runState === 'error'
+                          ? 'Analysis ended with an error. Review the log and go back to Configure Analysis.'
+                          : 'Analysis finished.'}
                 </CardDescription>
               </div>
               {activeJobId ? (
