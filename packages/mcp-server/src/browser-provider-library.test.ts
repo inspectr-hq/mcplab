@@ -78,5 +78,43 @@ describe('browser provider library tools', () => {
       id: 'claude'
     });
     expect(builtIn.structuredContent.content).toMatchObject({ id: 'claude', source: 'builtin' });
+    expect(builtIn.structuredContent.yaml).toContain('schema_version: 1');
+    expect(builtIn.structuredContent.yaml).not.toContain('claude:');
+    expect(builtIn.structuredContent.yaml).not.toContain('source: builtin');
+    expect(builtIn.structuredContent.yaml).not.toContain('created_at');
+    expect(builtIn.structuredContent.yaml).not.toContain('updated_at');
+  });
+
+  it('retrieves a workspace override instead of the built-in profile', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    writeFileSync(
+      join(root, 'mcplab', 'browser-providers', 'claude.yaml'),
+      `schema_version: 1\nname: Workspace Claude\nmatch:\n  origins: [https://claude.ai]\ncomposer:\n  locator:\n    segments: ['textarea']\n  input_mode: textarea\nsubmit:\n  action: enter\nassistant_messages:\n  locator:\n    segments: ['.assistant']\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://claude.ai\n  confidence: {}\n`,
+      'utf8'
+    );
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+
+    const listed = await tools.get('mcplab_list_library')!.cb({
+      kind: 'browser_providers',
+      includeContent: true
+    });
+    const listedClaude = listed.structuredContent.browser_providers.find(
+      (provider: { id: string }) => provider.id === 'claude'
+    );
+    const item = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'claude'
+    });
+
+    expect(item.structuredContent.content).toMatchObject({
+      id: 'claude',
+      name: 'Workspace Claude',
+      source: 'workspace'
+    });
+    expect(item.structuredContent.content).toEqual(listedClaude.entry);
+    expect(item.structuredContent.yaml).toContain('name: Workspace Claude');
   });
 });

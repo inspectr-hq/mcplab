@@ -70,6 +70,7 @@ export {
 export * from './queue-contract.js';
 export {
   parseBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   validateBrowserProviderProfile,
   type BrowserProviderProfile,
   type BrowserProviderConfidence,

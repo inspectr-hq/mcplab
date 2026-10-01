@@ -1,3 +1,5 @@
+import { stringify as stringifyYaml } from 'yaml';
+
 export type BrowserProviderConfidence = 'high' | 'medium' | 'low';
 
 export interface ShadowLocator {
@@ -238,4 +240,32 @@ export function parseBrowserProviderProfiles(
     profiles[id] = normalized;
   }
   return profiles;
+}
+
+export function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {
+  return `${stringifyYaml({
+    schema_version: profile.schemaVersion,
+    name: profile.name,
+    match: profile.match,
+    composer: {
+      locator: profile.composer.locator,
+      input_mode: profile.composer.inputMode
+    },
+    submit: profile.submit,
+    assistant_messages: {
+      locator: profile.assistantMessages.locator,
+      text_locator: profile.assistantMessages.textLocator
+    },
+    completion: {
+      generating_locator: profile.completion.generatingLocator,
+      idle_locator: profile.completion.idleLocator,
+      working_locator: profile.completion.workingLocator,
+      stability_ms: profile.completion.stabilityMs
+    },
+    new_conversation: profile.newConversation,
+    learned: {
+      source_origin: profile.learned.sourceOrigin,
+      confidence: profile.learned.confidence
+    }
+  })}\n`;
 }

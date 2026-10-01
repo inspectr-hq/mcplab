@@ -329,7 +329,10 @@ describe('RunEvaluation', () => {
     );
   });
 
-  it('groups Browser Agents and sends an explicit conversation override', async () => {
+  it.each([
+    { label: 'Start a new conversation', newConversation: true },
+    { label: 'Continue the same conversation', newConversation: false }
+  ])('honors $label for browser scenarios', async ({ label, newConversation }) => {
     const llmAgent: AgentConfig = {
       id: 'agent-llm',
       name: 'LLM Agent',
@@ -391,7 +394,7 @@ describe('RunEvaluation', () => {
     expect(varianceInput).toHaveValue(1);
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
+    fireEvent.click(screen.getByRole('option', { name: label }));
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
@@ -399,7 +402,8 @@ describe('RunEvaluation', () => {
       expect.objectContaining({
         agents: ['agent-llm', 'agent-browser'],
         runsPerScenario: 1,
-        newConversationBetweenScenarios: true
+        newConversationBetweenScenarios: newConversation,
+        newConversationBeforeStart: newConversation
       })
     );
   });

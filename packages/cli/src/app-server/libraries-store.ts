@@ -15,7 +15,8 @@ import {
   parseBrowserProviderProfiles,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   readLibraryAgentsAndServers,
-  validateBrowserProviderProfile
+  validateBrowserProviderProfile,
+  serializeBrowserProviderProfile
 } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 import { sanitizeBrowserProviderProposalDiagnostics } from './browser-provider-learning.js';
@@ -145,34 +146,6 @@ export function writeBrowserProviderProfiles(
     ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
     ...readBrowserProviderProfiles(root)
   };
-}
-
-function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {
-  return `${stringifyYaml({
-    schema_version: profile.schemaVersion,
-    name: profile.name,
-    match: profile.match,
-    composer: {
-      locator: profile.composer.locator,
-      input_mode: profile.composer.inputMode
-    },
-    submit: profile.submit,
-    assistant_messages: {
-      locator: profile.assistantMessages.locator,
-      text_locator: profile.assistantMessages.textLocator
-    },
-    completion: {
-      generating_locator: profile.completion.generatingLocator,
-      idle_locator: profile.completion.idleLocator,
-      working_locator: profile.completion.workingLocator,
-      stability_ms: profile.completion.stabilityMs
-    },
-    new_conversation: profile.newConversation,
-    learned: {
-      source_origin: profile.learned.sourceOrigin,
-      confidence: profile.learned.confidence
-    }
-  })}\n`;
 }
 
 function readFileIfPresent(path: string): string | undefined {

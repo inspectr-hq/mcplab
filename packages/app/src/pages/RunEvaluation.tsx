@@ -374,7 +374,9 @@ const RunEvaluation = () => {
         ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
           ? { newConversationBetweenScenarios: conversationMode === 'new' }
           : {}),
-        ...(selectedBrowserAgents.length > 0 ? { newConversationBeforeStart: true } : {}),
+        ...(selectedBrowserAgents.length > 0
+          ? { newConversationBeforeStart: conversationMode !== 'same' }
+          : {}),
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),

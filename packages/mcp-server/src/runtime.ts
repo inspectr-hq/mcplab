@@ -33,6 +33,7 @@ import {
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
   parseBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   updateEvaluationConfigFile,
@@ -3574,18 +3575,19 @@ function getLibraryItem(
     const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
     const builtIn =
       kind === 'browser_providers' ? DEFAULT_BROWSER_PROVIDER_PROFILES[id] : undefined;
-    if (builtIn) {
+    const file = directory
+      ? findBrowserProviderFile(directory, id)
+      : join(bundleRoot, `${kind}.yaml`);
+    if (builtIn && !existsSync(file)) {
+      const content = structuredClone(builtIn);
       return {
         bundleRoot,
         kind,
         id,
-        yaml: stringifyYaml({ [id]: builtIn }).trimEnd(),
-        content: builtIn as unknown as Record<string, unknown>
+        yaml: serializeBrowserProviderProfile(content).trimEnd(),
+        content: content as unknown as Record<string, unknown>
       };
     }
-    const file = directory
-      ? findBrowserProviderFile(directory, id)
-      : join(bundleRoot, `${kind}.yaml`);
     if (!existsSync(file)) {
       throw new Error(`Library file not found: ${file}`);
     }
