@@ -32,9 +32,6 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release": "npm run build && changeset publish",
-    "website:dev": "npm run dev -w @inspectr/mcplab-website",
-    "website:build": "npm run build -w @inspectr/mcplab-website",
-    "website:preview": "npm run preview -w @inspectr/mcplab-website",
     "validate:configs": "node scripts/validate-configs.mjs"
   },
   "devDependencies": {
