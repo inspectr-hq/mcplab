@@ -564,7 +564,7 @@ export async function startAppServer(options: AppServerOptions) {
         try {
           const profile = validateBrowserProviderProfile(rawProfile);
           const existing = readLibraries(settings.librariesDir).browserProviders;
-          const wasExisting = Boolean(existing[profile.id]);
+          const wasExisting = existing[profile.id]?.source === 'workspace';
           const agentBody = body.agent as
             | { id?: unknown; name?: unknown; url?: unknown }
             | undefined;

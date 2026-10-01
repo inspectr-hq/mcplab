@@ -49,6 +49,8 @@ describe('browser provider library tools', () => {
       includeContent: true
     });
     expect(listed.structuredContent.browser_providers).toMatchObject([
+      { id: 'chatgpt-com' },
+      { id: 'claude' },
       {
         id: 'custom-chat',
         entry: {
@@ -70,5 +72,11 @@ describe('browser provider library tools', () => {
     expect(item.structuredContent.yaml).toContain('schema_version: 1');
     expect(item.structuredContent.yaml).not.toContain('created_at');
     expect(item.structuredContent.yaml).not.toContain('updated_at');
+
+    const builtIn = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'claude'
+    });
+    expect(builtIn.structuredContent.content).toMatchObject({ id: 'claude', source: 'builtin' });
   });
 });

@@ -22,6 +22,33 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('exposes built-in Rover provider profiles without creating workspace files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const libraries = readLibraries(librariesDir);
+
+    expect(Object.keys(libraries.browserProviders)).toEqual(['claude', 'chatgpt-com']);
+    expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
+
+    const persisted = writeBrowserProviderProfiles(librariesDir, libraries.browserProviders);
+    expect(persisted.claude?.source).toBe('builtin');
+  });
+
+  it('lets a workspace profile override a built-in provider', () => {
+    const librariesDir = makeTempLibrariesDir();
+    mkdirSync(join(librariesDir, 'browser-providers'));
+    writeFileSync(
+      join(librariesDir, 'browser-providers', 'claude.yaml'),
+      `schema_version: 1\nname: Custom Claude\nmatch:\n  origins:\n    - https://claude.ai\ncomposer:\n  locator:\n    segments:\n      - '[contenteditable="true"]'\n  input_mode: contenteditable\nsubmit:\n  action: enter\nassistant_messages:\n  locator:\n    segments:\n      - '.assistant'\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://claude.ai\n  confidence: {}\n`,
+      'utf8'
+    );
+
+    expect(readLibraries(librariesDir).browserProviders.claude).toMatchObject({
+      name: 'Custom Claude',
+      source: 'workspace',
+      completion: { stabilityMs: 1000 }
+    });
+  });
+
   it('round-trips learned working and New Chat confirmation through YAML', () => {
     const librariesDir = makeTempLibrariesDir();
     writeBrowserProviderProfiles(librariesDir, {
@@ -125,7 +152,9 @@ describe('libraries-store test-case directory migration', () => {
     );
 
     const profiles = readLibraries(librariesDir).browserProviders;
-    expect(profiles).toEqual({});
+    expect(profiles).not.toHaveProperty('trendminer');
+    expect(profiles).toHaveProperty('claude');
+    expect(profiles).toHaveProperty('chatgpt-com');
     expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
   });
 
@@ -175,6 +204,9 @@ describe('libraries-store test-case directory migration', () => {
       provider: 'claude-learned'
     });
     expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
+    expect(readdirSync(join(librariesDir, 'browser-providers')).sort()).toEqual([
+      'claude-learned.yaml'
+    ]);
     expect(readLibraries(librariesDir).agents['existing-browser']).toMatchObject({
       newConversationBetweenScenarios: false
     });
@@ -208,7 +240,7 @@ describe('libraries-store test-case directory migration', () => {
     expect(
       readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt
     ).toEqual(expect.any(String));
-    expect(profile).toEqual({});
+    expect(profile).not.toHaveProperty('claude-learned');
   });
 
   it('loads servers and agents from library yaml files', () => {

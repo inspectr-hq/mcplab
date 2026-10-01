@@ -27,6 +27,12 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 
 Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 
+### Browser evaluations with Rover
+
+[MCPLab Rover](https://github.com/inspectr-hq/mcplab-rover) is the browser companion for running scenarios in Claude, ChatGPT, and learned browser providers. Queue browser evaluations from MCPLab, let Rover submit prompts and capture completed responses, then review the same assertions and results in MCPLab.
+
+See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/) or [download Rover](https://github.com/inspectr-hq/mcplab-rover/releases/latest).
+
 ---
 
 ## ✨ Features

@@ -13,6 +13,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { BrowserAgentConfig, BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
 import {
   parseBrowserProviderProfiles,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
   readLibraryAgentsAndServers,
   validateBrowserProviderProfile
 } from '@inspectr/mcplab-core';
@@ -61,7 +62,10 @@ export function readLibraries(librariesDir: string): {
       scenarios.push({ ...parsed, id });
     }
   }
-  const browserProviders = readBrowserProviderProfiles(root);
+  const browserProviders = {
+    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
+    ...readBrowserProviderProfiles(root)
+  };
   return { servers, agents, scenarios, browserProviders };
 }
 
@@ -80,6 +84,7 @@ function readBrowserProviderProfiles(root: string): Record<string, BrowserProvid
     const stats = statSync(join(directory, file));
     profiles[id] = {
       ...profile,
+      source: 'workspace',
       learned: {
         ...profile.learned,
         createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
@@ -100,6 +105,12 @@ export function writeBrowserProviderProfiles(
   mkdirSync(directory, { recursive: true });
   const desired = new Set<string>();
   for (const [id, profile] of Object.entries(profiles)) {
+    const builtIn = DEFAULT_BROWSER_PROVIDER_PROFILES[id];
+    if (
+      builtIn &&
+      serializeBrowserProviderProfile(builtIn) === serializeBrowserProviderProfile(profile)
+    )
+      continue;
     const fileStem = safeFileName(id);
     if (fileStem !== id) {
       throw new Error(`Browser provider id '${id}' must be a safe filename.`);
@@ -130,7 +141,10 @@ export function writeBrowserProviderProfiles(
     if (!(file.endsWith('.yaml') || file.endsWith('.yml')) || desired.has(file)) continue;
     unlinkSync(join(directory, file));
   }
-  return readBrowserProviderProfiles(root);
+  return {
+    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
+    ...readBrowserProviderProfiles(root)
+  };
 }
 
 function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {

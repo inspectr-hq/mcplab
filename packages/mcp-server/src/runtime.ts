@@ -41,6 +41,7 @@ import {
   readTestCaseFile,
   updateTestCaseFile,
   buildScenarioEntry,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -3484,7 +3485,10 @@ function readLibrary(
     : {};
   const browserProviders =
     kind === 'all' || kind === 'browser_providers'
-      ? readBrowserProviderProfiles(browserProvidersDir)
+      ? {
+          ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
+          ...readBrowserProviderProfiles(browserProvidersDir)
+        }
       : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
@@ -3550,6 +3554,7 @@ function readBrowserProviderProfiles(
     const stats = statSync(fullPath);
     profiles[id] = {
       ...profile,
+      source: 'workspace',
       learned: {
         ...profile.learned,
         createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
@@ -3567,6 +3572,17 @@ function getLibraryItem(
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
     const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
+    const builtIn =
+      kind === 'browser_providers' ? DEFAULT_BROWSER_PROVIDER_PROFILES[id] : undefined;
+    if (builtIn) {
+      return {
+        bundleRoot,
+        kind,
+        id,
+        yaml: stringifyYaml({ [id]: builtIn }).trimEnd(),
+        content: builtIn as unknown as Record<string, unknown>
+      };
+    }
     const file = directory
       ? findBrowserProviderFile(directory, id)
       : join(bundleRoot, `${kind}.yaml`);

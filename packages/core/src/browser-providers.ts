@@ -8,6 +8,7 @@ export interface BrowserProviderProfile {
   schemaVersion: 1;
   id: string;
   name: string;
+  source?: 'builtin' | 'workspace';
   match: { origins: string[] };
   composer: {
     locator: ShadowLocator;
@@ -90,6 +91,12 @@ function origin(value: unknown, label: string): string {
 export function validateBrowserProviderProfile(value: unknown): BrowserProviderProfile {
   const source = record(value, 'profile');
   if (
+    source.source !== undefined &&
+    source.source !== 'builtin' &&
+    source.source !== 'workspace'
+  )
+    throw new Error('Invalid browser provider source.');
+  if (
     Object.prototype.hasOwnProperty.call(source, 'script') ||
     Object.prototype.hasOwnProperty.call(source, 'scriptSource')
   ) {
@@ -128,6 +135,9 @@ export function validateBrowserProviderProfile(value: unknown): BrowserProviderP
     schemaVersion: 1,
     id,
     name,
+    ...(source.source === 'builtin' || source.source === 'workspace'
+      ? { source: source.source }
+      : {}),
     match: { origins },
     composer: { locator: locator(composer.locator, 'composer'), inputMode },
     submit: { action: submit.action, locator: optionalLocator(submit.locator, 'submit') },
