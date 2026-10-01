@@ -8,6 +8,7 @@ export function projectEvaluationJournal(params: {
   runsDir: string;
   evaluationRunId: string;
   evaluationName?: string;
+  runNote?: string;
   executionStatus?: 'stopped';
 }): ResultsJson | null {
   const events = readExecutionEvents(join(params.runsDir, params.evaluationRunId));
@@ -49,6 +50,7 @@ export function projectEvaluationJournal(params: {
     evaluationRunId: params.evaluationRunId,
     runId: params.evaluationRunId,
     evaluationName: params.evaluationName,
+    runNote: params.runNote,
     executions,
     failedExecutions: failedExecutions.size,
     stoppedExecutions: stoppedExecutions.size

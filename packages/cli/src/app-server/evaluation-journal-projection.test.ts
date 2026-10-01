@@ -54,10 +54,18 @@ describe('projectEvaluationJournal', () => {
       });
       expect(projected?.metadata.run_id).toBe('run-1');
       expect(projected?.metadata.config_name).toBe('Batch quality');
+      expect(projected?.metadata).not.toHaveProperty('run_note');
       expect(projected?.summary.total_runs).toBe(2);
       expect(readFileSync(join(root, 'run-1', 'trace.jsonl'), 'utf8')).toContain(
         '"roverType":"stage"'
       );
+      const noted = projectEvaluationJournal({
+        runsDir: root,
+        evaluationRunId: 'run-1',
+        evaluationName: 'Batch quality',
+        runNote: 'Manual verification run'
+      });
+      expect(noted?.metadata.run_note).toBe('Manual verification run');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

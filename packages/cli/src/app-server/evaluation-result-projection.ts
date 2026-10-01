@@ -6,6 +6,7 @@ export function projectEvaluationResult(params: {
   runId: string;
   executions: ResultsJson[];
   evaluationName?: string;
+  runNote?: string;
   failedExecutions?: number;
   stoppedExecutions?: number;
 }): ResultsJson {
@@ -108,9 +109,7 @@ export function projectEvaluationResult(params: {
         params.evaluationName ||
         sourceMetadata?.config_name ||
         `Evaluation ${params.evaluationRunId}`,
-      run_note: params.evaluationName
-        ? `Evaluation: ${params.evaluationName}`
-        : `Evaluation ${params.evaluationRunId}`,
+      ...(params.runNote?.trim() ? { run_note: params.runNote.trim() } : {}),
       ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
       ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
       evaluation_run_id: params.runId

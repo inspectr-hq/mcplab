@@ -431,6 +431,7 @@ export async function executeRunJob(params: {
         runsDir: settings.runsDir,
         evaluationRunId: job.runParams.evaluationRunId,
         evaluationName: job.runParams.evaluationName,
+        runNote: job.runParams.runNote,
         executionId: results.metadata.run_id,
         executionSource: 'mcplab',
         results,

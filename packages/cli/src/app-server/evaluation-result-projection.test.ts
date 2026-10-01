@@ -24,6 +24,25 @@ function execution(runId: string, passed: number, total: number): ResultsJson {
 }
 
 describe('projectEvaluationResult', () => {
+  it('only includes an explicitly entered run note', () => {
+    const withoutNote = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      evaluationName: 'Basic - Search Assets',
+      executions: [execution('llm-1', 1, 1)]
+    });
+    expect(withoutNote.metadata).not.toHaveProperty('run_note');
+
+    const withNote = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      evaluationName: 'Basic - Search Assets',
+      runNote: 'Manual verification run',
+      executions: [execution('llm-1', 1, 1)]
+    });
+    expect(withNote.metadata.run_note).toBe('Manual verification run');
+  });
+
   it('combines execution summaries into one canonical result', () => {
     const result = projectEvaluationResult({
       evaluationRunId: 'evaluation-1',

@@ -7,6 +7,7 @@ type JournalWriterOptions = {
   runsDir: string;
   evaluationRunId: string;
   evaluationName?: string;
+  runNote?: string;
   appendEvent?: typeof appendExecutionEvent;
 };
 
@@ -36,7 +37,8 @@ export function recordEvaluationExecution(
   return projectEvaluationJournal({
     runsDir: options.runsDir,
     evaluationRunId: options.evaluationRunId,
-    evaluationName: options.evaluationName
+    evaluationName: options.evaluationName,
+    runNote: options.runNote
   });
 }
 
@@ -63,6 +65,7 @@ export function recordEvaluationTerminalExecution(
     runsDir: options.runsDir,
     evaluationRunId: options.evaluationRunId,
     evaluationName: options.evaluationName,
+    runNote: options.runNote,
     ...(options.status === 'stopped' ? { executionStatus: 'stopped' as const } : {})
   });
 }

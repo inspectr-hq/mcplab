@@ -199,6 +199,7 @@ export function createRunQueueService(params: {
       runsDir: settings.runsDir,
       evaluationRunId,
       evaluationName: job.runParams.evaluationName,
+      runNote: job.runParams.runNote,
       executionStatus: 'stopped'
     });
   }
@@ -210,6 +211,7 @@ export function createRunQueueService(params: {
       runsDir: settings.runsDir,
       evaluationRunId,
       evaluationName: job.runParams.evaluationName,
+      runNote: job.runParams.runNote,
       executionId: job.id,
       status,
       reason
