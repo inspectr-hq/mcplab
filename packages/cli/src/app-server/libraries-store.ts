@@ -13,8 +13,10 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { BrowserAgentConfig, BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
 import {
   parseBrowserProviderProfiles,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
   readLibraryAgentsAndServers,
-  validateBrowserProviderProfile
+  validateBrowserProviderProfile,
+  serializeBrowserProviderProfile
 } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 import { sanitizeBrowserProviderProposalDiagnostics } from './browser-provider-learning.js';
@@ -61,7 +63,10 @@ export function readLibraries(librariesDir: string): {
       scenarios.push({ ...parsed, id });
     }
   }
-  const browserProviders = readBrowserProviderProfiles(root);
+  const browserProviders = {
+    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
+    ...readBrowserProviderProfiles(root)
+  };
   return { servers, agents, scenarios, browserProviders };
 }
 
@@ -80,6 +85,7 @@ function readBrowserProviderProfiles(root: string): Record<string, BrowserProvid
     const stats = statSync(join(directory, file));
     profiles[id] = {
       ...profile,
+      source: 'workspace',
       learned: {
         ...profile.learned,
         createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
@@ -100,6 +106,12 @@ export function writeBrowserProviderProfiles(
   mkdirSync(directory, { recursive: true });
   const desired = new Set<string>();
   for (const [id, profile] of Object.entries(profiles)) {
+    const builtIn = DEFAULT_BROWSER_PROVIDER_PROFILES[id];
+    if (
+      builtIn &&
+      serializeBrowserProviderProfile(builtIn) === serializeBrowserProviderProfile(profile)
+    )
+      continue;
     const fileStem = safeFileName(id);
     if (fileStem !== id) {
       throw new Error(`Browser provider id '${id}' must be a safe filename.`);
@@ -130,35 +142,10 @@ export function writeBrowserProviderProfiles(
     if (!(file.endsWith('.yaml') || file.endsWith('.yml')) || desired.has(file)) continue;
     unlinkSync(join(directory, file));
   }
-  return readBrowserProviderProfiles(root);
-}
-
-function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {
-  return `${stringifyYaml({
-    schema_version: profile.schemaVersion,
-    name: profile.name,
-    match: profile.match,
-    composer: {
-      locator: profile.composer.locator,
-      input_mode: profile.composer.inputMode
-    },
-    submit: profile.submit,
-    assistant_messages: {
-      locator: profile.assistantMessages.locator,
-      text_locator: profile.assistantMessages.textLocator
-    },
-    completion: {
-      generating_locator: profile.completion.generatingLocator,
-      idle_locator: profile.completion.idleLocator,
-      working_locator: profile.completion.workingLocator,
-      stability_ms: profile.completion.stabilityMs
-    },
-    new_conversation: profile.newConversation,
-    learned: {
-      source_origin: profile.learned.sourceOrigin,
-      confidence: profile.learned.confidence
-    }
-  })}\n`;
+  return {
+    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
+    ...readBrowserProviderProfiles(root)
+  };
 }
 
 function readFileIfPresent(path: string): string | undefined {

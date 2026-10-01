@@ -1,3 +1,5 @@
+import { stringify as stringifyYaml } from 'yaml';
+
 export type BrowserProviderConfidence = 'high' | 'medium' | 'low';
 
 export interface ShadowLocator {
@@ -8,6 +10,7 @@ export interface BrowserProviderProfile {
   schemaVersion: 1;
   id: string;
   name: string;
+  source?: 'builtin' | 'workspace';
   match: { origins: string[] };
   composer: {
     locator: ShadowLocator;
@@ -90,6 +93,12 @@ function origin(value: unknown, label: string): string {
 export function validateBrowserProviderProfile(value: unknown): BrowserProviderProfile {
   const source = record(value, 'profile');
   if (
+    source.source !== undefined &&
+    source.source !== 'builtin' &&
+    source.source !== 'workspace'
+  )
+    throw new Error('Invalid browser provider source.');
+  if (
     Object.prototype.hasOwnProperty.call(source, 'script') ||
     Object.prototype.hasOwnProperty.call(source, 'scriptSource')
   ) {
@@ -128,6 +137,9 @@ export function validateBrowserProviderProfile(value: unknown): BrowserProviderP
     schemaVersion: 1,
     id,
     name,
+    ...(source.source === 'builtin' || source.source === 'workspace'
+      ? { source: source.source }
+      : {}),
     match: { origins },
     composer: { locator: locator(composer.locator, 'composer'), inputMode },
     submit: { action: submit.action, locator: optionalLocator(submit.locator, 'submit') },
@@ -228,4 +240,32 @@ export function parseBrowserProviderProfiles(
     profiles[id] = normalized;
   }
   return profiles;
+}
+
+export function serializeBrowserProviderProfile(profile: BrowserProviderProfile): string {
+  return `${stringifyYaml({
+    schema_version: profile.schemaVersion,
+    name: profile.name,
+    match: profile.match,
+    composer: {
+      locator: profile.composer.locator,
+      input_mode: profile.composer.inputMode
+    },
+    submit: profile.submit,
+    assistant_messages: {
+      locator: profile.assistantMessages.locator,
+      text_locator: profile.assistantMessages.textLocator
+    },
+    completion: {
+      generating_locator: profile.completion.generatingLocator,
+      idle_locator: profile.completion.idleLocator,
+      working_locator: profile.completion.workingLocator,
+      stability_ms: profile.completion.stabilityMs
+    },
+    new_conversation: profile.newConversation,
+    learned: {
+      source_origin: profile.learned.sourceOrigin,
+      confidence: profile.learned.confidence
+    }
+  })}\n`;
 }

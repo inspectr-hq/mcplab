@@ -11,7 +11,7 @@ This project uses [Changesets](https://github.com/changesets/changesets) for ver
 | `@inspectr/mcplab-mcp-server` | `packages/mcp-server` |
 | `@inspectr/mcplab-reporting`  | `packages/reporting`  |
 
-Private packages (`@inspectr/mcplab-app`, `@inspectr/mcplab-website`) are ignored by changesets.
+The private app package is ignored by changesets.
 
 ## Release Steps
 

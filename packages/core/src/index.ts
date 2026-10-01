@@ -70,8 +70,10 @@ export {
 export * from './queue-contract.js';
 export {
   parseBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   validateBrowserProviderProfile,
   type BrowserProviderProfile,
   type BrowserProviderConfidence,
   type ShadowLocator
 } from './browser-providers.js';
+export { DEFAULT_BROWSER_PROVIDER_PROFILES } from './default-browser-providers.js';

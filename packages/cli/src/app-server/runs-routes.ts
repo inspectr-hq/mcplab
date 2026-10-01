@@ -538,7 +538,8 @@ export async function handleRunsRoutes(params: {
                 name,
                 provider: agent.provider,
                 url: agent.url,
-                ...(browserProviders[agent.provider]
+                ...(browserProviders[agent.provider]?.source !== 'builtin' &&
+                browserProviders[agent.provider]
                   ? {
                       providerRevision: browserProviders[agent.provider].learned.updatedAt
                     }
