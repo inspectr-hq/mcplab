@@ -928,7 +928,7 @@ const RunEvaluation = () => {
                 {agentGroups.map((group) =>
                   group.agents.length > 0 ? (
                     <div key={group.label} className="space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
                         <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
                         <div className="flex items-center gap-3 text-xs">
                           <button
