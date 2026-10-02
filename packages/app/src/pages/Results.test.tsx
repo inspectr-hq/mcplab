@@ -216,10 +216,11 @@ describe('Results', () => {
 
     expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
     expect(runHeader).toHaveClass('results-table-column-run-id');
-    expect(runHeader).toHaveClass('w-[25rem]', 'max-w-[25rem]');
+    expect(runHeader).toHaveClass('w-[30rem]', 'max-w-[30rem]');
     expect(runCell).toHaveClass('results-table-column-run-id');
     expect(evaluationHeader).toHaveClass('min-w-0');
     expect(evaluationHeader).toHaveClass('results-table-column-evaluation');
+    expect(evaluationHeader).toHaveClass('w-[20rem]', 'max-w-[20rem]');
     expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
     expect(evaluationCell).toHaveClass('min-w-0');
     expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
