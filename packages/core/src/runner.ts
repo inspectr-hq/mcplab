@@ -369,6 +369,60 @@ export async function runAll(
             });
             throw scenarioErr;
           }
+          if (runSignal?.aborted) {
+            const stopReason = String(scenarioErr?.message ?? scenarioErr ?? 'Request aborted');
+            const tsEnd = new Date().toISOString();
+            const stoppedRun: ScenarioRunResult = {
+              run_index: runIndex,
+              request_id: requestId,
+              pass: false,
+              outcome: 'stopped',
+              stop_reason: stopReason,
+              failures: [],
+              check_results: buildNotExecutedCheckResults(scenario.eval),
+              tool_calls: [],
+              tool_call_count: 0,
+              tool_sequence: [],
+              tool_usage: {},
+              tool_durations_ms: [],
+              run_duration_ms: Math.max(0, Date.parse(tsEnd) - Date.parse(tsStart)),
+              final_text: '',
+              extracted: {}
+            };
+            runs.push(stoppedRun);
+            trace.write({
+              type: 'scenario_run',
+              trace_version: 3,
+              run_index: runIndex,
+              request_id: requestId,
+              scenario_id: scenario.id,
+              agent: scenario.agent,
+              provider: agent.provider,
+              model: agent.model,
+              ts_start: tsStart,
+              ts_end: tsEnd,
+              pass: false,
+              outcome: 'stopped',
+              error: stopReason,
+              messages: []
+            });
+            await scenarioTrace.end({
+              error: stopReason,
+              outputs: { pass: false, stopped: true }
+            });
+            await emitProgress({
+              type: 'scenario_run_finished',
+              scenarioId: scenario.id,
+              agentName: scenario.agent,
+              scenarioRunIndex,
+              totalScenarioRuns,
+              runIndex,
+              runsPerScenario: options.runsPerScenario,
+              pass: false,
+              toolCallCount: 0
+            });
+            break;
+          }
           if (isAbortError(scenarioErr)) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),

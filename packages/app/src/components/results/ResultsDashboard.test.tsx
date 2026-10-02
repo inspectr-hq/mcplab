@@ -39,7 +39,7 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('87.5%')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument();
     expect(screen.getByText('Avg Tool Calls')).toBeInTheDocument();
-    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error')).toBeInTheDocument();
+    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error / Stopped')).toBeInTheDocument();
     expect(
       screen.getByText('Checks Pass / Fail / Not evaluated / Not executed')
     ).toBeInTheDocument();

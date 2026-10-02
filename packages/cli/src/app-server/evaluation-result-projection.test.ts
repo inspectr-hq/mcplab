@@ -169,6 +169,32 @@ describe('projectEvaluationResult', () => {
       stoppedExecutions: 1
     });
     expect(result.summary.total_runs).toBe(1);
-    expect(result.summary.outcomes).toEqual({ passed: 0, failed: 0, incomplete: 0, error: 1 });
+    expect(result.summary.pass_rate).toBe(0);
+    expect(result.summary.outcomes).toEqual({
+      passed: 0,
+      failed: 0,
+      incomplete: 0,
+      error: 0,
+      stopped: 1
+    });
+  });
+
+  it('excludes stopped executions from pass rate', () => {
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      executions: [execution('llm-1', 6, 6)],
+      stoppedExecutions: 1
+    });
+
+    expect(result.summary.total_runs).toBe(7);
+    expect(result.summary.pass_rate).toBe(1);
+    expect(result.summary.outcomes).toEqual({
+      passed: 6,
+      failed: 0,
+      incomplete: 0,
+      error: 0,
+      stopped: 1
+    });
   });
 });

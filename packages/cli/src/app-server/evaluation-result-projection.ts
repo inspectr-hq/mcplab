@@ -32,15 +32,16 @@ export function projectEvaluationResult(params: {
       ) / totalRuns
     );
   };
-  const outcomes: Record<RunOutcome, number> = {
+  const outcomes: Partial<Record<RunOutcome, number>> = {
     passed: 0,
     failed: failedExecutions,
     incomplete: 0,
-    error: stoppedExecutions
+    error: 0,
+    ...(stoppedExecutions > 0 ? { stopped: stoppedExecutions } : {})
   };
   for (const result of executions) {
     for (const outcome of Object.keys(outcomes) as RunOutcome[]) {
-      outcomes[outcome] += result.summary.outcomes?.[outcome] ?? 0;
+      outcomes[outcome] = (outcomes[outcome] ?? 0) + (result.summary.outcomes?.[outcome] ?? 0);
     }
   }
   const sourceMetadata = executions[0]?.metadata;
@@ -117,7 +118,10 @@ export function projectEvaluationResult(params: {
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : outcomes.passed / totalRuns,
+      pass_rate:
+        totalRuns - (outcomes.stopped ?? 0) === 0
+          ? 0
+          : (outcomes.passed ?? 0) / (totalRuns - (outcomes.stopped ?? 0)),
       avg_tool_calls_per_run: weighted('avg_tool_calls_per_run') ?? 0,
       avg_tool_latency_ms: weighted('avg_tool_latency_ms'),
       outcomes

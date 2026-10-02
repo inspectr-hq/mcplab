@@ -190,6 +190,7 @@ export interface ScenarioRun {
   passed: boolean;
   outcome?: RunOutcome;
   error?: string;
+  stopReason?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;

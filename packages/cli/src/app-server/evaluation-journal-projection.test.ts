@@ -206,8 +206,8 @@ describe('projectEvaluationJournal', () => {
       });
       expect(projected?.metadata.execution_status).toBe('stopped');
       expect(projected?.summary.total_runs).toBe(3);
-      expect(projected?.summary.pass_rate).toBeCloseTo(2 / 3);
-      expect(projected?.summary.outcomes).toMatchObject({ passed: 2, error: 1 });
+      expect(projected?.summary.pass_rate).toBe(1);
+      expect(projected?.summary.outcomes).toMatchObject({ passed: 2, stopped: 1, error: 0 });
       expect(
         JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8')).metadata.execution_status
       ).toBe('stopped');

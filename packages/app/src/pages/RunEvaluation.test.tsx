@@ -170,6 +170,61 @@ describe('RunEvaluation', () => {
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
   });
 
+  it('selects and clears LLM and browser agents independently', async () => {
+    const llmAgent: AgentConfig = {
+      id: 'agent-llm',
+      name: 'LLM Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const browserAgent: AgentConfig = {
+      id: 'agent-browser',
+      name: 'Browser Agent',
+      type: 'browser',
+      provider: 'chatgpt-com',
+      model: '',
+      maxTokens: 0,
+      url: 'https://chatgpt.com'
+    };
+    configsRef.value = [
+      {
+        id: 'test-config',
+        name: 'Test Config',
+        agents: [llmAgent, browserAgent],
+        scenarios: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        sourcePath: '/path/to/test.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'LLM Agent' })).toBeChecked());
+    const llmCheckbox = screen.getByRole('checkbox', { name: 'LLM Agent' });
+    const browserCheckbox = screen.getByRole('checkbox', { name: 'Browser Agent' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear LLM Agents' }));
+    expect(llmCheckbox).not.toBeChecked();
+    expect(browserCheckbox).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all LLM Agents' }));
+    expect(llmCheckbox).toBeChecked();
+    expect(browserCheckbox).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Browser Agents' }));
+    expect(llmCheckbox).toBeChecked();
+    expect(browserCheckbox).not.toBeChecked();
+  });
+
   it('defaults the run selection to config-scoped agents instead of all library agents', async () => {
     const configAgentA: AgentConfig = {
       id: 'agent-a',

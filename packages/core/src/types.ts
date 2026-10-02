@@ -424,7 +424,7 @@ export interface ScenarioRunTraceRecord {
   };
 }
 
-export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error';
+export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error' | 'stopped';
 
 export type ExecutionSource = 'mcplab' | 'rover';
 
@@ -446,6 +446,7 @@ export interface ScenarioRunResult {
   pass: boolean;
   outcome?: RunOutcome;
   error?: string;
+  stop_reason?: string;
   failures: string[];
   check_results?: CheckResult[];
   tool_calls: string[];
@@ -531,7 +532,7 @@ export interface ResultsJson {
     pass_rate: number;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
-    outcomes?: Record<RunOutcome, number>;
+    outcomes?: Partial<Record<RunOutcome, number>>;
   };
   scenarios: ScenarioAggregate[];
 }

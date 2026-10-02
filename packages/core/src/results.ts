@@ -68,8 +68,11 @@ export function aggregateResults(params: {
       lastFinalAnswer = run.final_text || lastFinalAnswer;
     }
 
+    const completedRuns = entry.runs.filter((run) => run.outcome !== 'stopped');
     const passRate =
-      entry.runs.length === 0 ? 0 : entry.runs.filter((run) => run.pass).length / entry.runs.length;
+      completedRuns.length === 0
+        ? 0
+        : completedRuns.filter((run) => run.pass).length / completedRuns.length;
 
     const toolConstraintsStats =
       Object.keys(requiredStats).length > 0 || Object.keys(forbiddenStats).length > 0
@@ -121,15 +124,19 @@ export function aggregateResults(params: {
       ),
     0
   );
-  const outcomes: Record<RunOutcome, number> = {
+  const outcomes: Partial<Record<RunOutcome, number>> = {
     passed: 0,
     failed: 0,
     incomplete: 0,
-    error: 0
+    error: 0,
+    stopped: 0
   };
   for (const run of scenarios.flatMap((scenario) => scenario.runs)) {
-    outcomes[run.outcome ?? deriveRunOutcome(run)] += 1;
+    const outcome = run.outcome ?? deriveRunOutcome(run);
+    outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
   }
+  if (outcomes.stopped === 0) delete outcomes.stopped;
+  const completedRuns = totalRuns - (outcomes.stopped ?? 0);
   const totalDurationMs = scenarios.reduce(
     (sum, scenario) =>
       sum +
@@ -162,7 +169,7 @@ export function aggregateResults(params: {
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : totalPasses / totalRuns,
+      pass_rate: completedRuns === 0 ? 0 : totalPasses / completedRuns,
       avg_tool_calls_per_run: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       avg_tool_latency_ms: avgLatency,
       outcomes

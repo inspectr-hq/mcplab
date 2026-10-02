@@ -67,7 +67,7 @@ export interface RunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  outcomes?: Record<RunOutcome, number>;
+  outcomes?: Partial<Record<RunOutcome, number>>;
   executionSource?: ExecutionSource;
   executionClient?: string;
   checkCounts: {

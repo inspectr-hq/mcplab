@@ -928,7 +928,36 @@ const RunEvaluation = () => {
                 {agentGroups.map((group) =>
                   group.agents.length > 0 ? (
                     <div key={group.label} className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                        <div className="flex items-center gap-3 text-xs">
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            aria-label={`Select all ${group.label}`}
+                            onClick={() => {
+                              const groupIds = new Set(group.agents.map((agent) => agent.id));
+                              setSelectedAgentIds((prev) => [
+                                ...prev.filter((id) => !groupIds.has(id)),
+                                ...groupIds
+                              ]);
+                            }}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            aria-label={`Clear ${group.label}`}
+                            onClick={() => {
+                              const groupIds = new Set(group.agents.map((agent) => agent.id));
+                              setSelectedAgentIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                            }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.agents.map((agent) => {
                           const checked = selectedAgentIds.includes(agent.id);
