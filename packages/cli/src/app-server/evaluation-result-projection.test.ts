@@ -197,4 +197,30 @@ describe('projectEvaluationResult', () => {
       stopped: 1
     });
   });
+
+  it.each([0, 1])(
+    'preserves stopped runs from execution summaries with %i separately stopped executions',
+    (stoppedExecutions) => {
+      const snapshot = execution('llm-1', 1, 2);
+      snapshot.summary.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 0, stopped: 1 };
+      snapshot.summary.pass_rate = 1;
+
+      const result = projectEvaluationResult({
+        evaluationRunId: 'evaluation-1',
+        runId: 'run-1',
+        executions: [snapshot],
+        stoppedExecutions
+      });
+
+      expect(result.summary.total_runs).toBe(2 + stoppedExecutions);
+      expect(result.summary.outcomes).toEqual({
+        passed: 1,
+        failed: 0,
+        incomplete: 0,
+        error: 0,
+        stopped: 1 + stoppedExecutions
+      });
+      expect(result.summary.pass_rate).toBe(1);
+    }
+  );
 });

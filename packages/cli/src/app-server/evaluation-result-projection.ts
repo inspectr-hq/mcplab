@@ -37,13 +37,14 @@ export function projectEvaluationResult(params: {
     failed: failedExecutions,
     incomplete: 0,
     error: 0,
-    ...(stoppedExecutions > 0 ? { stopped: stoppedExecutions } : {})
+    stopped: stoppedExecutions
   };
   for (const result of executions) {
     for (const outcome of Object.keys(outcomes) as RunOutcome[]) {
       outcomes[outcome] = (outcomes[outcome] ?? 0) + (result.summary.outcomes?.[outcome] ?? 0);
     }
   }
+  if (outcomes.stopped === 0) delete outcomes.stopped;
   const sourceMetadata = executions[0]?.metadata;
   const configPaths = Array.from(
     new Set(executions.map((result) => result.metadata.config_path).filter(Boolean))
