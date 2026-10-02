@@ -62,7 +62,11 @@ export const DEFAULT_BROWSER_PROVIDER_PROFILES: Record<string, BrowserProviderPr
     },
     submit: { action: 'enter' },
     assistantMessages: {
-      locator: { segments: ['[data-message-author-role="assistant"]'] }
+      locator: {
+        segments: [
+          '[data-message-author-role="assistant"], [data-markdown-text-style="assistant-message"]'
+        ]
+      }
     },
     completion: {
       generatingLocator: {
@@ -81,7 +85,7 @@ export const DEFAULT_BROWSER_PROVIDER_PROFILES: Record<string, BrowserProviderPr
     learned: {
       sourceOrigin: 'https://chatgpt.com',
       createdAt: '2026-10-01T00:00:00.000Z',
-      updatedAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-02T00:00:00.000Z',
       confidence: {
         composer: 'high',
         submit: 'high',
