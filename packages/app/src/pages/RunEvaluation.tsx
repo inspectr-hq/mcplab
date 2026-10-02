@@ -353,13 +353,23 @@ const RunEvaluation = () => {
       (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === 'referenced')
         ? 'refs-composed'
         : 'single-file/inline';
+    const browserConversationOptions = {
+      ...(selectedBrowserAgents.length > 0
+        ? {
+            newConversationBeforeStart: conversationMode !== 'same',
+            ...(conversationMode !== 'agent_default'
+              ? { newConversationBetweenScenarios: conversationMode === 'new' }
+              : {})
+          }
+        : {})
+    };
     setLogs([
       `[${nowTime()}] Starting evaluation run...`,
       `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents
         .map((a) => a.name || a.id)
         .join(
           ', '
-        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
+        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${selectedBrowserAgents.length > 0 ? ` newConversationBeforeStart=${browserConversationOptions.newConversationBeforeStart} newConversationBetweenScenarios=${browserConversationOptions.newConversationBetweenScenarios ?? 'agent_default'}` : ''}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
         effectiveScenarioServerSummary || '(none)'
       }`
@@ -371,12 +381,7 @@ const RunEvaluation = () => {
         runsPerScenario,
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
-        ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
-          ? { newConversationBetweenScenarios: conversationMode === 'new' }
-          : {}),
-        ...(selectedBrowserAgents.length > 0
-          ? { newConversationBeforeStart: conversationMode !== 'same' }
-          : {}),
+        ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),

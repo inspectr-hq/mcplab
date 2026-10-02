@@ -330,9 +330,10 @@ describe('RunEvaluation', () => {
   });
 
   it.each([
-    { label: 'Start a new conversation', newConversation: true },
-    { label: 'Continue the same conversation', newConversation: false }
-  ])('honors $label for browser scenarios', async ({ label, newConversation }) => {
+    { label: 'Start a new conversation', beforeStart: true, betweenScenarios: true },
+    { label: 'Continue the same conversation', beforeStart: false, betweenScenarios: false },
+    { label: 'Use agent default', beforeStart: true, betweenScenarios: undefined }
+  ])('logs $label for browser scenarios', async ({ label, beforeStart, betweenScenarios }) => {
     const llmAgent: AgentConfig = {
       id: 'agent-llm',
       name: 'LLM Agent',
@@ -402,9 +403,20 @@ describe('RunEvaluation', () => {
       expect.objectContaining({
         agents: ['agent-llm', 'agent-browser'],
         runsPerScenario: 1,
-        newConversationBetweenScenarios: newConversation,
-        newConversationBeforeStart: newConversation
+        newConversationBeforeStart: beforeStart
       })
+    );
+    if (betweenScenarios === undefined) {
+      expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty(
+        'newConversationBetweenScenarios'
+      );
+    } else {
+      expect(sourceMock.startRun.mock.calls[0][0].newConversationBetweenScenarios).toBe(
+        betweenScenarios
+      );
+    }
+    expect(screen.getByText(/Config=Test Config mode=/)).toHaveTextContent(
+      `newConversationBeforeStart=${beforeStart} newConversationBetweenScenarios=${betweenScenarios ?? 'agent_default'}`
     );
   });
 
