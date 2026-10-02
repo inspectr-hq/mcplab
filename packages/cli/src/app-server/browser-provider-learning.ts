@@ -1,7 +1,7 @@
 import { type BrowserProviderProfile, type LlmAgentConfig } from '@inspectr/mcplab-core';
 import { validateBrowserProviderProfile } from '@inspectr/mcplab-core';
 import type { LlmMessage } from '@inspectr/mcplab-core';
-import { chatWithJsonRetry } from './assistant-common.js';
+import { chatWithJsonRetry, parseJsonFromAssistantText } from './assistant-common.js';
 
 export interface BrowserProviderLearningTraceInput {
   evidenceVersion?: unknown;
@@ -287,7 +287,7 @@ export function parseBrowserProviderProposal(
   text: string,
   trace?: BrowserProviderLearningTraceInput
 ): BrowserProviderProposal {
-  const parsed = JSON.parse(text) as Record<string, unknown>;
+  const parsed = parseJsonFromAssistantText<Record<string, unknown>>(text);
   const rawProfile = parsed.profile ?? parsed;
   const parsedProfile = validateBrowserProviderProfile(rawProfile);
   const rationale = Array.isArray(parsed.rationale)
@@ -330,7 +330,9 @@ export async function proposeBrowserProviderProfile(params: {
     system:
       'You are a browser automation profile reviewer. Preserve the existing profile shape and identity. Selectors must be CSS selectors observed in the trace. A generation selector must represent an active generating state, an idle selector must represent an enabled completion state, and a working selector must describe the transient working state rather than a persistent response container.',
     parse: (text) => parseBrowserProviderProposal(text, params.trace),
-    toolCallFallbackText: () => 'Return the validated browser provider profile JSON.'
+    toolCallFallbackText: () => 'Return the validated browser provider profile JSON.',
+    invalidJsonRetryPrompt:
+      'Your previous response was not a valid browser provider proposal. Return ONLY one JSON object with profile (the complete browser provider profile), rationale (string array), and warnings (string array). Preserve the observed lifecycle constraints and existing profile identity.'
   });
   if ('type' in response) throw new Error('The provider proposal model returned a tool request.');
   if (

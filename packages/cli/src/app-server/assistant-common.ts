@@ -14,6 +14,59 @@ export function truncateJson(value: unknown, maxChars: number): string {
   }
 }
 
+function extractFirstBalancedJsonCandidate(text: string): string | null {
+  const starts: Array<{ idx: number; open: '{' | '['; close: '}' | ']' }> = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '{') starts.push({ idx: i, open: '{', close: '}' });
+    if (ch === '[') starts.push({ idx: i, open: '[', close: ']' });
+  }
+  for (const start of starts) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start.idx; i < text.length; i += 1) {
+      const ch = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === start.open) depth += 1;
+      if (ch === start.close) {
+        depth -= 1;
+        if (depth === 0) return text.slice(start.idx, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+export function parseJsonFromAssistantText<T = unknown>(text: string): T {
+  const cleaned = text.trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    const fenced =
+      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
+    if (fenced) return JSON.parse(fenced[1].trim()) as T;
+    const candidate = extractFirstBalancedJsonCandidate(cleaned);
+    if (candidate) return JSON.parse(candidate) as T;
+    throw new Error('Assistant returned invalid JSON');
+  }
+}
+
 export function normalizeAssistantToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
 }
@@ -128,8 +181,10 @@ export async function chatWithJsonRetry<T>(params: {
   parse: (text: string) => T;
   toolCallFallbackText: (toolName: string) => string;
   signal?: AbortSignal;
+  invalidJsonRetryPrompt?: string;
 }): Promise<T | AssistantToolCallRequestEnvelope> {
   const invalidJsonRetryPrompt =
+    params.invalidJsonRetryPrompt ??
     'Your previous response did not match the required assistant envelope. Reply ONLY with one JSON object using exactly one of these types: "assistant_message" with fields {"type":"assistant_message","text":"..."}, or "tool_call_request" with fields {"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}}}. Do not use any other type, such as "message", "assistant", or an event type.';
 
   const toToolCallRequest = (response: Awaited<ReturnType<typeof chatWithAgent>>) => {

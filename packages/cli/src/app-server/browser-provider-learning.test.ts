@@ -4,7 +4,10 @@ const { chatWithJsonRetryMock } = vi.hoisted(() => ({
   chatWithJsonRetryMock: vi.fn()
 }));
 
-vi.mock('./assistant-common.js', () => ({ chatWithJsonRetry: chatWithJsonRetryMock }));
+vi.mock('./assistant-common.js', async () => ({
+  ...await vi.importActual<typeof import('./assistant-common.js')>('./assistant-common.js'),
+  chatWithJsonRetry: chatWithJsonRetryMock
+}));
 
 import {
   parseBrowserProviderProposal,
@@ -33,6 +36,20 @@ const profile = {
 describe('browser provider learning proposals', () => {
   beforeEach(() => chatWithJsonRetryMock.mockReset());
 
+  it.each(['```json', '```', 'Here is the reviewed profile:\n```json'])(
+    'accepts a valid proposal wrapped in %s',
+    (prefix) => {
+      const proposal = { profile, rationale: ['Observed send control.'], warnings: [] };
+      expect(parseBrowserProviderProposal(`${prefix}\n${JSON.stringify(proposal)}\n\`\`\``))
+        .toMatchObject({ ...proposal, validated: true });
+    }
+  );
+
+  it('still rejects an invalid profile inside a JSON code block', () => {
+    expect(() => parseBrowserProviderProposal('```json\n{"profile":{"id":"bad"}}\n```'))
+      .toThrow('Unsupported browser provider profile schema.');
+  });
+
   it('validates and returns the model proposal', async () => {
     chatWithJsonRetryMock.mockResolvedValue({
       profile,
@@ -51,6 +68,9 @@ describe('browser provider learning proposals', () => {
     expect(proposal.profile.id).toBe('example');
     expect(proposal.rationale).toEqual(['Observed the send control.']);
     expect(chatWithJsonRetryMock).toHaveBeenCalledOnce();
+    expect(chatWithJsonRetryMock.mock.calls[0][0].invalidJsonRetryPrompt).toContain(
+      'profile (the complete browser provider profile)'
+    );
   });
 
   it('preserves confirmed New Chat when a proposal omits confirmation', async () => {
