@@ -178,6 +178,40 @@ describe('Rover run queue domain', () => {
     expect(send.mock.calls.filter(([message]) => message.type === 'assignment')).toHaveLength(1);
   });
 
+  it('waits when the requested provider differs from the registered worker', () => {
+    const addJobEvent = vi.fn();
+    const service = createRunQueueServiceForTest({ deps: { addJobEvent } });
+    const send = vi.fn(() => true);
+    const { jobId } = service.enqueueRun(roverParams());
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'gemini-google-com',
+      capabilities: ['assignment_lease']
+    };
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect(service.assignRoverJob('claude', send, worker)).toBeNull();
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(addJobEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'started' })
+    );
+    expect(service.state.queue).toEqual([jobId]);
+
+    const matchingWorker = { ...worker, provider: 'claude' };
+    expect(service.assignRoverJob('claude', send, matchingWorker)?.id).toBe(jobId);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(service.jobs.get(jobId)?.status).toBe('running');
+    expect(addJobEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'started' })
+    );
+    service.stopJob(jobId);
+  });
+
   it('reports only queued evaluations waiting for the connected provider', () => {
     const service = createRunQueueServiceForTest();
     const first = service.enqueueRun({ ...roverParams('claude'), evaluationName: 'First' });

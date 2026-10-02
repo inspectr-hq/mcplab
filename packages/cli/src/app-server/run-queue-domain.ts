@@ -824,6 +824,7 @@ export function createRunQueueService(params: {
       state.clients.clear();
     },
     assignRoverJob(provider, send, worker) {
+      if (worker && worker.provider !== provider) return null;
       const roverAlreadyBusy = Array.from(state.activeJobIds).some(
         (id) => jobs.get(id)?.runParams.executionType === 'rover'
       );
