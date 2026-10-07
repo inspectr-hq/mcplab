@@ -380,6 +380,78 @@ describe('Rover run queue domain', () => {
     expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
   });
 
+  it('fails a non-retryable assignment rejection with its actionable message', () => {
+    const send = vi.fn(() => true);
+    const service = createRunQueueServiceForTest({
+      deps: { addJobEvent: (job: any, event: any) => job.events.push(event) }
+    });
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const offer = send.mock.calls[0][0] as { leaseId: string };
+    const message =
+      'Polo has no New Chat support. Choose Continue the same conversation or learn a New Chat action.';
+    service.handleRoverMessage(
+      {
+        type: 'assignment_reject',
+        jobId,
+        leaseId: offer.leaseId,
+        reason: 'new_conversation_unsupported',
+        retryable: false,
+        message
+      },
+      'claude',
+      send,
+      worker
+    );
+
+    expect(service.jobs.get(jobId)?.status).toBe('error');
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(service.state.queue).not.toContain(jobId);
+    expect(service.jobs.get(jobId)?.childProgress?.[0].status).toBe('error');
+    expect(service.jobs.get(jobId)?.events.at(-1)?.payload.message).toContain(message);
+    expect(service.assignRoverJob('claude', send, worker)).toBeNull();
+  });
+
+  it.each([true, undefined])(
+    'keeps retryable and legacy rejections waiting with their error detail (%s)',
+    (retryable) => {
+      const send = vi.fn(() => true);
+      const service = createRunQueueServiceForTest({
+        deps: { addJobEvent: (job: any, event: any) => job.events.push(event) }
+      });
+      const worker = {
+        connectionId: 'connection-1',
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      };
+      const { jobId } = service.enqueueRun(roverParams());
+      service.assignRoverJob('claude', send, worker);
+      const offer = send.mock.calls[0][0] as { leaseId: string };
+      service.handleRoverMessage(
+        {
+          type: 'assignment_reject',
+          jobId,
+          leaseId: offer.leaseId,
+          reason: 'provider_unavailable',
+          retryable,
+          message: 'The composer did not become ready.'
+        },
+        'claude',
+        send,
+        worker
+      );
+      expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+      expect(service.jobs.get(jobId)?.events.at(-1)?.payload.message).toContain(
+        'The composer did not become ready.'
+      );
+    }
+  );
+
   it('requeues an offered lease released with a retryable error', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

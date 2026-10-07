@@ -1089,9 +1089,12 @@ export function createRunQueueService(params: {
           return null;
         }
         if (message.type === 'assignment_reject' && lease.state === 'offered') {
+          const detail = typeof message.message === 'string' ? message.message.trim() : '';
+          // A missing provider capability needs a configuration change, not another offer.
+          // Older Rover versions omit retryable, so preserve their requeue behavior.
           finalizeRoverJob(job, {
-            kind: 'requeue',
-            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}`
+            kind: message.retryable === false ? 'error' : 'requeue',
+            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}${detail ? `. ${detail}` : ''}`
           });
           return null;
         }

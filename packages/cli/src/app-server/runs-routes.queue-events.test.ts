@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
   cleanupFixtureRoot,
@@ -10,6 +10,74 @@ import {
 } from './runs-routes.test-helpers.js';
 
 describe('browser agent variance', () => {
+  it.each([
+    { before: true, between: false, supported: false, count: 1, status: 400 },
+    { before: false, between: true, supported: false, count: 2, status: 400 },
+    { before: false, between: false, supported: false, count: 2, status: 202 },
+    { before: false, between: true, supported: false, count: 1, status: 202 },
+    { before: true, between: true, supported: true, count: 2, status: 202 }
+  ])(
+    'checks New Chat support before queueing browser jobs (%j)',
+    async ({ before, between, supported, count, status }) => {
+      const fixture = createOauthEvalFixture();
+      writeFileSync(
+        fixture.configPath,
+        'servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: polo\n    url: https://polo.example\nscenarios:\n' +
+          Array.from({ length: count }, (_, i) => `  - id: s${i}\n    prompt: hello\n`).join('')
+      );
+      const response: { status?: number; body?: any } = {};
+      const enqueueRun = vi.fn(() => ({ jobId: 'test-job' }));
+      const deps = makeRunsRouteDeps({
+        parseBody: async () => ({
+          configPath: fixture.configPath,
+          agents: ['browser'],
+          newConversationBeforeStart: before,
+          newConversationBetweenScenarios: between
+        }),
+        asJson: (_res: unknown, status: number, body: unknown) => {
+          response.status = status;
+          response.body = body;
+        },
+        readLibraries: () => ({
+          agents: {},
+          servers: {},
+          browserProviders: {
+            polo: {
+              name: 'Polo',
+              learned: { updatedAt: 'now' },
+              ...(supported
+                ? {
+                    newConversation: { action: 'click', locator: { segments: ['button.new-chat'] } }
+                  }
+                : {})
+            }
+          }
+        }),
+        resolveRunSelectedAgents: () => ['browser']
+      });
+      try {
+        await handleRunsRoutes({
+          req: { url: '/api/runs', headers: {} } as never,
+          res: {} as never,
+          pathname: '/api/runs',
+          method: 'POST',
+          settings: { ...fixture, workspaceRoot: fixture.root } as never,
+          runQueueService: { enqueueRun } as never,
+          oauthSessionManager: {} as never,
+          deps: deps as never
+        });
+        expect(response.status).toBe(status);
+        if (status === 400) {
+          expect(response.body.error).toContain('Polo has no New Chat support');
+          expect(response.body.error).toContain('Continue the same conversation');
+          expect(enqueueRun).not.toHaveBeenCalled();
+        } else expect(enqueueRun).toHaveBeenCalledOnce();
+      } finally {
+        cleanupFixtureRoot(fixture.root);
+      }
+    }
+  );
+
   it('rejects multiple runs before queueing a browser agent', async () => {
     const fixture = createOauthEvalFixture();
     writeFileSync(

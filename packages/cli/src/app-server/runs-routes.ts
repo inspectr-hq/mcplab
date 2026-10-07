@@ -510,6 +510,22 @@ export async function handleRunsRoutes(params: {
         : undefined;
     const newConversationBeforeStart =
       typeof body.newConversationBeforeStart === 'boolean' ? body.newConversationBeforeStart : true;
+    const unsupportedNewChat = browserAgents.find(({ agent }) => {
+      const profile = browserProviders?.[agent.provider];
+      const needsNewChat =
+        newConversationBeforeStart ||
+        (selectedConfig.scenarios.length > 1 &&
+          (conversationOverride ?? agent.newConversationBetweenScenarios ?? true));
+      return needsNewChat && profile && !profile.newConversation;
+    });
+    if (unsupportedNewChat) {
+      const profile = browserProviders[unsupportedNewChat.agent.provider];
+      asJson(res, 400, {
+        code: 'new_conversation_unsupported',
+        error: `${profile.name} has no New Chat support. Choose Continue the same conversation or learn a New Chat action.`
+      });
+      return true;
+    }
     const evaluationRunId = createRunId();
     const baseRunParams = {
       evaluationRunId,
