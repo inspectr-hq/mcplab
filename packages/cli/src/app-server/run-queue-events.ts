@@ -158,7 +158,9 @@ export function buildQueueState(
         item.status === 'queued' ||
         item.status === 'running' ||
         item.status === 'paused' ||
-        item.status === 'stopped'
+        item.status === 'stopped' ||
+        item.status === 'failed' ||
+        item.status === 'partial'
     )
   };
 }

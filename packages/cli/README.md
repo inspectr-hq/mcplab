@@ -29,9 +29,25 @@ Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 
 ### Browser evaluations with Rover
 
-[MCPLab Rover](https://github.com/inspectr-hq/mcplab-rover) is the browser companion for running scenarios in Claude, ChatGPT, and learned browser providers. Queue browser evaluations from MCPLab, let Rover submit prompts and capture completed responses, then review the same assertions and results in MCPLab.
+[MCPLab Rover](https://github.com/inspectr-hq/mcplab-rover) is the browser extension for running scenarios in Claude, ChatGPT, and learned browser providers. MCPLab owns the evaluation queue, assertions, and results. Rover submits prompts in the chat page and returns completed responses for evaluation.
 
-See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/) or [download Rover](https://github.com/inspectr-hq/mcplab-rover/releases/latest).
+**Set up your first browser agent:**
+
+1. Start the local app with `npx @inspectr/mcplab app --open`.
+2. [Download Rover](https://github.com/inspectr-hq/mcplab-rover/releases/latest), unzip it, and load the folder through **Load unpacked** in `chrome://extensions` with **Developer mode** enabled.
+3. In MCPLab, open **Agents → Browser → Add Agent**. Select the Claude or ChatGPT provider, enter the chat URL, and save.
+4. Open that chat page, sign in, and click the Rover toolbar icon. Its default MCPLab endpoint is `http://127.0.0.1:8787`; use Rover's settings if your app uses another loopback port.
+5. In **Run Evaluation**, select your config, scenarios, and browser agent. Choose the **Conversation behavior**, then start the run. Work waits until Rover is available on the matching provider. Review the captured responses and checks in MCPLab's results.
+
+Claude and ChatGPT are built-in **provider profiles**, available even when Rover is disconnected. A profile defines how Rover interacts with the page; a saved **browser agent** makes that provider selectable for evaluations. Connecting Rover does not automatically create agents, and there is currently no setting to hide the built-in profiles.
+
+**Learn another provider:** Open its chat page, start learning in Rover's **Learn** tab, type and send one message, and wait for its response. Review the detected composer, submission, response, and completion signals. If Rover finds a New Chat action, open a new conversation on the provider page to confirm it before saving with that capability. **Improve with MCPLab AI** uses the configured Evaluation Judge to refine the profile; Rover still validates the proposal before saving. Saving a new learned provider also creates its browser agent in MCPLab.
+
+**Save without New Chat support** omits that action from the profile. To run that agent, select **Continue the same conversation** in MCPLab. Runs that request a new conversation require New Chat support. **Use agent default** starts a new conversation before the run and uses the agent's setting between scenarios.
+
+Browser agents run through Rover in app mode. They use your signed-in browser session instead of an LLM API key, and cannot serve as the Evaluation Judge. API keys are still needed for any API-based judge or assistant you choose. Browser-only capture does not observe MCP tool calls, so tool-dependent checks are `not_evaluated`; a run with passing evaluated checks and unavailable checks is `incomplete`.
+
+See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/) for more detail.
 
 ---
 
@@ -40,6 +56,7 @@ See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/
 ### Core Capabilities
 - **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
 - **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
+- **Browser Agents** - Run evaluations in browser chats through the MCPLab Rover extension
 - **Rich Assertions** - Validate tool usage, sequences, and response content
 - **Variance Testing** - Run multiple iterations to measure stability
 - **Detailed Traces** - JSONL logs of every tool call and LLM response
@@ -157,7 +174,7 @@ servers:     # MCP servers to test against
     url: "http://localhost:3000/mcp"
   - ref: "shared-server"
 
-agents:      # LLM agents to use for testing
+agents:      # API or browser agents to use for testing
   - id: local-agent
     provider: "anthropic"
     model: "claude-sonnet-4-6"
@@ -216,7 +233,7 @@ auth:
 
 ### Agents
 
-Configure LLM agents with provider-specific settings:
+Configure API-based LLM agents or browser agents with provider-specific settings:
 
 **Anthropic (Claude):**
 ```yaml
@@ -251,7 +268,29 @@ agents:
     system: "You are a helpful assistant."
 ```
 
-**Required environment variables:**
+**Browser agents (Rover):**
+
+Define a reusable browser agent in `mcplab/agents.yaml`:
+
+```yaml
+chatgpt-browser:
+  name: ChatGPT browser
+  type: browser
+  provider: chatgpt-com
+  url: https://chatgpt.com/
+  new_conversation_between_scenarios: true
+```
+
+Reference it from an evaluation config:
+
+```yaml
+agents:
+  - ref: chatgpt-browser
+```
+
+Use `claude` for Claude, `chatgpt-com` for ChatGPT, or the id of a learned provider. Browser agents use `url` instead of an API `model`. Select them in **Run Evaluation** in the app and run them through Rover. The agent's `new_conversation_between_scenarios` setting is used when **Conversation behavior** is **Use agent default**; the run can override it.
+
+**Required environment variables for API-based LLM agents:**
 - Anthropic: `ANTHROPIC_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Azure: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
@@ -503,7 +542,8 @@ Define servers, agents, and scenarios once and reuse them across multiple eval f
 ```
 mcplab/
 ├── servers.yaml       # Shared MCP server definitions
-├── agents.yaml        # Shared LLM agent definitions
+├── agents.yaml        # Shared API and browser agent definitions
+├── browser-providers/ # Learned browser interaction profiles
 └── scenarios/
     ├── scenario-a.yaml
     └── scenario-b.yaml
@@ -546,7 +586,8 @@ mcplab/
 │   └── tool-analysis/              # Saved tool analysis reports
 ├── reports/                        # Custom markdown reports
 ├── servers.yaml                    # Library: shared server definitions
-├── agents.yaml                     # Library: shared agent definitions
+├── agents.yaml                     # Library: shared API and browser agents
+├── browser-providers/              # Library: learned browser provider profiles
 └── scenarios/                      # Library: shared scenario files
 ```
 

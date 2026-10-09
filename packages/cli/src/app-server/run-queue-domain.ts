@@ -231,10 +231,7 @@ export function createRunQueueService(params: {
     job.roverLease = undefined;
   }
 
-  function settleUnfinishedRoverChildren(
-    job: RunJob,
-    status: 'completed' | 'error' | 'stopped'
-  ): void {
+  function settleUnfinishedChildren(job: RunJob, status: 'completed' | 'error' | 'stopped'): void {
     job.childProgress = job.childProgress?.map((child) =>
       child.status === 'queued' || child.status === 'running' ? { ...child, status } : child
     );
@@ -258,7 +255,7 @@ export function createRunQueueService(params: {
         payload: { message: `Rover assignment requeued: ${disposition.reason}` }
       });
     } else if (disposition.kind === 'completed') {
-      settleUnfinishedRoverChildren(
+      settleUnfinishedChildren(
         job,
         disposition.payload?.outcome === 'error'
           ? 'error'
@@ -274,13 +271,13 @@ export function createRunQueueService(params: {
       });
       closeJobClients(job);
     } else if (disposition.kind === 'stopped') {
-      settleUnfinishedRoverChildren(job, 'stopped');
+      settleUnfinishedChildren(job, 'stopped');
       job.status = 'stopped';
       addStopEvent(job, disposition.reason);
       markEvaluationStopped(job, disposition.reason);
       closeJobClients(job);
     } else {
-      settleUnfinishedRoverChildren(job, 'error');
+      settleUnfinishedChildren(job, 'error');
       job.status = 'error';
       deps.addJobEvent(job, {
         type: 'error',
@@ -304,7 +301,7 @@ export function createRunQueueService(params: {
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
     if (job.runParams.executionType === 'rover') {
       clearRoverLease(job);
-      settleUnfinishedRoverChildren(job, 'stopped');
+      settleUnfinishedChildren(job, 'stopped');
     }
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
@@ -358,6 +355,7 @@ export function createRunQueueService(params: {
     }
     if (job.status !== 'stopped') {
       job.status = 'error';
+      settleUnfinishedChildren(job, 'error');
       deps.addJobEvent(job, {
         type: 'error',
         ts: new Date().toISOString(),
@@ -399,6 +397,7 @@ export function createRunQueueService(params: {
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
     if (outcome.status === 'error' || outcome.status === 'stopped') {
+      settleUnfinishedChildren(job, outcome.status);
       recordTerminalExecution(
         job,
         outcome.status,
@@ -732,13 +731,11 @@ export function createRunQueueService(params: {
         (job) => job.runParams.evaluationRunId === evaluationRunId
       );
       if (jobsForEvaluation.length === 0) return null;
-      const stoppedEvaluation =
-        buildQueueState(jobs, state).evaluations?.find(
-          (evaluation) => evaluation.evaluationRunId === evaluationRunId
-        )?.status === 'stopped' &&
-        jobsForEvaluation.every((job) => ['completed', 'error', 'stopped'].includes(job.status));
+      const terminalEvaluation = jobsForEvaluation.every((job) =>
+        ['completed', 'error', 'stopped'].includes(job.status)
+      );
       if (
-        !stoppedEvaluation &&
+        !terminalEvaluation &&
         jobsForEvaluation.some(
           (job) =>
             job.status !== 'queued' &&
@@ -754,7 +751,7 @@ export function createRunQueueService(params: {
       }
       let removed = 0;
       for (const job of jobsForEvaluation) {
-        if (stoppedEvaluation || job.status === 'stopped') {
+        if (terminalEvaluation || job.status === 'stopped') {
           jobs.delete(job.id);
           removed += 1;
         } else if (this.removeQueuedJob(job.id, options)) {

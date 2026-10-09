@@ -705,48 +705,143 @@ describe('RunEvaluation', () => {
     expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
   });
 
-  it('offers removal when a stopped LLM child leaves its job completed', async () => {
-    sourceMock.getRunQueue.mockResolvedValue({
-      active: null,
-      active_jobs: [],
-      admitting_jobs: [],
-      queued: [],
-      evaluations: [
-        {
-          evaluationRunId: 'evaluation-stopped',
-          evaluationName: 'Stopped LLM evaluation',
-          status: 'stopped',
-          totalJobs: 1,
-          completedJobs: 0,
-          failedJobs: 1,
-          stoppedJobs: 1,
-          pausedJobs: 0,
-          jobs: [
-            {
-              jobId: 'llm-completed',
-              status: 'completed',
-              executionType: 'mcplab',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
-              childProgress: [
-                { scenarioId: 'scenario-1', agentName: 'LLM', completed: 0, total: 1, status: 'stopped' }
-              ]
-            }
-          ]
-        }
-      ]
-    });
+  it.each(['stopped', 'failed', 'partial'] as const)(
+    'shows stopped groups but hides finished %s groups from the queue',
+    async (status) => {
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-stopped',
+            evaluationName: 'Stopped LLM evaluation',
+            status,
+            totalJobs: 1,
+            completedJobs: 0,
+            failedJobs: 1,
+            stoppedJobs: 1,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'llm-completed',
+                status: status === 'stopped' ? 'completed' : 'error',
+                executionType: 'mcplab',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
+                childProgress: [
+                  {
+                    scenarioId: 'scenario-1',
+                    agentName: 'LLM',
+                    completed: 0,
+                    total: 1,
+                    status: status === 'stopped' ? 'stopped' : 'error'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      });
 
-    render(
-      <MemoryRouter initialEntries={['/run']}>
-        <Routes>
-          <Route path="/run" element={<RunEvaluation />} />
-        </Routes>
-      </MemoryRouter>
-    );
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/run']}>
+            <Routes>
+              <Route path="/run" element={<RunEvaluation />} />
+            </Routes>
+          </MemoryRouter>
+        );
+      });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove stopped run from queue' }));
-    expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
-  });
+      await waitFor(() => expect(sourceMock.getRunQueue).toHaveBeenCalled());
+      if (status !== 'stopped') {
+        await screen.findByText('No active or queued runs. Start a run above.');
+        expect(screen.queryByText('Stopped LLM evaluation')).toBeNull();
+        return;
+      }
+      await act(async () => {
+        fireEvent.click(
+          await screen.findByRole('button', {
+            name:
+              status === 'stopped'
+                ? 'Remove stopped run from queue'
+                : 'Remove evaluation from queue'
+          })
+        );
+      });
+      expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
+    }
+  );
+
+  it.each(['error', 'completed'] as const)(
+    'shows grouped results after the last child sends %s',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-last');
+      let onEvent: ((event: any) => void) | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-last') onEvent = callback;
+        return () => {};
+      });
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-mixed',
+            evaluationName: 'Mixed result group',
+            status: 'partial',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 1,
+            stoppedJobs: 0,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-last',
+                status: eventType === 'error' ? 'error' : 'completed',
+                runParams: {}
+              },
+              {
+                jobId: 'job-other',
+                status: eventType === 'error' ? 'completed' : 'error',
+                runParams: {}
+              }
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      await act(async () => {
+        onEvent?.({
+          type: eventType,
+          ts: '2026-10-09T00:18:28.000Z',
+          payload:
+            eventType === 'error'
+              ? { message: 'MCP connection failed' }
+              : { runId: 'evaluation-mixed' }
+        });
+      });
+      expect(await screen.findByText('Completed with errors')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+        'href',
+        '/results/evaluation-mixed'
+      );
+      expect(screen.getByText('100%')).toBeInTheDocument();
+      expect(screen.queryByText('Mixed result group')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
+    }
+  );
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');
@@ -789,66 +884,72 @@ describe('RunEvaluation', () => {
     expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
   });
 
-  it('keeps an evaluation active when its remaining child needs OAuth', async () => {
-    sessionStorage.setItem(activeJobStorageKey, 'job-finished');
-    let onEvent:
-      | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
-      | undefined;
-    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
-      if (jobId === 'job-finished') onEvent = callback;
-      return () => {};
-    });
-    sourceMock.getRunQueue.mockResolvedValue({
-      active: null,
-      active_jobs: [],
-      admitting_jobs: [],
-      queued: [],
-      evaluations: [
-        {
-          evaluationRunId: 'evaluation-1',
-          evaluationName: 'Mixed evaluation',
-          status: 'blocked_auth',
-          totalJobs: 2,
-          completedJobs: 1,
-          failedJobs: 0,
-          stoppedJobs: 0,
-          pausedJobs: 0,
-          jobs: [
-            {
-              jobId: 'job-finished',
-              status: 'completed',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
-            },
-            {
-              jobId: 'job-blocked',
-              status: 'blocked_auth',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
-            }
-          ]
-        }
-      ]
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/run']}>
-        <Routes>
-          <Route path="/run" element={<RunEvaluation />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    await waitFor(() => expect(onEvent).toBeDefined());
-    await act(async () => {
-      onEvent?.({
-        type: 'completed',
-        ts: '2026-09-28T10:00:00.000Z',
-        payload: { runId: 'evaluation-1' }
+  it.each(['completed', 'error'] as const)(
+    'continues after %s when the remaining child needs OAuth',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-finished');
+      let onEvent:
+        | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
+        | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-finished') onEvent = callback;
+        return () => {};
       });
-    });
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-1',
+            evaluationName: 'Mixed evaluation',
+            status: 'blocked_auth',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 0,
+            stoppedJobs: 0,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-finished',
+                status: 'completed',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+              },
+              {
+                jobId: 'job-blocked',
+                status: 'blocked_auth',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+              }
+            ]
+          }
+        ]
+      });
 
-    await waitFor(() => {
-      expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith('job-blocked', expect.any(Function));
-    });
-    expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
-    expect(screen.queryByText(/Run completed\./)).toBeNull();
-  });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      await act(async () => {
+        onEvent?.({
+          type: eventType,
+          ts: '2026-09-28T10:00:00.000Z',
+          payload: { runId: 'evaluation-1' }
+        });
+      });
+
+      await waitFor(() => {
+        expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith(
+          'job-blocked',
+          expect.any(Function)
+        );
+      });
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
+      expect(screen.queryByText(/Run completed\./)).toBeNull();
+    }
+  );
 });
