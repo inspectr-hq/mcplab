@@ -15,14 +15,23 @@ describe('browser agent variance', () => {
     { before: false, between: true, supported: false, count: 2, status: 400 },
     { before: false, between: false, supported: false, count: 2, status: 202 },
     { before: false, between: true, supported: false, count: 1, status: 202 },
-    { before: true, between: true, supported: true, count: 2, status: 202 }
+    { before: true, between: true, supported: true, count: 2, status: 202 },
+    { before: true, between: true, supported: false, count: 2, status: 202, provider: 'claude' },
+    {
+      before: true,
+      between: true,
+      supported: false,
+      count: 2,
+      status: 202,
+      provider: 'chatgpt-com'
+    }
   ])(
     'checks New Chat support before queueing browser jobs (%j)',
-    async ({ before, between, supported, count, status }) => {
+    async ({ before, between, supported, count, status, provider = 'polo' }) => {
       const fixture = createOauthEvalFixture();
       writeFileSync(
         fixture.configPath,
-        'servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: polo\n    url: https://polo.example\nscenarios:\n' +
+        `servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: ${provider}\n    url: https://polo.example\nscenarios:\n` +
           Array.from({ length: count }, (_, i) => `  - id: s${i}\n    prompt: hello\n`).join('')
       );
       const response: { status?: number; body?: any } = {};
@@ -42,7 +51,7 @@ describe('browser agent variance', () => {
           agents: {},
           servers: {},
           browserProviders: {
-            polo: {
+            [provider]: {
               name: 'Polo',
               learned: { updatedAt: 'now' },
               ...(supported

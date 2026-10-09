@@ -10,6 +10,7 @@ import {
   createRunId,
   runAll,
   applyRuntimeServerOverrides,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
   type BrowserAgentConfig,
   type ScenarioAttachment,
@@ -516,7 +517,13 @@ export async function handleRunsRoutes(params: {
         newConversationBeforeStart ||
         (selectedConfig.scenarios.length > 1 &&
           (conversationOverride ?? agent.newConversationBetweenScenarios ?? true));
-      return needsNewChat && profile && !profile.newConversation;
+      // Rover uses native New Chat actions for built-in providers, including saved overrides.
+      return (
+        needsNewChat &&
+        profile &&
+        !profile.newConversation &&
+        !Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, agent.provider)
+      );
     });
     if (unsupportedNewChat) {
       const profile = browserProviders[unsupportedNewChat.agent.provider];
