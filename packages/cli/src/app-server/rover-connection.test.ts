@@ -58,6 +58,7 @@ describe('Rover connection protocol', () => {
       providerRevision: 'rev-1',
       capabilities: ['scenario_control', 'assignment_lease']
     });
+    expect(service.connection()?.registrationVersion).toBe(1);
     expect(JSON.parse(raw.toString())).toMatchObject({ capabilities: ['assignment_lease'] });
     expect(log).toHaveBeenCalledWith(
       expect.stringMatching(
@@ -142,6 +143,11 @@ describe('Rover connection protocol', () => {
       provider: 'trendminer',
       providerRevision: 'rev-2'
     });
+    expect(service.connection()?.registrationVersion).toBe(2);
+    // Rechecking the same provider can confirm that its composer is ready again.
+    socket.send(JSON.stringify({ type: 'register_update', provider: 'trendminer' }));
+    await once(socket, 'message');
+    expect(service.connection()?.registrationVersion).toBe(3);
     socket.close();
   });
 });

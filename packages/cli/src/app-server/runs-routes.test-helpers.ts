@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRunQueueService } from './run-queue-domain.js';
+import type { RoverSocketMessage } from './rover-connection.js';
 
 export function createRunQueueState(overrides: Record<string, unknown> = {}) {
   return {
@@ -26,6 +27,7 @@ export function createRunQueueServiceForTest(
     deps?: Record<string, unknown>;
     assignRoverJob?: (provider: string) => any;
     onRoverJobReleased?: (provider: string) => void;
+    sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   } = {}
 ) {
   const deps = makeRunsRouteDeps(overrides.deps ?? {});
@@ -45,7 +47,8 @@ export function createRunQueueServiceForTest(
     jobs: (overrides.jobs ?? new Map()) as any,
     state: (overrides.runQueueState ?? createRunQueueState()) as any,
     assignRoverJob: overrides.assignRoverJob,
-    onRoverJobReleased: overrides.onRoverJobReleased
+    onRoverJobReleased: overrides.onRoverJobReleased,
+    sendRoverMessage: overrides.sendRoverMessage
   });
 }
 

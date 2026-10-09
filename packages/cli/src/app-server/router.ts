@@ -68,7 +68,7 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
-import { createRunQueueService } from './run-queue-domain.js';
+import { createRunQueueService, type RoverAssignmentWorker } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
@@ -125,7 +125,17 @@ import {
 } from './browser-provider-learning.js';
 import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
 import { createRoverConnectionService } from './rover-connection.js';
-import type { RoverSocketMessage } from './rover-connection.js';
+import type { RoverConnection, RoverSocketMessage } from './rover-connection.js';
+
+function roverAssignmentWorker(connection: RoverConnection): RoverAssignmentWorker {
+  return {
+    connectionId: connection.connectionId,
+    registrationVersion: connection.registrationVersion,
+    provider: connection.registration.provider,
+    providerRevision: connection.registration.providerRevision,
+    capabilities: connection.registration.capabilities
+  };
+}
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -258,15 +268,7 @@ export async function startAppServer(options: AppServerOptions) {
     assignRoverJob: (provider, worker) => {
       const connection = roverConnection.connection();
       const effectiveWorker =
-        worker ??
-        (connection
-          ? {
-              connectionId: connection.connectionId,
-              provider: connection.registration.provider,
-              providerRevision: connection.registration.providerRevision,
-              capabilities: connection.registration.capabilities
-            }
-          : undefined);
+        worker ?? (connection ? roverAssignmentWorker(connection) : undefined);
       const assigned = runQueueService.assignRoverJob(
         provider,
         (message: RoverSocketMessage) => roverConnection.send(message),
@@ -280,14 +282,7 @@ export async function startAppServer(options: AppServerOptions) {
       const next = runQueueService.assignRoverJob(
         provider,
         (message: RoverSocketMessage) => roverConnection.send(message),
-        connection
-          ? {
-              connectionId: connection.connectionId,
-              provider: connection.registration.provider,
-              providerRevision: connection.registration.providerRevision,
-              capabilities: connection.registration.capabilities
-            }
-          : undefined
+        connection ? roverAssignmentWorker(connection) : undefined
       );
       activeRoverJobId = next?.id ?? null;
     }
@@ -296,12 +291,7 @@ export async function startAppServer(options: AppServerOptions) {
   const roverConnection = createRoverConnectionService({
     log: (message) => console.log(message),
     onRegister: (connection) => {
-      const worker = {
-        connectionId: connection.connectionId,
-        provider: connection.registration.provider,
-        providerRevision: connection.registration.providerRevision,
-        capabilities: connection.registration.capabilities
-      };
+      const worker = roverAssignmentWorker(connection);
       runQueueService.rebindRoverLeases(connection.registration.provider, worker);
       const assigned = runQueueService.assignRoverJob(
         connection.registration.provider,
@@ -317,12 +307,7 @@ export async function startAppServer(options: AppServerOptions) {
     },
     onMessage: (connection, message) => {
       if (message.type === 'register_update' && !activeRoverJobId) {
-        const worker = {
-          connectionId: connection.connectionId,
-          provider: connection.registration.provider,
-          providerRevision: connection.registration.providerRevision,
-          capabilities: connection.registration.capabilities
-        };
+        const worker = roverAssignmentWorker(connection);
         const assigned = runQueueService.assignRoverJob(
           connection.registration.provider,
           (payload: RoverSocketMessage) => roverConnection.send(payload),
@@ -349,12 +334,7 @@ export async function startAppServer(options: AppServerOptions) {
           message,
           connection.registration.provider,
           (payload: RoverSocketMessage) => roverConnection.send(payload),
-          {
-            connectionId: connection.connectionId,
-            provider: connection.registration.provider,
-            providerRevision: connection.registration.providerRevision,
-            capabilities: connection.registration.capabilities
-          }
+          roverAssignmentWorker(connection)
         );
         if (
           message.type === 'complete' &&

@@ -49,6 +49,7 @@ export type RoverLeaseState = 'offered' | 'accepted' | 'running';
 export interface RoverLease {
   leaseId: string;
   connectionId: string;
+  registrationVersion?: number;
   state: RoverLeaseState;
   expiresAt: string;
   offeredAt: string;

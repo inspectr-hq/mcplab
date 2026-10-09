@@ -205,10 +205,108 @@ describe('Rover run queue domain', () => {
     expect(service.assignRoverJob('claude', send, matchingWorker)?.id).toBe(jobId);
     expect(send).toHaveBeenCalledTimes(1);
     expect(service.jobs.get(jobId)?.status).toBe('running');
+    const offer = send.mock.calls[0][0] as { leaseId: string };
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId, leaseId: offer.leaseId },
+      'claude',
+      send,
+      matchingWorker
+    );
     expect(addJobEvent).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ type: 'started' })
     );
+    service.stopJob(jobId);
+  });
+
+  it.each(['provider_mismatch', 'provider_unavailable'])(
+    'waits for a fresh registration after %s, including immediate release callbacks',
+    (reason) => {
+      const send = vi.fn(() => true);
+      const worker = {
+        connectionId: 'connection-1',
+        registrationVersion: 1,
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      };
+      const released = vi.fn(() => service.assignRoverJob('claude', send, worker));
+      const service = createRunQueueServiceForTest({ onRoverJobReleased: released });
+      const { jobId } = service.enqueueRun(roverParams());
+      service.assignRoverJob('claude', send, worker);
+      const offer = send.mock.calls[0][0] as { leaseId: string };
+
+      service.handleRoverMessage(
+        { type: 'assignment_reject', jobId, leaseId: offer.leaseId, reason },
+        'claude',
+        send,
+        worker
+      );
+
+      expect(released).toHaveReturnedWith(null);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        expect(service.assignRoverJob('claude', send, worker)).toBeNull();
+      }
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+      expect(service.state.queue).toEqual([jobId]);
+      const otherJob = service.enqueueRun(roverParams());
+      expect(service.assignRoverJob('claude', send, worker)).toBeNull();
+      expect(
+        service.assignRoverJob('claude', send, {
+          ...worker,
+          registrationVersion: 2
+        })?.id
+      ).toBe(jobId);
+      service.stopJob(jobId);
+      service.stopJob(otherJob.jobId);
+    }
+  );
+
+  it.each([
+    { connectionId: 'connection-1', registrationVersion: 2 },
+    { connectionId: 'connection-2', registrationVersion: 1 }
+  ])('does not block a newer registration or reconnect on a delayed rejection (%j)', (fresh) => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const worker = {
+      connectionId: 'connection-1',
+      registrationVersion: 1,
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    const offer = send.mock.calls[0][0] as { leaseId: string };
+    service.handleRoverMessage(
+      { type: 'assignment_reject', jobId, leaseId: offer.leaseId, reason: 'provider_mismatch' },
+      'claude',
+      send,
+      { ...worker, registrationVersion: 2 }
+    );
+    expect(service.assignRoverJob('claude', send, { ...worker, ...fresh })?.id).toBe(jobId);
+    service.stopJob(jobId);
+  });
+
+  it('logs a leased Rover run as started only after acceptance', () => {
+    const addJobEvent = vi.fn();
+    const service = createRunQueueServiceForTest({ deps: { addJobEvent } });
+    const send = vi.fn(() => true);
+    const worker = {
+      connectionId: 'connection-1',
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send, worker);
+    expect(addJobEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'started' })
+    );
+    const offer = send.mock.calls[0][0] as { leaseId: string };
+    const accept = { type: 'assignment_accept', jobId, leaseId: offer.leaseId };
+    service.handleRoverMessage(accept, 'claude', send, worker);
+    service.handleRoverMessage(accept, 'claude', send, worker);
+    expect(addJobEvent.mock.calls.filter(([, event]) => event.type === 'started')).toHaveLength(1);
     service.stopJob(jobId);
   });
 
@@ -1002,7 +1100,7 @@ describe('Rover run queue domain', () => {
 
   it('sends a scenario-specific stop command for a Rover child', () => {
     const sendRoverMessage = vi.fn(() => true);
-    const service = createRunQueueServiceForTest();
+    const service = createRunQueueServiceForTest({ sendRoverMessage });
     const send = vi.fn(() => true);
     const { jobId } = service.enqueueRun({
       ...roverParams(),
@@ -1011,6 +1109,68 @@ describe('Rover run queue domain', () => {
     service.assignRoverJob('claude', send);
     expect(service.stopRoverScenario(jobId, 's1')).toMatchObject({ ok: true, status: 'stopped' });
     expect(service.jobs.get(jobId)?.status).toBe('stopped');
+    expect(sendRoverMessage).toHaveBeenCalledWith({
+      type: 'stop_scenario',
+      jobId,
+      scenarioId: 's1'
+    });
+  });
+
+  it('removes the last waiting browser scenario while Rover is disconnected', () => {
+    const sendRoverMessage = vi.fn(() => false);
+    const service = createRunQueueServiceForTest({ sendRoverMessage });
+    const { jobId } = service.enqueueRun(roverParams());
+
+    expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({ ok: true, status: 'stopped' });
+    expect(sendRoverMessage).not.toHaveBeenCalled();
+    expect(service.jobs.get(jobId)?.status).toBe('stopped');
+    expect(service.state.queue).not.toContain(jobId);
+    expect(service.assignRoverJob('claude', () => true)).toBeNull();
+  });
+
+  it('omits a removed waiting scenario from the next browser assignment', () => {
+    const sendRoverMessage = vi.fn(() => false);
+    const service = createRunQueueServiceForTest({ sendRoverMessage });
+    const { jobId } = service.enqueueRun({
+      ...roverParams(),
+      roverScenarios: [
+        { id: 's1', prompt: 'first', agent: 'claude', servers: [] },
+        { id: 's2', prompt: 'second', agent: 'claude', servers: [] }
+      ]
+    });
+    expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({ ok: true, status: 'stopped' });
+    expect(sendRoverMessage).not.toHaveBeenCalled();
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(service.jobs.get(jobId)?.childProgress?.map((child) => child.status)).toEqual([
+      'stopped',
+      'queued'
+    ]);
+    const send = vi.fn(() => true);
+    service.assignRoverJob('claude', send);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenarios: [expect.objectContaining({ id: 's2' })]
+      })
+    );
+    service.handleRoverMessage({ type: 'complete', jobId, outcome: 'passed' }, 'claude', send);
+    expect(service.jobs.get(jobId)?.childProgress?.map((child) => child.status)).toEqual([
+      'stopped',
+      'completed'
+    ]);
+  });
+
+  it('still requires Rover to cancel an assigned scenario', () => {
+    const sendRoverMessage = vi.fn(() => false);
+    const service = createRunQueueServiceForTest({ sendRoverMessage });
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', () => true);
+    expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({
+      error: 'Rover is not connected',
+      statusCode: 409
+    });
+    expect(service.jobs.get(jobId)?.status).toBe('running');
+    expect(service.jobs.get(jobId)?.childProgress?.[0].status).toBe('queued');
+    service.stopJob(jobId);
   });
 
   it('aborts only the selected LLM child', () => {

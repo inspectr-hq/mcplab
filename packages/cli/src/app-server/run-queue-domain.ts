@@ -41,6 +41,7 @@ export type EnqueueResult = { jobId: string; queued?: boolean; position?: number
 
 export type RoverAssignmentWorker = {
   connectionId: string;
+  registrationVersion?: number;
   provider: string;
   providerRevision?: string;
   capabilities?: string[];
@@ -112,6 +113,19 @@ export function createRunQueueService(params: {
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
   const { settings, oauthSessionManager, deps } = params;
   const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let rejectedRoverRegistration: { connectionId: string; version: number } | undefined;
+
+  function markRoverStarted(job: RunJob): void {
+    deps.addJobEvent(job, {
+      type: 'started',
+      ts: new Date().toISOString(),
+      payload: {
+        executionType: 'rover',
+        roverAgent: job.runParams.roverAgent,
+        agents: job.runParams.requestedAgents ?? null
+      }
+    });
+  }
 
   function appendRoverTraceEvent(
     job: RunJob | undefined,
@@ -827,6 +841,14 @@ export function createRunQueueService(params: {
     },
     assignRoverJob(provider, send, worker) {
       if (worker && worker.provider !== provider) return null;
+      // A page mismatch invalidates this registration. Wait for a fresh tab
+      // registration or reconnect instead of offering the same rejected job in a loop.
+      if (
+        worker &&
+        rejectedRoverRegistration?.connectionId === worker.connectionId &&
+        rejectedRoverRegistration.version === (worker.registrationVersion ?? 0)
+      )
+        return null;
       const roverAlreadyBusy = Array.from(state.activeJobIds).some(
         (id) => jobs.get(id)?.runParams.executionType === 'rover'
       );
@@ -863,6 +885,7 @@ export function createRunQueueService(params: {
         job.roverLease = {
           leaseId,
           connectionId: worker.connectionId,
+          registrationVersion: worker.registrationVersion,
           state: 'offered',
           expiresAt,
           offeredAt: now.toISOString()
@@ -883,15 +906,7 @@ export function createRunQueueService(params: {
         return null;
       }
       appendRoverTraceEvent(job, assignment, provider);
-      deps.addJobEvent(job, {
-        type: 'started',
-        ts: new Date().toISOString(),
-        payload: {
-          executionType: 'rover',
-          roverAgent: job.runParams.roverAgent,
-          agents: job.runParams.requestedAgents ?? null
-        }
-      });
+      if (!leaseCapable) markRoverStarted(job);
       emit();
       return job;
     },
@@ -959,12 +974,21 @@ export function createRunQueueService(params: {
       if (child?.status === 'completed' || child?.status === 'stopped') {
         return { ok: true, status: 'stopped' };
       }
-      const sent = params.sendRoverMessage?.({
-        type: 'stop_scenario',
-        jobId,
-        scenarioId
-      });
-      if (sent === false) return { error: 'Rover is not connected', statusCode: 409 };
+      if (job.status === 'queued' || job.status === 'waiting_for_rover') {
+        // Unassigned scenarios belong to MCPLab's queue. Remove them here so
+        // cancellation works offline and a later assignment cannot run them.
+        if (!child) return { error: 'Scenario not found', statusCode: 404 };
+        job.runParams.roverScenarios = job.runParams.roverScenarios?.filter(
+          (scenario) => scenario.id !== scenarioId
+        );
+      } else {
+        const sent = params.sendRoverMessage?.({
+          type: 'stop_scenario',
+          jobId,
+          scenarioId
+        });
+        if (sent === false) return { error: 'Rover is not connected', statusCode: 409 };
+      }
       const progress = job.childProgress ?? [];
       const next = {
         scenarioId,
@@ -1079,6 +1103,7 @@ export function createRunQueueService(params: {
           lease.acceptedAt = new Date().toISOString();
           if (typeof message.tabId === 'number') lease.tabId = message.tabId;
           scheduleLeaseExpiry(job);
+          markRoverStarted(job);
           emit();
           return null;
         }
@@ -1092,11 +1117,19 @@ export function createRunQueueService(params: {
         }
         if (message.type === 'assignment_reject' && lease.state === 'offered') {
           const detail = typeof message.message === 'string' ? message.message.trim() : '';
+          const providerUnavailable =
+            message.reason === 'provider_mismatch' || message.reason === 'provider_unavailable';
+          if (providerUnavailable && message.retryable !== false) {
+            rejectedRoverRegistration = {
+              connectionId: lease.connectionId,
+              version: lease.registrationVersion ?? 0
+            };
+          }
           // A missing provider capability needs a configuration change, not another offer.
           // Older Rover versions omit retryable, so preserve their requeue behavior.
           finalizeRoverJob(job, {
             kind: message.retryable === false ? 'error' : 'requeue',
-            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}${detail ? `. ${detail}` : ''}`
+            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}${detail ? `. ${detail}` : ''}${providerUnavailable && message.retryable !== false ? `. Waiting for Rover to confirm provider ${job.runParams.roverAgent?.provider}. Open its browser agent tab.` : ''}`
           });
           return null;
         }
