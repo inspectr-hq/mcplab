@@ -666,10 +666,20 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
   });
 
-  it('queues rerun from detail page with same settings', async () => {
+  it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {
     const result = makeResult();
     result.id = 'run-rerun';
-    result.configPath = 'evaluate-search-tags.yaml';
+    result.configName = 'Search tags';
+    if (hasStoredPath) result.configPath = 'evaluate-search-tags.yaml';
+    mockConfigs.push({
+      id: 'workspace-config',
+      name: 'Search tags',
+      relativePath: 'evaluate-search-tags.yaml',
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
     result.rerunAgents = ['agent-1'];
     result.rerunScenarioIds = ['scn-1'];
     getResultMock.mockResolvedValue(result);

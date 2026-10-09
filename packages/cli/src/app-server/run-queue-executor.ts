@@ -1,4 +1,4 @@
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import {
   applyRuntimeServerOverrides,
@@ -12,6 +12,7 @@ import {
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { resultConfigPath } from './workspace-paths.js';
 import { recordEvaluationExecution } from './evaluation-journal-writer.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
@@ -373,9 +374,7 @@ export async function executeRunJob(params: {
         });
       }
     });
-    const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
-    const relativeConfigPath = relativeConfigPathRaw.replace(/\\/g, '/').replace(/^\.\/+/, '');
-    results.metadata.config_path = relativeConfigPath || configPath;
+    results.metadata.config_path = resultConfigPath(configPath, settings.evalsDir);
     if (loaded.config.name && loaded.config.name.trim().length > 0) {
       results.metadata.config_name = loaded.config.name.trim();
     }

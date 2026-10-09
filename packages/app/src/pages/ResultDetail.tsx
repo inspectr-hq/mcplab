@@ -770,7 +770,7 @@ const ResultDetail = () => {
     }
     setRerunningRun(true);
     try {
-      await rerunWithSameSettings(source, result);
+      await rerunWithSameSettings(source, { ...result, configPath });
       toast({
         title: 'Rerun queued',
         description: `${result.id} queued with previous run settings.`

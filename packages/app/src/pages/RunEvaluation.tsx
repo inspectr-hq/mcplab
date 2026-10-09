@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -1540,6 +1541,9 @@ const RunEvaluation = () => {
                         >
                           <span className="flex min-w-0 items-center gap-1.5 truncate">
                             <span className="shrink-0 tabular-nums">{rowIndex + 1}.</span>
+                            {(child ? child.status === 'running' : job.status === 'running') && (
+                              <QueueProcessingIndicator label="Subjob running" />
+                            )}
                             {child?.status === 'completed' && (
                               <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             )}

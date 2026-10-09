@@ -185,6 +185,7 @@ export async function startAppServer(options: AppServerOptions) {
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const liveTestService = new LiveTestService({
     runsDir: settings.runsDir,
+    evalsDir: settings.evalsDir,
     cliVersion: pkgVersion,
     readScenarios: (input) => {
       if (!input?.evaluationRunId) return readLibraries(settings.librariesDir).scenarios;

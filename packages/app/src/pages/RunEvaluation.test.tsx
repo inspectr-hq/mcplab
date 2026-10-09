@@ -153,6 +153,7 @@ describe('RunEvaluation', () => {
       fireEvent.click(button);
       await waitFor(() => expect(sourceMock.openRover).toHaveBeenCalledWith('browser-job'));
       fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+      expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
       const buttons = screen.getAllByRole('button', { name: 'Open browser agent' });
       expect(buttons).toHaveLength(2);
       fireEvent.click(buttons[1]);
@@ -160,6 +161,51 @@ describe('RunEvaluation', () => {
       expect(sourceMock.openRover.mock.calls).toEqual([['browser-job'], ['browser-job']]);
     }
   );
+
+  it('shows the processing icon only for running subjobs', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'mixed-run',
+          evaluationName: 'Mixed evaluation',
+          status: 'running',
+          totalJobs: 5,
+          completedJobs: 1,
+          failedJobs: 1,
+          stoppedJobs: 1,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'api-job',
+              status: 'running',
+              runParams: {},
+              childProgress: ['running', 'queued', 'completed', 'error', 'stopped'].map(
+                (status) => ({
+                  scenarioId: `${status}-scenario`,
+                  agentName: 'Test agent',
+                  status,
+                  completed: status === 'completed' ? 1 : 0,
+                  total: 1
+                })
+              )
+            }
+          ]
+        }
+      ]
+    });
+    render(
+      <MemoryRouter>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await screen.findByText('Mixed evaluation');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    const icons = screen.getAllByLabelText('Subjob running');
+    expect(icons).toHaveLength(1);
+    expect(icons[0].parentElement).toHaveTextContent('running-scenario');
+  });
 
   it('does not offer a browser action for a running API job or a finished browser job', async () => {
     sourceMock.getRunQueue.mockResolvedValue({
@@ -193,6 +239,7 @@ describe('RunEvaluation', () => {
     expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
     expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
+    expect(screen.getByLabelText('Subjob running').parentElement).toHaveTextContent('running');
   });
 
   it('reloads configs and libraries when refresh is clicked', async () => {

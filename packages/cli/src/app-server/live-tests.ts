@@ -15,6 +15,7 @@ import {
 import type { PersistEvaluationArtifactsParams } from '@inspectr/mcplab-core';
 import { appendExecutionEvent } from './execution-journal.js';
 import { recordEvaluationExecution } from './evaluation-journal-writer.js';
+import { resultConfigPath } from './workspace-paths.js';
 
 export interface LiveTestCatalogItem {
   id: string;
@@ -103,6 +104,7 @@ export function listLiveTestCases(scenarios: Scenario[]): LiveTestCatalogItem[] 
 
 export interface LiveTestServiceOptions {
   runsDir: string;
+  evalsDir?: string;
   cliVersion: string;
   readScenarios: (input?: LiveTestStartInput) => Scenario[];
   persist: (params: PersistEvaluationArtifactsParams) => void;
@@ -279,7 +281,8 @@ export class LiveTestService {
       ]
     });
     results.metadata.evaluation_run_id = session.evaluationRunId;
-    if (session.configPath) results.metadata.config_path = session.configPath;
+    if (session.configPath)
+      results.metadata.config_path = resultConfigPath(session.configPath, this.options.evalsDir);
     if (session.configName) results.metadata.config_name = session.configName;
     if (session.agentName) results.metadata.rerun_agents = [session.agentName];
     results.metadata.rerun_scenario_ids = [session.testCase.id];

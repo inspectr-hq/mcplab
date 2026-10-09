@@ -1,5 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
+import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -211,12 +212,7 @@ export function AppLayout() {
                   >
                     {queueDisplayCount}
                   </span>
-                  {isRunning && (
-                    <span
-                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
-                      aria-label="Queue processing"
-                    />
-                  )}
+                  {isRunning && <QueueProcessingIndicator />}
                   {oauthBlockedCount > 0 && (
                     <span className="text-xs text-yellow-700 dark:text-yellow-400">OAuth wait</span>
                   )}
