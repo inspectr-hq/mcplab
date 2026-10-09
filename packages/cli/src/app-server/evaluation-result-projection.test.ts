@@ -24,6 +24,42 @@ function execution(runId: string, passed: number, total: number): ResultsJson {
 }
 
 describe('projectEvaluationResult', () => {
+  it.each([false, true])(
+    'preserves MCP overrides in grouped results, Rover first: %s',
+    (roverFirst) => {
+      const mcp = execution('llm-1', 1, 1);
+      mcp.metadata.rerun_server_override_all = ['replacement-server'];
+      mcp.metadata.rerun_scenario_server_overrides = { 'scn-1': ['scenario-server'] };
+      const rover = execution('rover-1', 1, 1);
+      const result = projectEvaluationResult({
+        evaluationRunId: 'evaluation-1',
+        runId: 'run-1',
+        executions: roverFirst ? [rover, mcp] : [mcp, rover]
+      });
+      expect(result.metadata.rerun_server_override_all).toEqual(['replacement-server']);
+      expect(result.metadata.rerun_scenario_server_overrides).toEqual({
+        'scn-1': ['scenario-server']
+      });
+    }
+  );
+
+  it('merges scenario overrides from separate execution snapshots', () => {
+    const first = execution('llm-1', 1, 1);
+    const second = execution('llm-2', 1, 1);
+    first.metadata.rerun_scenario_server_overrides = { 'scn-1': ['server-a'] };
+    second.metadata.rerun_scenario_server_overrides = { 'scn-2': ['server-b'] };
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      executions: [first, second]
+    });
+    expect(result.metadata.rerun_scenario_server_overrides).toEqual({
+      'scn-1': ['server-a'],
+      'scn-2': ['server-b']
+    });
+    expect(result.metadata).not.toHaveProperty('rerun_server_override_all');
+  });
+
   it('only includes an explicitly entered run note', () => {
     const withoutNote = projectEvaluationResult({
       evaluationRunId: 'evaluation-1',
@@ -54,6 +90,8 @@ describe('projectEvaluationResult', () => {
     expect(result.summary.pass_rate).toBe(0.5);
     expect(result.summary.outcomes).toEqual({ passed: 1, failed: 1, incomplete: 0, error: 0 });
     expect(result.metadata).not.toHaveProperty('child_run_ids');
+    expect(result.metadata).not.toHaveProperty('rerun_server_override_all');
+    expect(result.metadata).not.toHaveProperty('rerun_scenario_server_overrides');
   });
 
   it('aggregates tool metadata and MCP server versions across executions', () => {

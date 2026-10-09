@@ -56,6 +56,16 @@ export function projectEvaluationResult(params: {
   const rerunScenarioIds = Array.from(
     new Set(executions.flatMap((result) => result.metadata.rerun_scenario_ids ?? []))
   );
+  // Children share evaluation overrides, but Rover snapshots may omit them and
+  // MCP snapshots contain only the overrides for their selected scenarios.
+  const serverOverrideAll = executions.find(
+    (result) => (result.metadata.rerun_server_override_all?.length ?? 0) > 0
+  )?.metadata.rerun_server_override_all;
+  const scenarioServerOverrides = Object.fromEntries(
+    executions.flatMap((result) =>
+      Object.entries(result.metadata.rerun_scenario_server_overrides ?? {})
+    )
+  );
   const executionSources = new Set(
     executions.map((result) => result.metadata.execution_source).filter(Boolean)
   );
@@ -115,6 +125,10 @@ export function projectEvaluationResult(params: {
       ...(params.runNote?.trim() ? { run_note: params.runNote.trim() } : {}),
       ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
       ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
+      ...(serverOverrideAll ? { rerun_server_override_all: [...serverOverrideAll] } : {}),
+      ...(Object.keys(scenarioServerOverrides).length > 0
+        ? { rerun_scenario_server_overrides: scenarioServerOverrides }
+        : {}),
       evaluation_run_id: params.runId
     },
     summary: {
