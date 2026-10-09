@@ -1014,7 +1014,7 @@ const ResultDetail = () => {
 
           <div className="grid gap-4 lg:grid-cols-4">
             <OutcomeCard
-              title="Runs Pass / Fail / Incomplete / Error / Stopped"
+              title="Runs Pass / Fail"
               passed={filteredPassCount}
               failed={Math.max(
                 0,
@@ -1025,7 +1025,7 @@ const ResultDetail = () => {
               stopped={stoppedRuns}
             />
             <OutcomeCard
-              title="Checks Pass / Fail / Not evaluated / Not executed"
+              title="Checks Pass / Fail"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}

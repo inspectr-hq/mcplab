@@ -266,7 +266,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error / Stopped')).toBeTruthy();
+    expect(screen.getByText('Runs Pass / Fail')).toBeTruthy();
     expect(screen.getByText('1 incomplete')).toBeTruthy();
   });
 
