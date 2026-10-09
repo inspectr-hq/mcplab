@@ -1,3 +1,4 @@
+import { DEFAULT_BROWSER_PROVIDER_PROFILES } from '@inspectr/mcplab-core';
 import { describe, it, expect } from 'vitest';
 import {
   mkdtempSync,
@@ -32,6 +33,25 @@ describe('libraries-store test-case directory migration', () => {
     const persisted = writeBrowserProviderProfiles(librariesDir, libraries.browserProviders);
     expect(persisted.claude?.source).toBe('builtin');
   });
+
+  it('round-trips a provider named constructor', () => {
+    const id = 'constructor';
+    const librariesDir = makeTempLibrariesDir();
+    const profile = { ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES.claude), id, name: id };
+    const saved = writeBrowserProviderProfiles(librariesDir, { [id]: profile });
+    expect(saved[id]).toMatchObject({ id, name: id, source: 'workspace' });
+    expect(readLibraries(librariesDir).browserProviders[id]).toEqual(saved[id]);
+  });
+
+  it.each(['toString', 'hasOwnProperty'])(
+    'validates filenames before saving inherited id %s',
+    (id) => {
+      const profile = { ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES.claude), id };
+      expect(() => writeBrowserProviderProfiles(makeTempLibrariesDir(), { [id]: profile })).toThrow(
+        `Browser provider id '${id}' must be a safe filename.`
+      );
+    }
+  );
 
   it('lets a workspace profile override a built-in provider', () => {
     const librariesDir = makeTempLibrariesDir();

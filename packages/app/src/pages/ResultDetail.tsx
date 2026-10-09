@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@inspectr/mcplab-core';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -493,7 +494,7 @@ const ResultDetail = () => {
       filteredScenarios: scenarios,
       filteredTotalRuns: totalRuns,
       filteredPassCount: passCount,
-      displayPassRate: totalRuns - stoppedRuns === 0 ? 0 : passCount / (totalRuns - stoppedRuns),
+      displayPassRate: calculatePassRate(passCount, totalRuns, stoppedRuns),
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       displayAvgLatency:
         totalRuns === 0 || totalDuration === null ? 0 : Math.round(totalDuration / totalRuns),
@@ -1017,11 +1018,7 @@ const ResultDetail = () => {
               passed={filteredPassCount}
               failed={Math.max(
                 0,
-                filteredTotalRuns -
-                  filteredPassCount -
-                  incompleteRuns -
-                  errorRuns -
-                  stoppedRuns
+                filteredTotalRuns - filteredPassCount - incompleteRuns - errorRuns - stoppedRuns
               )}
               incomplete={incompleteRuns}
               error={errorRuns}
@@ -1294,7 +1291,8 @@ const ResultDetail = () => {
                                       className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                                     >
                                       <div className="mt-0.5">
-                                        {run.outcome === 'incomplete' || run.outcome === 'stopped' ? (
+                                        {run.outcome === 'incomplete' ||
+                                        run.outcome === 'stopped' ? (
                                           <Clock3 className="h-4 w-4 text-amber-500" />
                                         ) : run.passed ? (
                                           <CheckCircle2 className="h-4 w-4 text-success" />
@@ -1587,7 +1585,8 @@ const ResultDetail = () => {
                                                           run.runIndex,
                                                           'extracts'
                                                         ),
-                                                        Object.keys(run.extractedValues ?? {}).length > 0
+                                                        Object.keys(run.extractedValues ?? {})
+                                                          .length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''

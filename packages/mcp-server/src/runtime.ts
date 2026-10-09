@@ -43,6 +43,7 @@ import {
   updateTestCaseFile,
   buildScenarioEntry,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -3486,10 +3487,7 @@ function readLibrary(
     : {};
   const browserProviders =
     kind === 'all' || kind === 'browser_providers'
-      ? {
-          ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
-          ...readBrowserProviderProfiles(browserProvidersDir)
-        }
+      ? mergeBrowserProviderProfiles(readBrowserProviderProfiles(browserProvidersDir))
       : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
@@ -3574,7 +3572,9 @@ function getLibraryItem(
   if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
     const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
     const builtIn =
-      kind === 'browser_providers' ? DEFAULT_BROWSER_PROVIDER_PROFILES[id] : undefined;
+      kind === 'browser_providers' && Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, id)
+        ? DEFAULT_BROWSER_PROVIDER_PROFILES[id]
+        : undefined;
     const file = directory
       ? findBrowserProviderFile(directory, id)
       : join(bundleRoot, `${kind}.yaml`);

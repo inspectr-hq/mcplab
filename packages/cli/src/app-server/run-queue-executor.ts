@@ -414,11 +414,9 @@ export async function executeRunJob(params: {
       ts: new Date().toISOString(),
       payload: { message: `Writing results to ${runDir}` }
     });
-    const traceRecords = getScenarioRunTraceRecords(
-      results.metadata.run_id,
-      settings.runsDir,
-      { requireResults: false }
-    ) as ScenarioRunTraceRecord[];
+    const traceRecords = getScenarioRunTraceRecords(results.metadata.run_id, settings.runsDir, {
+      requireResults: false
+    }) as ScenarioRunTraceRecord[];
     if (job.runParams.evaluationRunId) {
       rmSync(runDir, { recursive: true, force: true });
     }
@@ -587,6 +585,14 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
           total: event.runsPerScenario,
           status: 'queued' as const
         };
+  // A stop is terminal for the whole scenario-agent pair, including remaining variance runs.
+  if (
+    current.status === 'stopped' ||
+    (event.type === 'scenario_run_finished' && event.outcome === 'stopped')
+  ) {
+    job.childProgress = upsertQueueChildProgress(existing, { ...current, status: 'stopped' });
+    return;
+  }
   const next: QueueChildProgress = {
     ...current,
     total: event.runsPerScenario,
@@ -617,7 +623,7 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
     case 'scenario_run_finished':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${event.outcome === 'stopped' ? 'STOPPED' : event.pass ? 'PASS' : 'FAIL'} (${
         event.toolCallCount
       } tool call(s))`;
     case 'agent_progress': {

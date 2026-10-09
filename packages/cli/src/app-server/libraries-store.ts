@@ -14,6 +14,7 @@ import type { BrowserAgentConfig, BrowserProviderProfile, EvalConfig } from '@in
 import {
   parseBrowserProviderProfiles,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles,
   readLibraryAgentsAndServers,
   validateBrowserProviderProfile,
   serializeBrowserProviderProfile
@@ -63,10 +64,7 @@ export function readLibraries(librariesDir: string): {
       scenarios.push({ ...parsed, id });
     }
   }
-  const browserProviders = {
-    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
-    ...readBrowserProviderProfiles(root)
-  };
+  const browserProviders = mergeBrowserProviderProfiles(readBrowserProviderProfiles(root));
   return { servers, agents, scenarios, browserProviders };
 }
 
@@ -106,7 +104,9 @@ export function writeBrowserProviderProfiles(
   mkdirSync(directory, { recursive: true });
   const desired = new Set<string>();
   for (const [id, profile] of Object.entries(profiles)) {
-    const builtIn = DEFAULT_BROWSER_PROVIDER_PROFILES[id];
+    const builtIn = Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, id)
+      ? DEFAULT_BROWSER_PROVIDER_PROFILES[id]
+      : undefined;
     if (
       builtIn &&
       serializeBrowserProviderProfile(builtIn) === serializeBrowserProviderProfile(profile)
@@ -142,10 +142,7 @@ export function writeBrowserProviderProfiles(
     if (!(file.endsWith('.yaml') || file.endsWith('.yml')) || desired.has(file)) continue;
     unlinkSync(join(directory, file));
   }
-  return {
-    ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES),
-    ...readBrowserProviderProfiles(root)
-  };
+  return mergeBrowserProviderProfiles(readBrowserProviderProfiles(root));
 }
 
 function readFileIfPresent(path: string): string | undefined {

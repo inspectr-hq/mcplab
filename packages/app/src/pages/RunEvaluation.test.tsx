@@ -26,7 +26,8 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
         removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
-        startRun: vi.fn()
+        startRun: vi.fn(),
+        openRover: vi.fn().mockResolvedValue({ ok: true })
       }
     };
   });
@@ -77,6 +78,7 @@ beforeEach(() => {
   sourceMock.subscribeRunJob.mockReset();
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
   sourceMock.stopRun.mockReset();
+  sourceMock.openRover.mockClear();
   sourceMock.removeQueuedRun.mockReset();
   sourceMock.removeEvaluationRun.mockClear();
   sessionStorage.removeItem(activeJobStorageKey);
@@ -100,6 +102,99 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it.each(['queued', 'waiting_for_rover', 'running', 'paused_rover'] as const)(
+    'keeps Open browser agent available for a %s browser job',
+    async (status) => {
+      const browserJob = {
+        jobId: 'browser-job',
+        status,
+        executionType: 'rover',
+        roverAgent: { name: 'Polo browser', provider: 'polo', url: 'https://polo.example' },
+        runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 },
+        childProgress: [
+          {
+            scenarioId: 'search-tags',
+            agentName: 'Polo browser',
+            completed: 0,
+            total: 1,
+            status: 'queued'
+          }
+        ]
+      };
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'mixed-run',
+            evaluationName: 'Mixed evaluation',
+            status:
+              status === 'running' ? 'running' : status === 'paused_rover' ? 'paused' : 'queued',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 0,
+            stoppedJobs: 0,
+            pausedJobs: status === 'paused_rover' ? 1 : 0,
+            jobs: [
+              { jobId: 'api-job', status: 'completed', executionType: 'mcplab', runParams: {} },
+              browserJob
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <RunEvaluation />
+        </MemoryRouter>
+      );
+      const button = await screen.findByRole('button', { name: 'Open browser agent' });
+      fireEvent.click(button);
+      await waitFor(() => expect(sourceMock.openRover).toHaveBeenCalledWith('browser-job'));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+      const buttons = screen.getAllByRole('button', { name: 'Open browser agent' });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[1]);
+      await waitFor(() => expect(sourceMock.openRover).toHaveBeenCalledTimes(2));
+      expect(sourceMock.openRover.mock.calls).toEqual([['browser-job'], ['browser-job']]);
+    }
+  );
+
+  it('does not offer a browser action for a running API job or a finished browser job', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'mixed-run',
+          evaluationName: 'Mixed evaluation',
+          status: 'running',
+          totalJobs: 2,
+          completedJobs: 1,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            { jobId: 'api-job', status: 'running', executionType: 'mcplab', runParams: {} },
+            { jobId: 'browser-job', status: 'completed', executionType: 'rover', runParams: {} }
+          ]
+        }
+      ]
+    });
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await screen.findByText('Mixed evaluation');
+    expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
+  });
+
   it('reloads configs and libraries when refresh is clicked', async () => {
     render(
       <MemoryRouter initialEntries={['/run']}>
@@ -842,6 +937,73 @@ describe('RunEvaluation', () => {
       expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
     }
   );
+
+  it('shows stopped completion separately from errors and keeps grouped results', async () => {
+    sessionStorage.setItem(activeJobStorageKey, 'job-last');
+    let onEvent: ((event: any) => void) | undefined;
+    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+      if (jobId === 'job-last') onEvent = callback;
+      return () => {};
+    });
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'evaluation-mixed',
+          evaluationName: 'Mixed result group',
+          status: 'stopped',
+          totalJobs: 2,
+          completedJobs: 1,
+          failedJobs: 1,
+          stoppedJobs: 1,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'job-last',
+              status: 'completed',
+              runParams: {}
+            },
+            {
+              jobId: 'job-other',
+              status: 'stopped',
+              runParams: {}
+            }
+          ]
+        }
+      ]
+    });
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(onEvent).toBeDefined());
+    await act(async () => {
+      onEvent?.({
+        type: 'completed',
+        ts: '2026-10-09T00:18:28.000Z',
+        payload: { runId: 'evaluation-mixed' }
+      });
+    });
+    expect(await screen.findByText('Completed with stopped scenarios')).toBeInTheDocument();
+    expect(screen.queryByText('Completed with errors')).toBeNull();
+    expect(
+      screen.getByText('2/2 finished, 1 completed, 0 error(s), 1 stopped.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+      'href',
+      '/results/evaluation-mixed'
+    );
+    expect(screen.getByText('100%')).toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+    expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
+  });
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');

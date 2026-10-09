@@ -85,6 +85,20 @@ describe('browser provider library tools', () => {
     expect(builtIn.structuredContent.yaml).not.toContain('updated_at');
   });
 
+  it('reports a missing inherited provider id as a missing library file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+    const result = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'constructor'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Library file not found:');
+  });
+
   it('retrieves a workspace override instead of the built-in profile', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
     writeFixture(root);

@@ -6,7 +6,7 @@ import type { BrowserProviderProfile } from './browser-providers.js';
  * Rover keeps the executable adapters for these providers. MCP Lab exposes
  * these profiles so they are available in the library UI and API without a
  * workspace file. Workspace profiles with the same id take precedence.
- * Bump the learned timestamps when changing a built-in profile to invalidate stale revisions.
+ * Rover owns native adapter compatibility; built-ins are not checked by profile revision.
  */
 export const DEFAULT_BROWSER_PROVIDER_PROFILES: Record<string, BrowserProviderProfile> = {
   claude: {
@@ -25,9 +25,7 @@ export const DEFAULT_BROWSER_PROVIDER_PROFILES: Record<string, BrowserProviderPr
     },
     assistantMessages: {
       locator: {
-        segments: [
-          '[data-is-streaming]'
-        ]
+        segments: ['[data-is-streaming]']
       }
     },
     completion: {
@@ -96,3 +94,10 @@ export const DEFAULT_BROWSER_PROVIDER_PROFILES: Record<string, BrowserProviderPr
     }
   }
 };
+
+/** Workspace profiles override built-ins; callers may edit defaults without mutating them. */
+export function mergeBrowserProviderProfiles(
+  workspaceProfiles: Record<string, BrowserProviderProfile>
+): Record<string, BrowserProviderProfile> {
+  return { ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES), ...workspaceProfiles };
+}

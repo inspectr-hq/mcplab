@@ -14,7 +14,7 @@ export function truncateJson(value: unknown, maxChars: number): string {
   }
 }
 
-function extractFirstBalancedJsonCandidate(text: string): string | null {
+function* extractBalancedJsonCandidates(text: string): Generator<string> {
   const starts: Array<{ idx: number; open: '{' | '['; close: '}' | ']' }> = [];
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
@@ -46,11 +46,13 @@ function extractFirstBalancedJsonCandidate(text: string): string | null {
       if (ch === start.open) depth += 1;
       if (ch === start.close) {
         depth -= 1;
-        if (depth === 0) return text.slice(start.idx, i + 1);
+        if (depth === 0) {
+          yield text.slice(start.idx, i + 1);
+          break;
+        }
       }
     }
   }
-  return null;
 }
 
 export function parseJsonFromAssistantText<T = unknown>(text: string): T {
@@ -58,11 +60,18 @@ export function parseJsonFromAssistantText<T = unknown>(text: string): T {
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) return JSON.parse(fenced[1].trim()) as T;
-    const candidate = extractFirstBalancedJsonCandidate(cleaned);
-    if (candidate) return JSON.parse(candidate) as T;
+    const fenced = Array.from(cleaned.matchAll(/```(?:json)?\s*([\s\S]+?)```/gi), (match) =>
+      match[1].trim()
+    );
+    for (const candidates of [fenced, extractBalancedJsonCandidates(cleaned)]) {
+      for (const candidate of candidates) {
+        try {
+          return JSON.parse(candidate) as T;
+        } catch {
+          // CSS selectors and explanatory prose can contain brackets before the JSON.
+        }
+      }
+    }
     throw new Error('Assistant returned invalid JSON');
   }
 }

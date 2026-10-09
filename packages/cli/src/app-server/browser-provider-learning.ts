@@ -38,7 +38,7 @@ export function sanitizeBrowserProviderLearningTrace(
 ): Record<string, unknown> {
   const object = (candidate: unknown): Record<string, unknown> | null =>
     candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-      ? candidate as Record<string, unknown>
+      ? (candidate as Record<string, unknown>)
       : null;
   const short = (candidate: unknown, limit = 200) =>
     typeof candidate === 'string' ? candidate.slice(0, limit) : undefined;
@@ -48,7 +48,9 @@ export function sanitizeBrowserProviderLearningTrace(
       : undefined;
   const safeLocator = (candidate: unknown) => {
     const segments = object(candidate)?.segments;
-    return Array.isArray(segments) && segments.length > 0 && segments.length <= 8 &&
+    return Array.isArray(segments) &&
+      segments.length > 0 &&
+      segments.length <= 8 &&
       segments.every((item) => typeof item === 'string')
       ? { segments: segments.map((item) => String(item).slice(0, 500)) }
       : undefined;
@@ -63,36 +65,57 @@ export function sanitizeBrowserProviderLearningTrace(
     return {
       locator,
       selectors: Array.isArray(item.selectors)
-        ? item.selectors.filter((selector): selector is string => typeof selector === 'string')
-            .slice(0, 12).map((selector) => selector.slice(0, 500))
+        ? item.selectors
+            .filter((selector): selector is string => typeof selector === 'string')
+            .slice(0, 12)
+            .map((selector) => selector.slice(0, 500))
         : [],
       visible: item.visible === true,
       textLength: count(item.textLength) ?? 0,
       ...(typeof item.changedFromBaseline === 'boolean'
-        ? { changedFromBaseline: item.changedFromBaseline } : {}),
+        ? { changedFromBaseline: item.changedFromBaseline }
+        : {}),
       ...(typeof item.changedAfterSubmission === 'boolean'
-        ? { changedAfterSubmission: item.changedAfterSubmission } : {}),
+        ? { changedAfterSubmission: item.changedAfterSubmission }
+        : {}),
       ...(typeof item.absentAtSubmission === 'boolean'
-        ? { absentAtSubmission: item.absentAtSubmission } : {}),
+        ? { absentAtSubmission: item.absentAtSubmission }
+        : {}),
       ...(typeof item.candidateScore === 'number' && Number.isFinite(item.candidateScore)
-        ? { candidateScore: item.candidateScore } : {}),
-      ...(attributes ? {
-        attributes: Object.fromEntries(
-          ['role', 'ariaLabel', 'ariaBusy', 'testId', 'dataTest', 'authorRole']
-            .flatMap((key) => short(attributes[key]) === undefined ? [] : [[key, short(attributes[key])]])
-        )
-      } : {}),
-      ...(evaluations ? {
-        selectorEvaluations: Object.fromEntries(
-          Object.entries(evaluations).slice(0, 12).flatMap(([selector, raw]) => {
-            const entry = object(raw);
-            return entry ? [[selector.slice(0, 500), {
-              matchCount: count(entry.matchCount) ?? 0,
-              nonAssistantCount: count(entry.nonAssistantCount) ?? 0
-            }]] : [];
-          })
-        )
-      } : {})
+        ? { candidateScore: item.candidateScore }
+        : {}),
+      ...(attributes
+        ? {
+            attributes: Object.fromEntries(
+              ['role', 'ariaLabel', 'ariaBusy', 'testId', 'dataTest', 'authorRole'].flatMap(
+                (key) =>
+                  short(attributes[key]) === undefined ? [] : [[key, short(attributes[key])]]
+              )
+            )
+          }
+        : {}),
+      ...(evaluations
+        ? {
+            selectorEvaluations: Object.fromEntries(
+              Object.entries(evaluations)
+                .slice(0, 12)
+                .flatMap(([selector, raw]) => {
+                  const entry = object(raw);
+                  return entry
+                    ? [
+                        [
+                          selector.slice(0, 500),
+                          {
+                            matchCount: count(entry.matchCount) ?? 0,
+                            nonAssistantCount: count(entry.nonAssistantCount) ?? 0
+                          }
+                        ]
+                      ]
+                    : [];
+                })
+            )
+          }
+        : {})
     };
   };
   const events = Array.isArray(value.events)
@@ -104,16 +127,20 @@ export function sanitizeBrowserProviderLearningTrace(
           phase: typeof source.phase === 'string' ? source.phase : undefined,
           at: typeof source.at === 'string' ? source.at : undefined,
           ...(typeof source.workingActive === 'boolean'
-            ? { workingActive: source.workingActive } : {}),
-          ...(selected ? {
-            selectedElements: Object.fromEntries(
-              ['composer', 'submit', 'assistant', 'generating', 'working', 'idle']
-                .flatMap((role) => {
-                  const element = safeSelectedElement(selected[role]);
-                  return element ? [[role, element]] : [];
-                })
-            )
-          } : {}),
+            ? { workingActive: source.workingActive }
+            : {}),
+          ...(selected
+            ? {
+                selectedElements: Object.fromEntries(
+                  ['composer', 'submit', 'assistant', 'generating', 'working', 'idle'].flatMap(
+                    (role) => {
+                      const element = safeSelectedElement(selected[role]);
+                      return element ? [[role, element]] : [];
+                    }
+                  )
+                )
+              }
+            : {}),
           candidateCount:
             typeof source.candidateCount === 'number' ? source.candidateCount : undefined,
           changedCandidateCount:
@@ -172,30 +199,43 @@ export function sanitizeBrowserProviderLearningTrace(
     selectorValidation: Object.fromEntries(
       ['composer', 'submit', 'assistant'].flatMap((role) => {
         const entry = object(object(value.selectorValidation)?.[role]);
-        return entry ? [[role, {
-          valid: entry.valid === true,
-          matchCount: count(entry.matchCount) ?? 0,
-          visible: entry.visible === true
-        }]] : [];
+        return entry
+          ? [
+              [
+                role,
+                {
+                  valid: entry.valid === true,
+                  matchCount: count(entry.matchCount) ?? 0,
+                  visible: entry.visible === true
+                }
+              ]
+            ]
+          : [];
       })
     ),
-    ...(object(value.newConversationEvidence) ? (() => {
-      const evidence = object(value.newConversationEvidence)!;
-      const controlLocator = safeLocator(evidence.controlLocator);
-      return controlLocator &&
-        ['url-changed', 'assistant-count-reduced'].includes(String(evidence.signal))
-        ? { newConversationEvidence: {
-            controlLocator,
-            controlSelectors: Array.isArray(evidence.controlSelectors)
-              ? evidence.controlSelectors.filter((selector): selector is string => typeof selector === 'string')
-                  .slice(0, 12).map((selector) => selector.slice(0, 500))
-              : [],
-            signal: evidence.signal,
-            beforeAssistantCount: count(evidence.beforeAssistantCount) ?? 0,
-            afterAssistantCount: count(evidence.afterAssistantCount) ?? 0
-          } }
-        : {};
-    })() : {}),
+    ...(object(value.newConversationEvidence)
+      ? (() => {
+          const evidence = object(value.newConversationEvidence)!;
+          const controlLocator = safeLocator(evidence.controlLocator);
+          return controlLocator &&
+            ['url-changed', 'assistant-count-reduced'].includes(String(evidence.signal))
+            ? {
+                newConversationEvidence: {
+                  controlLocator,
+                  controlSelectors: Array.isArray(evidence.controlSelectors)
+                    ? evidence.controlSelectors
+                        .filter((selector): selector is string => typeof selector === 'string')
+                        .slice(0, 12)
+                        .map((selector) => selector.slice(0, 500))
+                    : [],
+                  signal: evidence.signal,
+                  beforeAssistantCount: count(evidence.beforeAssistantCount) ?? 0,
+                  afterAssistantCount: count(evidence.afterAssistantCount) ?? 0
+                }
+              }
+            : {};
+        })()
+      : {}),
     events
   };
 }
@@ -206,7 +246,8 @@ function validateWorkingLocatorEvidence(
 ): { profile: BrowserProviderProfile; warnings: string[] } {
   const events = Array.isArray(trace.events)
     ? trace.events.filter((event): event is Record<string, unknown> =>
-        Boolean(event && typeof event === 'object' && !Array.isArray(event)))
+        Boolean(event && typeof event === 'object' && !Array.isArray(event))
+      )
     : [];
   const submittedIndex = events.findIndex((event) => event.phase === 'submitted');
   const postSubmissionEvents = events.slice(submittedIndex >= 0 ? submittedIndex + 1 : 0);
@@ -215,7 +256,9 @@ function validateWorkingLocatorEvidence(
 
   if (workingEvents.length === 0) {
     if (trace.observedGeneration === true && profile.completion.workingLocator) {
-      throw new Error('Working locator evidence is incomplete: no active working event was observed.');
+      throw new Error(
+        'Working locator evidence is incomplete: no active working event was observed.'
+      );
     }
     return { profile, warnings: [] };
   }
@@ -223,7 +266,9 @@ function validateWorkingLocatorEvidence(
     throw new Error('Working locator evidence is incomplete: the final event is still active.');
   }
   if (!profile.completion.workingLocator) {
-    throw new Error('Working locator evidence is incomplete: the proposal omitted the working locator.');
+    throw new Error(
+      'Working locator evidence is incomplete: the proposal omitted the working locator.'
+    );
   }
 
   const proposedSegments = profile.completion.workingLocator.segments;
@@ -233,7 +278,7 @@ function validateWorkingLocatorEvidence(
       if (!selected || typeof selected !== 'object' || Array.isArray(selected)) return null;
       const working = (selected as Record<string, unknown>).working;
       return working && typeof working === 'object' && !Array.isArray(working)
-        ? working as Record<string, unknown>
+        ? (working as Record<string, unknown>)
         : null;
     })
     .filter((working): working is Record<string, unknown> => working !== null);
@@ -241,25 +286,31 @@ function validateWorkingLocatorEvidence(
     ...(Array.isArray(working.selectors)
       ? working.selectors.filter((selector): selector is string => typeof selector === 'string')
       : []),
-    ...((working.locator && typeof working.locator === 'object' && !Array.isArray(working.locator)
-      && Array.isArray((working.locator as Record<string, unknown>).segments))
-      ? ((working.locator as Record<string, unknown>).segments as unknown[])
-          .filter((segment): segment is string => typeof segment === 'string')
+    ...(working.locator &&
+    typeof working.locator === 'object' &&
+    !Array.isArray(working.locator) &&
+    Array.isArray((working.locator as Record<string, unknown>).segments)
+      ? ((working.locator as Record<string, unknown>).segments as unknown[]).filter(
+          (segment): segment is string => typeof segment === 'string'
+        )
       : [])
   ]);
   const observed = new Set(observedSelectors);
   const proposedIsObserved = proposedSegments.every((segment) => {
     if (observed.has(segment)) return true;
     const parts = segment.match(/\[[^\]]+\]/g) ?? [];
-    return parts.length > 0 && parts.every((part) =>
-      observedSelectors.some((selector) => selector.includes(part))
+    return (
+      parts.length > 0 &&
+      parts.every((part) => observedSelectors.some((selector) => selector.includes(part)))
     );
   });
   if (proposedIsObserved && !proposedSegments.some((segment) => /aria-busy\s*=/.test(segment))) {
     const transientSelector = observedSelectors.find((selector) => /aria-busy\s*=/.test(selector));
     const baseSelector = proposedSegments.find((segment) => observed.has(segment));
     if (transientSelector && baseSelector && !baseSelector.includes('aria-busy')) {
-      const condition = transientSelector.match(/\[[^\]]*aria-busy\s*=\s*["'][^"']+["'][^\]]*\]/i)?.[0];
+      const condition = transientSelector.match(
+        /\[[^\]]*aria-busy\s*=\s*["'][^"']+["'][^\]]*\]/i
+      )?.[0];
       if (condition) {
         const narrowed = `${baseSelector}${condition}`;
         return {
@@ -278,7 +329,9 @@ function validateWorkingLocatorEvidence(
     }
   }
   if (!proposedIsObserved) {
-    throw new Error('Working locator evidence is incomplete: the selector was not observed while working.');
+    throw new Error(
+      'Working locator evidence is incomplete: the selector was not observed while working.'
+    );
   }
   return { profile, warnings: [] };
 }

@@ -9,7 +9,8 @@ import type {
   ScenarioRunResult,
   ResultsJson,
   ExecutableScenario,
-  ScenarioRunTraceRecord
+  ScenarioRunTraceRecord,
+  RunOutcome
 } from './types.js';
 import { isLlmAgent } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
@@ -87,6 +88,7 @@ export type RunProgressEvent =
       runIndex: number;
       runsPerScenario: number;
       pass: boolean;
+      outcome?: RunOutcome;
       toolCallCount: number;
     }
   | {
@@ -359,6 +361,7 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: scenarioRun.pass,
+            outcome: scenarioRun.outcome,
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
@@ -369,78 +372,30 @@ export async function runAll(
             });
             throw scenarioErr;
           }
-          if (runSignal?.aborted) {
-            const stopReason = String(scenarioErr?.message ?? scenarioErr ?? 'Request aborted');
-            const tsEnd = new Date().toISOString();
-            const stoppedRun: ScenarioRunResult = {
-              run_index: runIndex,
-              request_id: requestId,
-              pass: false,
-              outcome: 'stopped',
-              stop_reason: stopReason,
-              failures: [],
-              check_results: buildNotExecutedCheckResults(scenario.eval),
-              tool_calls: [],
-              tool_call_count: 0,
-              tool_sequence: [],
-              tool_usage: {},
-              tool_durations_ms: [],
-              run_duration_ms: Math.max(0, Date.parse(tsEnd) - Date.parse(tsStart)),
-              final_text: '',
-              extracted: {}
-            };
-            runs.push(stoppedRun);
-            trace.write({
-              type: 'scenario_run',
-              trace_version: 3,
-              run_index: runIndex,
-              request_id: requestId,
-              scenario_id: scenario.id,
-              agent: scenario.agent,
-              provider: agent.provider,
-              model: agent.model,
-              ts_start: tsStart,
-              ts_end: tsEnd,
-              pass: false,
-              outcome: 'stopped',
-              error: stopReason,
-              messages: []
-            });
-            await scenarioTrace.end({
-              error: stopReason,
-              outputs: { pass: false, stopped: true }
-            });
-            await emitProgress({
-              type: 'scenario_run_finished',
-              scenarioId: scenario.id,
-              agentName: scenario.agent,
-              scenarioRunIndex,
-              totalScenarioRuns,
-              runIndex,
-              runsPerScenario: options.runsPerScenario,
-              pass: false,
-              toolCallCount: 0
-            });
-            break;
-          }
-          if (isAbortError(scenarioErr)) {
+          let traceEnded = false;
+          if (isAbortError(scenarioErr) && !runSignal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
               outputs: { pass: false }
             });
-            if (runSignal?.aborted) break;
-            throw scenarioErr;
+            traceEnded = true;
+            // A child stop can arrive while trace cleanup is awaiting. Record it below.
+            if (options.signal?.aborted || !runSignal?.aborted) throw scenarioErr;
           }
-          const errorMessage = scenarioErr?.message ?? String(scenarioErr);
-          console.error(`Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`);
+          const stopped = Boolean(runSignal?.aborted);
+          const outcome = stopped ? 'stopped' : 'error';
+          const errorMessage = String(scenarioErr?.message ?? scenarioErr ?? 'Request aborted');
+          if (!stopped) {
+            console.error(`Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`);
+          }
           const tsEnd = new Date().toISOString();
-          const errorRun: ScenarioRunResult = {
+          const unsuccessfulRun: ScenarioRunResult = {
             run_index: runIndex,
             request_id: requestId,
             pass: false,
-            outcome: 'error',
-            error: errorMessage,
-            failures: [`Scenario error: ${errorMessage}`],
+            outcome,
+            ...(stopped ? { stop_reason: errorMessage } : { error: errorMessage }),
+            failures: stopped ? [] : [`Scenario error: ${errorMessage}`],
             check_results: buildNotExecutedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
@@ -451,8 +406,8 @@ export async function runAll(
             final_text: '',
             extracted: {}
           };
-          runs.push(errorRun);
-          const errorTrace: ScenarioRunTraceRecord = {
+          runs.push(unsuccessfulRun);
+          const unsuccessfulTrace: ScenarioRunTraceRecord = {
             type: 'scenario_run',
             trace_version: 3,
             run_index: runIndex,
@@ -464,12 +419,17 @@ export async function runAll(
             ts_start: tsStart,
             ts_end: tsEnd,
             pass: false,
-            outcome: 'error',
+            outcome,
             error: errorMessage,
             messages: []
           };
-          trace.write(errorTrace);
-          await scenarioTrace.end({ error: errorMessage, outputs: { pass: false } });
+          trace.write(unsuccessfulTrace);
+          if (!traceEnded) {
+            await scenarioTrace.end({
+              error: errorMessage,
+              outputs: { pass: false, ...(stopped ? { stopped: true } : {}) }
+            });
+          }
           await emitProgress({
             type: 'scenario_run_finished',
             scenarioId: scenario.id,
@@ -479,8 +439,10 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: false,
+            outcome,
             toolCallCount: 0
           });
+          if (stopped) break;
         }
       }
 

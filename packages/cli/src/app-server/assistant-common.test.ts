@@ -6,7 +6,7 @@ vi.mock('@inspectr/mcplab-core', async () => ({
   chatWithAgent: chatWithAgentMock
 }));
 
-import { chatWithJsonRetry } from './assistant-common.js';
+import { chatWithJsonRetry, parseJsonFromAssistantText } from './assistant-common.js';
 
 it('uses the caller response schema when retrying invalid JSON', async () => {
   chatWithAgentMock
@@ -27,4 +27,25 @@ it('uses the caller response schema when retrying invalid JSON', async () => {
     role: 'user',
     content: retryPrompt
   });
+});
+
+it.each([
+  'Use button[aria-label="Stop"]. Proposal: {"ok":true}',
+  'Notes {not JSON}, then [also not JSON]. {"ok":true}',
+  '```text\nbutton[aria-label="Stop"]\n```\n```json\n{"ok":true}\n```',
+  '```json\n{invalid}\n```\nActual proposal: {"ok":true}'
+])('skips invalid candidates before a valid proposal: %s', (text) => {
+  expect(parseJsonFromAssistantText(text)).toEqual({ ok: true });
+});
+
+it('retains arrays and escaped delimiters in valid JSON', () => {
+  expect(
+    parseJsonFromAssistantText('Answer: [{"selector":"button[aria-label=\\"Stop\\"]"}]')
+  ).toEqual([{ selector: 'button[aria-label="Stop"]' }]);
+});
+
+it('rejects a response with no valid JSON candidate', () => {
+  expect(() => parseJsonFromAssistantText('button[aria-label="Stop"] {invalid}')).toThrow(
+    'Assistant returned invalid JSON'
+  );
 });

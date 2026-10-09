@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@inspectr/mcplab-core';
 import { useMemo } from 'react';
 import { Activity, BarChart3, CheckCircle2, Clock, Layers, Timer, Wrench } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
@@ -112,7 +113,10 @@ export function OutcomeCard({
           )}
           {stopped > 0 && (
             <div className="flex items-center gap-1.5">
-              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STOPPED_COLOR }} />
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: STOPPED_COLOR }}
+              />
               {formatNumber(stopped)} stopped
             </div>
           )}
@@ -195,7 +199,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
       stoppedRuns,
       checkCounts,
       totalScenarios,
-      passRate: totalRuns - stoppedRuns === 0 ? 0 : passedRuns / (totalRuns - stoppedRuns),
+      passRate: calculatePassRate(passedRuns, totalRuns, stoppedRuns),
       avgToolCalls: weighted((run) => run.avgToolCalls),
       avgLatency: weighted((run) => run.avgLatency),
       totalTokens,

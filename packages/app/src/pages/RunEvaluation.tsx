@@ -52,6 +52,14 @@ function nowTime(): string {
   return new Date().toLocaleTimeString();
 }
 
+// Assignment marks a Rover job running before its first scenario starts.
+function canOpenRoverJob(job: QueueEntry): boolean {
+  return (
+    job.executionType === 'rover' &&
+    ['queued', 'waiting_for_rover', 'running', 'paused_rover'].includes(job.status)
+  );
+}
+
 function queueChildRows(evaluation: EvaluationQueueItem): Array<{
   job: QueueEntry;
   child?: QueueChildProgress;
@@ -730,7 +738,8 @@ const RunEvaluation = () => {
           setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
         }
         const finishEvaluation = (evaluation?: EvaluationQueueItem) => {
-          const hasErrors = isError || (evaluation?.failedJobs ?? 0) > 0;
+          const hasErrors =
+            isError || (evaluation?.failedJobs ?? 0) - (evaluation?.stoppedJobs ?? 0) > 0;
           setOauthRequired(null);
           oauthConnectingRef.current = false;
           setLogs((prev) => {
@@ -1427,22 +1436,13 @@ const RunEvaluation = () => {
                           {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
                         </Button>
                       )}
-                      {evaluation.jobs.some(
-                        (job) =>
-                          job.executionType === 'rover' &&
-                          (job.status === 'queued' || job.status === 'waiting_for_rover')
-                      ) && (
+                      {evaluation.jobs.some(canOpenRoverJob) && (
                         <Button
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
                           onClick={() => {
-                            const job = evaluation.jobs.find(
-                              (candidate) =>
-                                candidate.executionType === 'rover' &&
-                                (candidate.status === 'queued' ||
-                                  candidate.status === 'waiting_for_rover')
-                            );
+                            const job = evaluation.jobs.find(canOpenRoverJob);
                             if (job) void openRoverJob(job.jobId);
                           }}
                           title="Open the browser-agent URL, then activate the Rover extension"
@@ -1477,7 +1477,7 @@ const RunEvaluation = () => {
                             job.status
                           )
                         ) ||
-                          (['stopped', 'failed', 'partial'].includes(evaluation.status) &&
+                          (evaluation.status === 'stopped' &&
                             evaluation.jobs.every((job) =>
                               ['completed', 'error', 'stopped'].includes(job.status)
                             ))) && (
@@ -1582,8 +1582,7 @@ const RunEvaluation = () => {
                             className="flex shrink-0 items-center gap-1"
                             onClick={(event) => event.stopPropagation()}
                           >
-                            {job.executionType === 'rover' &&
-                              (job.status === 'queued' || job.status === 'waiting_for_rover') &&
+                            {canOpenRoverJob(job) &&
                               (!child ||
                                 job.childProgress?.[0]?.scenarioId === child.scenarioId) && (
                                 <Button
@@ -1930,21 +1929,35 @@ const RunEvaluation = () => {
       )}
 
       {done && (
-        <Card className={completionHasErrors ? 'border-amber-500/50' : 'border-success/50'}>
+        <Card
+          className={
+            completionHasErrors
+              ? 'border-amber-500/50'
+              : completionSummary?.stoppedJobs
+                ? 'border-border'
+                : 'border-success/50'
+          }
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               {completionHasErrors ? (
                 <X className="h-6 w-6 text-destructive" />
+              ) : completionSummary?.stoppedJobs ? (
+                <Clock className="h-6 w-6 text-muted-foreground" />
               ) : (
                 <CheckCircle2 className="h-6 w-6 text-success" />
               )}
               <div>
                 <p className="font-medium">
-                  {completionHasErrors ? 'Completed with errors' : 'Evaluation Complete'}
+                  {completionHasErrors
+                    ? 'Completed with errors'
+                    : completionSummary?.stoppedJobs
+                      ? 'Completed with stopped scenarios'
+                      : 'Evaluation Complete'}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {completionSummary
-                    ? `${completionSummary.totalJobs}/${completionSummary.totalJobs} finished, ${completionSummary.completedJobs} completed, ${completionSummary.failedJobs - completionSummary.stoppedJobs} error(s), ${completionSummary.stoppedJobs} stopped.`
+                    ? `${completionSummary.totalJobs}/${completionSummary.totalJobs} finished, ${completionSummary.completedJobs} completed, ${Math.max(0, completionSummary.failedJobs - completionSummary.stoppedJobs)} error(s), ${completionSummary.stoppedJobs} stopped.`
                     : completionHasErrors
                       ? 'The evaluation ended with errors. Review the log for details.'
                       : 'All scenarios have finished. Review the results for their outcomes.'}

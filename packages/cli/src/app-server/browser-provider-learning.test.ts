@@ -5,7 +5,7 @@ const { chatWithJsonRetryMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('./assistant-common.js', async () => ({
-  ...await vi.importActual<typeof import('./assistant-common.js')>('./assistant-common.js'),
+  ...(await vi.importActual<typeof import('./assistant-common.js')>('./assistant-common.js')),
   chatWithJsonRetry: chatWithJsonRetryMock
 }));
 
@@ -40,14 +40,16 @@ describe('browser provider learning proposals', () => {
     'accepts a valid proposal wrapped in %s',
     (prefix) => {
       const proposal = { profile, rationale: ['Observed send control.'], warnings: [] };
-      expect(parseBrowserProviderProposal(`${prefix}\n${JSON.stringify(proposal)}\n\`\`\``))
-        .toMatchObject({ ...proposal, validated: true });
+      expect(
+        parseBrowserProviderProposal(`${prefix}\n${JSON.stringify(proposal)}\n\`\`\``)
+      ).toMatchObject({ ...proposal, validated: true });
     }
   );
 
   it('still rejects an invalid profile inside a JSON code block', () => {
-    expect(() => parseBrowserProviderProposal('```json\n{"profile":{"id":"bad"}}\n```'))
-      .toThrow('Unsupported browser provider profile schema.');
+    expect(() => parseBrowserProviderProposal('```json\n{"profile":{"id":"bad"}}\n```')).toThrow(
+      'Unsupported browser provider profile schema.'
+    );
   });
 
   it('validates and returns the model proposal', async () => {
@@ -134,15 +136,18 @@ describe('browser provider learning proposals', () => {
       ]
     };
 
-    const proposal = parseBrowserProviderProposal(JSON.stringify({
-      profile: {
-        ...profile,
-        completion: {
-          ...profile.completion,
-          workingLocator: { segments: ['[role="article"]'] }
+    const proposal = parseBrowserProviderProposal(
+      JSON.stringify({
+        profile: {
+          ...profile,
+          completion: {
+            ...profile.completion,
+            workingLocator: { segments: ['[role="article"]'] }
+          }
         }
-      }
-    }), trace);
+      }),
+      trace
+    );
 
     expect(proposal.profile.completion.workingLocator).toEqual({
       segments: ['[role="article"][aria-busy="true"]']
@@ -153,21 +158,26 @@ describe('browser provider learning proposals', () => {
   });
 
   it('rejects a working locator that is not active after submission and inactive at final', () => {
-    expect(() => parseBrowserProviderProposal(JSON.stringify({
-      profile: {
-        ...profile,
-        completion: {
-          ...profile.completion,
-          workingLocator: { segments: ['[role="article"]'] }
+    expect(() =>
+      parseBrowserProviderProposal(
+        JSON.stringify({
+          profile: {
+            ...profile,
+            completion: {
+              ...profile.completion,
+              workingLocator: { segments: ['[role="article"]'] }
+            }
+          }
+        }),
+        {
+          observedGeneration: true,
+          events: [
+            { phase: 'submitted', workingActive: false },
+            { phase: 'final', workingActive: false }
+          ]
         }
-      }
-    }), {
-      observedGeneration: true,
-      events: [
-        { phase: 'submitted', workingActive: false },
-        { phase: 'final', workingActive: false }
-      ]
-    })).toThrow('Working locator evidence is incomplete');
+      )
+    ).toThrow('Working locator evidence is incomplete');
   });
 
   it('accepts the transient compound selector supported by the working trace', () => {
@@ -190,15 +200,18 @@ describe('browser provider learning proposals', () => {
       ]
     };
 
-    const proposal = parseBrowserProviderProposal(JSON.stringify({
-      profile: {
-        ...profile,
-        completion: {
-          ...profile.completion,
-          workingLocator: { segments: ['[role="article"][aria-busy="true"]'] }
+    const proposal = parseBrowserProviderProposal(
+      JSON.stringify({
+        profile: {
+          ...profile,
+          completion: {
+            ...profile.completion,
+            workingLocator: { segments: ['[role="article"][aria-busy="true"]'] }
+          }
         }
-      }
-    }), trace);
+      }),
+      trace
+    );
 
     expect(proposal.profile.completion.workingLocator?.segments).toEqual([
       '[role="article"][aria-busy="true"]'
@@ -232,37 +245,41 @@ describe('browser provider learning proposals', () => {
         beforeAssistantCount: 1,
         afterAssistantCount: 0
       },
-      events: [{
-        phase: 'final',
-        workingActive: false,
-        selectedElements: {
-          assistant: {
-            locator: { segments: ['[data-testid="markdown-reply"]'] },
-            selectors: ['[data-testid="markdown-reply"]'],
-            visible: true,
-            textLength: 23,
-            changedAfterSubmission: true,
-            absentAtSubmission: true,
-            candidateScore: 21,
-            attributes: { testId: 'markdown-reply' },
-            rawText: 'secret answer must not survive'
+      events: [
+        {
+          phase: 'final',
+          workingActive: false,
+          selectedElements: {
+            assistant: {
+              locator: { segments: ['[data-testid="markdown-reply"]'] },
+              selectors: ['[data-testid="markdown-reply"]'],
+              visible: true,
+              textLength: 23,
+              changedAfterSubmission: true,
+              absentAtSubmission: true,
+              candidateScore: 21,
+              attributes: { testId: 'markdown-reply' },
+              rawText: 'secret answer must not survive'
+            }
           }
         }
-      }]
+      ]
     });
     expect(trace).toMatchObject({
       evidenceVersion: 1,
       newConversationEvidence: { signal: 'assistant-count-reduced' },
-      events: [{
-        workingActive: false,
-        selectedElements: {
-          assistant: {
-            locator: { segments: ['[data-testid="markdown-reply"]'] },
-            changedAfterSubmission: true,
-            absentAtSubmission: true
+      events: [
+        {
+          workingActive: false,
+          selectedElements: {
+            assistant: {
+              locator: { segments: ['[data-testid="markdown-reply"]'] },
+              changedAfterSubmission: true,
+              absentAtSubmission: true
+            }
           }
         }
-      }]
+      ]
     });
     expect(JSON.stringify(trace)).not.toContain('secret answer must not survive');
   });

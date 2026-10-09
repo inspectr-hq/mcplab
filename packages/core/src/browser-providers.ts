@@ -92,11 +92,7 @@ function origin(value: unknown, label: string): string {
 
 export function validateBrowserProviderProfile(value: unknown): BrowserProviderProfile {
   const source = record(value, 'profile');
-  if (
-    source.source !== undefined &&
-    source.source !== 'builtin' &&
-    source.source !== 'workspace'
-  )
+  if (source.source !== undefined && source.source !== 'builtin' && source.source !== 'workspace')
     throw new Error('Invalid browser provider source.');
   if (
     Object.prototype.hasOwnProperty.call(source, 'script') ||

@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@inspectr/mcplab-core';
 import type { ResultsJson, RunOutcome } from '@inspectr/mcplab-core';
 
 /** Project completed execution snapshots into the single canonical evaluation result. */
@@ -119,10 +120,7 @@ export function projectEvaluationResult(params: {
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate:
-        totalRuns - (outcomes.stopped ?? 0) === 0
-          ? 0
-          : (outcomes.passed ?? 0) / (totalRuns - (outcomes.stopped ?? 0)),
+      pass_rate: calculatePassRate(outcomes.passed ?? 0, totalRuns, outcomes.stopped),
       avg_tool_calls_per_run: weighted('avg_tool_calls_per_run') ?? 0,
       avg_tool_latency_ms: weighted('avg_tool_latency_ms'),
       outcomes

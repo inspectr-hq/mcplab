@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@inspectr/mcplab-core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,
@@ -793,7 +794,11 @@ const Compare = () => {
         agentName: agent.name,
         provider,
         model,
-        passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+        passRate: calculatePassRate(
+          passCount,
+          totalRuns,
+          runs.filter((run) => run.outcome === 'stopped').length
+        ),
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
         avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns

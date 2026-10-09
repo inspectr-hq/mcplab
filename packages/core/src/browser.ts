@@ -5,3 +5,5 @@ export {
   formatToolSequenceLabel,
   type ToolInputAssertionFailureKind
 } from './eval.js';
+
+export { calculatePassRate } from './result-metrics.js';

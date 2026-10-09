@@ -936,7 +936,7 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
     case 'scenario_run_finished':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${event.outcome === 'stopped' ? 'STOPPED' : event.pass ? 'PASS' : 'FAIL'} (${
         event.toolCallCount
       } tool calls)`;
     case 'run_finished':
