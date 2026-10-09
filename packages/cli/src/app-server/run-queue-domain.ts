@@ -293,6 +293,11 @@ export function createRunQueueService(params: {
     emit();
     if (disposition.kind !== 'completed')
       params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+    // Wake API runs after the caller has offered the next Rover assignment.
+    // That assignment must count against the shared worker limit before we claim another job.
+    queueMicrotask(() => {
+      void advance({ emitWhenIdle: true });
+    });
     return true;
   }
 

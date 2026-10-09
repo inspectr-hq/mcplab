@@ -1530,7 +1530,7 @@ const RunEvaluation = () => {
                   </div>
                   {expandedEvaluationRunId === evaluation.evaluationRunId && (
                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      {queueChildRows(evaluation).map(({ job, child }) => (
+                      {queueChildRows(evaluation).map(({ job, child }, rowIndex) => (
                         <div
                           key={`${job.jobId}:${child?.scenarioId ?? 'job'}:${
                             child?.agentName ?? 'job'
@@ -1545,6 +1545,7 @@ const RunEvaluation = () => {
                           onClick={() => selectQueueJob(job.jobId)}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 truncate">
+                            <span className="shrink-0 tabular-nums">{rowIndex + 1}.</span>
                             {child?.status === 'completed' && (
                               <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             )}
