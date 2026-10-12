@@ -566,7 +566,7 @@ const ManageTestCases = () => {
                             <Button
                               type="button"
                               size="sm"
-                              variant={isSelected ? 'default' : 'outline'}
+                              variant={isSelected ? 'default' : 'outline-solid'}
                               asChild
                             >
                               <Link to={href}>

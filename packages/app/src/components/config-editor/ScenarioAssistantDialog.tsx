@@ -593,7 +593,7 @@ export function ScenarioAssistantDialog({
           {sessionId && (
             <button
               type="button"
-              className="absolute right-12 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              className="absolute right-12 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
               onClick={handleMinimize}
               aria-label="Minimize assistant"
               title="Minimize assistant"
@@ -976,7 +976,7 @@ function EvalRulesSuggestionCard({
               />
               <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
                 <span className="block text-xs font-medium">{label}</span>
-                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
+                <code className="block wrap-break-word rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
                   {JSON.stringify(rule)}
                 </code>
               </label>
@@ -1095,7 +1095,7 @@ function ExtractRulesSuggestionCard({
               />
               <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
                 <span className="block text-xs font-medium">{label}</span>
-                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
+                <code className="block wrap-break-word rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
                   {JSON.stringify(rule)}
                 </code>
               </label>

@@ -1017,7 +1017,7 @@ const Results = () => {
             <Table className="table-auto">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="results-table-column-run-id w-[30rem] max-w-[30rem]">
+                  <TableHead className="results-table-column-run-id w-120 max-w-120">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1030,7 +1030,7 @@ const Results = () => {
                   <TableHead className="results-table-column-evaluation w-[20rem] max-w-[20rem] min-w-0">
                     Evaluation
                   </TableHead>
-                  <TableHead className="results-table-column-timestamp w-[11rem] min-w-[11rem] max-w-[11rem]">
+                  <TableHead className="results-table-column-timestamp w-44 min-w-44 max-w-44">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1040,7 +1040,7 @@ const Results = () => {
                       {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-pass-rate w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center">
+                  <TableHead className="results-table-column-pass-rate w-30 min-w-30 max-w-30 text-center">
                     <button
                       type="button"
                       className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
@@ -1050,7 +1050,7 @@ const Results = () => {
                       {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-scenarios w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right">
+                  <TableHead className="results-table-column-scenarios w-22 min-w-22 max-w-22 text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1060,7 +1060,7 @@ const Results = () => {
                       {sortIcon('scenarios')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-avg-tools w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
+                  <TableHead className="results-table-column-avg-tools w-30 min-w-30 max-w-30 text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1070,7 +1070,7 @@ const Results = () => {
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-tool-tokens w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
+                  <TableHead className="results-table-column-tool-tokens w-36 min-w-36 max-w-36 text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1080,7 +1080,7 @@ const Results = () => {
                       {sortIcon('toolTokens')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-actions w-[9rem] min-w-[9rem] max-w-[9rem]" />
+                  <TableHead className="results-table-column-actions w-36 min-w-36 max-w-36" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1114,7 +1114,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell className="results-table-column-run-id w-[30rem] max-w-[30rem]">
+                        <TableCell className="results-table-column-run-id w-120 max-w-120">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1129,7 +1129,7 @@ const Results = () => {
                               {runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}
                             </div>
                             {item.run.runNote ? (
-                              <div className="text-[11px] text-muted-foreground break-words">
+                              <div className="text-[11px] text-muted-foreground wrap-break-word">
                                 Note: {item.run.runNote}
                               </div>
                             ) : null}
@@ -1167,7 +1167,7 @@ const Results = () => {
                             );
                           })()}
                         </TableCell>
-                        <TableCell className="results-table-column-timestamp w-[11rem] min-w-[11rem] max-w-[11rem] text-xs text-muted-foreground">
+                        <TableCell className="results-table-column-timestamp w-44 min-w-44 max-w-44 text-xs text-muted-foreground">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -1184,7 +1184,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="results-table-column-pass-rate w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
+                        <TableCell className="results-table-column-pass-rate w-30 min-w-30 max-w-30 text-right">
                           <div className="flex flex-col items-center gap-1">
                             <PassRateBadge rate={item.run.overallPassRate} />
                             {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
@@ -1223,13 +1223,13 @@ const Results = () => {
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
-                        <TableCell className="results-table-column-scenarios w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm">
+                        <TableCell className="results-table-column-scenarios w-22 min-w-22 max-w-22 text-right font-mono text-sm">
                           {item.run.totalScenarios}
                         </TableCell>
-                        <TableCell className="results-table-column-avg-tools w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center font-mono text-sm">
+                        <TableCell className="results-table-column-avg-tools w-30 min-w-30 max-w-30 text-center font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell className="results-table-column-tool-tokens w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
+                        <TableCell className="results-table-column-tool-tokens w-36 min-w-36 max-w-36 text-right">
                           <div className="space-y-0.5">
                             <div className="font-mono text-sm">
                               {formatToolTokenTotal(item.run)}
@@ -1245,7 +1245,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="results-table-column-actions w-[9rem] min-w-[9rem] max-w-[9rem]">
+                        <TableCell className="results-table-column-actions w-36 min-w-36 max-w-36">
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"
@@ -1416,14 +1416,14 @@ const Results = () => {
                     </div>
                   )}
                   <div
-                    className={`min-w-0 max-w-[92%] break-words rounded-md border p-3 text-sm ${
+                    className={`min-w-0 max-w-[92%] wrap-break-word rounded-md border p-3 text-sm ${
                       isUser
                         ? 'border-primary/20 bg-primary/10'
                         : isSystem
                           ? 'border-amber-400/30 bg-amber-50/70'
                           : isTool
                             ? 'border-blue-300/30 bg-blue-50/50'
-                            : 'border-border/80 bg-background shadow-sm'
+                            : 'border-border/80 bg-background shadow-xs'
                     }`}
                   >
                     {isUser ? (

@@ -216,20 +216,20 @@ describe('Results', () => {
 
     expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
     expect(runHeader).toHaveClass('results-table-column-run-id');
-    expect(runHeader).toHaveClass('w-[30rem]', 'max-w-[30rem]');
+    expect(runHeader).toHaveClass('w-120', 'max-w-120');
     expect(runCell).toHaveClass('results-table-column-run-id');
     expect(evaluationHeader).toHaveClass('min-w-0');
     expect(evaluationHeader).toHaveClass('results-table-column-evaluation');
     expect(evaluationHeader).toHaveClass('w-[20rem]', 'max-w-[20rem]');
-    expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationHeader).not.toHaveClass('w-40', 'min-w-40', 'max-w-40');
     expect(evaluationCell).toHaveClass('min-w-0');
-    expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationCell).not.toHaveClass('w-40', 'min-w-40', 'max-w-40');
     expect(timestampHeader).toHaveClass('results-table-column-timestamp');
-    expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
-    expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
-    expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
-    expect(avgToolsHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
-    expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
+    expect(timestampHeader).toHaveClass('w-44', 'min-w-44', 'max-w-44');
+    expect(passRateHeader).toHaveClass('w-30', 'min-w-30', 'max-w-30');
+    expect(scenariosHeader).toHaveClass('w-22', 'min-w-22', 'max-w-22');
+    expect(avgToolsHeader).toHaveClass('w-30', 'min-w-30', 'max-w-30');
+    expect(toolTokensHeader).toHaveClass('w-36', 'min-w-36', 'max-w-36');
     expect(passRateHeader).toHaveClass('results-table-column-pass-rate');
     expect(scenariosHeader).toHaveClass('results-table-column-scenarios');
     expect(avgToolsHeader).toHaveClass('results-table-column-avg-tools');
