@@ -56,7 +56,7 @@
   "dependencies": {
     "@inspectr/mcplab-core": "1.22.2",
     "@inspectr/mcplab-reporting": "1.2.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "yaml": "^2.8.4",
     "zod": "^3.25.0"
   }
