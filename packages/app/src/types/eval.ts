@@ -211,7 +211,7 @@ export interface ScenarioResult {
   provider?: string;
   model?: string;
   runs: ScenarioRun[];
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgDuration: number;
   checkCounts?: CheckCounts;
@@ -240,7 +240,7 @@ export interface EvalResult {
   scenarios: ScenarioResult[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
-  overallPassRate: number;
+  overallPassRate: number | null;
   totalScenarios: number;
   totalRuns: number;
   avgToolCalls: number;

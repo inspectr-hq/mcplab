@@ -37,6 +37,30 @@ function setupTools(registerTools: (server: any) => void) {
 }
 
 describe('browser provider library tools', () => {
+  it('lists valid profiles even when neighboring files contain invalid YAML or schemas', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    const directory = join(root, 'mcplab', 'browser-providers');
+    writeFileSync(join(directory, 'bad-yaml.yaml'), 'name: [');
+    writeFileSync(join(directory, 'bad-schema.yml'), 'name: Missing fields');
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+
+    const listed = await tools.get('mcplab_list_library')!.cb({
+      kind: 'browser_providers',
+      includeContent: true
+    });
+    expect(listed.isError).not.toBe(true);
+    expect(
+      listed.structuredContent.browser_providers.map((profile: { id: string }) => profile.id)
+    ).toEqual(['chatgpt-com', 'claude', 'custom-chat']);
+    expect(listed.structuredContent.browser_providers[2].entry).toMatchObject({
+      id: 'custom-chat',
+      source: 'workspace'
+    });
+  });
+
   it('lists and retrieves normalized browser provider profiles from an isolated bundle', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
     writeFixture(root);

@@ -1,12 +1,22 @@
 import { Badge } from '@/components/ui/badge';
 
 interface PassRateBadgeProps {
-  rate: number;
+  rate: number | null;
   className?: string;
 }
 
 export function PassRateBadge({ rate, className }: PassRateBadgeProps) {
-  const pct = Math.round(rate * 100);
+  const pct = rate === null ? null : Math.round(rate * 100);
+  if (pct === null)
+    return (
+      <Badge
+        variant="secondary"
+        className={`font-mono text-xs text-muted-foreground ${className ?? ''}`}
+        title="Nothing evaluated"
+      >
+        –
+      </Badge>
+    );
   const variant = pct >= 80 ? 'default' : pct >= 50 ? 'secondary' : 'destructive';
 
   return (

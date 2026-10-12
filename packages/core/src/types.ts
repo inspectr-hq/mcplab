@@ -471,7 +471,7 @@ export interface ScenarioAggregate {
     forbidden: Record<string, number>;
   };
   runs: ScenarioRunResult[];
-  pass_rate: number;
+  pass_rate: number | null;
   distinct_sequences: Record<string, number>;
   tool_usage_frequency: Record<string, number>;
   extracted_values: Record<string, Record<string, number>>;
@@ -531,7 +531,7 @@ export interface ResultsJson {
   summary: {
     total_scenarios: number;
     total_runs: number;
-    pass_rate: number;
+    pass_rate: number | null;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
     outcomes?: Partial<Record<RunOutcome, number>>;

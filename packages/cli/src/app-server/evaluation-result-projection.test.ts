@@ -207,7 +207,7 @@ describe('projectEvaluationResult', () => {
       stoppedExecutions: 1
     });
     expect(result.summary.total_runs).toBe(1);
-    expect(result.summary.pass_rate).toBe(0);
+    expect(result.summary.pass_rate).toBeNull();
     expect(result.summary.outcomes).toEqual({
       passed: 0,
       failed: 0,

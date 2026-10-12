@@ -1,4 +1,7 @@
-import { DEFAULT_BROWSER_PROVIDER_PROFILES } from '@inspectr/mcplab-core';
+import {
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  serializeBrowserProviderProfile
+} from '@inspectr/mcplab-core';
 import { describe, it, expect } from 'vitest';
 import {
   mkdtempSync,
@@ -23,6 +26,22 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('keeps valid browser profiles when neighboring files contain invalid YAML or schemas', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const directory = join(librariesDir, 'browser-providers');
+    mkdirSync(directory);
+    writeFileSync(join(directory, 'bad-yaml.yaml'), 'name: [');
+    writeFileSync(join(directory, 'bad-schema.yml'), 'name: Missing fields');
+    writeFileSync(
+      join(directory, 'custom-chat.yaml'),
+      serializeBrowserProviderProfile(DEFAULT_BROWSER_PROVIDER_PROFILES.claude)
+    );
+
+    const profiles = readLibraries(librariesDir).browserProviders;
+    expect(Object.keys(profiles)).toEqual(['claude', 'chatgpt-com', 'custom-chat']);
+    expect(profiles['custom-chat']).toMatchObject({ id: 'custom-chat', source: 'workspace' });
+  });
+
   it('exposes built-in Rover provider profiles without creating workspace files', () => {
     const librariesDir = makeTempLibrariesDir();
     const libraries = readLibraries(librariesDir);

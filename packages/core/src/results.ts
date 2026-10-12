@@ -210,15 +210,18 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   lines.push('');
   lines.push(`Total scenarios: ${results.summary.total_scenarios}`);
   lines.push(`Total runs: ${results.summary.total_runs}`);
-  lines.push(`Pass rate: ${(results.summary.pass_rate * 100).toFixed(1)}%`);
+  lines.push(
+    `Pass rate: ${results.summary.pass_rate === null ? '–' : `${(results.summary.pass_rate * 100).toFixed(1)}%`}`
+  );
   lines.push('');
   lines.push('| Scenario | Agent | Runs | Pass rate | Distinct sequences | Tool calls |');
   lines.push('|---|---|---|---|---|---|');
   for (const scenario of results.scenarios) {
-    const passRate = (scenario.pass_rate * 100).toFixed(1);
+    const passRate =
+      scenario.pass_rate === null ? '–' : `${(scenario.pass_rate * 100).toFixed(1)}%`;
     const toolCalls = scenario.runs.reduce((sum, run) => sum + run.tool_call_count, 0);
     lines.push(
-      `| ${scenario.scenario_id} | ${scenario.agent} | ${scenario.runs.length} | ${passRate}% | ${
+      `| ${scenario.scenario_id} | ${scenario.agent} | ${scenario.runs.length} | ${passRate} | ${
         Object.keys(scenario.distinct_sequences).length
       } | ${toolCalls} |`
     );

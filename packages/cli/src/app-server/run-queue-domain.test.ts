@@ -1142,17 +1142,24 @@ describe('Rover run queue domain', () => {
     });
   });
 
-  it('removes the last waiting browser scenario while Rover is disconnected', () => {
-    const sendRoverMessage = vi.fn(() => false);
-    const service = createRunQueueServiceForTest({ sendRoverMessage });
-    const { jobId } = service.enqueueRun(roverParams());
+  it.each(['waiting_for_rover', 'paused_rover'] as const)(
+    'removes the last %s browser scenario while Rover is disconnected',
+    (status) => {
+      const sendRoverMessage = vi.fn(() => false);
+      const service = createRunQueueServiceForTest({ sendRoverMessage });
+      const { jobId } = service.enqueueRun(roverParams());
+      if (status === 'paused_rover') {
+        service.assignRoverJob('claude', () => true);
+        service.pauseRoverJob(jobId);
+      }
 
-    expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({ ok: true, status: 'stopped' });
-    expect(sendRoverMessage).not.toHaveBeenCalled();
-    expect(service.jobs.get(jobId)?.status).toBe('stopped');
-    expect(service.state.queue).not.toContain(jobId);
-    expect(service.assignRoverJob('claude', () => true)).toBeNull();
-  });
+      expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({ ok: true, status: 'stopped' });
+      expect(sendRoverMessage).not.toHaveBeenCalled();
+      expect(service.jobs.get(jobId)?.status).toBe('stopped');
+      expect(service.state.queue).not.toContain(jobId);
+      expect(service.assignRoverJob('claude', () => true)).toBeNull();
+    }
+  );
 
   it('omits a removed waiting scenario from the next browser assignment', () => {
     const sendRoverMessage = vi.fn(() => false);
@@ -1196,6 +1203,77 @@ describe('Rover run queue domain', () => {
     });
     expect(service.jobs.get(jobId)?.status).toBe('running');
     expect(service.jobs.get(jobId)?.childProgress?.[0].status).toBe('queued');
+    service.stopJob(jobId);
+  });
+
+  it('revokes a paused assignment before cancelling its scenario offline', () => {
+    const sendRoverMessage = vi.fn(() => false);
+    const service = createRunQueueServiceForTest({ sendRoverMessage });
+    const { jobId } = service.enqueueRun({
+      ...roverParams(),
+      roverScenarios: [
+        { id: 's1', prompt: 'first', agent: 'claude', servers: [] },
+        { id: 's2', prompt: 'second', agent: 'claude', servers: [] }
+      ]
+    });
+    const worker = {
+      connectionId: 'old',
+      registrationVersion: 1,
+      provider: 'claude',
+      capabilities: ['assignment_lease']
+    };
+    const send = vi.fn(() => true);
+    service.assignRoverJob('claude', send, worker);
+    const leaseId = service.jobs.get(jobId)!.roverLease!.leaseId;
+    service.handleRoverMessage(
+      { type: 'assignment_accept', jobId, leaseId },
+      'claude',
+      send,
+      worker
+    );
+    service.pauseRoverJob(jobId, worker.connectionId);
+
+    expect(service.stopScenario(jobId, 's1', 'claude')).toEqual({ ok: true, status: 'stopped' });
+    expect(sendRoverMessage).not.toHaveBeenCalled();
+    expect(service.jobs.get(jobId)?.roverLease).toBeUndefined();
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    const reconnect = { ...worker, connectionId: 'new' };
+    service.rebindRoverLeases('claude', reconnect);
+    service.handleRoverMessage(
+      {
+        type: 'lease_renew',
+        jobId,
+        leaseId,
+        leaseExpiresAt: new Date(Date.now() + 30_000).toISOString()
+      },
+      'claude',
+      send,
+      reconnect
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'lease_unknown', leaseId })
+    );
+    service.handleRoverMessage(
+      {
+        type: 'scenario_status',
+        jobId,
+        leaseId,
+        scenarioId: 's1',
+        status: 'completed',
+        completed: 1
+      },
+      'claude',
+      send,
+      reconnect
+    );
+    expect(service.jobs.get(jobId)?.childProgress?.[0]?.status).toBe('stopped');
+    service.assignRoverJob('claude', send, reconnect);
+    expect(send).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'assignment',
+        scenarios: [expect.objectContaining({ id: 's2' })]
+      })
+    );
     service.stopJob(jobId);
   });
 

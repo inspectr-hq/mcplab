@@ -64,7 +64,7 @@ export interface RunSummary {
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs?: number;
@@ -169,7 +169,14 @@ function buildRunSummary(runId: string, dir: string, results: ResultsJson): RunS
     rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
-    passRate: results.summary.pass_rate,
+    passRate:
+      results.summary.total_runs <=
+      (results.summary.outcomes?.stopped ??
+        scenarioItems
+          .flatMap((scenario) => scenario.runs ?? [])
+          .filter((run) => run.outcome === 'stopped').length)
+        ? null
+        : results.summary.pass_rate,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatencyMs: results.summary.avg_tool_latency_ms ?? 0,
     totalToolDurationMs:

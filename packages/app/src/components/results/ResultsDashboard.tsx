@@ -150,7 +150,8 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
     const passedRuns = runs.reduce(
       (sum, run) =>
         sum +
-        (run.outcomes?.passed ?? Math.round(Math.max(0, run.totalRuns) * run.overallPassRate)),
+        (run.outcomes?.passed ??
+          Math.round(Math.max(0, run.totalRuns) * (run.overallPassRate ?? 0))),
       0
     );
     const incompleteRuns = runs.reduce((sum, run) => sum + (run.outcomes?.incomplete ?? 0), 0);
@@ -163,7 +164,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           Math.max(
             0,
             run.totalRuns -
-              Math.round(Math.max(0, run.totalRuns) * run.overallPassRate) -
+              Math.round(Math.max(0, run.totalRuns) * (run.overallPassRate ?? 0)) -
               (run.outcomes?.incomplete ?? 0) -
               (run.outcomes?.error ?? 0) -
               (run.outcomes?.stopped ?? 0)
@@ -263,7 +264,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           <StatCard
             compact
             title="Pass Rate"
-            value={`${formatNumber(summary.passRate * 100, 1)}%`}
+            value={summary.passRate === null ? '–' : `${formatNumber(summary.passRate * 100, 1)}%`}
             icon={BarChart3}
           />
           <StatCard

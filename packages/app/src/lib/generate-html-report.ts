@@ -1,4 +1,5 @@
 import { calculatePassRate, type EvalResult } from '@/types/eval';
+import { formatPassRate } from '@/lib/utils';
 
 export function generateHtmlReport(result: EvalResult): string {
   const passCount = result.scenarios.reduce(
@@ -26,8 +27,13 @@ export function generateHtmlReport(result: EvalResult): string {
   const toolCounts = Object.values(toolFreq);
 
   const scenarioRows = result.scenarios
-    .map(
-      (sc) => `
+    .map((sc) => {
+      const scenarioRate = calculatePassRate(
+        sc.runs.filter((run) => run.passed).length,
+        sc.runs.length,
+        sc.runs.filter((run) => run.outcome === 'stopped').length
+      );
+      return `
     <div class="scenario-card">
       <div class="scenario-header" onclick="this.parentElement.classList.toggle('open')">
         <span class="chevron">▶</span>
@@ -35,8 +41,14 @@ export function generateHtmlReport(result: EvalResult): string {
         <span class="scenario-agent">${esc(sc.agentName)}</span>
         <span class="mono">${sc.runs.length} runs</span>
         <span class="badge ${
-          sc.passRate >= 0.8 ? 'badge-pass' : sc.passRate >= 0.5 ? 'badge-warn' : 'badge-fail'
-        }">${Math.round(sc.passRate * 100)}%</span>
+          scenarioRate === null
+            ? 'badge-neutral'
+            : scenarioRate >= 0.8
+              ? 'badge-pass'
+              : scenarioRate >= 0.5
+                ? 'badge-warn'
+                : 'badge-fail'
+        }">${formatPassRate(scenarioRate)}</span>
         <span class="mono">${sc.avgToolCalls.toFixed(1)} avg tools</span>
       </div>
       <div class="scenario-detail">
@@ -68,8 +80,8 @@ export function generateHtmlReport(result: EvalResult): string {
           )
           .join('')}
       </div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 
   return `<!DOCTYPE html>
@@ -118,6 +130,7 @@ canvas{max-height:220px}
 .badge-pass{background:#d1fae5;color:#065f46}
 .badge-warn{background:#fef3c7;color:#92400e}
 .badge-fail{background:#fee2e2;color:#991b1b}
+.badge-neutral{background:#f3f4f6;color:#6b7280}
 .footer{text-align:center;color:#9ca3af;font-size:.7rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #e5e7eb}
 </style>
 </head>
@@ -125,8 +138,14 @@ canvas{max-height:220px}
 <div class="header">
   <h1 class="mono">${esc(result.id)}</h1>
   <span class="badge ${
-    passRate >= 0.8 ? 'badge-pass' : passRate >= 0.5 ? 'badge-warn' : 'badge-fail'
-  }">${Math.round(passRate * 100)}% pass</span>
+    passRate === null
+      ? 'badge-neutral'
+      : passRate >= 0.8
+        ? 'badge-pass'
+        : passRate >= 0.5
+          ? 'badge-warn'
+          : 'badge-fail'
+  }">${formatPassRate(passRate)}${passRate === null ? '' : ' pass'}</span>
 </div>
 <p class="sub">${new Date(
     result.timestamp
@@ -139,9 +158,7 @@ canvas{max-height:220px}
   <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value">${
     result.totalRuns
   }</div></div>
-  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${Math.round(
-    passRate * 100
-  )}%</div></div>
+  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${formatPassRate(passRate)}</div></div>
   <div class="stat"><div class="stat-label">Avg Tool Calls</div><div class="stat-value">${result.avgToolCalls.toFixed(
     1
   )}</div></div>

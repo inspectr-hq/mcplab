@@ -365,6 +365,29 @@ export async function runAll(
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
+          const recordedRun = runs.find((run) => run.run_index === runIndex);
+          if (recordedRun) {
+            // Trace cleanup or progress delivery can fail after evaluation was recorded.
+            // Preserve that outcome even if a child stop arrives during cleanup.
+            console.error(
+              `Scenario '${scenario.id}' run ${runIndex} cleanup failed: ${String(scenarioErr?.message ?? scenarioErr)}`
+            );
+            await emitProgress({
+              type: 'scenario_run_finished',
+              scenarioId: scenario.id,
+              agentName: scenario.agent,
+              scenarioRunIndex,
+              totalScenarioRuns,
+              runIndex,
+              runsPerScenario: options.runsPerScenario,
+              pass: recordedRun.pass,
+              outcome: recordedRun.outcome,
+              toolCallCount: recordedRun.tool_call_count
+            });
+            throwIfAborted(options.signal);
+            if (runSignal?.aborted) break;
+            continue;
+          }
           if (options.signal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),

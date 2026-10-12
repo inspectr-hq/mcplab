@@ -649,7 +649,7 @@ const Results = () => {
       if (sortBy === 'id') cmp = a.id.localeCompare(b.id);
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'passRate') cmp = (a.overallPassRate ?? -1) - (b.overallPassRate ?? -1);
       if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
       if (sortBy === 'avgToolCalls') cmp = a.avgToolCalls - b.avgToolCalls;
       return sortDir === 'asc' ? cmp : -cmp;

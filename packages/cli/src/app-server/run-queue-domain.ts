@@ -977,12 +977,26 @@ export function createRunQueueService(params: {
       if (child?.status === 'completed' || child?.status === 'stopped') {
         return { ok: true, status: 'stopped' };
       }
-      if (job.status === 'queued' || job.status === 'waiting_for_rover') {
-        // Unassigned scenarios belong to MCPLab's queue. Remove them here so
-        // cancellation works offline and a later assignment cannot run them.
+      if (
+        job.status === 'queued' ||
+        job.status === 'waiting_for_rover' ||
+        job.status === 'paused_rover'
+      ) {
+        // Revoke paused assignments before editing their scenario list. Reconnection
+        // must offer the remaining work, never resume a lease containing cancelled work.
         if (!child) return { error: 'Scenario not found', statusCode: 404 };
+        if (job.status === 'paused_rover') {
+          clearRoverLease(job);
+          job.status = 'waiting_for_rover';
+        }
         job.runParams.roverScenarios = job.runParams.roverScenarios?.filter(
-          (scenario) => scenario.id !== scenarioId
+          (scenario) =>
+            scenario.id !== scenarioId &&
+            !(job.childProgress ?? []).some(
+              (entry) =>
+                entry.scenarioId === scenario.id &&
+                ['completed', 'error', 'stopped'].includes(entry.status)
+            )
         );
       } else {
         const sent = params.sendRoverMessage?.({
@@ -1048,18 +1062,7 @@ export function createRunQueueService(params: {
     },
     handleRoverMessage(message, provider, send, worker) {
       const messageJob = typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
-      const leaseControlMessage = [
-        'assignment_accept',
-        'assignment_reject',
-        'lease_renew',
-        'lease_release',
-        'complete'
-      ].includes(message.type);
-      if (
-        leaseControlMessage &&
-        typeof message.jobId === 'string' &&
-        typeof message.leaseId === 'string'
-      ) {
+      if (typeof message.jobId === 'string' && typeof message.leaseId === 'string') {
         const knownJob = jobs.get(message.jobId);
         const knownLease = knownJob?.roverLease;
         if (

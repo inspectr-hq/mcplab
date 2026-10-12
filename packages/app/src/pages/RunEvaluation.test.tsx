@@ -1001,7 +1001,9 @@ describe('RunEvaluation', () => {
     'structured-stop',
     'queue-stop',
     'group-stop',
-    'lookup-failed'
+    'lookup-failed',
+    'fully-stopped',
+    'fully-stopped-results'
   ])(
     'shows stopped completion separately from errors and keeps grouped results (%s)',
     async (eventType) => {
@@ -1022,14 +1024,17 @@ describe('RunEvaluation', () => {
             evaluationName: 'Mixed result group',
             status: 'stopped',
             totalJobs: 2,
-            completedJobs: 1,
-            failedJobs: 1,
-            stoppedJobs: 1,
+            completedJobs: eventType.startsWith('fully-stopped') ? 0 : 1,
+            failedJobs: eventType.startsWith('fully-stopped') ? 2 : 1,
+            stoppedJobs: eventType.startsWith('fully-stopped') ? 2 : 1,
             pausedJobs: 0,
             jobs: [
               {
                 jobId: 'job-last',
-                status: eventType === 'queue-stop' ? 'stopped' : 'completed',
+                status:
+                  eventType === 'queue-stop' || eventType.startsWith('fully-stopped')
+                    ? 'stopped'
+                    : 'completed',
                 runParams: {}
               },
               {
@@ -1062,13 +1067,32 @@ describe('RunEvaluation', () => {
                 ? { status: 'stopped', message: 'Cancelled' }
                 : eventType === 'queue-stop' || eventType === 'group-stop'
                   ? { message: 'Cancelled elsewhere' }
-                  : { message: 'Run stopped by user' }
+                  : {
+                      message: 'Run stopped by user',
+                      ...(eventType === 'fully-stopped-results'
+                        ? { runId: 'evaluation-mixed' }
+                        : {})
+                    }
         });
       });
       if (eventType === 'lookup-failed') {
         expect(await screen.findByText('Run stopped')).toBeInTheDocument();
         expect(screen.queryByText('Evaluation Complete')).toBeNull();
         expect(screen.queryByText(/Error:.*Run stopped/)).toBeNull();
+        return;
+      }
+      if (eventType.startsWith('fully-stopped')) {
+        expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+        expect(screen.queryByText('Completed with stopped scenarios')).toBeNull();
+        expect(screen.queryByRole('link', { name: 'View Runs' })).toBeNull();
+        if (eventType === 'fully-stopped-results') {
+          expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+            'href',
+            '/results/evaluation-mixed'
+          );
+        } else {
+          expect(screen.queryByRole('link', { name: 'View Results' })).toBeNull();
+        }
         return;
       }
       expect(await screen.findByText('Completed with stopped scenarios')).toBeInTheDocument();

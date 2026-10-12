@@ -1430,7 +1430,7 @@ export function fromCoreResultsJson(
       provider: scenario.provider,
       model: scenario.model,
       runs,
-      passRate: scenario.pass_rate,
+      passRate: runs.some((run) => run.outcome !== 'stopped') ? scenario.pass_rate : null,
       avgToolCalls,
       avgDuration,
       checkCounts: countChecks(runs),
@@ -1478,7 +1478,13 @@ export function fromCoreResultsJson(
     scenarios,
     assistantTokenUsage: toTokenUsage(runAssistantUsageAcc),
     toolTokenUsage: toTokenUsage(runToolUsageAcc),
-    overallPassRate: results.summary.pass_rate,
+    overallPassRate:
+      results.summary.total_runs <=
+      (results.summary.outcomes?.stopped ??
+        scenarios.flatMap((scenario) => scenario.runs).filter((run) => run.outcome === 'stopped')
+          .length)
+        ? null
+        : results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,

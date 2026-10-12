@@ -34,7 +34,7 @@ describe('aggregateResults', () => {
     const result = aggregateResults({ ...BASE, scenarioRuns: [] });
     expect(result.summary.total_scenarios).toBe(0);
     expect(result.summary.total_runs).toBe(0);
-    expect(result.summary.pass_rate).toBe(0);
+    expect(result.summary.pass_rate).toBeNull();
     expect(result.scenarios).toHaveLength(0);
   });
 
@@ -125,12 +125,12 @@ describe('aggregateResults', () => {
     expect(result.summary.outcomes).toMatchObject({ passed: 1, stopped: 1 });
   });
 
-  it('sets pass_rate to 0 when there are no runs', () => {
+  it('sets pass_rate to null when there are no runs', () => {
     const result = aggregateResults({
       ...BASE,
       scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [] }]
     });
-    expect(result.scenarios[0].pass_rate).toBe(0);
+    expect(result.scenarios[0].pass_rate).toBeNull();
   });
 
   it('accumulates tool_usage_frequency across runs', () => {

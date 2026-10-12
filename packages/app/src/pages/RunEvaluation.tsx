@@ -746,10 +746,11 @@ const RunEvaluation = () => {
         };
         const finishEvaluation = (evaluation?: EvaluationQueueItem) => {
           logError(evaluation);
-          const stoppedWithoutSummary = wasStopped(evaluation) && !evaluation;
           const hasErrors =
             (isError && !wasStopped(evaluation)) ||
             (evaluation?.failedJobs ?? 0) - (evaluation?.stoppedJobs ?? 0) > 0;
+          const stoppedWithoutResults =
+            wasStopped(evaluation) && !hasErrors && !evaluation?.completedJobs && !eventRunId;
           setOauthRequired(null);
           oauthConnectingRef.current = false;
           setLogs((prev) => {
@@ -758,10 +759,10 @@ const RunEvaluation = () => {
           });
           setProgress(100);
           setRunning(false);
-          setDone(!stoppedWithoutSummary);
+          setDone(!stoppedWithoutResults);
           setCompletionHasErrors(hasErrors);
           setCompletionSummary(evaluation ?? null);
-          setStopped(stoppedWithoutSummary);
+          setStopped(stoppedWithoutResults);
           setRunId(
             evaluation?.completedJobs
               ? evaluation.evaluationRunId
@@ -1970,7 +1971,9 @@ const RunEvaluation = () => {
                   {completionHasErrors
                     ? 'Completed with errors'
                     : completionSummary?.stoppedJobs
-                      ? 'Completed with stopped scenarios'
+                      ? completionSummary.completedJobs
+                        ? 'Completed with stopped scenarios'
+                        : 'Run stopped'
                       : 'Evaluation Complete'}
                 </p>
                 <p className="text-sm text-muted-foreground">

@@ -4,7 +4,6 @@ import {
   mkdirSync,
   readdirSync,
   renameSync,
-  statSync,
   unlinkSync,
   writeFileSync,
   readFileSync
@@ -16,6 +15,7 @@ import {
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   mergeBrowserProviderProfiles,
   readLibraryAgentsAndServers,
+  readBrowserProviderProfiles,
   validateBrowserProviderProfile,
   serializeBrowserProviderProfile
 } from '@inspectr/mcplab-core';
@@ -66,32 +66,6 @@ export function readLibraries(librariesDir: string): {
   }
   const browserProviders = mergeBrowserProviderProfiles(readBrowserProviderProfiles(root));
   return { servers, agents, scenarios, browserProviders };
-}
-
-function readBrowserProviderProfiles(root: string): Record<string, BrowserProviderProfile> {
-  const directory = join(root, BROWSER_PROVIDERS_DIR_NAME);
-  if (!existsSync(directory)) return {};
-  const profiles: Record<string, BrowserProviderProfile> = {};
-  const files = readdirSync(directory)
-    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-    .sort((a, b) => a.localeCompare(b));
-  for (const file of files) {
-    const id = basename(file, extname(file));
-    const parsed = readYamlFile<Record<string, unknown> | null>(join(directory, file), null);
-    if (!parsed) continue;
-    const profile = parseBrowserProviderProfiles({ [id]: parsed })[id];
-    const stats = statSync(join(directory, file));
-    profiles[id] = {
-      ...profile,
-      source: 'workspace',
-      learned: {
-        ...profile.learned,
-        createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
-        updatedAt: new Date(stats.mtimeMs).toISOString()
-      }
-    };
-  }
-  return profiles;
 }
 
 export function writeBrowserProviderProfiles(

@@ -102,7 +102,7 @@ export interface WorkspaceRunSummary {
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs?: number;
@@ -747,7 +747,7 @@ export interface EvalDataSource {
       relativePath?: string;
       configHash?: string;
     }>;
-  }) => Promise<Record<string, number>>;
+  }) => Promise<Record<string, number | null>>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;

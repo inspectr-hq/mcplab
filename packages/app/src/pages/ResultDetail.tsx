@@ -1,4 +1,5 @@
 import { calculatePassRate } from '@/types/eval';
+import { formatPassRate } from '@/lib/utils';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -980,11 +981,7 @@ const ResultDetail = () => {
           >
             <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
             <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
-            <StatCard
-              title="Pass Rate"
-              value={`${Math.round(displayPassRate * 100)}%`}
-              icon={BarChart3}
-            />
+            <StatCard title="Pass Rate" value={formatPassRate(displayPassRate)} icon={BarChart3} />
             <StatCard
               title="Avg Tool Calls"
               value={formatCompactOneDecimal(displayAvgToolCalls)}
@@ -1229,7 +1226,7 @@ const ResultDetail = () => {
                                       <p className="text-xs font-semibold">Scenario details</p>
                                       <p className="text-[11px] text-muted-foreground">
                                         {scenarioLabel} · {sc.agentName} ·{' '}
-                                        {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {formatPassRate(sc.passRate)} pass rate ·{' '}
                                         {hasCheckResults
                                           ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
                                               checkCounts.not_evaluated

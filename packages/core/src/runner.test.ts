@@ -26,6 +26,61 @@ afterEach(() => {
 });
 
 describe('runAll agent dispatch', () => {
+  it('keeps an evaluated run when trace cleanup fails after a late child stop', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-recorded-stop-'));
+    temporaryRunDirs.push(runsDir);
+    const controller = new AbortController();
+    const events: any[] = [];
+    const endTrace = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new Error('Trace cleanup failed');
+      })
+      .mockResolvedValue(undefined);
+    runAgentScenarioMock.mockResolvedValueOnce({
+      finalText: 'done',
+      toolCalls: [],
+      toolDurationsMs: [],
+      availableToolNames: [],
+      toolSequence: [],
+      traceMessages: [],
+      traceModel: 'test',
+      traceProvider: 'openai',
+      traceStartedAt: '2026-10-12T12:00:00Z',
+      traceEndedAt: '2026-10-12T12:00:01Z'
+    });
+    const result = await runAll(
+      {
+        servers: {},
+        agents: { agent: { provider: 'openai', model: 'test' } },
+        scenarios: [{ id: 's1', prompt: 'test', agent: 'agent', servers: [] }]
+      } as any,
+      {
+        runsPerScenario: 3,
+        configHash: 'test',
+        cliVersion: 'test',
+        runsDir,
+        scenarioSignal: () => controller.signal,
+        onProgress: (event) => {
+          events.push(event);
+        },
+        traceExporter: {
+          startScenario: () => ({ end: endTrace }),
+          flush: async () => ({ traceUrls: {} })
+        }
+      }
+    );
+    expect(result.results.scenarios[0].runs).toEqual([
+      expect.objectContaining({ run_index: 0, pass: true, outcome: 'passed', final_text: 'done' })
+    ]);
+    expect(result.results.summary.total_runs).toBe(1);
+    expect(endTrace).toHaveBeenCalledOnce();
+    expect(events.filter((event) => event.type === 'scenario_run_finished')).toEqual([
+      expect.objectContaining({ runIndex: 0, outcome: 'passed' })
+    ]);
+  });
+
   it.each([1, 3])(
     'reports a stopped outcome when a child is aborted with %i runs requested',
     async (runsPerScenario) => {

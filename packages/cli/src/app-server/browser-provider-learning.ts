@@ -1,7 +1,11 @@
 import { type BrowserProviderProfile, type LlmAgentConfig } from '@inspectr/mcplab-core';
 import { validateBrowserProviderProfile } from '@inspectr/mcplab-core';
 import type { LlmMessage } from '@inspectr/mcplab-core';
-import { chatWithJsonRetry, parseJsonFromAssistantText } from './assistant-common.js';
+import {
+  chatWithJsonRetry,
+  extractJsonValuesFromAssistantText,
+  parseJsonFromAssistantText
+} from './assistant-common.js';
 
 export interface BrowserProviderLearningTraceInput {
   evidenceVersion?: unknown;
@@ -340,7 +344,7 @@ export function parseBrowserProviderProposal(
   text: string,
   trace?: BrowserProviderLearningTraceInput
 ): BrowserProviderProposal {
-  return parseJsonFromAssistantText(text, (value) => {
+  const validateProposal = (value: unknown): BrowserProviderProposal => {
     const parsed =
       value && typeof value === 'object' && !Array.isArray(value)
         ? (value as Record<string, unknown>)
@@ -363,7 +367,26 @@ export function parseBrowserProviderProposal(
       warnings: warnings.slice(0, 8),
       validated: true
     };
-  });
+  };
+  const candidates = extractJsonValuesFromAssistantText(text);
+  const proposals = candidates.filter(
+    (value) =>
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      (Object.hasOwn(value, 'profile') || Object.hasOwn(value, 'schemaVersion'))
+  );
+  // A final proposal supersedes quoted profiles. Its validation failure must trigger a retry,
+  // rather than silently returning the earlier quote or a nested profile without warnings.
+  if (proposals.length > 0) return validateProposal(proposals.at(-1));
+  for (const candidate of candidates.reverse()) {
+    try {
+      return validateProposal(candidate);
+    } catch {
+      // Retain support for unwrapped profiles and unrelated JSON snippets.
+    }
+  }
+  return parseJsonFromAssistantText(text, validateProposal);
 }
 
 export async function proposeBrowserProviderProfile(params: {

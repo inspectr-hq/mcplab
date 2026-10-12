@@ -440,9 +440,7 @@ export async function executeRunJob(params: {
       type: 'log',
       ts: new Date().toISOString(),
       payload: {
-        message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
-          results.summary.pass_rate * 100
-        )}%`
+        message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${results.summary.pass_rate === null ? '– (nothing evaluated)' : `${Math.round(results.summary.pass_rate * 100)}%`}`
       }
     });
     addJobEvent(job, {

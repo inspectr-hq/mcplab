@@ -90,6 +90,21 @@ function makeRecord(
 }
 
 describe('fromCoreResultsJson conversation mapping', () => {
+  it('normalizes legacy stopped-only zero pass rates to nothing evaluated', () => {
+    const results = baseResults();
+    results.summary.outcomes = { stopped: 2 };
+    results.summary.pass_rate = 0;
+    results.scenarios[0].runs = results.scenarios[0].runs.map((run) => ({
+      ...run,
+      pass: false,
+      outcome: 'stopped'
+    }));
+    results.scenarios[0].pass_rate = 0;
+    expect(fromCoreResultsJson(results, [])).toMatchObject({
+      overallPassRate: null,
+      scenarios: [{ passRate: null }]
+    });
+  });
   it('preserves explicit conversation choices for reruns', () => {
     const result = baseResults();
     result.metadata.rerun_new_conversation_before_start = false;

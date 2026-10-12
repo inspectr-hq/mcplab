@@ -1,5 +1,6 @@
 export * from './types.js';
 export { tallyCheckCounts } from './check-counts.js';
+export { readBrowserProviderProfiles } from './browser-provider-store.js';
 export {
   loadConfig,
   hashConfig,

@@ -21,7 +21,9 @@ function* extractBalancedJsonCandidates(text: string): Generator<string> {
     if (ch === '{') starts.push({ idx: i, open: '{', close: '}' });
     if (ch === '[') starts.push({ idx: i, open: '[', close: ']' });
   }
+  let enclosingCandidateEnd = -1;
   for (const start of starts) {
+    if (start.idx <= enclosingCandidateEnd) continue;
     let depth = 0;
     let inString = false;
     let escaped = false;
@@ -47,12 +49,32 @@ function* extractBalancedJsonCandidates(text: string): Generator<string> {
       if (ch === start.close) {
         depth -= 1;
         if (depth === 0) {
-          yield text.slice(start.idx, i + 1);
+          const candidate = text.slice(start.idx, i + 1);
+          try {
+            JSON.parse(candidate);
+            // Keep complete wrappers, not their nested profile or diagnostic arrays.
+            enclosingCandidateEnd = i;
+          } catch {
+            // An invalid prose fragment may still contain a complete JSON payload.
+          }
+          yield candidate;
           break;
         }
       }
     }
   }
+}
+
+export function extractJsonValuesFromAssistantText(text: string): unknown[] {
+  const values: unknown[] = [];
+  for (const candidate of extractBalancedJsonCandidates(text)) {
+    try {
+      values.push(JSON.parse(candidate));
+    } catch {
+      // Ignore CSS selectors and explanatory prose containing brackets.
+    }
+  }
+  return values;
 }
 
 export function parseJsonFromAssistantText<T = unknown>(

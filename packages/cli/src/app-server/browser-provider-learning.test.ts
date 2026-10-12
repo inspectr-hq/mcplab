@@ -34,6 +34,50 @@ const profile = {
 };
 
 describe('browser provider learning proposals', () => {
+  it('uses the final proposal rather than a quoted current profile', () => {
+    const proposed = { ...profile, completion: { stabilityMs: 4000 } };
+    const proposal = {
+      profile: proposed,
+      rationale: ['Observed longer response gaps.'],
+      warnings: ['Review timing.']
+    };
+    expect(
+      parseBrowserProviderProposal(
+        `Current profile:\n${JSON.stringify(profile)}\nProposal:\n${JSON.stringify(proposal)}`
+      )
+    ).toMatchObject({ ...proposal, validated: true });
+  });
+
+  it('rejects an invalid final proposal instead of returning an earlier valid quote', () => {
+    expect(() =>
+      parseBrowserProviderProposal(
+        `Current profile:\n${JSON.stringify({ profile })}\nProposal:\n${JSON.stringify({ profile: { id: 'bad' }, rationale: ['Updated'] })}`
+      )
+    ).toThrow('Unsupported browser provider profile schema.');
+  });
+
+  it('retains working evidence validation when an earlier quoted profile is valid', () => {
+    const proposed = {
+      ...profile,
+      completion: { ...profile.completion, workingLocator: { segments: ['[role="article"]'] } }
+    };
+    expect(() =>
+      parseBrowserProviderProposal(
+        `Current profile:\n${JSON.stringify(profile)}\nProposal:\n${JSON.stringify({ profile: proposed })}`,
+        { observedGeneration: true, events: [{ phase: 'final', workingActive: false }] }
+      )
+    ).toThrow('Working locator evidence is incomplete');
+  });
+
+  it('uses a final unwrapped profile after a quoted proposal wrapper', () => {
+    const proposed = { ...profile, completion: { stabilityMs: 4000 } };
+    expect(
+      parseBrowserProviderProposal(
+        `Current profile:\n${JSON.stringify({ profile })}\nProposal:\n${JSON.stringify(proposed)}`
+      ).profile
+    ).toEqual(proposed);
+  });
+
   it.each(['{"example":true}\n', '```json\n{"example":true}\n```\n'])(
     'skips parseable JSON that is not a valid proposal (%s)',
     (prefix) => {

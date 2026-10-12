@@ -208,7 +208,7 @@ export async function handleRunsRoutes(params: {
       Number.isFinite(lastDaysRaw) && lastDaysRaw > 0 ? Math.floor(lastDaysRaw) : undefined;
     const summaries = listRuns(settings.runsDir, { lastDays });
     const pending = new Set(normalizedConfigs.map((entry) => entry.id));
-    const byConfigId: Record<string, number> = {};
+    const byConfigId: Record<string, number | null> = {};
     for (const summary of summaries) {
       if (pending.size === 0) break;
       const summaryPath = String(summary.configPath ?? '').trim();
@@ -524,13 +524,7 @@ export async function handleRunsRoutes(params: {
           (conversationOverride ??
             agent.newConversationBetweenScenarios ??
             supportsNewChat(agent)));
-      // Rover uses native New Chat actions for built-in providers, including saved overrides.
-      return (
-        needsNewChat &&
-        profile &&
-        !profile.newConversation &&
-        !Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, agent.provider)
-      );
+      return needsNewChat && profile && !supportsNewChat(agent);
     });
     if (unsupportedNewChat) {
       const profile = browserProviders[unsupportedNewChat.agent.provider];
