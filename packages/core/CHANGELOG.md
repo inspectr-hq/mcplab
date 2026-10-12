@@ -1,5 +1,18 @@
 # @inspectr/mcplab-core
 
+## 1.23.0
+
+### Minor Changes
+
+- feat: Rover Browser Agents
+- Add Rover browser agent execution, provider profiles, queue lifecycle handling, and browser agent library tools.
+
+  Compatibility changes:
+
+  - Core result and scenario `pass_rate` fields are now `number | null`. A null value means no runs were evaluated, including when all runs were stopped; it must not be interpreted as a 0% failure rate.
+  - MCP result and comparison schemas also accept null pass rates and pass-rate deltas. Comparison classifications now include `not_evaluated` when either side has no evaluated runs.
+  - Consumers must handle null metrics and the new comparison classification when displaying percentages, sorting results, or detecting regressions.
+
 ## 1.22.2
 
 ### Patch Changes
