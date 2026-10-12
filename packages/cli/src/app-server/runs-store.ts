@@ -59,15 +59,17 @@ export interface RunSummary {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  outcomes?: Record<RunOutcome, number>;
+  outcomes?: Partial<Record<RunOutcome, number>>;
   executionSource?: ExecutionSource;
   executionClient?: string;
   checkCounts: {
@@ -162,10 +164,19 @@ function buildRunSummary(runId: string, dir: string, results: ResultsJson): RunS
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,
+    rerunNewConversationBeforeStart: results.metadata.rerun_new_conversation_before_start,
+    rerunNewConversationBetweenScenarios: results.metadata.rerun_new_conversation_between_scenarios,
     rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
-    passRate: results.summary.pass_rate,
+    passRate:
+      results.summary.total_runs <=
+      (results.summary.outcomes?.stopped ??
+        scenarioItems
+          .flatMap((scenario) => scenario.runs ?? [])
+          .filter((run) => run.outcome === 'stopped').length)
+        ? null
+        : results.summary.pass_rate,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatencyMs: results.summary.avg_tool_latency_ms ?? 0,
     totalToolDurationMs:

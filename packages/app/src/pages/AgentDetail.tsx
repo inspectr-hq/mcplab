@@ -100,13 +100,10 @@ const AgentDetail = () => {
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
   const hydratedRouteRef = useRef<string | null>(null);
-  const browserProviderOptions = [
-    { id: 'claude', name: 'Claude' },
-    { id: 'trendminer', name: 'TrendMiner' },
-    ...Object.values(browserProviders)
-      .filter((provider) => !['claude', 'trendminer'].includes(provider.id))
-      .map((provider) => ({ id: provider.id, name: provider.name }))
-  ];
+  const browserProviderOptions = Object.values(browserProviders).map((provider) => ({
+    id: provider.id,
+    name: provider.name
+  }));
 
   useEffect(() => {
     const routeKey = isNew ? `new:${decodedParam || 'new'}` : `agt:${decodedParam}`;
@@ -442,7 +439,7 @@ const AgentDetail = () => {
                 onValueChange={(v) =>
                   setForm((f) =>
                     f.type === 'browser'
-                      ? { ...f, provider: v as 'claude' | 'trendminer' }
+                      ? { ...f, provider: v }
                       : {
                           ...f,
                           provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom',
@@ -511,7 +508,7 @@ const AgentDetail = () => {
               <Input
                 value={form.url ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="https://claude.ai or TrendMiner URL"
+                placeholder="https://provider.example"
               />
               <p className="text-[11px] text-muted-foreground">
                 Rover opens this URL when the queued Browser Agent needs attention.

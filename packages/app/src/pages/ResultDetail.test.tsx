@@ -266,7 +266,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.getByText('Runs Pass / Fail / Incomplete / Error')).toBeTruthy();
+    expect(screen.getByText('Runs Pass / Fail')).toBeTruthy();
     expect(screen.getByText('1 incomplete')).toBeTruthy();
   });
 
@@ -274,7 +274,7 @@ describe('ResultDetail conversation toggle', () => {
     const result = makeResult();
     result.totalRuns = 2;
     result.overallPassRate = 0.5;
-    result.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 1 };
+    result.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 0, stopped: 1 };
     getResultMock.mockResolvedValue(result);
 
     render(
@@ -286,7 +286,8 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.getByText('1 error')).toBeTruthy();
+    expect(screen.getByText('1 stopped')).toBeTruthy();
+    expect(screen.queryByText('1 error')).not.toBeInTheDocument();
   });
 
   it('shows passed and failed check counts in the scenario table', async () => {
@@ -665,10 +666,20 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
   });
 
-  it('queues rerun from detail page with same settings', async () => {
+  it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {
     const result = makeResult();
     result.id = 'run-rerun';
-    result.configPath = 'evaluate-search-tags.yaml';
+    result.configName = 'Search tags';
+    if (hasStoredPath) result.configPath = 'evaluate-search-tags.yaml';
+    mockConfigs.push({
+      id: 'workspace-config',
+      name: 'Search tags',
+      relativePath: 'evaluate-search-tags.yaml',
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
     result.rerunAgents = ['agent-1'];
     result.rerunScenarioIds = ['scn-1'];
     getResultMock.mockResolvedValue(result);

@@ -6,7 +6,7 @@ import type {
   RoverAgentProvider,
   RunOutcome
 } from '@/lib/data-sources/types';
-export { tallyCheckCounts } from '@/lib/data-sources/types';
+export { calculatePassRate, tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';
@@ -190,6 +190,7 @@ export interface ScenarioRun {
   passed: boolean;
   outcome?: RunOutcome;
   error?: string;
+  stopReason?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
@@ -210,7 +211,7 @@ export interface ScenarioResult {
   provider?: string;
   model?: string;
   runs: ScenarioRun[];
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgDuration: number;
   checkCounts?: CheckCounts;
@@ -230,6 +231,8 @@ export interface EvalResult {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   timestamp: string;
   runNote?: string;
@@ -237,7 +240,7 @@ export interface EvalResult {
   scenarios: ScenarioResult[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
-  overallPassRate: number;
+  overallPassRate: number | null;
   totalScenarios: number;
   totalRuns: number;
   avgToolCalls: number;

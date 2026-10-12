@@ -41,6 +41,7 @@ export type EnqueueResult = { jobId: string; queued?: boolean; position?: number
 
 export type RoverAssignmentWorker = {
   connectionId: string;
+  registrationVersion?: number;
   provider: string;
   providerRevision?: string;
   capabilities?: string[];
@@ -106,12 +107,25 @@ export function createRunQueueService(params: {
   state?: RunQueueState;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   assignRoverJob?: (provider: string, worker?: RoverAssignmentWorker) => RunJob | null;
-  onRoverJobReleased?: (provider: string) => void;
+  onRoverJobReleased?: (provider: string, jobId: string) => void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
   const { settings, oauthSessionManager, deps } = params;
   const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let rejectedRoverRegistration: { connectionId: string; version: number } | undefined;
+
+  function markRoverStarted(job: RunJob): void {
+    deps.addJobEvent(job, {
+      type: 'started',
+      ts: new Date().toISOString(),
+      payload: {
+        executionType: 'rover',
+        roverAgent: job.runParams.roverAgent,
+        agents: job.runParams.requestedAgents ?? null
+      }
+    });
+  }
 
   function appendRoverTraceEvent(
     job: RunJob | undefined,
@@ -171,7 +185,7 @@ export function createRunQueueService(params: {
         });
         emit();
         if (job.runParams.executionType === 'rover')
-          params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+          params.onRoverJobReleased?.(job.runParams.roverAgent.provider, job.id);
       }, delay)
     );
   }
@@ -180,7 +194,7 @@ export function createRunQueueService(params: {
     deps.addJobEvent(job, {
       type: 'error',
       ts: new Date().toISOString(),
-      payload: { message }
+      payload: { message, status: 'stopped' }
     });
   }
 
@@ -231,10 +245,7 @@ export function createRunQueueService(params: {
     job.roverLease = undefined;
   }
 
-  function settleUnfinishedRoverChildren(
-    job: RunJob,
-    status: 'completed' | 'error' | 'stopped'
-  ): void {
+  function settleUnfinishedChildren(job: RunJob, status: 'completed' | 'error' | 'stopped'): void {
     job.childProgress = job.childProgress?.map((child) =>
       child.status === 'queued' || child.status === 'running' ? { ...child, status } : child
     );
@@ -258,7 +269,7 @@ export function createRunQueueService(params: {
         payload: { message: `Rover assignment requeued: ${disposition.reason}` }
       });
     } else if (disposition.kind === 'completed') {
-      settleUnfinishedRoverChildren(
+      settleUnfinishedChildren(
         job,
         disposition.payload?.outcome === 'error'
           ? 'error'
@@ -274,13 +285,13 @@ export function createRunQueueService(params: {
       });
       closeJobClients(job);
     } else if (disposition.kind === 'stopped') {
-      settleUnfinishedRoverChildren(job, 'stopped');
+      settleUnfinishedChildren(job, 'stopped');
       job.status = 'stopped';
       addStopEvent(job, disposition.reason);
       markEvaluationStopped(job, disposition.reason);
       closeJobClients(job);
     } else {
-      settleUnfinishedRoverChildren(job, 'error');
+      settleUnfinishedChildren(job, 'error');
       job.status = 'error';
       deps.addJobEvent(job, {
         type: 'error',
@@ -292,14 +303,19 @@ export function createRunQueueService(params: {
     }
     emit();
     if (disposition.kind !== 'completed')
-      params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+      params.onRoverJobReleased?.(job.runParams.roverAgent.provider, job.id);
+    // Wake API runs after the caller has offered the next Rover assignment.
+    // That assignment must count against the shared worker limit before we claim another job.
+    queueMicrotask(() => {
+      void advance({ emitWhenIdle: true });
+    });
     return true;
   }
 
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
     if (job.runParams.executionType === 'rover') {
       clearRoverLease(job);
-      settleUnfinishedRoverChildren(job, 'stopped');
+      settleUnfinishedChildren(job, 'stopped');
     }
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
@@ -353,6 +369,7 @@ export function createRunQueueService(params: {
     }
     if (job.status !== 'stopped') {
       job.status = 'error';
+      settleUnfinishedChildren(job, 'error');
       deps.addJobEvent(job, {
         type: 'error',
         ts: new Date().toISOString(),
@@ -394,6 +411,7 @@ export function createRunQueueService(params: {
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
     if (outcome.status === 'error' || outcome.status === 'stopped') {
+      settleUnfinishedChildren(job, outcome.status);
       recordTerminalExecution(
         job,
         outcome.status,
@@ -628,7 +646,9 @@ export function createRunQueueService(params: {
             type: 'evaluation_started',
             ts: new Date().toISOString(),
             evaluationRunId: runParams.evaluationRunId,
-            evaluationName: runParams.evaluationName
+            evaluationName: runParams.evaluationName,
+            newConversationBeforeStart: runParams.newConversationBeforeStart,
+            newConversationBetweenScenarios: runParams.newConversationBetweenScenarios
           });
         }
       }
@@ -727,13 +747,11 @@ export function createRunQueueService(params: {
         (job) => job.runParams.evaluationRunId === evaluationRunId
       );
       if (jobsForEvaluation.length === 0) return null;
-      const stoppedEvaluation =
-        buildQueueState(jobs, state).evaluations?.find(
-          (evaluation) => evaluation.evaluationRunId === evaluationRunId
-        )?.status === 'stopped' &&
-        jobsForEvaluation.every((job) => ['completed', 'error', 'stopped'].includes(job.status));
+      const terminalEvaluation = jobsForEvaluation.every((job) =>
+        ['completed', 'error', 'stopped'].includes(job.status)
+      );
       if (
-        !stoppedEvaluation &&
+        !terminalEvaluation &&
         jobsForEvaluation.some(
           (job) =>
             job.status !== 'queued' &&
@@ -749,7 +767,7 @@ export function createRunQueueService(params: {
       }
       let removed = 0;
       for (const job of jobsForEvaluation) {
-        if (stoppedEvaluation || job.status === 'stopped') {
+        if (terminalEvaluation || job.status === 'stopped') {
           jobs.delete(job.id);
           removed += 1;
         } else if (this.removeQueuedJob(job.id, options)) {
@@ -824,6 +842,15 @@ export function createRunQueueService(params: {
       state.clients.clear();
     },
     assignRoverJob(provider, send, worker) {
+      if (worker && worker.provider !== provider) return null;
+      // A page mismatch invalidates this registration. Wait for a fresh tab
+      // registration or reconnect instead of offering the same rejected job in a loop.
+      if (
+        worker &&
+        rejectedRoverRegistration?.connectionId === worker.connectionId &&
+        rejectedRoverRegistration.version === (worker.registrationVersion ?? 0)
+      )
+        return null;
       const roverAlreadyBusy = Array.from(state.activeJobIds).some(
         (id) => jobs.get(id)?.runParams.executionType === 'rover'
       );
@@ -860,6 +887,7 @@ export function createRunQueueService(params: {
         job.roverLease = {
           leaseId,
           connectionId: worker.connectionId,
+          registrationVersion: worker.registrationVersion,
           state: 'offered',
           expiresAt,
           offeredAt: now.toISOString()
@@ -880,15 +908,7 @@ export function createRunQueueService(params: {
         return null;
       }
       appendRoverTraceEvent(job, assignment, provider);
-      deps.addJobEvent(job, {
-        type: 'started',
-        ts: new Date().toISOString(),
-        payload: {
-          executionType: 'rover',
-          roverAgent: job.runParams.roverAgent,
-          agents: job.runParams.requestedAgents ?? null
-        }
-      });
+      if (!leaseCapable) markRoverStarted(job);
       emit();
       return job;
     },
@@ -905,6 +925,7 @@ export function createRunQueueService(params: {
         )
           continue;
         job.roverLease.connectionId = worker.connectionId;
+        job.roverLease.registrationVersion = worker.registrationVersion;
         job.roverLease.expiresAt = new Date(now + 30_000).toISOString();
         scheduleLeaseExpiry(job);
       }
@@ -956,12 +977,35 @@ export function createRunQueueService(params: {
       if (child?.status === 'completed' || child?.status === 'stopped') {
         return { ok: true, status: 'stopped' };
       }
-      const sent = params.sendRoverMessage?.({
-        type: 'stop_scenario',
-        jobId,
-        scenarioId
-      });
-      if (sent === false) return { error: 'Rover is not connected', statusCode: 409 };
+      if (
+        job.status === 'queued' ||
+        job.status === 'waiting_for_rover' ||
+        job.status === 'paused_rover'
+      ) {
+        // Revoke paused assignments before editing their scenario list. Reconnection
+        // must offer the remaining work, never resume a lease containing cancelled work.
+        if (!child) return { error: 'Scenario not found', statusCode: 404 };
+        if (job.status === 'paused_rover') {
+          clearRoverLease(job);
+          job.status = 'waiting_for_rover';
+        }
+        job.runParams.roverScenarios = job.runParams.roverScenarios?.filter(
+          (scenario) =>
+            scenario.id !== scenarioId &&
+            !(job.childProgress ?? []).some(
+              (entry) =>
+                entry.scenarioId === scenario.id &&
+                ['completed', 'error', 'stopped'].includes(entry.status)
+            )
+        );
+      } else {
+        const sent = params.sendRoverMessage?.({
+          type: 'stop_scenario',
+          jobId,
+          scenarioId
+        });
+        if (sent === false) return { error: 'Rover is not connected', statusCode: 409 };
+      }
       const progress = job.childProgress ?? [];
       const next = {
         scenarioId,
@@ -1018,18 +1062,7 @@ export function createRunQueueService(params: {
     },
     handleRoverMessage(message, provider, send, worker) {
       const messageJob = typeof message.jobId === 'string' ? jobs.get(message.jobId) : undefined;
-      const leaseControlMessage = [
-        'assignment_accept',
-        'assignment_reject',
-        'lease_renew',
-        'lease_release',
-        'complete'
-      ].includes(message.type);
-      if (
-        leaseControlMessage &&
-        typeof message.jobId === 'string' &&
-        typeof message.leaseId === 'string'
-      ) {
+      if (typeof message.jobId === 'string' && typeof message.leaseId === 'string') {
         const knownJob = jobs.get(message.jobId);
         const knownLease = knownJob?.roverLease;
         if (
@@ -1076,6 +1109,7 @@ export function createRunQueueService(params: {
           lease.acceptedAt = new Date().toISOString();
           if (typeof message.tabId === 'number') lease.tabId = message.tabId;
           scheduleLeaseExpiry(job);
+          markRoverStarted(job);
           emit();
           return null;
         }
@@ -1088,9 +1122,20 @@ export function createRunQueueService(params: {
           return null;
         }
         if (message.type === 'assignment_reject' && lease.state === 'offered') {
+          const detail = typeof message.message === 'string' ? message.message.trim() : '';
+          const providerUnavailable =
+            message.reason === 'provider_mismatch' || message.reason === 'provider_unavailable';
+          if (providerUnavailable && message.retryable !== false) {
+            rejectedRoverRegistration = {
+              connectionId: lease.connectionId,
+              version: lease.registrationVersion ?? 0
+            };
+          }
+          // A missing provider capability needs a configuration change, not another offer.
+          // Older Rover versions omit retryable, so preserve their requeue behavior.
           finalizeRoverJob(job, {
-            kind: 'requeue',
-            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}`
+            kind: message.retryable === false ? 'error' : 'requeue',
+            reason: `assignment_rejected:${String(message.reason ?? 'unknown')}${detail ? `. ${detail}` : ''}${providerUnavailable && message.retryable !== false ? `. Waiting for Rover to confirm provider ${job.runParams.roverAgent?.provider}. Open its browser agent tab.` : ''}`
           });
           return null;
         }

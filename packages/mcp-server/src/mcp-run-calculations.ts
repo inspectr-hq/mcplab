@@ -1,4 +1,5 @@
 import type { ResultsJson } from '@inspectr/mcplab-core';
+import { calculatePassRate } from '@inspectr/mcplab-core';
 
 type AggregateGroupBy = 'run' | 'scenario' | 'agent';
 
@@ -6,7 +7,8 @@ type MetricSummary = {
   total_runs: number;
   passed_runs: number;
   failed_runs: number;
-  pass_rate: number;
+  stopped_runs?: number;
+  pass_rate: number | null;
   avg_tool_calls_per_run: number;
   avg_tool_latency_ms: number | null;
 };
@@ -23,7 +25,7 @@ type AggregateGroupRow = MetricSummary & {
   };
 };
 
-type CompareClass = 'regressed' | 'improved' | 'unchanged' | 'new' | 'missing';
+type CompareClass = 'regressed' | 'improved' | 'unchanged' | 'new' | 'missing' | 'not_evaluated';
 
 type CompareRow = {
   key: string;
@@ -68,10 +70,12 @@ export function buildAggregateRunsReport(params: {
   );
   const rows = buildAggregateRows(params.runs, params.groupBy, scenarioFilter, agentFilter);
   const worstRows = [...rows]
+    .filter((row) => row.pass_rate !== null)
     .sort(compareRowsWorstFirst)
     .slice(0, params.topN)
     .map(toSerializableAggregateRow);
   const bestRows = [...rows]
+    .filter((row) => row.pass_rate !== null)
     .sort(compareRowsBestFirst)
     .slice(0, params.topN)
     .map(toSerializableAggregateRow);
@@ -135,7 +139,7 @@ export function buildCompareRunsReport(params: {
       deltas: {
         pass_rate:
           leftEntry && rightEntry
-            ? roundedDelta(rightEntry.summary.pass_rate - leftEntry.summary.pass_rate)
+            ? nullableRoundedDelta(rightEntry.summary.pass_rate, leftEntry.summary.pass_rate)
             : null,
         failed_runs:
           leftEntry && rightEntry
@@ -180,7 +184,7 @@ export function buildCompareRunsReport(params: {
       acc[row.classification] += 1;
       return acc;
     },
-    { regressed: 0, improved: 0, unchanged: 0, new: 0, missing: 0 }
+    { regressed: 0, improved: 0, unchanged: 0, new: 0, missing: 0, not_evaluated: 0 }
   );
 
   return removeUndefined({
@@ -202,7 +206,7 @@ export function buildCompareRunsReport(params: {
       left: leftSummary,
       right: rightSummary,
       deltas: {
-        pass_rate: roundedDelta(rightSummary.pass_rate - leftSummary.pass_rate),
+        pass_rate: nullableRoundedDelta(rightSummary.pass_rate, leftSummary.pass_rate),
         failed_runs: rightSummary.failed_runs - leftSummary.failed_runs,
         avg_tool_calls_per_run: roundedDelta(
           rightSummary.avg_tool_calls_per_run - leftSummary.avg_tool_calls_per_run
@@ -234,14 +238,17 @@ export function computeMetricSummary(scenarios: ResultsJson['scenarios']): Metri
   const runs = scenarios.flatMap((s) => s.runs);
   const totalRuns = runs.length;
   const passedRuns = runs.filter((r) => r.pass).length;
-  const failedRuns = totalRuns - passedRuns;
+  const stoppedRuns = runs.filter((r) => r.outcome === 'stopped').length;
+  const failedRuns = totalRuns - passedRuns - stoppedRuns;
   const totalToolCalls = runs.reduce((sum, r) => sum + r.tool_call_count, 0);
   const allDurations = runs.flatMap((r) => r.tool_durations_ms ?? []);
+  const passRate = calculatePassRate(passedRuns, totalRuns, stoppedRuns);
   return {
     total_runs: totalRuns,
     passed_runs: passedRuns,
     failed_runs: failedRuns,
-    pass_rate: totalRuns === 0 ? 0 : roundedDelta(passedRuns / totalRuns),
+    ...(stoppedRuns > 0 ? { stopped_runs: stoppedRuns } : {}),
+    pass_rate: passRate === null ? null : roundedDelta(passRate),
     avg_tool_calls_per_run: totalRuns === 0 ? 0 : roundedDelta(totalToolCalls / totalRuns),
     avg_tool_latency_ms:
       allDurations.length === 0
@@ -313,6 +320,7 @@ export function classifyCompareRow(
   if (!left && right) return 'new';
   if (left && !right) return 'missing';
   if (!left || !right) return 'unchanged';
+  if (left.pass_rate === null || right.pass_rate === null) return 'not_evaluated';
   const delta = roundedDelta(right.pass_rate - left.pass_rate);
   if (delta > 0.001) return 'improved';
   if (delta < -0.001) return 'regressed';
@@ -353,7 +361,7 @@ function buildScenarioAgentMetricMap(
 
 function compareRowsWorstFirst(a: AggregateGroupRow, b: AggregateGroupRow): number {
   return (
-    a.pass_rate - b.pass_rate ||
+    compareNullableNumbersAsc(a.pass_rate, b.pass_rate) ||
     b.failed_runs - a.failed_runs ||
     b.avg_tool_calls_per_run - a.avg_tool_calls_per_run ||
     compareNullableNumbersDesc(a.avg_tool_latency_ms, b.avg_tool_latency_ms) ||
@@ -363,7 +371,7 @@ function compareRowsWorstFirst(a: AggregateGroupRow, b: AggregateGroupRow): numb
 
 function compareRowsBestFirst(a: AggregateGroupRow, b: AggregateGroupRow): number {
   return (
-    b.pass_rate - a.pass_rate ||
+    compareNullableNumbersDesc(a.pass_rate, b.pass_rate) ||
     a.failed_runs - b.failed_runs ||
     a.avg_tool_calls_per_run - b.avg_tool_calls_per_run ||
     compareNullableNumbersAsc(a.avg_tool_latency_ms, b.avg_tool_latency_ms) ||
@@ -411,6 +419,7 @@ function toSerializableAggregateRow(row: AggregateGroupRow): Record<string, unkn
       total_runs: row.total_runs,
       passed_runs: row.passed_runs,
       failed_runs: row.failed_runs,
+      stopped_runs: row.stopped_runs,
       pass_rate: row.pass_rate,
       avg_tool_calls_per_run: row.avg_tool_calls_per_run,
       avg_tool_latency_ms: row.avg_tool_latency_ms

@@ -45,7 +45,6 @@ npm test -w @inspectr/mcplab-app
 npm test -w @inspectr/mcplab
 npm test -w @inspectr/mcplab-core
 npm test -w @inspectr/mcplab-mcp-server
-npm test -w @inspectr/mcplab-website
 ```
 
 ### Rover

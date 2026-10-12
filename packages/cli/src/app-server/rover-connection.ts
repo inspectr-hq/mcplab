@@ -52,6 +52,7 @@ export function validateRoverRegistration(
 
 export interface RoverConnection {
   connectionId: string;
+  registrationVersion: number;
   registration: RoverRegistration;
   socket: WebSocket;
   connectedAt: string;
@@ -140,6 +141,7 @@ export function createRoverConnectionService(
         const extensionVersion = message.extensionVersion as string;
         connection = {
           connectionId: randomUUID(),
+          registrationVersion: 1,
           registration: {
             protocolVersion: ROVER_PROTOCOL_VERSION,
             provider,
@@ -171,6 +173,7 @@ export function createRoverConnectionService(
       connection.lastSeenAt = new Date().toISOString();
       if (message.type === 'register_update') {
         if (typeof message.provider !== 'string' || !message.provider.trim()) return;
+        connection.registrationVersion += 1;
         connection.registration = {
           ...connection.registration,
           provider: message.provider,

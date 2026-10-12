@@ -34,7 +34,7 @@ describe('aggregateResults', () => {
     const result = aggregateResults({ ...BASE, scenarioRuns: [] });
     expect(result.summary.total_scenarios).toBe(0);
     expect(result.summary.total_runs).toBe(0);
-    expect(result.summary.pass_rate).toBe(0);
+    expect(result.summary.pass_rate).toBeNull();
     expect(result.scenarios).toHaveLength(0);
   });
 
@@ -101,12 +101,36 @@ describe('aggregateResults', () => {
     expect(result.scenarios[0].pass_rate).toBeCloseTo(2 / 3);
   });
 
-  it('sets pass_rate to 0 when there are no runs', () => {
+  it('excludes stopped runs from pass_rate', () => {
+    const stopped = makeRun(false);
+    stopped.outcome = 'stopped';
+    stopped.failures = [];
+    stopped.check_results = [
+      { type: 'required_tool', label: 'Required tool', status: 'not_executed' }
+    ];
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'gpt-4',
+          runs: [makeRun(true), stopped]
+        }
+      ]
+    });
+
+    expect(result.summary.total_runs).toBe(2);
+    expect(result.summary.pass_rate).toBe(1);
+    expect(result.scenarios[0].pass_rate).toBe(1);
+    expect(result.summary.outcomes).toMatchObject({ passed: 1, stopped: 1 });
+  });
+
+  it('sets pass_rate to null when there are no runs', () => {
     const result = aggregateResults({
       ...BASE,
       scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [] }]
     });
-    expect(result.scenarios[0].pass_rate).toBe(0);
+    expect(result.scenarios[0].pass_rate).toBeNull();
   });
 
   it('accumulates tool_usage_frequency across runs', () => {

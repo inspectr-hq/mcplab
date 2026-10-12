@@ -10,6 +10,7 @@ import {
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   chatWithJsonRetry,
+  parseJsonFromAssistantText,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   newAssistantEntityId,
@@ -623,19 +624,7 @@ function normalizeEvalRuleSuggestions(
 }
 
 function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
-  const cleaned = text.trim();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) {
-      parsed = JSON.parse(fenced[1]);
-    } else {
-      throw new Error('Assistant returned invalid JSON');
-    }
-  }
+  const parsed = parseJsonFromAssistantText(text);
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Assistant response must be a JSON object');
   }

@@ -1,3 +1,5 @@
+import { calculatePassRate } from '@/types/eval';
+import { formatPassRate } from '@/lib/utils';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -441,7 +443,8 @@ const ResultDetail = () => {
     displayAvgLatency,
     displayDurationMs,
     displayToolTimeMs,
-    displayToolTokenUsage
+    displayToolTokenUsage,
+    filteredStoppedRuns
   } = useMemo(() => {
     if (!result) {
       return {
@@ -453,7 +456,8 @@ const ResultDetail = () => {
         displayAvgLatency: 0,
         displayDurationMs: null as number | null,
         displayToolTimeMs: null as number | null,
-        displayToolTokenUsage: null
+        displayToolTokenUsage: null,
+        filteredStoppedRuns: 0
       };
     }
     const scenarios = requestedAgentId
@@ -467,11 +471,19 @@ const ResultDetail = () => {
       (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
       0
     );
+    const scenarioStoppedCount = scenarios.reduce(
+      (sum, scenario) => sum + scenario.runs.filter((run) => run.outcome === 'stopped').length,
+      0
+    );
     const totalRuns = !requestedAgentId && result.outcomes ? result.totalRuns : scenarioRunCount;
     const passCount =
       !requestedAgentId && result.outcomes?.passed !== undefined
         ? result.outcomes.passed
         : scenarioPassCount;
+    const stoppedRuns =
+      !requestedAgentId && result.outcomes?.stopped !== undefined
+        ? result.outcomes.stopped
+        : scenarioStoppedCount;
     const totalToolCalls = scenarios.reduce(
       (sum, scenario) =>
         sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
@@ -483,13 +495,14 @@ const ResultDetail = () => {
       filteredScenarios: scenarios,
       filteredTotalRuns: totalRuns,
       filteredPassCount: passCount,
-      displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+      displayPassRate: calculatePassRate(passCount, totalRuns, stoppedRuns),
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       displayAvgLatency:
         totalRuns === 0 || totalDuration === null ? 0 : Math.round(totalDuration / totalRuns),
       displayDurationMs: totalDuration,
       displayToolTimeMs: totalToolDuration,
-      displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
+      displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage)),
+      filteredStoppedRuns: stoppedRuns
     };
   }, [result, requestedAgentId]);
 
@@ -523,6 +536,7 @@ const ResultDetail = () => {
     !requestedAgentId && result.outcomes?.error !== undefined
       ? result.outcomes.error
       : runOutcomes.filter((run) => run.outcome === 'error').length;
+  const stoppedRuns = filteredStoppedRuns;
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -757,7 +771,7 @@ const ResultDetail = () => {
     }
     setRerunningRun(true);
     try {
-      await rerunWithSameSettings(source, result);
+      await rerunWithSameSettings(source, { ...result, configPath });
       toast({
         title: 'Rerun queued',
         description: `${result.id} queued with previous run settings.`
@@ -967,11 +981,7 @@ const ResultDetail = () => {
           >
             <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
             <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
-            <StatCard
-              title="Pass Rate"
-              value={`${Math.round(displayPassRate * 100)}%`}
-              icon={BarChart3}
-            />
+            <StatCard title="Pass Rate" value={formatPassRate(displayPassRate)} icon={BarChart3} />
             <StatCard
               title="Avg Tool Calls"
               value={formatCompactOneDecimal(displayAvgToolCalls)}
@@ -1001,17 +1011,18 @@ const ResultDetail = () => {
 
           <div className="grid gap-4 lg:grid-cols-4">
             <OutcomeCard
-              title="Runs Pass / Fail / Incomplete / Error"
+              title="Runs Pass / Fail"
               passed={filteredPassCount}
               failed={Math.max(
                 0,
-                filteredTotalRuns - filteredPassCount - incompleteRuns - errorRuns
+                filteredTotalRuns - filteredPassCount - incompleteRuns - errorRuns - stoppedRuns
               )}
               incomplete={incompleteRuns}
               error={errorRuns}
+              stopped={stoppedRuns}
             />
             <OutcomeCard
-              title="Checks Pass / Fail / Not evaluated / Not executed"
+              title="Checks Pass / Fail"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}
@@ -1215,7 +1226,7 @@ const ResultDetail = () => {
                                       <p className="text-xs font-semibold">Scenario details</p>
                                       <p className="text-[11px] text-muted-foreground">
                                         {scenarioLabel} · {sc.agentName} ·{' '}
-                                        {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {formatPassRate(sc.passRate)} pass rate ·{' '}
                                         {hasCheckResults
                                           ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
                                               checkCounts.not_evaluated
@@ -1277,7 +1288,8 @@ const ResultDetail = () => {
                                       className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                                     >
                                       <div className="mt-0.5">
-                                        {run.outcome === 'incomplete' ? (
+                                        {run.outcome === 'incomplete' ||
+                                        run.outcome === 'stopped' ? (
                                           <Clock3 className="h-4 w-4 text-amber-500" />
                                         ) : run.passed ? (
                                           <CheckCircle2 className="h-4 w-4 text-success" />
@@ -1338,6 +1350,13 @@ const ResultDetail = () => {
                                                   >
                                                     Incomplete
                                                   </Badge>
+                                                ) : run.outcome === 'stopped' ? (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-muted-foreground/30 bg-muted text-muted-foreground text-[10px]"
+                                                  >
+                                                    Stopped
+                                                  </Badge>
                                                 ) : !run.passed ? (
                                                   <Badge
                                                     variant="outline"
@@ -1362,6 +1381,16 @@ const ResultDetail = () => {
                                                   </ul>
                                                 </div>
                                               )}
+                                              {run.outcome === 'stopped' && run.stopReason ? (
+                                                <div className="rounded-md border border-muted-foreground/20 bg-muted/40 p-2">
+                                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    Stop reason
+                                                  </p>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {run.stopReason}
+                                                  </p>
+                                                </div>
+                                              ) : null}
                                               {checks.length > 0 && (
                                                 <Collapsible
                                                   open={isRunSectionOpen(
@@ -1553,7 +1582,8 @@ const ResultDetail = () => {
                                                           run.runIndex,
                                                           'extracts'
                                                         ),
-                                                        Object.keys(run.extractedValues ?? {}).length > 0
+                                                        Object.keys(run.extractedValues ?? {})
+                                                          .length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''

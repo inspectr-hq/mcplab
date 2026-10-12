@@ -250,6 +250,33 @@ describe('Compare', () => {
     });
   });
 
+  it('excludes stopped runs from the within-run agent pass rate', async () => {
+    const run = structuredClone(baseResults[0]!);
+    const scenario = run.scenarios[0]!;
+    scenario.runs.push({
+      ...structuredClone(scenario.runs[0]!),
+      runIndex: 1,
+      passed: false,
+      outcome: 'stopped'
+    });
+    run.totalRuns += 1;
+    sourceMock.listResults.mockResolvedValue([run]);
+    render(
+      <MemoryRouter
+        initialEntries={['/compare?mode=within-run&runId=run-1&agents=agent-a,agent-b']}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const heading = await screen.findByText('Agent Summary');
+    const card = heading.closest('.rounded-lg')! as HTMLElement;
+    const row = within(card).getByText('Pass Rate').closest('tr')!;
+    expect(within(row).getByText('100%')).toBeInTheDocument();
+    expect(within(row).queryByText('50%')).toBeNull();
+  });
+
   it('hydrates from URL params for within-run mode and shows sparse cells as em-dash', async () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 

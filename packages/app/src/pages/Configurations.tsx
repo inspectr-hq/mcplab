@@ -190,9 +190,9 @@ const Configurations = () => {
   const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
   const [queuingConfigIds, setQueuingConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
-  const [latestPassRateByConfigId, setLatestPassRateByConfigId] = useState<Record<string, number>>(
-    {}
-  );
+  const [latestPassRateByConfigId, setLatestPassRateByConfigId] = useState<
+    Record<string, number | null>
+  >({});
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
   const toggleSort = (next: typeof sortBy) => {
@@ -659,7 +659,7 @@ const Configurations = () => {
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              {typeof latestPassRateByConfigId[cfg.id] === 'number' ? (
+                              {Object.hasOwn(latestPassRateByConfigId, cfg.id) ? (
                                 <div className="inline-flex justify-end">
                                   <PassRateBadge rate={latestPassRateByConfigId[cfg.id]} />
                                 </div>

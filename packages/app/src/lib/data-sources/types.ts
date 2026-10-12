@@ -35,6 +35,7 @@ import type {
 
 export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
+  calculatePassRate,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
@@ -96,10 +97,12 @@ export interface WorkspaceRunSummary {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs?: number;
@@ -744,7 +747,7 @@ export interface EvalDataSource {
       relativePath?: string;
       configHash?: string;
     }>;
-  }) => Promise<Record<string, number>>;
+  }) => Promise<Record<string, number | null>>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
@@ -756,6 +759,7 @@ export interface EvalDataSource {
     agents?: string[];
     runNote?: string;
     newConversationBetweenScenarios?: boolean;
+    newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<StartRunResponse>;

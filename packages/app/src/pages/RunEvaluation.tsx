@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -52,6 +53,14 @@ function nowTime(): string {
   return new Date().toLocaleTimeString();
 }
 
+// Assignment marks a Rover job running before its first scenario starts.
+function canOpenRoverJob(job: QueueEntry): boolean {
+  return (
+    job.executionType === 'rover' &&
+    ['queued', 'waiting_for_rover', 'running', 'paused_rover'].includes(job.status)
+  );
+}
+
 function queueChildRows(evaluation: EvaluationQueueItem): Array<{
   job: QueueEntry;
   child?: QueueChildProgress;
@@ -69,6 +78,8 @@ const RunEvaluation = () => {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const [completionHasErrors, setCompletionHasErrors] = useState(false);
+  const [completionSummary, setCompletionSummary] = useState<EvaluationQueueItem | null>(null);
   const [stopped, setStopped] = useState(false);
   const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -96,6 +107,7 @@ const RunEvaluation = () => {
   );
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const attachedJobIdRef = useRef<string | null>(null);
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
@@ -353,13 +365,21 @@ const RunEvaluation = () => {
       (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === 'referenced')
         ? 'refs-composed'
         : 'single-file/inline';
+    const browserConversationOptions = {
+      ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
+        ? {
+            newConversationBeforeStart: conversationMode === 'new',
+            newConversationBetweenScenarios: conversationMode === 'new'
+          }
+        : {})
+    };
     setLogs([
       `[${nowTime()}] Starting evaluation run...`,
       `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents
         .map((a) => a.name || a.id)
         .join(
           ', '
-        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
+        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${selectedBrowserAgents.length > 0 ? ` newConversationBeforeStart=${browserConversationOptions.newConversationBeforeStart ?? 'agent_default'} newConversationBetweenScenarios=${browserConversationOptions.newConversationBetweenScenarios ?? 'agent_default'}` : ''}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
         effectiveScenarioServerSummary || '(none)'
       }`
@@ -371,10 +391,7 @@ const RunEvaluation = () => {
         runsPerScenario,
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
-        ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
-          ? { newConversationBetweenScenarios: conversationMode === 'new' }
-          : {}),
-        ...(selectedBrowserAgents.length > 0 ? { newConversationBeforeStart: true } : {}),
+        ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),
@@ -405,6 +422,7 @@ const RunEvaluation = () => {
   };
 
   const stopRun = () => {
+    attachedJobIdRef.current = null;
     if (activeJobId) {
       void source.stopRun(activeJobId);
     }
@@ -425,6 +443,7 @@ const RunEvaluation = () => {
 
   useEffect(
     () => () => {
+      attachedJobIdRef.current = null;
       unsubscribeRef.current?.();
     },
     []
@@ -475,7 +494,12 @@ const RunEvaluation = () => {
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
-      setEvaluations(q.evaluations ?? []);
+      // Terminal summaries remain available for results reconciliation, not queue rows.
+      setEvaluations(
+        (q.evaluations ?? []).filter(
+          (item) => !['completed', 'partial', 'failed'].includes(item.status)
+        )
+      );
       // Restore blocked-auth state for the currently attached job on page-load / reconnect
       // scenarios where SSE was missed. Do not surface a global OAuth banner for unrelated
       // queued jobs; those keep their own per-job queue action.
@@ -629,6 +653,7 @@ const RunEvaluation = () => {
   const attachRunJob = (jobId: string) => {
     if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
+    attachedJobIdRef.current = jobId;
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
       if (event.type === 'queued') {
@@ -701,37 +726,79 @@ const RunEvaluation = () => {
           });
         }
       }
-      if (event.type === 'completed') {
-        const completedJobId = activeJobId;
-        const evaluationRunId = String(event.payload.runId ?? '').trim();
+      if (event.type === 'completed' || event.type === 'error') {
+        const isError = event.type === 'error';
+        const eventRunId = String(event.payload.runId ?? '').trim();
+        const wasStopped = (evaluation?: EvaluationQueueItem) =>
+          event.payload.status === 'stopped' ||
+          ['Run stopped by user', 'Run aborted by user'].includes(String(event.payload.message)) ||
+          evaluation?.status === 'stopped' ||
+          evaluation?.jobs.find((job) => job.jobId === jobId)?.status === 'stopped';
+        const logError = (evaluation?: EvaluationQueueItem) => {
+          if (!isError || wasStopped(evaluation)) return;
+          const message = String(event.payload.message ?? 'Unknown error');
+          const extraHint = message.includes('Anthropic model not found')
+            ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
+            : '';
+          setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
+        };
+        const finishEvaluation = (evaluation?: EvaluationQueueItem) => {
+          logError(evaluation);
+          const hasErrors =
+            (isError && !wasStopped(evaluation)) ||
+            (evaluation?.failedJobs ?? 0) - (evaluation?.stoppedJobs ?? 0) > 0;
+          const stoppedWithoutResults =
+            wasStopped(evaluation) && !hasErrors && !evaluation?.completedJobs && !eventRunId;
+          setOauthRequired(null);
+          oauthConnectingRef.current = false;
+          setLogs((prev) => {
+            const line = `[${ts}] ${hasErrors ? 'Run completed with errors.' : wasStopped(evaluation) ? 'Run stopped.' : 'Run completed.'}`;
+            return prev.includes(line) ? prev : [...prev, line];
+          });
+          setProgress(100);
+          setRunning(false);
+          setDone(!stoppedWithoutResults);
+          setCompletionHasErrors(hasErrors);
+          setCompletionSummary(evaluation ?? null);
+          setStopped(stoppedWithoutResults);
+          setRunId(
+            evaluation?.completedJobs
+              ? evaluation.evaluationRunId
+              : isError && !wasStopped(evaluation)
+                ? ''
+                : eventRunId
+          );
+          clearActiveRunJob();
+          setActiveJobId(null);
+          attachedJobIdRef.current = null;
+          unsubscribeRef.current?.();
+          unsubscribeRef.current = null;
+          void refreshQueue();
+        };
         void source
           .getRunQueue()
           .then((queue) => {
+            if (attachedJobIdRef.current !== jobId) return;
             const evaluation =
-              queue.evaluations?.find((item) => item.evaluationRunId === evaluationRunId) ??
-              queue.evaluations?.find((item) =>
-                item.jobs.some((job) => job.jobId === completedJobId)
-              );
+              queue.evaluations?.find((item) => item.jobs.some((job) => job.jobId === jobId)) ??
+              queue.evaluations?.find((item) => item.evaluationRunId === eventRunId);
             const nextJob =
               evaluation?.jobs.find(
                 (job) =>
-                  job.jobId !== completedJobId &&
+                  job.jobId !== jobId &&
                   ['queued', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
               ) ??
-              evaluation?.jobs.find(
-                (job) => job.jobId !== completedJobId && job.status === 'blocked_auth'
-              );
-
+              evaluation?.jobs.find((job) => job.jobId !== jobId && job.status === 'blocked_auth');
             if (nextJob && evaluation) {
-              const completedLine = `[${ts}] Subtask completed. ${
-                evaluation.completedJobs
-              }/${evaluation.totalJobs} complete. Continuing with the remaining run tasks...`;
-              setLogs((prev) => (prev.includes(completedLine) ? prev : [...prev, completedLine]));
+              logError(evaluation);
+              const finished = evaluation.completedJobs + evaluation.failedJobs;
+              const line = `[${ts}] Subtask finished. ${finished}/${evaluation.totalJobs} finished. Continuing with the remaining run tasks...`;
+              setLogs((prev) => (prev.includes(line) ? prev : [...prev, line]));
               setProgress((prev) =>
                 Math.max(
                   prev,
                   evaluation.totalJobs > 0
-                    ? Math.round((evaluation.completedJobs / evaluation.totalJobs) * 100)
+                    ? Math.round((finished / evaluation.totalJobs) * 100)
                     : prev
                 )
               );
@@ -750,56 +817,11 @@ const RunEvaluation = () => {
               attachRunJob(nextJob.jobId);
               return;
             }
-
-            const nextRunId = String(event.payload.runId ?? '').trim();
-            setOauthRequired(null);
-            oauthConnectingRef.current = false;
-            setLogs((prev) => {
-              const line = `[${ts}] Run completed.`;
-              return prev.includes(line) ? prev : [...prev, line];
-            });
-            setProgress(100);
-            setRunning(false);
-            setDone(true);
-            setStopped(false);
-            setRunId(nextRunId);
-            clearActiveRunJob();
-            setActiveJobId(null);
-            unsubscribeRef.current?.();
-            unsubscribeRef.current = null;
-            void refreshQueue();
+            finishEvaluation(evaluation);
           })
           .catch(() => {
-            // Preserve the existing completion behavior if queue reconciliation fails.
-            setProgress(100);
-            setRunning(false);
-            setDone(true);
-            setStopped(false);
-            setRunId(evaluationRunId);
-            clearActiveRunJob();
-            setActiveJobId(null);
-            unsubscribeRef.current?.();
-            unsubscribeRef.current = null;
-            void refreshQueue();
+            if (attachedJobIdRef.current === jobId) finishEvaluation();
           });
-      }
-      if (event.type === 'error') {
-        const message = String(event.payload.message ?? 'Unknown error');
-        const extraHint = message.includes('Anthropic model not found')
-          ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
-          : '';
-        setOauthRequired(null);
-        oauthConnectingRef.current = false;
-        setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
-        setRunning(false);
-        setDone(false);
-        setStopped(false);
-        setProgress(0);
-        clearActiveRunJob();
-        setActiveJobId(null);
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
-        void refreshQueue();
       }
     });
   };
@@ -921,7 +943,36 @@ const RunEvaluation = () => {
                 {agentGroups.map((group) =>
                   group.agents.length > 0 ? (
                     <div key={group.label} className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                        <div className="flex items-center gap-3 text-xs">
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            aria-label={`Select all ${group.label}`}
+                            onClick={() => {
+                              const groupIds = new Set(group.agents.map((agent) => agent.id));
+                              setSelectedAgentIds((prev) => [
+                                ...prev.filter((id) => !groupIds.has(id)),
+                                ...groupIds
+                              ]);
+                            }}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            aria-label={`Clear ${group.label}`}
+                            onClick={() => {
+                              const groupIds = new Set(group.agents.map((agent) => agent.id));
+                              setSelectedAgentIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                            }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.agents.map((agent) => {
                           const checked = selectedAgentIds.includes(agent.id);
@@ -1399,22 +1450,13 @@ const RunEvaluation = () => {
                           {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
                         </Button>
                       )}
-                      {evaluation.jobs.some(
-                        (job) =>
-                          job.executionType === 'rover' &&
-                          (job.status === 'queued' || job.status === 'waiting_for_rover')
-                      ) && (
+                      {evaluation.jobs.some(canOpenRoverJob) && (
                         <Button
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
                           onClick={() => {
-                            const job = evaluation.jobs.find(
-                              (candidate) =>
-                                candidate.executionType === 'rover' &&
-                                (candidate.status === 'queued' ||
-                                  candidate.status === 'waiting_for_rover')
-                            );
+                            const job = evaluation.jobs.find(canOpenRoverJob);
                             if (job) void openRoverJob(job.jobId);
                           }}
                           title="Open the browser-agent URL, then activate the Rover extension"
@@ -1445,7 +1487,9 @@ const RunEvaluation = () => {
                       </Button>
                       {evaluation.jobs.length > 0 &&
                         (evaluation.jobs.every((job) =>
-                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(job.status)
+                          ['queued', 'blocked_auth', 'waiting_for_rover', 'stopped'].includes(
+                            job.status
+                          )
                         ) ||
                           (evaluation.status === 'stopped' &&
                             evaluation.jobs.every((job) =>
@@ -1494,7 +1538,7 @@ const RunEvaluation = () => {
                   </div>
                   {expandedEvaluationRunId === evaluation.evaluationRunId && (
                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      {queueChildRows(evaluation).map(({ job, child }) => (
+                      {queueChildRows(evaluation).map(({ job, child }, rowIndex) => (
                         <div
                           key={`${job.jobId}:${child?.scenarioId ?? 'job'}:${
                             child?.agentName ?? 'job'
@@ -1509,6 +1553,10 @@ const RunEvaluation = () => {
                           onClick={() => selectQueueJob(job.jobId)}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 truncate">
+                            <span className="shrink-0 tabular-nums">{rowIndex + 1}.</span>
+                            {(child ? child.status === 'running' : job.status === 'running') && (
+                              <QueueProcessingIndicator label="Subjob running" />
+                            )}
                             {child?.status === 'completed' && (
                               <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             )}
@@ -1529,7 +1577,7 @@ const RunEvaluation = () => {
                                 : child?.status === 'completed'
                                   ? 'completed'
                                   : child?.status === 'error'
-                                    ? 'failed'
+                                    ? 'error'
                                     : child?.status === 'stopped'
                                       ? 'stopped'
                                       : job.status === 'waiting_for_rover'
@@ -1551,8 +1599,7 @@ const RunEvaluation = () => {
                             className="flex shrink-0 items-center gap-1"
                             onClick={(event) => event.stopPropagation()}
                           >
-                            {job.executionType === 'rover' &&
-                              (job.status === 'queued' || job.status === 'waiting_for_rover') &&
+                            {canOpenRoverJob(job) &&
                               (!child ||
                                 job.childProgress?.[0]?.scenarioId === child.scenarioId) && (
                                 <Button
@@ -1899,14 +1946,40 @@ const RunEvaluation = () => {
       )}
 
       {done && (
-        <Card className="border-success/50">
+        <Card
+          className={
+            completionHasErrors
+              ? 'border-amber-500/50'
+              : completionSummary?.stoppedJobs
+                ? 'border-border'
+                : 'border-success/50'
+          }
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-success" />
+              {completionHasErrors ? (
+                <X className="h-6 w-6 text-destructive" />
+              ) : completionSummary?.stoppedJobs ? (
+                <Clock className="h-6 w-6 text-muted-foreground" />
+              ) : (
+                <CheckCircle2 className="h-6 w-6 text-success" />
+              )}
               <div>
-                <p className="font-medium">Evaluation Complete</p>
+                <p className="font-medium">
+                  {completionHasErrors
+                    ? 'Completed with errors'
+                    : completionSummary?.stoppedJobs
+                      ? completionSummary.completedJobs
+                        ? 'Completed with stopped scenarios'
+                        : 'Run stopped'
+                      : 'Evaluation Complete'}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  All scenarios have been evaluated successfully.
+                  {completionSummary
+                    ? `${completionSummary.totalJobs}/${completionSummary.totalJobs} finished, ${completionSummary.completedJobs} completed, ${Math.max(0, completionSummary.failedJobs - completionSummary.stoppedJobs)} error(s), ${completionSummary.stoppedJobs} stopped.`
+                    : completionHasErrors
+                      ? 'The evaluation ended with errors. Review the log for details.'
+                      : 'All scenarios have finished. Review the results for their outcomes.'}
                 </p>
               </div>
               <Button asChild className="ml-auto">

@@ -32,16 +32,14 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release": "npm run build && changeset publish",
-    "website:dev": "npm run dev -w @inspectr/mcplab-website",
-    "website:build": "npm run build -w @inspectr/mcplab-website",
-    "website:preview": "npm run preview -w @inspectr/mcplab-website",
     "validate:configs": "node scripts/validate-configs.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.19.17",
     "@changesets/cli": "^2.31.0",
     "oxfmt": "^0.71.0",
     "oxlint": "^1.86.0",
-    "tsx": "^4.23.13",
-    "typescript": "^5.9.3"
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

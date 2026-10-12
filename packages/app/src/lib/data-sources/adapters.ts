@@ -1377,6 +1377,7 @@ export function fromCoreResultsJson(
         passed: run.pass,
         outcome: run.outcome,
         error: run.error,
+        stopReason: run.stop_reason,
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
         toolTokenUsage: tokenUsage.tool,
@@ -1429,7 +1430,7 @@ export function fromCoreResultsJson(
       provider: scenario.provider,
       model: scenario.model,
       runs,
-      passRate: scenario.pass_rate,
+      passRate: runs.some((run) => run.outcome !== 'stopped') ? scenario.pass_rate : null,
       avgToolCalls,
       avgDuration,
       checkCounts: countChecks(runs),
@@ -1468,6 +1469,8 @@ export function fromCoreResultsJson(
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,
+    rerunNewConversationBeforeStart: results.metadata.rerun_new_conversation_before_start,
+    rerunNewConversationBetweenScenarios: results.metadata.rerun_new_conversation_between_scenarios,
     rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
     timestamp: results.metadata.timestamp,
     runNote: results.metadata.run_note,
@@ -1475,7 +1478,13 @@ export function fromCoreResultsJson(
     scenarios,
     assistantTokenUsage: toTokenUsage(runAssistantUsageAcc),
     toolTokenUsage: toTokenUsage(runToolUsageAcc),
-    overallPassRate: results.summary.pass_rate,
+    overallPassRate:
+      results.summary.total_runs <=
+      (results.summary.outcomes?.stopped ??
+        scenarios.flatMap((scenario) => scenario.runs).filter((run) => run.outcome === 'stopped')
+          .length)
+        ? null
+        : results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
@@ -1506,6 +1515,7 @@ export function fromCoreScenarioRunPreview(
     passed: run.pass,
     outcome: run.outcome,
     error: run.error,
+    stopReason: run.stop_reason,
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,
     toolTokenUsage: tokenUsage.tool,

@@ -10,6 +10,7 @@ import {
   createRunId,
   runAll,
   applyRuntimeServerOverrides,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
   type BrowserAgentConfig,
   type ScenarioAttachment,
@@ -207,7 +208,7 @@ export async function handleRunsRoutes(params: {
       Number.isFinite(lastDaysRaw) && lastDaysRaw > 0 ? Math.floor(lastDaysRaw) : undefined;
     const summaries = listRuns(settings.runsDir, { lastDays });
     const pending = new Set(normalizedConfigs.map((entry) => entry.id));
-    const byConfigId: Record<string, number> = {};
+    const byConfigId: Record<string, number | null> = {};
     for (const summary of summaries) {
       if (pending.size === 0) break;
       const summaryPath = String(summary.configPath ?? '').trim();
@@ -509,7 +510,30 @@ export async function handleRunsRoutes(params: {
         ? body.newConversationBetweenScenarios
         : undefined;
     const newConversationBeforeStart =
-      typeof body.newConversationBeforeStart === 'boolean' ? body.newConversationBeforeStart : true;
+      typeof body.newConversationBeforeStart === 'boolean'
+        ? body.newConversationBeforeStart
+        : undefined;
+    const supportsNewChat = (agent: BrowserAgentConfig) =>
+      Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, agent.provider) ||
+      Boolean(browserProviders?.[agent.provider]?.newConversation);
+    const unsupportedNewChat = browserAgents.find(({ agent }) => {
+      const profile = browserProviders?.[agent.provider];
+      const needsNewChat =
+        (newConversationBeforeStart ?? supportsNewChat(agent)) ||
+        (selectedConfig.scenarios.length > 1 &&
+          (conversationOverride ??
+            agent.newConversationBetweenScenarios ??
+            supportsNewChat(agent)));
+      return needsNewChat && profile && !supportsNewChat(agent);
+    });
+    if (unsupportedNewChat) {
+      const profile = browserProviders[unsupportedNewChat.agent.provider];
+      asJson(res, 400, {
+        code: 'new_conversation_unsupported',
+        error: `${profile.name} has no New Chat support. Choose Continue the same conversation or learn a New Chat action.`
+      });
+      return true;
+    }
     const evaluationRunId = createRunId();
     const baseRunParams = {
       evaluationRunId,
@@ -521,7 +545,9 @@ export async function handleRunsRoutes(params: {
       runNote,
       oauthServerNames,
       serverOverrideAll,
-      scenarioServerOverrides
+      scenarioServerOverrides,
+      newConversationBeforeStart,
+      newConversationBetweenScenarios: conversationOverride
     };
     const runParamsList =
       browserAgents.length === 0
@@ -538,7 +564,8 @@ export async function handleRunsRoutes(params: {
                 name,
                 provider: agent.provider,
                 url: agent.url,
-                ...(browserProviders[agent.provider]
+                ...(browserProviders[agent.provider]?.source !== 'builtin' &&
+                browserProviders[agent.provider]
                   ? {
                       providerRevision: browserProviders[agent.provider].learned.updatedAt
                     }
@@ -546,8 +573,10 @@ export async function handleRunsRoutes(params: {
               },
               roverScenarios: structuredClone(selectedConfig.scenarios),
               roverNewConversationBetweenScenarios:
-                conversationOverride ?? agent.newConversationBetweenScenarios ?? true,
-              roverNewConversationBeforeStart: newConversationBeforeStart
+                conversationOverride ??
+                agent.newConversationBetweenScenarios ??
+                supportsNewChat(agent),
+              roverNewConversationBeforeStart: newConversationBeforeStart ?? supportsNewChat(agent)
             }))
           ];
     const responses = runParamsList.map((runParams) =>

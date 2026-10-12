@@ -68,7 +68,11 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
-import { createRunQueueService } from './run-queue-domain.js';
+import {
+  createRunQueueService,
+  type RoverAssignmentWorker,
+  type RunQueueService
+} from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
@@ -125,7 +129,46 @@ import {
 } from './browser-provider-learning.js';
 import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
 import { createRoverConnectionService } from './rover-connection.js';
-import type { RoverSocketMessage } from './rover-connection.js';
+import type { RoverConnection, RoverSocketMessage } from './rover-connection.js';
+
+function roverAssignmentWorker(connection: RoverConnection): RoverAssignmentWorker {
+  return {
+    connectionId: connection.connectionId,
+    registrationVersion: connection.registrationVersion,
+    provider: connection.registration.provider,
+    providerRevision: connection.registration.providerRevision,
+    capabilities: connection.registration.capabilities
+  };
+}
+
+export function assignRegisteredRoverJob(
+  queue: Pick<RunQueueService, 'assignRoverJob'>,
+  connection: RoverConnection | null,
+  send: (message: RoverSocketMessage) => boolean
+): RunJob | null {
+  if (!connection) return null;
+  return queue.assignRoverJob(
+    connection.registration.provider,
+    send,
+    roverAssignmentWorker(connection)
+  );
+}
+
+export function roverCompletionReleasedJob(job: RunJob | undefined): boolean {
+  return job !== undefined && ['completed', 'stopped', 'error'].includes(job.status);
+}
+
+export function releaseRegisteredRoverJob(
+  queue: Pick<RunQueueService, 'assignRoverJob'>,
+  connection: RoverConnection | null,
+  send: (message: RoverSocketMessage) => boolean,
+  activeJobId: string | null,
+  releasedJobId: string
+): string | null {
+  // Cancelling waiting work must not release another job's running slot.
+  if (activeJobId && activeJobId !== releasedJobId) return activeJobId;
+  return assignRegisteredRoverJob(queue, connection, send)?.id ?? null;
+}
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -175,6 +218,7 @@ export async function startAppServer(options: AppServerOptions) {
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const liveTestService = new LiveTestService({
     runsDir: settings.runsDir,
+    evalsDir: settings.evalsDir,
     cliVersion: pkgVersion,
     readScenarios: (input) => {
       if (!input?.evaluationRunId) return readLibraries(settings.librariesDir).scenarios;
@@ -258,15 +302,7 @@ export async function startAppServer(options: AppServerOptions) {
     assignRoverJob: (provider, worker) => {
       const connection = roverConnection.connection();
       const effectiveWorker =
-        worker ??
-        (connection
-          ? {
-              connectionId: connection.connectionId,
-              provider: connection.registration.provider,
-              providerRevision: connection.registration.providerRevision,
-              capabilities: connection.registration.capabilities
-            }
-          : undefined);
+        worker ?? (connection ? roverAssignmentWorker(connection) : undefined);
       const assigned = runQueueService.assignRoverJob(
         provider,
         (message: RoverSocketMessage) => roverConnection.send(message),
@@ -275,33 +311,21 @@ export async function startAppServer(options: AppServerOptions) {
       if (assigned) activeRoverJobId = assigned.id;
       return assigned;
     },
-    onRoverJobReleased: (provider) => {
-      const connection = roverConnection.connection();
-      const next = runQueueService.assignRoverJob(
-        provider,
+    onRoverJobReleased: (_provider, jobId) => {
+      activeRoverJobId = releaseRegisteredRoverJob(
+        runQueueService,
+        roverConnection.connection(),
         (message: RoverSocketMessage) => roverConnection.send(message),
-        connection
-          ? {
-              connectionId: connection.connectionId,
-              provider: connection.registration.provider,
-              providerRevision: connection.registration.providerRevision,
-              capabilities: connection.registration.capabilities
-            }
-          : undefined
+        activeRoverJobId,
+        jobId
       );
-      activeRoverJobId = next?.id ?? null;
     }
   });
   let activeRoverJobId: string | null = null;
   const roverConnection = createRoverConnectionService({
     log: (message) => console.log(message),
     onRegister: (connection) => {
-      const worker = {
-        connectionId: connection.connectionId,
-        provider: connection.registration.provider,
-        providerRevision: connection.registration.providerRevision,
-        capabilities: connection.registration.capabilities
-      };
+      const worker = roverAssignmentWorker(connection);
       runQueueService.rebindRoverLeases(connection.registration.provider, worker);
       const assigned = runQueueService.assignRoverJob(
         connection.registration.provider,
@@ -317,12 +341,7 @@ export async function startAppServer(options: AppServerOptions) {
     },
     onMessage: (connection, message) => {
       if (message.type === 'register_update' && !activeRoverJobId) {
-        const worker = {
-          connectionId: connection.connectionId,
-          provider: connection.registration.provider,
-          providerRevision: connection.registration.providerRevision,
-          capabilities: connection.registration.capabilities
-        };
+        const worker = roverAssignmentWorker(connection);
         const assigned = runQueueService.assignRoverJob(
           connection.registration.provider,
           (payload: RoverSocketMessage) => roverConnection.send(payload),
@@ -349,18 +368,16 @@ export async function startAppServer(options: AppServerOptions) {
           message,
           connection.registration.provider,
           (payload: RoverSocketMessage) => roverConnection.send(payload),
-          {
-            connectionId: connection.connectionId,
-            provider: connection.registration.provider,
-            providerRevision: connection.registration.providerRevision,
-            capabilities: connection.registration.capabilities
-          }
+          roverAssignmentWorker(connection)
         );
         if (
           message.type === 'complete' &&
           typeof message.jobId === 'string' &&
-          activeRoverJobId === message.jobId
+          activeRoverJobId === message.jobId &&
+          roverCompletionReleasedJob(runQueueService.jobs.get(message.jobId))
         ) {
+          // A stale lease can complete after this job was reassigned. Only a
+          // completion accepted by the queue domain releases the tracked slot.
           activeRoverJobId = nextJobId;
         }
       }
@@ -564,7 +581,7 @@ export async function startAppServer(options: AppServerOptions) {
         try {
           const profile = validateBrowserProviderProfile(rawProfile);
           const existing = readLibraries(settings.librariesDir).browserProviders;
-          const wasExisting = Boolean(existing[profile.id]);
+          const wasExisting = existing[profile.id]?.source === 'workspace';
           const agentBody = body.agent as
             | { id?: unknown; name?: unknown; url?: unknown }
             | undefined;

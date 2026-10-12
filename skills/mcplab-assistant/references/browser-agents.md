@@ -17,6 +17,8 @@ custom-research-chat-browser:
 
 `browser-providers/<provider-id>.yaml` contains one deterministic interaction profile per file. The profile is provider-specific and must come from Rover capture, local validation, or an explicitly reviewed update. Do not copy the example values below into a real workspace.
 
+MCP Lab includes the native Rover profiles for `claude` and `chatgpt-com` by default. They are available through the library API without workspace files and are not written to YAML automatically. A workspace profile with the same provider id overrides the bundled profile and is persisted under `browser-providers/`.
+
 ## Provider profile shape
 
 ```yaml

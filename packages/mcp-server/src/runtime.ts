@@ -32,7 +32,8 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
-  parseBrowserProviderProfiles,
+  readBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   updateEvaluationConfigFile,
@@ -41,6 +42,8 @@ import {
   readTestCaseFile,
   updateTestCaseFile,
   buildScenarioEntry,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -112,7 +115,7 @@ const GenericObjectSchema = z.object({}).passthrough();
 const ResultsSummarySchema = z.object({
   total_scenarios: z.number().int().nonnegative(),
   total_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
+  pass_rate: z.number().nullable(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
 });
@@ -134,7 +137,8 @@ const MetricSummarySchema = z.object({
   total_runs: z.number().int().nonnegative(),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
+  stopped_runs: z.number().int().nonnegative().optional(),
+  pass_rate: z.number().nullable(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
 });
@@ -158,7 +162,7 @@ const CompareRowSchema = z.object({
   key: z.string(),
   scenario_id: z.string(),
   agent: z.string(),
-  classification: z.enum(['regressed', 'improved', 'unchanged', 'new', 'missing']),
+  classification: z.enum(['regressed', 'improved', 'unchanged', 'new', 'missing', 'not_evaluated']),
   left: MetricSummarySchema.nullable(),
   right: MetricSummarySchema.nullable(),
   deltas: z.object({
@@ -2006,7 +2010,7 @@ export function registerTools(server: McpServer): void {
           z.object({
             scenario_id: z.string(),
             agent: z.string(),
-            pass_rate: z.number(),
+            pass_rate: z.number().nullable(),
             tool_usage_frequency: z.record(z.number())
           })
         ),
@@ -2365,7 +2369,7 @@ export function registerTools(server: McpServer): void {
           left: MetricSummarySchema,
           right: MetricSummarySchema,
           deltas: z.object({
-            pass_rate: z.number(),
+            pass_rate: z.number().nullable(),
             failed_runs: z.number(),
             avg_tool_calls_per_run: z.number(),
             avg_tool_latency_ms: z.number().nullable()
@@ -2375,7 +2379,8 @@ export function registerTools(server: McpServer): void {
             improved: z.number().int().nonnegative(),
             unchanged: z.number().int().nonnegative(),
             new: z.number().int().nonnegative(),
-            missing: z.number().int().nonnegative()
+            missing: z.number().int().nonnegative(),
+            not_evaluated: z.number().int().nonnegative()
           })
         }),
         regressions: z.array(CompareRowSchema),
@@ -2977,7 +2982,7 @@ export function registerTools(server: McpServer): void {
             z.object({
               scenario_id: z.string(),
               agent: z.string(),
-              pass_rate: z.number()
+              pass_rate: z.number().nullable()
             })
           )
           .optional()
@@ -3473,7 +3478,6 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const browserProvidersDir = join(bundleRoot, 'browser-providers');
   const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
@@ -3484,7 +3488,7 @@ function readLibrary(
     : {};
   const browserProviders =
     kind === 'all' || kind === 'browser_providers'
-      ? readBrowserProviderProfiles(browserProvidersDir)
+      ? mergeBrowserProviderProfiles(readBrowserProviderProfiles(bundleRoot))
       : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
@@ -3534,32 +3538,6 @@ function readLibrary(
   return out;
 }
 
-function readBrowserProviderProfiles(
-  directory: string
-): Record<string, ReturnType<typeof parseBrowserProviderProfiles>[string]> {
-  if (!existsSync(directory)) return {};
-  const profiles: Record<string, ReturnType<typeof parseBrowserProviderProfiles>[string]> = {};
-  const files = readdirSync(directory)
-    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-    .sort();
-  for (const file of files) {
-    const id = basename(file, extname(file));
-    const fullPath = join(directory, file);
-    const parsed = (parseYaml(readFileSync(fullPath, 'utf8')) as Record<string, unknown>) ?? {};
-    const profile = parseBrowserProviderProfiles({ [id]: parsed })[id];
-    const stats = statSync(fullPath);
-    profiles[id] = {
-      ...profile,
-      learned: {
-        ...profile.learned,
-        createdAt: new Date(stats.birthtimeMs || stats.ctimeMs).toISOString(),
-        updatedAt: new Date(stats.mtimeMs).toISOString()
-      }
-    };
-  }
-  return profiles;
-}
-
 function getLibraryItem(
   bundleRoot: string,
   kind: 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios',
@@ -3567,9 +3545,23 @@ function getLibraryItem(
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
     const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
+    const builtIn =
+      kind === 'browser_providers' && Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, id)
+        ? DEFAULT_BROWSER_PROVIDER_PROFILES[id]
+        : undefined;
     const file = directory
       ? findBrowserProviderFile(directory, id)
       : join(bundleRoot, `${kind}.yaml`);
+    if (builtIn && !existsSync(file)) {
+      const content = structuredClone(builtIn);
+      return {
+        bundleRoot,
+        kind,
+        id,
+        yaml: serializeBrowserProviderProfile(content).trimEnd(),
+        content: content as unknown as Record<string, unknown>
+      };
+    }
     if (!existsSync(file)) {
       throw new Error(`Library file not found: ${file}`);
     }
@@ -3579,7 +3571,7 @@ function getLibraryItem(
       throw new Error(`'${id}' not found in ${file}`);
     }
     const normalizedEntry =
-      kind === 'browser_providers' ? readBrowserProviderProfiles(dirname(file))[id] : parsed[id];
+      kind === 'browser_providers' ? readBrowserProviderProfiles(bundleRoot)[id] : parsed[id];
     if (!normalizedEntry) throw new Error(`'${id}' not found in ${file}`);
     return {
       bundleRoot,

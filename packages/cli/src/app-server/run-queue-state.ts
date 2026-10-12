@@ -14,6 +14,8 @@ type RunParamsBase = {
   oauthServerNames?: string[];
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
+  newConversationBeforeStart?: boolean;
+  newConversationBetweenScenarios?: boolean;
 };
 
 export type McplabRunParams = RunParamsBase & {
@@ -49,6 +51,7 @@ export type RoverLeaseState = 'offered' | 'accepted' | 'running';
 export interface RoverLease {
   leaseId: string;
   connectionId: string;
+  registrationVersion?: number;
   state: RoverLeaseState;
   expiresAt: string;
   offeredAt: string;

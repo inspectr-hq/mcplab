@@ -57,6 +57,12 @@ export function projectEvaluationJournal(params: {
   });
   if (params.executionStatus || stoppedExecutions.size > 0)
     results.metadata.execution_status = 'stopped';
+  const start = events.find((event) => event.type === 'evaluation_started');
+  if (typeof start?.newConversationBeforeStart === 'boolean')
+    results.metadata.rerun_new_conversation_before_start = start.newConversationBeforeStart;
+  if (typeof start?.newConversationBetweenScenarios === 'boolean')
+    results.metadata.rerun_new_conversation_between_scenarios =
+      start.newConversationBetweenScenarios;
   persistAppRunArtifacts({
     runDir: join(params.runsDir, params.evaluationRunId),
     results,

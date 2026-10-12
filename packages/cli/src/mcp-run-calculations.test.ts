@@ -91,6 +91,50 @@ function makeLoadedRun(
 }
 
 describe('mcp run calculation helpers', () => {
+  it('does not report an entirely stopped scenario as a regression', () => {
+    const passed = makeRunResult(0, true, 0, []);
+    const stopped = { ...makeRunResult(0, false, 0, []), outcome: 'stopped' as const };
+    const report = buildCompareRunsReport({
+      left: makeLoadedRun('left', '2026-10-12', [makeScenario('s1', 'a1', [passed])]),
+      right: makeLoadedRun('right', '2026-10-12', [makeScenario('s1', 'a1', [stopped])]),
+      topN: 10,
+      includeDetails: true
+    });
+    expect(report).toMatchObject({
+      regressions: [],
+      improvements: [],
+      summary: {
+        right: { pass_rate: null },
+        deltas: { pass_rate: null },
+        classification_counts: { not_evaluated: 1 }
+      },
+      details: [{ classification: 'not_evaluated', deltas: { pass_rate: null } }]
+    });
+  });
+  it('excludes stopped runs from failures and comparison regressions', () => {
+    const passed = makeRunResult(0, true, 1, [10]);
+    const stopped = { ...makeRunResult(1, false, 0, []), outcome: 'stopped' as const };
+    const summary = computeMetricSummary([makeScenario('s1', 'a1', [passed, stopped])]);
+    expect(summary).toMatchObject({
+      total_runs: 2,
+      passed_runs: 1,
+      failed_runs: 0,
+      stopped_runs: 1,
+      pass_rate: 1
+    });
+    const report = buildCompareRunsReport({
+      left: makeLoadedRun('left', '2026-10-12T00:00:00Z', [makeScenario('s1', 'a1', [passed])]),
+      right: makeLoadedRun('right', '2026-10-12T00:01:00Z', [
+        makeScenario('s1', 'a1', [passed, stopped])
+      ]),
+      topN: 10,
+      includeDetails: true
+    });
+    expect(report).toMatchObject({
+      regressions: [],
+      summary: { classification_counts: { unchanged: 1 } }
+    });
+  });
   it('computes summary metrics', () => {
     const summary = computeMetricSummary([
       makeScenario('s1', 'a1', [

@@ -25,7 +25,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
       agentId: summary.agentIds?.[index] ?? '',
       agentName: summary.agentIds?.[index] ?? '',
       runs: [],
-      passRate: 0,
+      passRate: null,
       avgToolCalls: 0,
       avgDuration: 0
     })),

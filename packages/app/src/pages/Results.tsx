@@ -649,7 +649,7 @@ const Results = () => {
       if (sortBy === 'id') cmp = a.id.localeCompare(b.id);
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'passRate') cmp = (a.overallPassRate ?? -1) - (b.overallPassRate ?? -1);
       if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
       if (sortBy === 'avgToolCalls') cmp = a.avgToolCalls - b.avgToolCalls;
       return sortDir === 'asc' ? cmp : -cmp;
@@ -1017,7 +1017,7 @@ const Results = () => {
             <Table className="table-auto">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="results-table-column-run-id w-[25rem] max-w-[25rem]">
+                  <TableHead className="results-table-column-run-id w-[30rem] max-w-[30rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1027,7 +1027,7 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead className="results-table-column-evaluation min-w-0">
+                  <TableHead className="results-table-column-evaluation w-[20rem] max-w-[20rem] min-w-0">
                     Evaluation
                   </TableHead>
                   <TableHead className="results-table-column-timestamp w-[11rem] min-w-[11rem] max-w-[11rem]">
@@ -1114,7 +1114,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell className="results-table-column-run-id w-[25rem] max-w-[25rem]">
+                        <TableCell className="results-table-column-run-id w-[30rem] max-w-[30rem]">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1135,7 +1135,7 @@ const Results = () => {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="results-table-column-evaluation min-w-0 text-[11px] text-muted-foreground">
+                        <TableCell className="results-table-column-evaluation w-[20rem] max-w-[20rem] min-w-0 text-[11px] text-muted-foreground">
                           {(() => {
                             const scope = runScopesById.get(item.run.id) ?? {
                               scenarioCount: 0,

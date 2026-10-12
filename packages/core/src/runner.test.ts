@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { runAgentScenarioMock } = vi.hoisted(() => ({ runAgentScenarioMock: vi.fn() }));
+vi.mock('./agent.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./agent.js')>()),
+  runAgentScenario: runAgentScenarioMock
+}));
 import {
   buildFallbackScenarioRequestId,
   buildJudgeBatchPayload,
@@ -20,6 +26,183 @@ afterEach(() => {
 });
 
 describe('runAll agent dispatch', () => {
+  it('keeps an evaluated run when trace cleanup fails after a late child stop', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-recorded-stop-'));
+    temporaryRunDirs.push(runsDir);
+    const controller = new AbortController();
+    const events: any[] = [];
+    const endTrace = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new Error('Trace cleanup failed');
+      })
+      .mockResolvedValue(undefined);
+    runAgentScenarioMock.mockResolvedValueOnce({
+      finalText: 'done',
+      toolCalls: [],
+      toolDurationsMs: [],
+      availableToolNames: [],
+      toolSequence: [],
+      traceMessages: [],
+      traceModel: 'test',
+      traceProvider: 'openai',
+      traceStartedAt: '2026-10-12T12:00:00Z',
+      traceEndedAt: '2026-10-12T12:00:01Z'
+    });
+    const result = await runAll(
+      {
+        servers: {},
+        agents: { agent: { provider: 'openai', model: 'test' } },
+        scenarios: [{ id: 's1', prompt: 'test', agent: 'agent', servers: [] }]
+      } as any,
+      {
+        runsPerScenario: 3,
+        configHash: 'test',
+        cliVersion: 'test',
+        runsDir,
+        scenarioSignal: () => controller.signal,
+        onProgress: (event) => {
+          events.push(event);
+        },
+        traceExporter: {
+          startScenario: () => ({ end: endTrace }),
+          flush: async () => ({ traceUrls: {} })
+        }
+      }
+    );
+    expect(result.results.scenarios[0].runs).toEqual([
+      expect.objectContaining({ run_index: 0, pass: true, outcome: 'passed', final_text: 'done' })
+    ]);
+    expect(result.results.summary.total_runs).toBe(1);
+    expect(endTrace).toHaveBeenCalledOnce();
+    expect(events.filter((event) => event.type === 'scenario_run_finished')).toEqual([
+      expect.objectContaining({ runIndex: 0, outcome: 'passed' })
+    ]);
+  });
+
+  it.each([1, 3])(
+    'reports a stopped outcome when a child is aborted with %i runs requested',
+    async (runsPerScenario) => {
+      const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-stop-'));
+      temporaryRunDirs.push(runsDir);
+      const controller = new AbortController();
+      const events: any[] = [];
+      runAgentScenarioMock.mockImplementationOnce(async () => {
+        controller.abort();
+        throw new Error('Stopped by user');
+      });
+      const result = await runAll(
+        {
+          servers: {},
+          agents: { agent: { provider: 'openai', model: 'test' } },
+          scenarios: [{ id: 's1', prompt: 'test', agent: 'agent', servers: [] }]
+        } as any,
+        {
+          runsPerScenario,
+          configHash: 'test',
+          cliVersion: 'test',
+          runsDir,
+          scenarioSignal: () => controller.signal,
+          onProgress: (event) => {
+            events.push(event);
+          },
+          traceExporter: {
+            startScenario: () => ({ end: async () => undefined }),
+            flush: async () => ({ traceUrls: {} })
+          }
+        }
+      );
+      expect(result.results.summary.outcomes).toMatchObject({ stopped: 1, error: 0 });
+      expect(events.filter((event) => event.type === 'scenario_run_finished')).toEqual([
+        expect.objectContaining({ outcome: 'stopped', pass: false, runIndex: 0 })
+      ]);
+      expect(events.filter((event) => event.type === 'scenario_run_started')).toHaveLength(1);
+    }
+  );
+
+  it('continues to the next scenario after a child stop and retains ordinary errors', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-stop-next-'));
+    temporaryRunDirs.push(runsDir);
+    const controller = new AbortController();
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    runAgentScenarioMock
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new Error('Stopped by user');
+      })
+      .mockRejectedValueOnce(new Error('Scenario failed'));
+    try {
+      const result = await runAll(
+        {
+          servers: {},
+          agents: { agent: { provider: 'openai', model: 'test' } },
+          scenarios: ['stopped', 'next'].map((id) => ({
+            id,
+            prompt: 'test',
+            agent: 'agent',
+            servers: []
+          }))
+        } as any,
+        {
+          runsPerScenario: 1,
+          configHash: 'test',
+          cliVersion: 'test',
+          runsDir,
+          scenarioSignal: (scenario) => (scenario.id === 'stopped' ? controller.signal : undefined),
+          traceExporter: {
+            startScenario: () => ({ end: async () => undefined }),
+            flush: async () => ({ traceUrls: {} })
+          }
+        }
+      );
+      expect(result.results.summary.outcomes).toMatchObject({ stopped: 1, error: 1 });
+      expect(result.results.scenarios.map((scenario) => scenario.runs[0])).toEqual([
+        expect.objectContaining({ outcome: 'stopped', failures: [] }),
+        expect.objectContaining({
+          outcome: 'error',
+          error: 'Scenario failed',
+          failures: ['Scenario error: Scenario failed']
+        })
+      ]);
+      expect(logError).toHaveBeenCalledTimes(1);
+    } finally {
+      logError.mockRestore();
+    }
+  });
+
+  it('records a child stopped during asynchronous abort cleanup', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-late-stop-'));
+    temporaryRunDirs.push(runsDir);
+    const controller = new AbortController();
+    const aborted = new Error('Request aborted');
+    aborted.name = 'AbortError';
+    runAgentScenarioMock.mockRejectedValueOnce(aborted);
+    const result = await runAll(
+      {
+        servers: {},
+        agents: { agent: { provider: 'openai', model: 'test' } },
+        scenarios: [{ id: 's1', prompt: 'test', agent: 'agent', servers: [] }]
+      } as any,
+      {
+        runsPerScenario: 3,
+        configHash: 'test',
+        cliVersion: 'test',
+        runsDir,
+        scenarioSignal: () => controller.signal,
+        traceExporter: {
+          startScenario: () => ({
+            end: async () => {
+              controller.abort();
+            }
+          }),
+          flush: async () => ({ traceUrls: {} })
+        }
+      }
+    );
+    expect(result.results.summary.outcomes).toMatchObject({ stopped: 1 });
+  });
+
   it('omits a child scenario-agent result when its child signal is already stopped', async () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-child-stop-'));
     temporaryRunDirs.push(runsDir);

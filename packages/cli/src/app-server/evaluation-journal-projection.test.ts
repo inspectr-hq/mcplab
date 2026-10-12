@@ -28,6 +28,13 @@ describe('projectEvaluationJournal', () => {
         scenarios: []
       });
       appendExecutionEvent(join(root, 'run-1'), {
+        eventId: 'evaluation-start',
+        type: 'evaluation_started',
+        ts: new Date().toISOString(),
+        newConversationBeforeStart: false,
+        newConversationBetweenScenarios: false
+      });
+      appendExecutionEvent(join(root, 'run-1'), {
         eventId: 'execution-1',
         type: 'execution_completed',
         ts: new Date().toISOString(),
@@ -54,6 +61,8 @@ describe('projectEvaluationJournal', () => {
       });
       expect(projected?.metadata.run_id).toBe('run-1');
       expect(projected?.metadata.config_name).toBe('Batch quality');
+      expect(projected?.metadata.rerun_new_conversation_before_start).toBe(false);
+      expect(projected?.metadata.rerun_new_conversation_between_scenarios).toBe(false);
       expect(projected?.metadata).not.toHaveProperty('run_note');
       expect(projected?.summary.total_runs).toBe(2);
       expect(readFileSync(join(root, 'run-1', 'trace.jsonl'), 'utf8')).toContain(
@@ -206,8 +215,8 @@ describe('projectEvaluationJournal', () => {
       });
       expect(projected?.metadata.execution_status).toBe('stopped');
       expect(projected?.summary.total_runs).toBe(3);
-      expect(projected?.summary.pass_rate).toBeCloseTo(2 / 3);
-      expect(projected?.summary.outcomes).toMatchObject({ passed: 2, error: 1 });
+      expect(projected?.summary.pass_rate).toBe(1);
+      expect(projected?.summary.outcomes).toMatchObject({ passed: 2, stopped: 1, error: 0 });
       expect(
         JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8')).metadata.execution_status
       ).toBe('stopped');

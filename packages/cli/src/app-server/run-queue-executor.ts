@@ -1,4 +1,4 @@
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import {
   applyRuntimeServerOverrides,
@@ -12,6 +12,7 @@ import {
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { resultConfigPath } from './workspace-paths.js';
 import { recordEvaluationExecution } from './evaluation-journal-writer.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
@@ -373,9 +374,7 @@ export async function executeRunJob(params: {
         });
       }
     });
-    const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
-    const relativeConfigPath = relativeConfigPathRaw.replace(/\\/g, '/').replace(/^\.\/+/, '');
-    results.metadata.config_path = relativeConfigPath || configPath;
+    results.metadata.config_path = resultConfigPath(configPath, settings.evalsDir);
     if (loaded.config.name && loaded.config.name.trim().length > 0) {
       results.metadata.config_name = loaded.config.name.trim();
     }
@@ -414,11 +413,9 @@ export async function executeRunJob(params: {
       ts: new Date().toISOString(),
       payload: { message: `Writing results to ${runDir}` }
     });
-    const traceRecords = getScenarioRunTraceRecords(
-      results.metadata.run_id,
-      settings.runsDir,
-      { requireResults: false }
-    ) as ScenarioRunTraceRecord[];
+    const traceRecords = getScenarioRunTraceRecords(results.metadata.run_id, settings.runsDir, {
+      requireResults: false
+    }) as ScenarioRunTraceRecord[];
     if (job.runParams.evaluationRunId) {
       rmSync(runDir, { recursive: true, force: true });
     }
@@ -443,9 +440,7 @@ export async function executeRunJob(params: {
       type: 'log',
       ts: new Date().toISOString(),
       payload: {
-        message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
-          results.summary.pass_rate * 100
-        )}%`
+        message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${results.summary.pass_rate === null ? '– (nothing evaluated)' : `${Math.round(results.summary.pass_rate * 100)}%`}`
       }
     });
     addJobEvent(job, {
@@ -489,6 +484,7 @@ export async function executeRunJob(params: {
       type: 'error',
       ts: new Date().toISOString(),
       payload: {
+        status: aborted ? 'stopped' : 'error',
         message: aborted
           ? 'Run aborted by user'
           : normalizedError instanceof Error
@@ -587,6 +583,14 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
           total: event.runsPerScenario,
           status: 'queued' as const
         };
+  // A stop is terminal for the whole scenario-agent pair, including remaining variance runs.
+  if (
+    current.status === 'stopped' ||
+    (event.type === 'scenario_run_finished' && event.outcome === 'stopped')
+  ) {
+    job.childProgress = upsertQueueChildProgress(existing, { ...current, status: 'stopped' });
+    return;
+  }
   const next: QueueChildProgress = {
     ...current,
     total: event.runsPerScenario,
@@ -617,7 +621,7 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
     case 'scenario_run_finished':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${event.outcome === 'stopped' ? 'STOPPED' : event.pass ? 'PASS' : 'FAIL'} (${
         event.toolCallCount
       } tool call(s))`;
     case 'agent_progress': {

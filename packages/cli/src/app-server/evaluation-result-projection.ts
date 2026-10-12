@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@inspectr/mcplab-core';
 import type { ResultsJson, RunOutcome } from '@inspectr/mcplab-core';
 
 /** Project completed execution snapshots into the single canonical evaluation result. */
@@ -32,17 +33,19 @@ export function projectEvaluationResult(params: {
       ) / totalRuns
     );
   };
-  const outcomes: Record<RunOutcome, number> = {
+  const outcomes: Partial<Record<RunOutcome, number>> = {
     passed: 0,
     failed: failedExecutions,
     incomplete: 0,
-    error: stoppedExecutions
+    error: 0,
+    stopped: stoppedExecutions
   };
   for (const result of executions) {
     for (const outcome of Object.keys(outcomes) as RunOutcome[]) {
-      outcomes[outcome] += result.summary.outcomes?.[outcome] ?? 0;
+      outcomes[outcome] = (outcomes[outcome] ?? 0) + (result.summary.outcomes?.[outcome] ?? 0);
     }
   }
+  if (outcomes.stopped === 0) delete outcomes.stopped;
   const sourceMetadata = executions[0]?.metadata;
   const configPaths = Array.from(
     new Set(executions.map((result) => result.metadata.config_path).filter(Boolean))
@@ -52,6 +55,16 @@ export function projectEvaluationResult(params: {
   );
   const rerunScenarioIds = Array.from(
     new Set(executions.flatMap((result) => result.metadata.rerun_scenario_ids ?? []))
+  );
+  // Children share evaluation overrides, but Rover snapshots may omit them and
+  // MCP snapshots contain only the overrides for their selected scenarios.
+  const serverOverrideAll = executions.find(
+    (result) => (result.metadata.rerun_server_override_all?.length ?? 0) > 0
+  )?.metadata.rerun_server_override_all;
+  const scenarioServerOverrides = Object.fromEntries(
+    executions.flatMap((result) =>
+      Object.entries(result.metadata.rerun_scenario_server_overrides ?? {})
+    )
   );
   const executionSources = new Set(
     executions.map((result) => result.metadata.execution_source).filter(Boolean)
@@ -112,12 +125,16 @@ export function projectEvaluationResult(params: {
       ...(params.runNote?.trim() ? { run_note: params.runNote.trim() } : {}),
       ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
       ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
+      ...(serverOverrideAll ? { rerun_server_override_all: [...serverOverrideAll] } : {}),
+      ...(Object.keys(scenarioServerOverrides).length > 0
+        ? { rerun_scenario_server_overrides: scenarioServerOverrides }
+        : {}),
       evaluation_run_id: params.runId
     },
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : outcomes.passed / totalRuns,
+      pass_rate: calculatePassRate(outcomes.passed ?? 0, totalRuns, outcomes.stopped),
       avg_tool_calls_per_run: weighted('avg_tool_calls_per_run') ?? 0,
       avg_tool_latency_ms: weighted('avg_tool_latency_ms'),
       outcomes

@@ -13,7 +13,8 @@ function escapeHtml(value: string | number | boolean | null | undefined): string
     .replace(/'/g, '&#39;');
 }
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return '–';
   return `${(value * 100).toFixed(1)}%`;
 }
 
@@ -24,7 +25,13 @@ export function renderHtml(results: ResultsJson): string {
       const passRate = formatPercent(scenario.pass_rate);
       const sequences = Object.keys(scenario.distinct_sequences).length;
       const status =
-        scenario.pass_rate === 1 ? 'pass' : scenario.pass_rate === 0 ? 'fail' : 'mixed';
+        scenario.pass_rate === null
+          ? 'neutral'
+          : scenario.pass_rate === 1
+            ? 'pass'
+            : scenario.pass_rate === 0
+              ? 'fail'
+              : 'mixed';
       return `
         <tr data-status="${status}">
           <td><a href="#scenario-${escapeHtml(scenario.scenario_id)}">${escapeHtml(

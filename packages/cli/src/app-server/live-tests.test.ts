@@ -136,43 +136,49 @@ describe('LiveTestService', () => {
     expect(persistedResults.metadata.evaluation_run_id).toBeUndefined();
   });
 
-  it('projects grouped Rover completion into the canonical evaluation result', async () => {
-    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-group-'));
-    let persisted = 0;
-    const service = new LiveTestService({
-      runsDir,
-      cliVersion: 'test',
-      readScenarios: () => scenarios,
-      persist: () => {
-        persisted += 1;
-      }
-    });
-    const session = service.start({
-      testCaseId: 'plain',
-      client: 'claude',
-      evaluationRunId: 'evaluation-8',
-      configPath: 'evals/plain.yaml',
-      configName: 'Plain evaluation',
-      agentName: 'claude-browser'
-    });
+  it.each(['evals/plain.yaml', '/tmp/evaluations/evals/plain.yaml'])(
+    'projects grouped Rover completion with a relative config path from %s',
+    async (configPath) => {
+      const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-group-'));
+      let persisted = 0;
+      const service = new LiveTestService({
+        runsDir,
+        evalsDir: '/tmp/evaluations',
+        cliVersion: 'test',
+        readScenarios: () => scenarios,
+        persist: () => {
+          persisted += 1;
+        }
+      });
+      const session = service.start({
+        testCaseId: 'plain',
+        client: 'claude',
+        evaluationRunId: 'evaluation-8',
+        configPath,
+        configName: 'Plain evaluation',
+        agentName: 'claude-browser'
+      });
 
-    const completion = await service.complete(session.id, {
-      finalText: 'Antwerp is in Belgium.',
-      startedAt: '2026-09-08T10:00:00.000Z',
-      completedAt: '2026-09-08T10:00:01.000Z'
-    });
+      const completion = await service.complete(session.id, {
+        finalText: 'Antwerp is in Belgium.',
+        startedAt: '2026-09-08T10:00:00.000Z',
+        completedAt: '2026-09-08T10:00:01.000Z'
+      });
 
-    expect(persisted).toBe(0);
-    expect(completion.resultUrl).toBe('/results/evaluation-8');
-    expect(existsSync(join(runsDir, 'evaluation-8', 'results.json'))).toBe(true);
-    const results = JSON.parse(readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8'));
-    expect(results.metadata.run_id).toBe('evaluation-8');
-    expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
-    expect(results.metadata.config_path).toBe('evals/plain.yaml');
-    expect(results.metadata.config_name).toBe('Plain evaluation');
-    expect(results.metadata.rerun_agents).toEqual(['claude-browser']);
-    expect(results.scenarios[0].agent).toBe('claude-browser');
-  });
+      expect(persisted).toBe(0);
+      expect(completion.resultUrl).toBe('/results/evaluation-8');
+      expect(existsSync(join(runsDir, 'evaluation-8', 'results.json'))).toBe(true);
+      const results = JSON.parse(
+        readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8')
+      );
+      expect(results.metadata.run_id).toBe('evaluation-8');
+      expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
+      expect(results.metadata.config_path).toBe('evals/plain.yaml');
+      expect(results.metadata.config_name).toBe('Plain evaluation');
+      expect(results.metadata.rerun_agents).toEqual(['claude-browser']);
+      expect(results.scenarios[0].agent).toBe('claude-browser');
+    }
+  );
 
   it('rejects conflicting completion data', async () => {
     const service = new LiveTestService({

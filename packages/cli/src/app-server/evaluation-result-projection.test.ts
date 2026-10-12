@@ -24,6 +24,42 @@ function execution(runId: string, passed: number, total: number): ResultsJson {
 }
 
 describe('projectEvaluationResult', () => {
+  it.each([false, true])(
+    'preserves MCP overrides in grouped results, Rover first: %s',
+    (roverFirst) => {
+      const mcp = execution('llm-1', 1, 1);
+      mcp.metadata.rerun_server_override_all = ['replacement-server'];
+      mcp.metadata.rerun_scenario_server_overrides = { 'scn-1': ['scenario-server'] };
+      const rover = execution('rover-1', 1, 1);
+      const result = projectEvaluationResult({
+        evaluationRunId: 'evaluation-1',
+        runId: 'run-1',
+        executions: roverFirst ? [rover, mcp] : [mcp, rover]
+      });
+      expect(result.metadata.rerun_server_override_all).toEqual(['replacement-server']);
+      expect(result.metadata.rerun_scenario_server_overrides).toEqual({
+        'scn-1': ['scenario-server']
+      });
+    }
+  );
+
+  it('merges scenario overrides from separate execution snapshots', () => {
+    const first = execution('llm-1', 1, 1);
+    const second = execution('llm-2', 1, 1);
+    first.metadata.rerun_scenario_server_overrides = { 'scn-1': ['server-a'] };
+    second.metadata.rerun_scenario_server_overrides = { 'scn-2': ['server-b'] };
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      executions: [first, second]
+    });
+    expect(result.metadata.rerun_scenario_server_overrides).toEqual({
+      'scn-1': ['server-a'],
+      'scn-2': ['server-b']
+    });
+    expect(result.metadata).not.toHaveProperty('rerun_server_override_all');
+  });
+
   it('only includes an explicitly entered run note', () => {
     const withoutNote = projectEvaluationResult({
       evaluationRunId: 'evaluation-1',
@@ -54,6 +90,8 @@ describe('projectEvaluationResult', () => {
     expect(result.summary.pass_rate).toBe(0.5);
     expect(result.summary.outcomes).toEqual({ passed: 1, failed: 1, incomplete: 0, error: 0 });
     expect(result.metadata).not.toHaveProperty('child_run_ids');
+    expect(result.metadata).not.toHaveProperty('rerun_server_override_all');
+    expect(result.metadata).not.toHaveProperty('rerun_scenario_server_overrides');
   });
 
   it('aggregates tool metadata and MCP server versions across executions', () => {
@@ -169,6 +207,58 @@ describe('projectEvaluationResult', () => {
       stoppedExecutions: 1
     });
     expect(result.summary.total_runs).toBe(1);
-    expect(result.summary.outcomes).toEqual({ passed: 0, failed: 0, incomplete: 0, error: 1 });
+    expect(result.summary.pass_rate).toBeNull();
+    expect(result.summary.outcomes).toEqual({
+      passed: 0,
+      failed: 0,
+      incomplete: 0,
+      error: 0,
+      stopped: 1
+    });
   });
+
+  it('excludes stopped executions from pass rate', () => {
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      executions: [execution('llm-1', 6, 6)],
+      stoppedExecutions: 1
+    });
+
+    expect(result.summary.total_runs).toBe(7);
+    expect(result.summary.pass_rate).toBe(1);
+    expect(result.summary.outcomes).toEqual({
+      passed: 6,
+      failed: 0,
+      incomplete: 0,
+      error: 0,
+      stopped: 1
+    });
+  });
+
+  it.each([0, 1])(
+    'preserves stopped runs from execution summaries with %i separately stopped executions',
+    (stoppedExecutions) => {
+      const snapshot = execution('llm-1', 1, 2);
+      snapshot.summary.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 0, stopped: 1 };
+      snapshot.summary.pass_rate = 1;
+
+      const result = projectEvaluationResult({
+        evaluationRunId: 'evaluation-1',
+        runId: 'run-1',
+        executions: [snapshot],
+        stoppedExecutions
+      });
+
+      expect(result.summary.total_runs).toBe(2 + stoppedExecutions);
+      expect(result.summary.outcomes).toEqual({
+        passed: 1,
+        failed: 0,
+        incomplete: 0,
+        error: 0,
+        stopped: 1 + stoppedExecutions
+      });
+      expect(result.summary.pass_rate).toBe(1);
+    }
+  );
 });

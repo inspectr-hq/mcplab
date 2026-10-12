@@ -671,6 +671,8 @@ function normalizeAgentDefinition(
   id: string
 ): EvalConfig['agents'][string] {
   if (raw.type === 'browser') {
+    const betweenScenarios =
+      raw.new_conversation_between_scenarios ?? raw.newConversationBetweenScenarios;
     if (!raw.url) throw new Error(`Browser agent ${id} requires a url`);
     if (typeof raw.provider !== 'string' || !raw.provider.trim()) {
       throw new Error(`Browser agent ${id} requires a provider`);
@@ -680,8 +682,8 @@ function normalizeAgentDefinition(
       name: typeof raw.name === 'string' ? raw.name : undefined,
       provider: raw.provider,
       url: String(raw.url),
-      ...(typeof raw.new_conversation_between_scenarios === 'boolean'
-        ? { newConversationBetweenScenarios: raw.new_conversation_between_scenarios }
+      ...(typeof betweenScenarios === 'boolean'
+        ? { newConversationBetweenScenarios: betweenScenarios }
         : {})
     };
   }

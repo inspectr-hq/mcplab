@@ -3,8 +3,16 @@ import {
   parseBrowserProviderProfiles,
   validateBrowserProviderProfile
 } from './browser-providers.js';
+import { DEFAULT_BROWSER_PROVIDER_PROFILES } from './default-browser-providers.js';
 
 describe('browser provider profiles', () => {
+  it('ships the native Rover provider profiles', () => {
+    expect(Object.keys(DEFAULT_BROWSER_PROVIDER_PROFILES)).toEqual(['claude', 'chatgpt-com']);
+    for (const profile of Object.values(DEFAULT_BROWSER_PROVIDER_PROFILES)) {
+      expect(validateBrowserProviderProfile(profile)).toEqual(profile);
+    }
+  });
+
   it('retains learned activity and New Chat confirmation when validating a profile', () => {
     const profile = validateBrowserProviderProfile({
       schemaVersion: 1,
@@ -80,6 +88,15 @@ describe('browser provider profiles', () => {
         script: 'alert(1)'
       } as never)
     ).toThrow(/profile|script|composer/i);
+  });
+
+  it('rejects unknown profile sources', () => {
+    expect(() =>
+      validateBrowserProviderProfile({
+        ...DEFAULT_BROWSER_PROVIDER_PROFILES.claude,
+        source: 'BuiltIn'
+      })
+    ).toThrow(/source/i);
   });
 
   it('rejects new conversation navigation outside matched origins', () => {

@@ -26,7 +26,8 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
         removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
-        startRun: vi.fn()
+        startRun: vi.fn(),
+        openRover: vi.fn().mockResolvedValue({ ok: true })
       }
     };
   });
@@ -77,6 +78,7 @@ beforeEach(() => {
   sourceMock.subscribeRunJob.mockReset();
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
   sourceMock.stopRun.mockReset();
+  sourceMock.openRover.mockClear();
   sourceMock.removeQueuedRun.mockReset();
   sourceMock.removeEvaluationRun.mockClear();
   sessionStorage.removeItem(activeJobStorageKey);
@@ -100,6 +102,146 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it.each(['queued', 'waiting_for_rover', 'running', 'paused_rover'] as const)(
+    'keeps Open browser agent available for a %s browser job',
+    async (status) => {
+      const browserJob = {
+        jobId: 'browser-job',
+        status,
+        executionType: 'rover',
+        roverAgent: { name: 'Polo browser', provider: 'polo', url: 'https://polo.example' },
+        runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 },
+        childProgress: [
+          {
+            scenarioId: 'search-tags',
+            agentName: 'Polo browser',
+            completed: 0,
+            total: 1,
+            status: 'queued'
+          }
+        ]
+      };
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'mixed-run',
+            evaluationName: 'Mixed evaluation',
+            status:
+              status === 'running' ? 'running' : status === 'paused_rover' ? 'paused' : 'queued',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 0,
+            stoppedJobs: 0,
+            pausedJobs: status === 'paused_rover' ? 1 : 0,
+            jobs: [
+              { jobId: 'api-job', status: 'completed', executionType: 'mcplab', runParams: {} },
+              browserJob
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <RunEvaluation />
+        </MemoryRouter>
+      );
+      const button = await screen.findByRole('button', { name: 'Open browser agent' });
+      fireEvent.click(button);
+      await waitFor(() => expect(sourceMock.openRover).toHaveBeenCalledWith('browser-job'));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+      expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
+      const buttons = screen.getAllByRole('button', { name: 'Open browser agent' });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[1]);
+      await waitFor(() => expect(sourceMock.openRover).toHaveBeenCalledTimes(2));
+      expect(sourceMock.openRover.mock.calls).toEqual([['browser-job'], ['browser-job']]);
+    }
+  );
+
+  it('shows the processing icon only for running subjobs', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'mixed-run',
+          evaluationName: 'Mixed evaluation',
+          status: 'running',
+          totalJobs: 5,
+          completedJobs: 1,
+          failedJobs: 1,
+          stoppedJobs: 1,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'api-job',
+              status: 'running',
+              runParams: {},
+              childProgress: ['running', 'queued', 'completed', 'error', 'stopped'].map(
+                (status) => ({
+                  scenarioId: `${status}-scenario`,
+                  agentName: 'Test agent',
+                  status,
+                  completed: status === 'completed' ? 1 : 0,
+                  total: 1
+                })
+              )
+            }
+          ]
+        }
+      ]
+    });
+    render(
+      <MemoryRouter>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await screen.findByText('Mixed evaluation');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    const icons = screen.getAllByLabelText('Subjob running');
+    expect(icons).toHaveLength(1);
+    expect(icons[0].parentElement).toHaveTextContent('running-scenario');
+  });
+
+  it('does not offer a browser action for a running API job or a finished browser job', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'mixed-run',
+          evaluationName: 'Mixed evaluation',
+          status: 'running',
+          totalJobs: 2,
+          completedJobs: 1,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            { jobId: 'api-job', status: 'running', executionType: 'mcplab', runParams: {} },
+            { jobId: 'browser-job', status: 'completed', executionType: 'rover', runParams: {} }
+          ]
+        }
+      ]
+    });
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await screen.findByText('Mixed evaluation');
+    expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    expect(screen.queryByRole('button', { name: 'Open browser agent' })).toBeNull();
+    expect(screen.getByLabelText('Subjob running').parentElement).toHaveTextContent('running');
+  });
+
   it('reloads configs and libraries when refresh is clicked', async () => {
     render(
       <MemoryRouter initialEntries={['/run']}>
@@ -168,6 +310,61 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Inline Agent')).toBeInTheDocument();
     });
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
+  });
+
+  it('selects and clears LLM and browser agents independently', async () => {
+    const llmAgent: AgentConfig = {
+      id: 'agent-llm',
+      name: 'LLM Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const browserAgent: AgentConfig = {
+      id: 'agent-browser',
+      name: 'Browser Agent',
+      type: 'browser',
+      provider: 'chatgpt-com',
+      model: '',
+      maxTokens: 0,
+      url: 'https://chatgpt.com'
+    };
+    configsRef.value = [
+      {
+        id: 'test-config',
+        name: 'Test Config',
+        agents: [llmAgent, browserAgent],
+        scenarios: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        sourcePath: '/path/to/test.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'LLM Agent' })).toBeChecked());
+    const llmCheckbox = screen.getByRole('checkbox', { name: 'LLM Agent' });
+    const browserCheckbox = screen.getByRole('checkbox', { name: 'Browser Agent' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear LLM Agents' }));
+    expect(llmCheckbox).not.toBeChecked();
+    expect(browserCheckbox).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all LLM Agents' }));
+    expect(llmCheckbox).toBeChecked();
+    expect(browserCheckbox).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Browser Agents' }));
+    expect(llmCheckbox).toBeChecked();
+    expect(browserCheckbox).not.toBeChecked();
   });
 
   it('defaults the run selection to config-scoped agents instead of all library agents', async () => {
@@ -329,7 +526,11 @@ describe('RunEvaluation', () => {
     );
   });
 
-  it('groups Browser Agents and sends an explicit conversation override', async () => {
+  it.each([
+    { label: 'Start a new conversation', beforeStart: true, betweenScenarios: true },
+    { label: 'Continue the same conversation', beforeStart: false, betweenScenarios: false },
+    { label: 'Use agent default', beforeStart: undefined, betweenScenarios: undefined }
+  ])('logs $label for browser scenarios', async ({ label, beforeStart, betweenScenarios }) => {
     const llmAgent: AgentConfig = {
       id: 'agent-llm',
       name: 'LLM Agent',
@@ -342,7 +543,7 @@ describe('RunEvaluation', () => {
       id: 'agent-browser',
       name: 'Browser Agent',
       type: 'browser',
-      provider: 'chatgpt-com',
+      provider: 'learned-provider',
       model: '',
       maxTokens: 0,
       url: 'https://chatgpt.com',
@@ -390,17 +591,35 @@ describe('RunEvaluation', () => {
     expect(varianceInput).toBeDisabled();
     expect(varianceInput).toHaveValue(1);
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
+    if (label !== 'Use agent default') {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
+      fireEvent.click(screen.getByRole('option', { name: label }));
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith(
       expect.objectContaining({
         agents: ['agent-llm', 'agent-browser'],
-        runsPerScenario: 1,
-        newConversationBetweenScenarios: true
+        runsPerScenario: 1
       })
+    );
+    if (beforeStart === undefined) {
+      expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty('newConversationBeforeStart');
+    } else {
+      expect(sourceMock.startRun.mock.calls[0][0].newConversationBeforeStart).toBe(beforeStart);
+    }
+    if (betweenScenarios === undefined) {
+      expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty(
+        'newConversationBetweenScenarios'
+      );
+    } else {
+      expect(sourceMock.startRun.mock.calls[0][0].newConversationBetweenScenarios).toBe(
+        betweenScenarios
+      );
+    }
+    expect(screen.getByText(/Config=Test Config mode=/)).toHaveTextContent(
+      `newConversationBeforeStart=${beforeStart ?? 'agent_default'} newConversationBetweenScenarios=${betweenScenarios ?? 'agent_default'}`
     );
   });
 
@@ -634,48 +853,270 @@ describe('RunEvaluation', () => {
     expect(runningBadge).toHaveClass('bg-emerald-500/15', 'text-emerald-700');
   });
 
-  it('offers removal when a stopped LLM child leaves its job completed', async () => {
-    sourceMock.getRunQueue.mockResolvedValue({
-      active: null,
-      active_jobs: [],
-      admitting_jobs: [],
-      queued: [],
-      evaluations: [
-        {
-          evaluationRunId: 'evaluation-stopped',
-          evaluationName: 'Stopped LLM evaluation',
-          status: 'stopped',
-          totalJobs: 1,
-          completedJobs: 0,
-          failedJobs: 1,
-          stoppedJobs: 1,
-          pausedJobs: 0,
-          jobs: [
-            {
-              jobId: 'llm-completed',
-              status: 'completed',
-              executionType: 'mcplab',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
-              childProgress: [
-                { scenarioId: 'scenario-1', agentName: 'LLM', completed: 0, total: 1, status: 'stopped' }
-              ]
-            }
-          ]
+  it.each(['stopped', 'failed', 'partial'] as const)(
+    'shows stopped groups but hides finished %s groups from the queue',
+    async (status) => {
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-stopped',
+            evaluationName: 'Stopped LLM evaluation',
+            status,
+            totalJobs: 1,
+            completedJobs: 0,
+            failedJobs: 1,
+            stoppedJobs: 1,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'llm-completed',
+                status: status === 'stopped' ? 'completed' : 'error',
+                executionType: 'mcplab',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1, agents: ['LLM'] },
+                childProgress: [
+                  {
+                    scenarioId: 'scenario-1',
+                    agentName: 'LLM',
+                    completed: 0,
+                    total: 1,
+                    status: status === 'stopped' ? 'stopped' : 'error'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      });
+
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/run']}>
+            <Routes>
+              <Route path="/run" element={<RunEvaluation />} />
+            </Routes>
+          </MemoryRouter>
+        );
+      });
+
+      await waitFor(() => expect(sourceMock.getRunQueue).toHaveBeenCalled());
+      if (status !== 'stopped') {
+        await screen.findByText('No active or queued runs. Start a run above.');
+        expect(screen.queryByText('Stopped LLM evaluation')).toBeNull();
+        return;
+      }
+      await act(async () => {
+        fireEvent.click(
+          await screen.findByRole('button', {
+            name:
+              status === 'stopped'
+                ? 'Remove stopped run from queue'
+                : 'Remove evaluation from queue'
+          })
+        );
+      });
+      expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
+    }
+  );
+
+  it.each(['error', 'completed', 'stopped'] as const)(
+    'shows grouped results after the last child sends %s',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-last');
+      let onEvent: ((event: any) => void) | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-last') onEvent = callback;
+        return () => {};
+      });
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-mixed',
+            evaluationName: 'Mixed result group',
+            status: 'partial',
+            totalJobs: eventType === 'stopped' ? 3 : 2,
+            completedJobs: 1,
+            failedJobs: eventType === 'stopped' ? 2 : 1,
+            stoppedJobs: eventType === 'stopped' ? 1 : 0,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-last',
+                status:
+                  eventType === 'stopped'
+                    ? 'stopped'
+                    : eventType === 'error'
+                      ? 'error'
+                      : 'completed',
+                runParams: {}
+              },
+              {
+                jobId: 'job-other',
+                status: eventType === 'error' ? 'completed' : 'error',
+                runParams: {}
+              },
+              ...(eventType === 'stopped'
+                ? [{ jobId: 'job-completed', status: 'completed', runParams: {} }]
+                : [])
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      await act(async () => {
+        onEvent?.({
+          type: eventType === 'stopped' ? 'error' : eventType,
+          ts: '2026-10-09T00:18:28.000Z',
+          payload:
+            eventType === 'stopped'
+              ? { status: 'stopped', message: 'Run stopped by user' }
+              : eventType === 'error'
+                ? { message: 'MCP connection failed' }
+                : { runId: 'evaluation-mixed' }
+        });
+      });
+      expect(await screen.findByText('Completed with errors')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+        'href',
+        '/results/evaluation-mixed'
+      );
+      expect(screen.getByText('100%')).toBeInTheDocument();
+      expect(screen.queryByText('Mixed result group')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
+    }
+  );
+
+  it.each([
+    'completed',
+    'legacy-stop',
+    'structured-stop',
+    'queue-stop',
+    'group-stop',
+    'lookup-failed',
+    'fully-stopped',
+    'fully-stopped-results'
+  ])(
+    'shows stopped completion separately from errors and keeps grouped results (%s)',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-last');
+      let onEvent: ((event: any) => void) | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-last') onEvent = callback;
+        return () => {};
+      });
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-mixed',
+            evaluationName: 'Mixed result group',
+            status: 'stopped',
+            totalJobs: 2,
+            completedJobs: eventType.startsWith('fully-stopped') ? 0 : 1,
+            failedJobs: eventType.startsWith('fully-stopped') ? 2 : 1,
+            stoppedJobs: eventType.startsWith('fully-stopped') ? 2 : 1,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-last',
+                status:
+                  eventType === 'queue-stop' || eventType.startsWith('fully-stopped')
+                    ? 'stopped'
+                    : 'completed',
+                runParams: {}
+              },
+              {
+                jobId: 'job-other',
+                status: 'stopped',
+                runParams: {}
+              }
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      if (eventType === 'lookup-failed')
+        sourceMock.getRunQueue.mockRejectedValueOnce(new Error('Offline'));
+      await act(async () => {
+        onEvent?.({
+          type: eventType === 'completed' ? 'completed' : 'error',
+          ts: '2026-10-09T00:18:28.000Z',
+          payload:
+            eventType === 'completed'
+              ? { runId: 'evaluation-mixed' }
+              : eventType === 'structured-stop'
+                ? { status: 'stopped', message: 'Cancelled' }
+                : eventType === 'queue-stop' || eventType === 'group-stop'
+                  ? { message: 'Cancelled elsewhere' }
+                  : {
+                      message: 'Run stopped by user',
+                      ...(eventType === 'fully-stopped-results'
+                        ? { runId: 'evaluation-mixed' }
+                        : {})
+                    }
+        });
+      });
+      if (eventType === 'lookup-failed') {
+        expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+        expect(screen.queryByText('Evaluation Complete')).toBeNull();
+        expect(screen.queryByText(/Error:.*Run stopped/)).toBeNull();
+        return;
+      }
+      if (eventType.startsWith('fully-stopped')) {
+        expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+        expect(screen.queryByText('Completed with stopped scenarios')).toBeNull();
+        expect(screen.queryByRole('link', { name: 'View Runs' })).toBeNull();
+        if (eventType === 'fully-stopped-results') {
+          expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+            'href',
+            '/results/evaluation-mixed'
+          );
+        } else {
+          expect(screen.queryByRole('link', { name: 'View Results' })).toBeNull();
         }
-      ]
-    });
+        return;
+      }
+      expect(await screen.findByText('Completed with stopped scenarios')).toBeInTheDocument();
+      expect(screen.queryByText('Completed with errors')).toBeNull();
+      expect(screen.queryByText(/Error:.*(Cancelled|Run stopped)/)).toBeNull();
+      expect(
+        screen.getByText('2/2 finished, 1 completed, 0 error(s), 1 stopped.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+        'href',
+        '/results/evaluation-mixed'
+      );
+      expect(screen.getByText('100%')).toBeInTheDocument();
 
-    render(
-      <MemoryRouter initialEntries={['/run']}>
-        <Routes>
-          <Route path="/run" element={<RunEvaluation />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove stopped run from queue' }));
-    expect(sourceMock.removeEvaluationRun).toHaveBeenCalledWith('evaluation-stopped');
-  });
+      expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
+    }
+  );
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');
@@ -718,66 +1159,72 @@ describe('RunEvaluation', () => {
     expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
   });
 
-  it('keeps an evaluation active when its remaining child needs OAuth', async () => {
-    sessionStorage.setItem(activeJobStorageKey, 'job-finished');
-    let onEvent:
-      | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
-      | undefined;
-    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
-      if (jobId === 'job-finished') onEvent = callback;
-      return () => {};
-    });
-    sourceMock.getRunQueue.mockResolvedValue({
-      active: null,
-      active_jobs: [],
-      admitting_jobs: [],
-      queued: [],
-      evaluations: [
-        {
-          evaluationRunId: 'evaluation-1',
-          evaluationName: 'Mixed evaluation',
-          status: 'blocked_auth',
-          totalJobs: 2,
-          completedJobs: 1,
-          failedJobs: 0,
-          stoppedJobs: 0,
-          pausedJobs: 0,
-          jobs: [
-            {
-              jobId: 'job-finished',
-              status: 'completed',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
-            },
-            {
-              jobId: 'job-blocked',
-              status: 'blocked_auth',
-              runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
-            }
-          ]
-        }
-      ]
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/run']}>
-        <Routes>
-          <Route path="/run" element={<RunEvaluation />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    await waitFor(() => expect(onEvent).toBeDefined());
-    await act(async () => {
-      onEvent?.({
-        type: 'completed',
-        ts: '2026-09-28T10:00:00.000Z',
-        payload: { runId: 'evaluation-1' }
+  it.each(['completed', 'error'] as const)(
+    'continues after %s when the remaining child needs OAuth',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-finished');
+      let onEvent:
+        | ((event: { type: string; ts: string; payload: Record<string, unknown> }) => void)
+        | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-finished') onEvent = callback;
+        return () => {};
       });
-    });
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-1',
+            evaluationName: 'Mixed evaluation',
+            status: 'blocked_auth',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 0,
+            stoppedJobs: 0,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-finished',
+                status: 'completed',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+              },
+              {
+                jobId: 'job-blocked',
+                status: 'blocked_auth',
+                runParams: { configPath: '/tmp/eval.yaml', runsPerScenario: 1 }
+              }
+            ]
+          }
+        ]
+      });
 
-    await waitFor(() => {
-      expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith('job-blocked', expect.any(Function));
-    });
-    expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
-    expect(screen.queryByText(/Run completed\./)).toBeNull();
-  });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      await act(async () => {
+        onEvent?.({
+          type: eventType,
+          ts: '2026-09-28T10:00:00.000Z',
+          payload: { runId: 'evaluation-1' }
+        });
+      });
+
+      await waitFor(() => {
+        expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith(
+          'job-blocked',
+          expect.any(Function)
+        );
+      });
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBe('job-blocked');
+      expect(screen.queryByText(/Run completed\./)).toBeNull();
+    }
+  );
 });

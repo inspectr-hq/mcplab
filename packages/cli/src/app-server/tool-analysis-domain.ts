@@ -8,7 +8,8 @@ import {
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
-import { truncateJson } from './assistant-common.js';
+import { parseJsonFromAssistantText, truncateJson } from './assistant-common.js';
+export { parseJsonFromAssistantText } from './assistant-common.js';
 import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
@@ -379,59 +380,6 @@ function normalizeToolAnalysisFinding(
 
 function clampStringArray(value: unknown, fallback: string[] = []): string[] {
   return Array.isArray(value) ? value.map((v) => String(v)).filter(Boolean) : fallback;
-}
-
-function extractFirstBalancedJsonCandidate(text: string): string | null {
-  const starts: Array<{ idx: number; open: '{' | '['; close: '}' | ']' }> = [];
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === '{') starts.push({ idx: i, open: '{', close: '}' });
-    if (ch === '[') starts.push({ idx: i, open: '[', close: ']' });
-  }
-  for (const start of starts) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start.idx; i < text.length; i += 1) {
-      const ch = text[i];
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (ch === '\\') {
-          escaped = true;
-          continue;
-        }
-        if (ch === '"') inString = false;
-        continue;
-      }
-      if (ch === '"') {
-        inString = true;
-        continue;
-      }
-      if (ch === start.open) depth += 1;
-      if (ch === start.close) {
-        depth -= 1;
-        if (depth === 0) return text.slice(start.idx, i + 1);
-      }
-    }
-  }
-  return null;
-}
-
-export function parseJsonFromAssistantText<T = unknown>(text: string): T {
-  const cleaned = text.trim();
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) return JSON.parse(fenced[1].trim()) as T;
-    const candidate = extractFirstBalancedJsonCandidate(cleaned);
-    if (candidate) return JSON.parse(candidate) as T;
-    throw new Error('Assistant returned invalid JSON');
-  }
 }
 
 function parseJsonFromToolCalls(response: {

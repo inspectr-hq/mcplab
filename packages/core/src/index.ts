@@ -1,5 +1,6 @@
 export * from './types.js';
 export { tallyCheckCounts } from './check-counts.js';
+export { readBrowserProviderProfiles } from './browser-provider-store.js';
 export {
   loadConfig,
   hashConfig,
@@ -70,8 +71,15 @@ export {
 export * from './queue-contract.js';
 export {
   parseBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   validateBrowserProviderProfile,
   type BrowserProviderProfile,
   type BrowserProviderConfidence,
   type ShadowLocator
 } from './browser-providers.js';
+export {
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles
+} from './default-browser-providers.js';
+
+export { calculatePassRate } from './result-metrics.js';

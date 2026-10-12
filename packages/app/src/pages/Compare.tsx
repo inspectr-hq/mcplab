@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@/types/eval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,
@@ -78,7 +79,7 @@ type AgentSummary = {
   agentName: string;
   provider?: string;
   model?: string;
-  passRate: number;
+  passRate: number | null;
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
@@ -434,7 +435,7 @@ const Compare = () => {
       if (sortBy === 'id') cmp = a.id.localeCompare(b.id);
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'passRate') cmp = (a.overallPassRate ?? -1) - (b.overallPassRate ?? -1);
       if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -793,7 +794,11 @@ const Compare = () => {
         agentName: agent.name,
         provider,
         model,
-        passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+        passRate: calculatePassRate(
+          passCount,
+          totalRuns,
+          runs.filter((run) => run.outcome === 'stopped').length
+        ),
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
         avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns
@@ -1545,7 +1550,8 @@ const Compare = () => {
                 data={selectedRuns.map((r, i) => ({
                   idx: i + 1,
                   runId: r.id,
-                  passRate: Number((r.overallPassRate * 100).toFixed(1))
+                  passRate:
+                    r.overallPassRate === null ? null : Number((r.overallPassRate * 100).toFixed(1))
                 }))}
               >
                 <XAxis dataKey="idx" tickFormatter={(v) => String(v)} />

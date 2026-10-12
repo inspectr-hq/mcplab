@@ -1,3 +1,7 @@
+import {
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  serializeBrowserProviderProfile
+} from '@inspectr/mcplab-core';
 import { describe, it, expect } from 'vitest';
 import {
   mkdtempSync,
@@ -22,6 +26,122 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('keeps valid browser profiles when neighboring files contain invalid YAML or schemas', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const directory = join(librariesDir, 'browser-providers');
+    mkdirSync(directory);
+    writeFileSync(join(directory, 'bad-yaml.yaml'), 'name: [');
+    writeFileSync(join(directory, 'bad-schema.yml'), 'name: Missing fields');
+    writeFileSync(
+      join(directory, 'custom-chat.yaml'),
+      serializeBrowserProviderProfile(DEFAULT_BROWSER_PROVIDER_PROFILES.claude)
+    );
+
+    const profiles = readLibraries(librariesDir).browserProviders;
+    expect(Object.keys(profiles)).toEqual(['claude', 'chatgpt-com', 'custom-chat']);
+    expect(profiles['custom-chat']).toMatchObject({ id: 'custom-chat', source: 'workspace' });
+  });
+
+  it('exposes built-in Rover provider profiles without creating workspace files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const libraries = readLibraries(librariesDir);
+
+    expect(Object.keys(libraries.browserProviders)).toEqual(['claude', 'chatgpt-com']);
+    expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
+
+    const persisted = writeBrowserProviderProfiles(librariesDir, libraries.browserProviders);
+    expect(persisted.claude?.source).toBe('builtin');
+  });
+
+  it.each(['name: [', 'name: Missing fields'])(
+    'refuses provider saves without changing files when an existing profile is invalid',
+    (raw) => {
+      const librariesDir = makeTempLibrariesDir();
+      const directory = join(librariesDir, 'browser-providers');
+      mkdirSync(directory);
+      const valid = serializeBrowserProviderProfile(DEFAULT_BROWSER_PROVIDER_PROFILES.claude);
+      writeFileSync(join(directory, 'valid.yaml'), valid);
+      writeFileSync(join(directory, 'broken.yml'), raw);
+
+      for (const profiles of [{}, { broken: DEFAULT_BROWSER_PROVIDER_PROFILES.claude }]) {
+        expect(() => writeBrowserProviderProfiles(librariesDir, profiles)).toThrow(/broken\.yml/);
+      }
+
+      expect(readFileSync(join(directory, 'broken.yml'), 'utf8')).toBe(raw);
+      expect(readFileSync(join(directory, 'valid.yaml'), 'utf8')).toBe(valid);
+      expect(readdirSync(directory).sort()).toEqual(['broken.yml', 'valid.yaml']);
+    }
+  );
+
+  it('still removes omitted valid provider profiles', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const profile = { ...DEFAULT_BROWSER_PROVIDER_PROFILES.claude, id: 'custom-chat' };
+    writeBrowserProviderProfiles(librariesDir, { 'custom-chat': profile });
+
+    writeBrowserProviderProfiles(librariesDir, {});
+
+    expect(existsSync(join(librariesDir, 'browser-providers', 'custom-chat.yaml'))).toBe(false);
+  });
+
+  it('refuses a learned profile save before migrating or changing the library', () => {
+    const librariesDir = makeTempLibrariesDir();
+    mkdirSync(join(librariesDir, 'browser-providers'));
+    mkdirSync(join(librariesDir, 'scenarios'));
+    writeFileSync(join(librariesDir, 'browser-providers', 'broken.yaml'), 'name: [');
+    writeFileSync(join(librariesDir, 'scenarios', 'old.yaml'), 'id: old\n');
+
+    expect(() =>
+      writeBrowserProviderAndAgent(librariesDir, DEFAULT_BROWSER_PROVIDER_PROFILES.claude, {
+        id: 'new-agent',
+        name: 'New agent',
+        provider: 'claude',
+        url: 'https://claude.ai'
+      })
+    ).toThrow(/broken\.yaml/);
+
+    expect(readFileSync(join(librariesDir, 'browser-providers', 'broken.yaml'), 'utf8')).toBe(
+      'name: ['
+    );
+    expect(readFileSync(join(librariesDir, 'scenarios', 'old.yaml'), 'utf8')).toBe('id: old\n');
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
+    expect(existsSync(join(librariesDir, 'agents.yaml'))).toBe(false);
+  });
+
+  it('round-trips a provider named constructor', () => {
+    const id = 'constructor';
+    const librariesDir = makeTempLibrariesDir();
+    const profile = { ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES.claude), id, name: id };
+    const saved = writeBrowserProviderProfiles(librariesDir, { [id]: profile });
+    expect(saved[id]).toMatchObject({ id, name: id, source: 'workspace' });
+    expect(readLibraries(librariesDir).browserProviders[id]).toEqual(saved[id]);
+  });
+
+  it.each(['toString', 'hasOwnProperty'])(
+    'validates filenames before saving inherited id %s',
+    (id) => {
+      const profile = { ...structuredClone(DEFAULT_BROWSER_PROVIDER_PROFILES.claude), id };
+      expect(() => writeBrowserProviderProfiles(makeTempLibrariesDir(), { [id]: profile })).toThrow(
+        `Browser provider id '${id}' must be a safe filename.`
+      );
+    }
+  );
+
+  it('lets a workspace profile override a built-in provider', () => {
+    const librariesDir = makeTempLibrariesDir();
+    mkdirSync(join(librariesDir, 'browser-providers'));
+    writeFileSync(
+      join(librariesDir, 'browser-providers', 'claude.yaml'),
+      `schema_version: 1\nname: Custom Claude\nmatch:\n  origins:\n    - https://claude.ai\ncomposer:\n  locator:\n    segments:\n      - '[contenteditable="true"]'\n  input_mode: contenteditable\nsubmit:\n  action: enter\nassistant_messages:\n  locator:\n    segments:\n      - '.assistant'\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://claude.ai\n  confidence: {}\n`,
+      'utf8'
+    );
+
+    expect(readLibraries(librariesDir).browserProviders.claude).toMatchObject({
+      name: 'Custom Claude',
+      source: 'workspace',
+      completion: { stabilityMs: 1000 }
+    });
+  });
+
   it('round-trips learned working and New Chat confirmation through YAML', () => {
     const librariesDir = makeTempLibrariesDir();
     writeBrowserProviderProfiles(librariesDir, {
@@ -125,7 +245,9 @@ describe('libraries-store test-case directory migration', () => {
     );
 
     const profiles = readLibraries(librariesDir).browserProviders;
-    expect(profiles).toEqual({});
+    expect(profiles).not.toHaveProperty('trendminer');
+    expect(profiles).toHaveProperty('claude');
+    expect(profiles).toHaveProperty('chatgpt-com');
     expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
   });
 
@@ -175,6 +297,9 @@ describe('libraries-store test-case directory migration', () => {
       provider: 'claude-learned'
     });
     expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
+    expect(readdirSync(join(librariesDir, 'browser-providers')).sort()).toEqual([
+      'claude-learned.yaml'
+    ]);
     expect(readLibraries(librariesDir).agents['existing-browser']).toMatchObject({
       newConversationBetweenScenarios: false
     });
@@ -208,7 +333,7 @@ describe('libraries-store test-case directory migration', () => {
     expect(
       readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt
     ).toEqual(expect.any(String));
-    expect(profile).toEqual({});
+    expect(profile).not.toHaveProperty('claude-learned');
   });
 
   it('loads servers and agents from library yaml files', () => {
@@ -303,6 +428,36 @@ describe('libraries-store test-case directory migration', () => {
         browserProviders: { invalid: { script: 'alert(1)' } }
       })
     ).toThrow('Executable browser provider profiles are not supported.');
+  });
+
+  it('refuses a full library save before any changes when a stored provider is invalid', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const directory = join(librariesDir, 'browser-providers');
+    mkdirSync(directory);
+    mkdirSync(join(librariesDir, 'scenarios'));
+    const originals = {
+      'servers.yaml': 'existing: true\n',
+      'agents.yaml': 'old: {}\n',
+      'scenarios/old.yaml': 'id: old\n',
+      'browser-providers/broken.yaml': 'name: ['
+    };
+    for (const [file, raw] of Object.entries(originals)) {
+      writeFileSync(join(librariesDir, file), raw);
+    }
+
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: {},
+        agents: {},
+        scenarios: [],
+        browserProviders: {}
+      })
+    ).toThrow(/broken\.yaml/);
+
+    for (const [file, raw] of Object.entries(originals)) {
+      expect(readFileSync(join(librariesDir, file), 'utf8')).toBe(raw);
+    }
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
   });
 
   it('migrates legacy scenarios folder to test-cases when reading libraries', () => {

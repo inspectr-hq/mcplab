@@ -424,7 +424,7 @@ export interface ScenarioRunTraceRecord {
   };
 }
 
-export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error';
+export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error' | 'stopped';
 
 export type ExecutionSource = 'mcplab' | 'rover';
 
@@ -446,6 +446,7 @@ export interface ScenarioRunResult {
   pass: boolean;
   outcome?: RunOutcome;
   error?: string;
+  stop_reason?: string;
   failures: string[];
   check_results?: CheckResult[];
   tool_calls: string[];
@@ -470,7 +471,7 @@ export interface ScenarioAggregate {
     forbidden: Record<string, number>;
   };
   runs: ScenarioRunResult[];
-  pass_rate: number;
+  pass_rate: number | null;
   distinct_sequences: Record<string, number>;
   tool_usage_frequency: Record<string, number>;
   extracted_values: Record<string, Record<string, number>>;
@@ -511,6 +512,8 @@ export interface ResultsJson {
     rerun_scenario_ids?: string[];
     rerun_server_override_all?: string[];
     rerun_scenario_server_overrides?: Record<string, string[]>;
+    rerun_new_conversation_before_start?: boolean;
+    rerun_new_conversation_between_scenarios?: boolean;
     tool_tokens_total?: number | null;
     total_duration_ms?: number;
     total_tool_duration_ms?: number;
@@ -528,10 +531,10 @@ export interface ResultsJson {
   summary: {
     total_scenarios: number;
     total_runs: number;
-    pass_rate: number;
+    pass_rate: number | null;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
-    outcomes?: Record<RunOutcome, number>;
+    outcomes?: Partial<Record<RunOutcome, number>>;
   };
   scenarios: ScenarioAggregate[];
 }

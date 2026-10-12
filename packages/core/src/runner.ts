@@ -9,7 +9,8 @@ import type {
   ScenarioRunResult,
   ResultsJson,
   ExecutableScenario,
-  ScenarioRunTraceRecord
+  ScenarioRunTraceRecord,
+  RunOutcome
 } from './types.js';
 import { isLlmAgent } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
@@ -87,6 +88,7 @@ export type RunProgressEvent =
       runIndex: number;
       runsPerScenario: number;
       pass: boolean;
+      outcome?: RunOutcome;
       toolCallCount: number;
     }
   | {
@@ -359,9 +361,33 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: scenarioRun.pass,
+            outcome: scenarioRun.outcome,
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
+          const recordedRun = runs.find((run) => run.run_index === runIndex);
+          if (recordedRun) {
+            // Trace cleanup or progress delivery can fail after evaluation was recorded.
+            // Preserve that outcome even if a child stop arrives during cleanup.
+            console.error(
+              `Scenario '${scenario.id}' run ${runIndex} cleanup failed: ${String(scenarioErr?.message ?? scenarioErr)}`
+            );
+            await emitProgress({
+              type: 'scenario_run_finished',
+              scenarioId: scenario.id,
+              agentName: scenario.agent,
+              scenarioRunIndex,
+              totalScenarioRuns,
+              runIndex,
+              runsPerScenario: options.runsPerScenario,
+              pass: recordedRun.pass,
+              outcome: recordedRun.outcome,
+              toolCallCount: recordedRun.tool_call_count
+            });
+            throwIfAborted(options.signal);
+            if (runSignal?.aborted) break;
+            continue;
+          }
           if (options.signal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
@@ -369,24 +395,30 @@ export async function runAll(
             });
             throw scenarioErr;
           }
-          if (isAbortError(scenarioErr)) {
+          let traceEnded = false;
+          if (isAbortError(scenarioErr) && !runSignal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
               outputs: { pass: false }
             });
-            if (runSignal?.aborted) break;
-            throw scenarioErr;
+            traceEnded = true;
+            // A child stop can arrive while trace cleanup is awaiting. Record it below.
+            if (options.signal?.aborted || !runSignal?.aborted) throw scenarioErr;
           }
-          const errorMessage = scenarioErr?.message ?? String(scenarioErr);
-          console.error(`Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`);
+          const stopped = Boolean(runSignal?.aborted);
+          const outcome = stopped ? 'stopped' : 'error';
+          const errorMessage = String(scenarioErr?.message ?? scenarioErr ?? 'Request aborted');
+          if (!stopped) {
+            console.error(`Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`);
+          }
           const tsEnd = new Date().toISOString();
-          const errorRun: ScenarioRunResult = {
+          const unsuccessfulRun: ScenarioRunResult = {
             run_index: runIndex,
             request_id: requestId,
             pass: false,
-            outcome: 'error',
-            error: errorMessage,
-            failures: [`Scenario error: ${errorMessage}`],
+            outcome,
+            ...(stopped ? { stop_reason: errorMessage } : { error: errorMessage }),
+            failures: stopped ? [] : [`Scenario error: ${errorMessage}`],
             check_results: buildNotExecutedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
@@ -397,8 +429,8 @@ export async function runAll(
             final_text: '',
             extracted: {}
           };
-          runs.push(errorRun);
-          const errorTrace: ScenarioRunTraceRecord = {
+          runs.push(unsuccessfulRun);
+          const unsuccessfulTrace: ScenarioRunTraceRecord = {
             type: 'scenario_run',
             trace_version: 3,
             run_index: runIndex,
@@ -410,12 +442,17 @@ export async function runAll(
             ts_start: tsStart,
             ts_end: tsEnd,
             pass: false,
-            outcome: 'error',
+            outcome,
             error: errorMessage,
             messages: []
           };
-          trace.write(errorTrace);
-          await scenarioTrace.end({ error: errorMessage, outputs: { pass: false } });
+          trace.write(unsuccessfulTrace);
+          if (!traceEnded) {
+            await scenarioTrace.end({
+              error: errorMessage,
+              outputs: { pass: false, ...(stopped ? { stopped: true } : {}) }
+            });
+          }
           await emitProgress({
             type: 'scenario_run_finished',
             scenarioId: scenario.id,
@@ -425,8 +462,10 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: false,
+            outcome,
             toolCallCount: 0
           });
+          if (stopped) break;
         }
       }
 
