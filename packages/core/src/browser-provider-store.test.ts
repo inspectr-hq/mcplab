@@ -46,4 +46,19 @@ describe('readBrowserProviderProfiles', () => {
     mkdirSync(join(root, 'browser-providers', 'directory.yaml'), { recursive: true });
     expect(() => readBrowserProviderProfiles(root)).toThrow();
   });
+
+  it.each(['name: [', 'name: Missing required fields'])(
+    'reports invalid profiles with their filename when strict reading is requested',
+    (raw) => {
+      const root = mkdtempSync(join(tmpdir(), 'mcplab-provider-store-'));
+      roots.push(root);
+      const directory = join(root, 'browser-providers');
+      mkdirSync(directory);
+      writeFileSync(join(directory, 'broken.yaml'), raw);
+
+      expect(() => readBrowserProviderProfiles(root, { strict: true })).toThrow(
+        /Invalid browser provider file .*broken\.yaml: .+/
+      );
+    }
+  );
 });

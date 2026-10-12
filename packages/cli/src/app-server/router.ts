@@ -158,6 +158,18 @@ export function roverCompletionReleasedJob(job: RunJob | undefined): boolean {
   return job !== undefined && ['completed', 'stopped', 'error'].includes(job.status);
 }
 
+export function releaseRegisteredRoverJob(
+  queue: Pick<RunQueueService, 'assignRoverJob'>,
+  connection: RoverConnection | null,
+  send: (message: RoverSocketMessage) => boolean,
+  activeJobId: string | null,
+  releasedJobId: string
+): string | null {
+  // Cancelling waiting work must not release another job's running slot.
+  if (activeJobId && activeJobId !== releasedJobId) return activeJobId;
+  return assignRegisteredRoverJob(queue, connection, send)?.id ?? null;
+}
+
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
 
@@ -299,13 +311,14 @@ export async function startAppServer(options: AppServerOptions) {
       if (assigned) activeRoverJobId = assigned.id;
       return assigned;
     },
-    onRoverJobReleased: () => {
-      const next = assignRegisteredRoverJob(
+    onRoverJobReleased: (_provider, jobId) => {
+      activeRoverJobId = releaseRegisteredRoverJob(
         runQueueService,
         roverConnection.connection(),
-        (message: RoverSocketMessage) => roverConnection.send(message)
+        (message: RoverSocketMessage) => roverConnection.send(message),
+        activeRoverJobId,
+        jobId
       );
-      activeRoverJobId = next?.id ?? null;
     }
   });
   let activeRoverJobId: string | null = null;

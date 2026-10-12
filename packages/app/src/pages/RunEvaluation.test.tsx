@@ -529,7 +529,7 @@ describe('RunEvaluation', () => {
   it.each([
     { label: 'Start a new conversation', beforeStart: true, betweenScenarios: true },
     { label: 'Continue the same conversation', beforeStart: false, betweenScenarios: false },
-    { label: 'Use agent default', beforeStart: true, betweenScenarios: undefined }
+    { label: 'Use agent default', beforeStart: undefined, betweenScenarios: undefined }
   ])('logs $label for browser scenarios', async ({ label, beforeStart, betweenScenarios }) => {
     const llmAgent: AgentConfig = {
       id: 'agent-llm',
@@ -543,7 +543,7 @@ describe('RunEvaluation', () => {
       id: 'agent-browser',
       name: 'Browser Agent',
       type: 'browser',
-      provider: 'chatgpt-com',
+      provider: 'learned-provider',
       model: '',
       maxTokens: 0,
       url: 'https://chatgpt.com',
@@ -591,18 +591,24 @@ describe('RunEvaluation', () => {
     expect(varianceInput).toBeDisabled();
     expect(varianceInput).toHaveValue(1);
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
-    fireEvent.click(screen.getByRole('option', { name: label }));
+    if (label !== 'Use agent default') {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
+      fireEvent.click(screen.getByRole('option', { name: label }));
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith(
       expect.objectContaining({
         agents: ['agent-llm', 'agent-browser'],
-        runsPerScenario: 1,
-        newConversationBeforeStart: beforeStart
+        runsPerScenario: 1
       })
     );
+    if (beforeStart === undefined) {
+      expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty('newConversationBeforeStart');
+    } else {
+      expect(sourceMock.startRun.mock.calls[0][0].newConversationBeforeStart).toBe(beforeStart);
+    }
     if (betweenScenarios === undefined) {
       expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty(
         'newConversationBetweenScenarios'
@@ -613,7 +619,7 @@ describe('RunEvaluation', () => {
       );
     }
     expect(screen.getByText(/Config=Test Config mode=/)).toHaveTextContent(
-      `newConversationBeforeStart=${beforeStart} newConversationBetweenScenarios=${betweenScenarios ?? 'agent_default'}`
+      `newConversationBeforeStart=${beforeStart ?? 'agent_default'} newConversationBetweenScenarios=${betweenScenarios ?? 'agent_default'}`
     );
   });
 

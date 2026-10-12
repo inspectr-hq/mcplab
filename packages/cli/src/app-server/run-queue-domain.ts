@@ -107,7 +107,7 @@ export function createRunQueueService(params: {
   state?: RunQueueState;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   assignRoverJob?: (provider: string, worker?: RoverAssignmentWorker) => RunJob | null;
-  onRoverJobReleased?: (provider: string) => void;
+  onRoverJobReleased?: (provider: string, jobId: string) => void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
@@ -185,7 +185,7 @@ export function createRunQueueService(params: {
         });
         emit();
         if (job.runParams.executionType === 'rover')
-          params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+          params.onRoverJobReleased?.(job.runParams.roverAgent.provider, job.id);
       }, delay)
     );
   }
@@ -303,7 +303,7 @@ export function createRunQueueService(params: {
     }
     emit();
     if (disposition.kind !== 'completed')
-      params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+      params.onRoverJobReleased?.(job.runParams.roverAgent.provider, job.id);
     // Wake API runs after the caller has offered the next Rover assignment.
     // That assignment must count against the shared worker limit before we claim another job.
     queueMicrotask(() => {

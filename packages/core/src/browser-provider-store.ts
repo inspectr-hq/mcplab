@@ -4,7 +4,8 @@ import { parse as parseYaml } from 'yaml';
 import { parseBrowserProviderProfiles, type BrowserProviderProfile } from './browser-providers.js';
 
 export function readBrowserProviderProfiles(
-  bundleRoot: string
+  bundleRoot: string,
+  options: { strict?: boolean } = {}
 ): Record<string, BrowserProviderProfile> {
   const directory = join(bundleRoot, 'browser-providers');
   if (!existsSync(directory)) return {};
@@ -19,7 +20,13 @@ export function readBrowserProviderProfiles(
     let profile: BrowserProviderProfile;
     try {
       profile = parseBrowserProviderProfiles({ [id]: parseYaml(raw) })[id];
-    } catch {
+    } catch (error) {
+      if (options.strict) {
+        throw new Error(
+          `Invalid browser provider file ${path}: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error }
+        );
+      }
       // One malformed YAML or invalid profile must not hide the rest of the library.
       // Filesystem errors remain outside this catch so callers can report them.
       continue;

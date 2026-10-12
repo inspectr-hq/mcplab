@@ -462,7 +462,7 @@ describe('Rover run queue domain', () => {
     expect(callbackService.jobs.get(jobId)?.status).toBe('waiting_for_rover');
     expect(callbackService.jobs.get(jobId)?.roverLease).toBeUndefined();
     expect(callbackService.state.queue).toContain(jobId);
-    expect(released).toHaveBeenCalledWith('claude');
+    expect(released).toHaveBeenCalledWith('claude', jobId);
 
     callbackService.handleRoverMessage(
       {

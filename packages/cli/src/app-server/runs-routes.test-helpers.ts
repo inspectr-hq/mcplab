@@ -26,7 +26,7 @@ export function createRunQueueServiceForTest(
     oauthSessionManager?: any;
     deps?: Record<string, unknown>;
     assignRoverJob?: (provider: string) => any;
-    onRoverJobReleased?: (provider: string) => void;
+    onRoverJobReleased?: (provider: string, jobId: string) => void;
     sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   } = {}
 ) {

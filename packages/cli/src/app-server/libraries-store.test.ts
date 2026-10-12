@@ -53,6 +53,60 @@ describe('libraries-store test-case directory migration', () => {
     expect(persisted.claude?.source).toBe('builtin');
   });
 
+  it.each(['name: [', 'name: Missing fields'])(
+    'refuses provider saves without changing files when an existing profile is invalid',
+    (raw) => {
+      const librariesDir = makeTempLibrariesDir();
+      const directory = join(librariesDir, 'browser-providers');
+      mkdirSync(directory);
+      const valid = serializeBrowserProviderProfile(DEFAULT_BROWSER_PROVIDER_PROFILES.claude);
+      writeFileSync(join(directory, 'valid.yaml'), valid);
+      writeFileSync(join(directory, 'broken.yml'), raw);
+
+      for (const profiles of [{}, { broken: DEFAULT_BROWSER_PROVIDER_PROFILES.claude }]) {
+        expect(() => writeBrowserProviderProfiles(librariesDir, profiles)).toThrow(/broken\.yml/);
+      }
+
+      expect(readFileSync(join(directory, 'broken.yml'), 'utf8')).toBe(raw);
+      expect(readFileSync(join(directory, 'valid.yaml'), 'utf8')).toBe(valid);
+      expect(readdirSync(directory).sort()).toEqual(['broken.yml', 'valid.yaml']);
+    }
+  );
+
+  it('still removes omitted valid provider profiles', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const profile = { ...DEFAULT_BROWSER_PROVIDER_PROFILES.claude, id: 'custom-chat' };
+    writeBrowserProviderProfiles(librariesDir, { 'custom-chat': profile });
+
+    writeBrowserProviderProfiles(librariesDir, {});
+
+    expect(existsSync(join(librariesDir, 'browser-providers', 'custom-chat.yaml'))).toBe(false);
+  });
+
+  it('refuses a learned profile save before migrating or changing the library', () => {
+    const librariesDir = makeTempLibrariesDir();
+    mkdirSync(join(librariesDir, 'browser-providers'));
+    mkdirSync(join(librariesDir, 'scenarios'));
+    writeFileSync(join(librariesDir, 'browser-providers', 'broken.yaml'), 'name: [');
+    writeFileSync(join(librariesDir, 'scenarios', 'old.yaml'), 'id: old\n');
+
+    expect(() =>
+      writeBrowserProviderAndAgent(librariesDir, DEFAULT_BROWSER_PROVIDER_PROFILES.claude, {
+        id: 'new-agent',
+        name: 'New agent',
+        provider: 'claude',
+        url: 'https://claude.ai'
+      })
+    ).toThrow(/broken\.yaml/);
+
+    expect(readFileSync(join(librariesDir, 'browser-providers', 'broken.yaml'), 'utf8')).toBe(
+      'name: ['
+    );
+    expect(readFileSync(join(librariesDir, 'scenarios', 'old.yaml'), 'utf8')).toBe('id: old\n');
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
+    expect(existsSync(join(librariesDir, 'agents.yaml'))).toBe(false);
+  });
+
   it('round-trips a provider named constructor', () => {
     const id = 'constructor';
     const librariesDir = makeTempLibrariesDir();
@@ -374,6 +428,36 @@ describe('libraries-store test-case directory migration', () => {
         browserProviders: { invalid: { script: 'alert(1)' } }
       })
     ).toThrow('Executable browser provider profiles are not supported.');
+  });
+
+  it('refuses a full library save before any changes when a stored provider is invalid', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const directory = join(librariesDir, 'browser-providers');
+    mkdirSync(directory);
+    mkdirSync(join(librariesDir, 'scenarios'));
+    const originals = {
+      'servers.yaml': 'existing: true\n',
+      'agents.yaml': 'old: {}\n',
+      'scenarios/old.yaml': 'id: old\n',
+      'browser-providers/broken.yaml': 'name: ['
+    };
+    for (const [file, raw] of Object.entries(originals)) {
+      writeFileSync(join(librariesDir, file), raw);
+    }
+
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: {},
+        agents: {},
+        scenarios: [],
+        browserProviders: {}
+      })
+    ).toThrow(/broken\.yaml/);
+
+    for (const [file, raw] of Object.entries(originals)) {
+      expect(readFileSync(join(librariesDir, file), 'utf8')).toBe(raw);
+    }
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
   });
 
   it('migrates legacy scenarios folder to test-cases when reading libraries', () => {

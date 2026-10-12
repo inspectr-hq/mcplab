@@ -73,6 +73,8 @@ export function writeBrowserProviderProfiles(
   profiles: Record<string, BrowserProviderProfile>
 ): Record<string, BrowserProviderProfile> {
   const root = resolve(librariesDir);
+  // Bulk saves must not overwrite or remove hand-edited profiles skipped by library listing.
+  readBrowserProviderProfiles(root, { strict: true });
   mkdirSync(root, { recursive: true });
   const directory = join(root, BROWSER_PROVIDERS_DIR_NAME);
   mkdirSync(directory, { recursive: true });
@@ -132,6 +134,7 @@ export function writeBrowserProviderAndAgent(
   profile: BrowserProviderProfile,
   agent: { id: string; name: string; provider: string; url: string }
 ): { profile: BrowserProviderProfile; agent: BrowserAgentConfig & { id: string } } {
+  readBrowserProviderProfiles(resolve(librariesDir), { strict: true });
   const current = readLibraries(librariesDir);
   const existingAgent = current.agents[agent.id];
   if (
@@ -214,6 +217,7 @@ export function writeLibraries(
       )
     : undefined;
   const root = resolve(librariesDir);
+  if (browserProviders) readBrowserProviderProfiles(root, { strict: true });
   const { testCasesDir } = ensureTestCasesDir(root);
   mkdirSync(root, { recursive: true });
   mkdirSync(testCasesDir, { recursive: true });

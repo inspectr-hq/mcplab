@@ -366,12 +366,10 @@ const RunEvaluation = () => {
         ? 'refs-composed'
         : 'single-file/inline';
     const browserConversationOptions = {
-      ...(selectedBrowserAgents.length > 0
+      ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
         ? {
-            newConversationBeforeStart: conversationMode !== 'same',
-            ...(conversationMode !== 'agent_default'
-              ? { newConversationBetweenScenarios: conversationMode === 'new' }
-              : {})
+            newConversationBeforeStart: conversationMode === 'new',
+            newConversationBetweenScenarios: conversationMode === 'new'
           }
         : {})
     };
@@ -381,7 +379,7 @@ const RunEvaluation = () => {
         .map((a) => a.name || a.id)
         .join(
           ', '
-        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${selectedBrowserAgents.length > 0 ? ` newConversationBeforeStart=${browserConversationOptions.newConversationBeforeStart} newConversationBetweenScenarios=${browserConversationOptions.newConversationBetweenScenarios ?? 'agent_default'}` : ''}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
+        )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${selectedBrowserAgents.length > 0 ? ` newConversationBeforeStart=${browserConversationOptions.newConversationBeforeStart ?? 'agent_default'} newConversationBetweenScenarios=${browserConversationOptions.newConversationBetweenScenarios ?? 'agent_default'}` : ''}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
         effectiveScenarioServerSummary || '(none)'
       }`
