@@ -486,6 +486,7 @@ export async function executeRunJob(params: {
       type: 'error',
       ts: new Date().toISOString(),
       payload: {
+        status: aborted ? 'stopped' : 'error',
         message: aborted
           ? 'Run aborted by user'
           : normalizedError instanceof Error

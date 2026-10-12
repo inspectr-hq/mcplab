@@ -34,6 +34,17 @@ const profile = {
 };
 
 describe('browser provider learning proposals', () => {
+  it.each(['{"example":true}\n', '```json\n{"example":true}\n```\n'])(
+    'skips parseable JSON that is not a valid proposal (%s)',
+    (prefix) => {
+      expect(parseBrowserProviderProposal(`${prefix}${JSON.stringify({ profile })}`)).toMatchObject(
+        {
+          profile,
+          validated: true
+        }
+      );
+    }
+  );
   beforeEach(() => chatWithJsonRetryMock.mockReset());
 
   it.each(['```json', '```', 'Here is the reviewed profile:\n```json'])(

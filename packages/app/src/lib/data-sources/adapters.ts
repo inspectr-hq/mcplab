@@ -1469,6 +1469,8 @@ export function fromCoreResultsJson(
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,
+    rerunNewConversationBeforeStart: results.metadata.rerun_new_conversation_before_start,
+    rerunNewConversationBetweenScenarios: results.metadata.rerun_new_conversation_between_scenarios,
     rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
     timestamp: results.metadata.timestamp,
     runNote: results.metadata.run_note,

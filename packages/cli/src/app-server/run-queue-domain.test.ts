@@ -736,31 +736,57 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(jobId)?.roverProgress).toBeUndefined();
   });
 
-  it('rebinds an active lease to a reconnecting worker', () => {
-    const service = createRunQueueServiceForTest();
-    const send = vi.fn(() => true);
-    const worker = {
-      connectionId: 'connection-1',
-      provider: 'claude',
-      capabilities: ['assignment_lease']
-    };
-    const { jobId } = service.enqueueRun(roverParams());
-    service.assignRoverJob('claude', send, worker);
-    const assignment = send.mock.calls[0][0] as { leaseId: string };
-    service.handleRoverMessage(
-      { type: 'assignment_accept', jobId, leaseId: assignment.leaseId },
-      'claude',
-      send,
-      worker
-    );
+  it.each(['offered', 'accepted'] as const)(
+    'rebinds an %s lease to a reconnecting worker',
+    (state) => {
+      const service = createRunQueueServiceForTest();
+      const send = vi.fn(() => true);
+      const worker = {
+        connectionId: 'connection-1',
+        registrationVersion: 8,
+        provider: 'claude',
+        capabilities: ['assignment_lease']
+      };
+      const { jobId } = service.enqueueRun(roverParams());
+      service.assignRoverJob('claude', send, worker);
+      const assignment = send.mock.calls[0][0] as { leaseId: string };
+      if (state === 'accepted')
+        service.handleRoverMessage(
+          { type: 'assignment_accept', jobId, leaseId: assignment.leaseId },
+          'claude',
+          send,
+          worker
+        );
 
-    service.rebindRoverLeases('claude', { ...worker, connectionId: 'connection-2' });
-    expect(service.jobs.get(jobId)?.roverLease).toMatchObject({
-      leaseId: assignment.leaseId,
-      connectionId: 'connection-2',
-      state: 'accepted'
-    });
-  });
+      service.rebindRoverLeases('claude', {
+        ...worker,
+        connectionId: 'connection-2',
+        registrationVersion: 1
+      });
+      expect(service.jobs.get(jobId)?.roverLease).toMatchObject({
+        leaseId: assignment.leaseId,
+        connectionId: 'connection-2',
+        registrationVersion: 1,
+        state
+      });
+      if (state === 'offered') {
+        const reconnected = { ...worker, connectionId: 'connection-2', registrationVersion: 1 };
+        service.handleRoverMessage(
+          {
+            type: 'assignment_reject',
+            jobId,
+            leaseId: assignment.leaseId,
+            reason: 'provider_mismatch',
+            retryable: true
+          },
+          'claude',
+          send,
+          reconnected
+        );
+        expect(service.assignRoverJob('claude', send, reconnected)).toBeNull();
+      }
+    }
+  );
 
   it('does not consume a waiting job when the Rover assignment cannot be delivered', () => {
     const service = createRunQueueServiceForTest();

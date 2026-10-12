@@ -1,4 +1,4 @@
-import { calculatePassRate } from '@inspectr/mcplab-core';
+import { calculatePassRate } from '@/types/eval';
 import { useMemo } from 'react';
 import { Activity, BarChart3, CheckCircle2, Clock, Layers, Timer, Wrench } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';

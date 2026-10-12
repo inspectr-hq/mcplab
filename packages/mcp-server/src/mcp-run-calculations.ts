@@ -1,4 +1,5 @@
 import type { ResultsJson } from '@inspectr/mcplab-core';
+import { calculatePassRate } from '@inspectr/mcplab-core';
 
 type AggregateGroupBy = 'run' | 'scenario' | 'agent';
 
@@ -6,6 +7,7 @@ type MetricSummary = {
   total_runs: number;
   passed_runs: number;
   failed_runs: number;
+  stopped_runs?: number;
   pass_rate: number;
   avg_tool_calls_per_run: number;
   avg_tool_latency_ms: number | null;
@@ -234,14 +236,16 @@ export function computeMetricSummary(scenarios: ResultsJson['scenarios']): Metri
   const runs = scenarios.flatMap((s) => s.runs);
   const totalRuns = runs.length;
   const passedRuns = runs.filter((r) => r.pass).length;
-  const failedRuns = totalRuns - passedRuns;
+  const stoppedRuns = runs.filter((r) => r.outcome === 'stopped').length;
+  const failedRuns = totalRuns - passedRuns - stoppedRuns;
   const totalToolCalls = runs.reduce((sum, r) => sum + r.tool_call_count, 0);
   const allDurations = runs.flatMap((r) => r.tool_durations_ms ?? []);
   return {
     total_runs: totalRuns,
     passed_runs: passedRuns,
     failed_runs: failedRuns,
-    pass_rate: totalRuns === 0 ? 0 : roundedDelta(passedRuns / totalRuns),
+    ...(stoppedRuns > 0 ? { stopped_runs: stoppedRuns } : {}),
+    pass_rate: roundedDelta(calculatePassRate(passedRuns, totalRuns, stoppedRuns)),
     avg_tool_calls_per_run: totalRuns === 0 ? 0 : roundedDelta(totalToolCalls / totalRuns),
     avg_tool_latency_ms:
       allDurations.length === 0
@@ -411,6 +415,7 @@ function toSerializableAggregateRow(row: AggregateGroupRow): Record<string, unkn
       total_runs: row.total_runs,
       passed_runs: row.passed_runs,
       failed_runs: row.failed_runs,
+      stopped_runs: row.stopped_runs,
       pass_rate: row.pass_rate,
       avg_tool_calls_per_run: row.avg_tool_calls_per_run,
       avg_tool_latency_ms: row.avg_tool_latency_ms

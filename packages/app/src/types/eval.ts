@@ -6,7 +6,7 @@ import type {
   RoverAgentProvider,
   RunOutcome
 } from '@/lib/data-sources/types';
-export { tallyCheckCounts } from '@/lib/data-sources/types';
+export { calculatePassRate, tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';
@@ -231,6 +231,8 @@ export interface EvalResult {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   timestamp: string;
   runNote?: string;

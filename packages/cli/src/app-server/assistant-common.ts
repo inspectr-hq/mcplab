@@ -55,10 +55,29 @@ function* extractBalancedJsonCandidates(text: string): Generator<string> {
   }
 }
 
-export function parseJsonFromAssistantText<T = unknown>(text: string): T {
+export function parseJsonFromAssistantText<T = unknown>(
+  text: string,
+  validate?: (value: unknown) => T
+): T {
   const cleaned = text.trim();
+  let validationError: unknown;
+  let validationErrorLength = -1;
+  const parseCandidate = (candidate: string): T => {
+    const value: unknown = JSON.parse(candidate);
+    if (!validate) return value as T;
+    try {
+      return validate(value);
+    } catch (error) {
+      // Keep diagnostics from the most complete candidate, not a nested fragment.
+      if (candidate.length > validationErrorLength) {
+        validationError = error;
+        validationErrorLength = candidate.length;
+      }
+      throw error;
+    }
+  };
   try {
-    return JSON.parse(cleaned) as T;
+    return parseCandidate(cleaned);
   } catch {
     const fenced = Array.from(cleaned.matchAll(/```(?:json)?\s*([\s\S]+?)```/gi), (match) =>
       match[1].trim()
@@ -66,12 +85,13 @@ export function parseJsonFromAssistantText<T = unknown>(text: string): T {
     for (const candidates of [fenced, extractBalancedJsonCandidates(cleaned)]) {
       for (const candidate of candidates) {
         try {
-          return JSON.parse(candidate) as T;
+          return parseCandidate(candidate);
         } catch {
           // CSS selectors and explanatory prose can contain brackets before the JSON.
         }
       }
     }
+    if (validationError) throw validationError;
     throw new Error('Assistant returned invalid JSON');
   }
 }

@@ -39,6 +39,8 @@ interface QueueRunParamsBase {
   runNote: string | null;
   serverOverrideAll: string[] | null;
   scenarioServerOverrides: Record<string, string[]> | null;
+  newConversationBeforeStart?: boolean;
+  newConversationBetweenScenarios?: boolean;
 }
 
 export interface QueueChildProgress {

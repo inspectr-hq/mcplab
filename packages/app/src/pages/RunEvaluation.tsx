@@ -731,30 +731,43 @@ const RunEvaluation = () => {
       if (event.type === 'completed' || event.type === 'error') {
         const isError = event.type === 'error';
         const eventRunId = String(event.payload.runId ?? '').trim();
-        if (isError) {
+        const wasStopped = (evaluation?: EvaluationQueueItem) =>
+          event.payload.status === 'stopped' ||
+          ['Run stopped by user', 'Run aborted by user'].includes(String(event.payload.message)) ||
+          evaluation?.status === 'stopped' ||
+          evaluation?.jobs.find((job) => job.jobId === jobId)?.status === 'stopped';
+        const logError = (evaluation?: EvaluationQueueItem) => {
+          if (!isError || wasStopped(evaluation)) return;
           const message = String(event.payload.message ?? 'Unknown error');
           const extraHint = message.includes('Anthropic model not found')
             ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
             : '';
           setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
-        }
+        };
         const finishEvaluation = (evaluation?: EvaluationQueueItem) => {
+          logError(evaluation);
+          const stoppedWithoutSummary = wasStopped(evaluation) && !evaluation;
           const hasErrors =
-            isError || (evaluation?.failedJobs ?? 0) - (evaluation?.stoppedJobs ?? 0) > 0;
+            (isError && !wasStopped(evaluation)) ||
+            (evaluation?.failedJobs ?? 0) - (evaluation?.stoppedJobs ?? 0) > 0;
           setOauthRequired(null);
           oauthConnectingRef.current = false;
           setLogs((prev) => {
-            const line = `[${ts}] ${hasErrors ? 'Run completed with errors.' : 'Run completed.'}`;
+            const line = `[${ts}] ${hasErrors ? 'Run completed with errors.' : wasStopped(evaluation) ? 'Run stopped.' : 'Run completed.'}`;
             return prev.includes(line) ? prev : [...prev, line];
           });
           setProgress(100);
           setRunning(false);
-          setDone(true);
+          setDone(!stoppedWithoutSummary);
           setCompletionHasErrors(hasErrors);
           setCompletionSummary(evaluation ?? null);
-          setStopped(false);
+          setStopped(stoppedWithoutSummary);
           setRunId(
-            evaluation?.completedJobs ? evaluation.evaluationRunId : isError ? '' : eventRunId
+            evaluation?.completedJobs
+              ? evaluation.evaluationRunId
+              : isError && !wasStopped(evaluation)
+                ? ''
+                : eventRunId
           );
           clearActiveRunJob();
           setActiveJobId(null);
@@ -778,6 +791,7 @@ const RunEvaluation = () => {
               ) ??
               evaluation?.jobs.find((job) => job.jobId !== jobId && job.status === 'blocked_auth');
             if (nextJob && evaluation) {
+              logError(evaluation);
               const finished = evaluation.completedJobs + evaluation.failedJobs;
               const line = `[${ts}] Subtask finished. ${finished}/${evaluation.totalJobs} finished. Continuing with the remaining run tasks...`;
               setLogs((prev) => (prev.includes(line) ? prev : [...prev, line]));

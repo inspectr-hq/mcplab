@@ -1,4 +1,4 @@
-import { calculatePassRate } from '@inspectr/mcplab-core';
+import { calculatePassRate } from '@/types/eval';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {

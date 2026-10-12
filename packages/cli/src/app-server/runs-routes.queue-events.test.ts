@@ -11,6 +11,11 @@ import {
 
 describe('browser agent variance', () => {
   it.each([
+    { supported: false, count: 1, status: 202 },
+    { supported: false, count: 2, status: 202 },
+    { supported: false, count: 2, status: 400, agentBetween: true },
+    { supported: true, count: 2, status: 202 },
+    { supported: true, count: 2, status: 202, agentBetween: false },
     { before: true, between: false, supported: false, count: 1, status: 400 },
     { before: false, between: true, supported: false, count: 2, status: 400 },
     { before: false, between: false, supported: false, count: 2, status: 202 },
@@ -27,11 +32,11 @@ describe('browser agent variance', () => {
     }
   ])(
     'checks New Chat support before queueing browser jobs (%j)',
-    async ({ before, between, supported, count, status, provider = 'polo' }) => {
+    async ({ before, between, supported, count, status, provider = 'polo', agentBetween }) => {
       const fixture = createOauthEvalFixture();
       writeFileSync(
         fixture.configPath,
-        `servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: ${provider}\n    url: https://polo.example\nscenarios:\n` +
+        `servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: ${provider}\n    url: https://polo.example\n${agentBetween !== undefined ? `    new_conversation_between_scenarios: ${agentBetween}\n` : ''}scenarios:\n` +
           Array.from({ length: count }, (_, i) => `  - id: s${i}\n    prompt: hello\n`).join('')
       );
       const response: { status?: number; body?: any } = {};
@@ -80,7 +85,14 @@ describe('browser agent variance', () => {
           expect(response.body.error).toContain('Polo has no New Chat support');
           expect(response.body.error).toContain('Continue the same conversation');
           expect(enqueueRun).not.toHaveBeenCalled();
-        } else expect(enqueueRun).toHaveBeenCalledOnce();
+        } else {
+          expect(enqueueRun).toHaveBeenCalledOnce();
+          const native = ['claude', 'chatgpt-com'].includes(provider);
+          expect(enqueueRun.mock.calls[0][0]).toMatchObject({
+            roverNewConversationBeforeStart: before ?? (supported || native),
+            roverNewConversationBetweenScenarios: between ?? agentBetween ?? (supported || native)
+          });
+        }
       } finally {
         cleanupFixtureRoot(fixture.root);
       }

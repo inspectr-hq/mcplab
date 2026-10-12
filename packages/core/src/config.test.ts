@@ -107,6 +107,21 @@ describe('browser agent normalization', () => {
 });
 
 describe('loadConfig normalization', () => {
+  it('preserves inline browser conversation settings through source and runtime normalization', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-browser-config-'));
+    try {
+      const path = join(dir, 'config.yaml');
+      writeFileSync(
+        path,
+        'servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: polo\n    url: https://polo.example\n    new_conversation_between_scenarios: false\nscenarios: []\n'
+      );
+      expect(loadConfig(path).config.agents.browser).toMatchObject({
+        newConversationBetweenScenarios: false
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('preserves optional top-level config name from source config', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

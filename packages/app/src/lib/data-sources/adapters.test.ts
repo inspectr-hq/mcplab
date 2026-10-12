@@ -90,6 +90,15 @@ function makeRecord(
 }
 
 describe('fromCoreResultsJson conversation mapping', () => {
+  it('preserves explicit conversation choices for reruns', () => {
+    const result = baseResults();
+    result.metadata.rerun_new_conversation_before_start = false;
+    result.metadata.rerun_new_conversation_between_scenarios = true;
+    expect(fromCoreResultsJson(result, [])).toMatchObject({
+      rerunNewConversationBeforeStart: false,
+      rerunNewConversationBetweenScenarios: true
+    });
+  });
   it('preserves LangSmith trace URLs when loading a detailed run', () => {
     const results = baseResults();
     results.metadata.langsmith_trace_urls = {

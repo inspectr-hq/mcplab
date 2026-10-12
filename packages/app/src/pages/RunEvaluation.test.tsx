@@ -916,7 +916,7 @@ describe('RunEvaluation', () => {
     }
   );
 
-  it.each(['error', 'completed'] as const)(
+  it.each(['error', 'completed', 'stopped'] as const)(
     'shows grouped results after the last child sends %s',
     async (eventType) => {
       sessionStorage.setItem(activeJobStorageKey, 'job-last');
@@ -935,22 +935,30 @@ describe('RunEvaluation', () => {
             evaluationRunId: 'evaluation-mixed',
             evaluationName: 'Mixed result group',
             status: 'partial',
-            totalJobs: 2,
+            totalJobs: eventType === 'stopped' ? 3 : 2,
             completedJobs: 1,
-            failedJobs: 1,
-            stoppedJobs: 0,
+            failedJobs: eventType === 'stopped' ? 2 : 1,
+            stoppedJobs: eventType === 'stopped' ? 1 : 0,
             pausedJobs: 0,
             jobs: [
               {
                 jobId: 'job-last',
-                status: eventType === 'error' ? 'error' : 'completed',
+                status:
+                  eventType === 'stopped'
+                    ? 'stopped'
+                    : eventType === 'error'
+                      ? 'error'
+                      : 'completed',
                 runParams: {}
               },
               {
                 jobId: 'job-other',
                 status: eventType === 'error' ? 'completed' : 'error',
                 runParams: {}
-              }
+              },
+              ...(eventType === 'stopped'
+                ? [{ jobId: 'job-completed', status: 'completed', runParams: {} }]
+                : [])
             ]
           }
         ]
@@ -965,12 +973,14 @@ describe('RunEvaluation', () => {
       await waitFor(() => expect(onEvent).toBeDefined());
       await act(async () => {
         onEvent?.({
-          type: eventType,
+          type: eventType === 'stopped' ? 'error' : eventType,
           ts: '2026-10-09T00:18:28.000Z',
           payload:
-            eventType === 'error'
-              ? { message: 'MCP connection failed' }
-              : { runId: 'evaluation-mixed' }
+            eventType === 'stopped'
+              ? { status: 'stopped', message: 'Run stopped by user' }
+              : eventType === 'error'
+                ? { message: 'MCP connection failed' }
+                : { runId: 'evaluation-mixed' }
         });
       });
       expect(await screen.findByText('Completed with errors')).toBeInTheDocument();
@@ -985,72 +995,98 @@ describe('RunEvaluation', () => {
     }
   );
 
-  it('shows stopped completion separately from errors and keeps grouped results', async () => {
-    sessionStorage.setItem(activeJobStorageKey, 'job-last');
-    let onEvent: ((event: any) => void) | undefined;
-    sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
-      if (jobId === 'job-last') onEvent = callback;
-      return () => {};
-    });
-    sourceMock.getRunQueue.mockResolvedValue({
-      active: null,
-      active_jobs: [],
-      admitting_jobs: [],
-      queued: [],
-      evaluations: [
-        {
-          evaluationRunId: 'evaluation-mixed',
-          evaluationName: 'Mixed result group',
-          status: 'stopped',
-          totalJobs: 2,
-          completedJobs: 1,
-          failedJobs: 1,
-          stoppedJobs: 1,
-          pausedJobs: 0,
-          jobs: [
-            {
-              jobId: 'job-last',
-              status: 'completed',
-              runParams: {}
-            },
-            {
-              jobId: 'job-other',
-              status: 'stopped',
-              runParams: {}
-            }
-          ]
-        }
-      ]
-    });
-    render(
-      <MemoryRouter initialEntries={['/run']}>
-        <Routes>
-          <Route path="/run" element={<RunEvaluation />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    await waitFor(() => expect(onEvent).toBeDefined());
-    await act(async () => {
-      onEvent?.({
-        type: 'completed',
-        ts: '2026-10-09T00:18:28.000Z',
-        payload: { runId: 'evaluation-mixed' }
+  it.each([
+    'completed',
+    'legacy-stop',
+    'structured-stop',
+    'queue-stop',
+    'group-stop',
+    'lookup-failed'
+  ])(
+    'shows stopped completion separately from errors and keeps grouped results (%s)',
+    async (eventType) => {
+      sessionStorage.setItem(activeJobStorageKey, 'job-last');
+      let onEvent: ((event: any) => void) | undefined;
+      sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
+        if (jobId === 'job-last') onEvent = callback;
+        return () => {};
       });
-    });
-    expect(await screen.findByText('Completed with stopped scenarios')).toBeInTheDocument();
-    expect(screen.queryByText('Completed with errors')).toBeNull();
-    expect(
-      screen.getByText('2/2 finished, 1 completed, 0 error(s), 1 stopped.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
-      'href',
-      '/results/evaluation-mixed'
-    );
-    expect(screen.getByText('100%')).toBeInTheDocument();
+      sourceMock.getRunQueue.mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [
+          {
+            evaluationRunId: 'evaluation-mixed',
+            evaluationName: 'Mixed result group',
+            status: 'stopped',
+            totalJobs: 2,
+            completedJobs: 1,
+            failedJobs: 1,
+            stoppedJobs: 1,
+            pausedJobs: 0,
+            jobs: [
+              {
+                jobId: 'job-last',
+                status: eventType === 'queue-stop' ? 'stopped' : 'completed',
+                runParams: {}
+              },
+              {
+                jobId: 'job-other',
+                status: 'stopped',
+                runParams: {}
+              }
+            ]
+          }
+        ]
+      });
+      render(
+        <MemoryRouter initialEntries={['/run']}>
+          <Routes>
+            <Route path="/run" element={<RunEvaluation />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      await waitFor(() => expect(onEvent).toBeDefined());
+      if (eventType === 'lookup-failed')
+        sourceMock.getRunQueue.mockRejectedValueOnce(new Error('Offline'));
+      await act(async () => {
+        onEvent?.({
+          type: eventType === 'completed' ? 'completed' : 'error',
+          ts: '2026-10-09T00:18:28.000Z',
+          payload:
+            eventType === 'completed'
+              ? { runId: 'evaluation-mixed' }
+              : eventType === 'structured-stop'
+                ? { status: 'stopped', message: 'Cancelled' }
+                : eventType === 'queue-stop' || eventType === 'group-stop'
+                  ? { message: 'Cancelled elsewhere' }
+                  : { message: 'Run stopped by user' }
+        });
+      });
+      if (eventType === 'lookup-failed') {
+        expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+        expect(screen.queryByText('Evaluation Complete')).toBeNull();
+        expect(screen.queryByText(/Error:.*Run stopped/)).toBeNull();
+        return;
+      }
+      expect(await screen.findByText('Completed with stopped scenarios')).toBeInTheDocument();
+      expect(screen.queryByText('Completed with errors')).toBeNull();
+      expect(screen.queryByText(/Error:.*(Cancelled|Run stopped)/)).toBeNull();
+      expect(
+        screen.getByText('2/2 finished, 1 completed, 0 error(s), 1 stopped.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
+        'href',
+        '/results/evaluation-mixed'
+      );
+      expect(screen.getByText('100%')).toBeInTheDocument();
 
-    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
-    expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
-  });
+      expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+      expect(sessionStorage.getItem(activeJobStorageKey)).toBeNull();
+    }
+  );
 
   it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-running');

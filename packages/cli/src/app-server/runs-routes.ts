@@ -510,13 +510,20 @@ export async function handleRunsRoutes(params: {
         ? body.newConversationBetweenScenarios
         : undefined;
     const newConversationBeforeStart =
-      typeof body.newConversationBeforeStart === 'boolean' ? body.newConversationBeforeStart : true;
+      typeof body.newConversationBeforeStart === 'boolean'
+        ? body.newConversationBeforeStart
+        : undefined;
+    const supportsNewChat = (agent: BrowserAgentConfig) =>
+      Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, agent.provider) ||
+      Boolean(browserProviders?.[agent.provider]?.newConversation);
     const unsupportedNewChat = browserAgents.find(({ agent }) => {
       const profile = browserProviders?.[agent.provider];
       const needsNewChat =
-        newConversationBeforeStart ||
+        (newConversationBeforeStart ?? supportsNewChat(agent)) ||
         (selectedConfig.scenarios.length > 1 &&
-          (conversationOverride ?? agent.newConversationBetweenScenarios ?? true));
+          (conversationOverride ??
+            agent.newConversationBetweenScenarios ??
+            supportsNewChat(agent)));
       // Rover uses native New Chat actions for built-in providers, including saved overrides.
       return (
         needsNewChat &&
@@ -544,7 +551,9 @@ export async function handleRunsRoutes(params: {
       runNote,
       oauthServerNames,
       serverOverrideAll,
-      scenarioServerOverrides
+      scenarioServerOverrides,
+      newConversationBeforeStart,
+      newConversationBetweenScenarios: conversationOverride
     };
     const runParamsList =
       browserAgents.length === 0
@@ -570,8 +579,10 @@ export async function handleRunsRoutes(params: {
               },
               roverScenarios: structuredClone(selectedConfig.scenarios),
               roverNewConversationBetweenScenarios:
-                conversationOverride ?? agent.newConversationBetweenScenarios ?? true,
-              roverNewConversationBeforeStart: newConversationBeforeStart
+                conversationOverride ??
+                agent.newConversationBetweenScenarios ??
+                supportsNewChat(agent),
+              roverNewConversationBeforeStart: newConversationBeforeStart ?? supportsNewChat(agent)
             }))
           ];
     const responses = runParamsList.map((runParams) =>

@@ -340,20 +340,30 @@ export function parseBrowserProviderProposal(
   text: string,
   trace?: BrowserProviderLearningTraceInput
 ): BrowserProviderProposal {
-  const parsed = parseJsonFromAssistantText<Record<string, unknown>>(text);
-  const rawProfile = parsed.profile ?? parsed;
-  const parsedProfile = validateBrowserProviderProfile(rawProfile);
-  const rationale = Array.isArray(parsed.rationale)
-    ? parsed.rationale.filter((value): value is string => typeof value === 'string').slice(0, 8)
-    : [];
-  const warnings = Array.isArray(parsed.warnings)
-    ? parsed.warnings.filter((value): value is string => typeof value === 'string').slice(0, 8)
-    : [];
-  const validated = trace
-    ? validateWorkingLocatorEvidence(parsedProfile, trace)
-    : { profile: parsedProfile, warnings: [] };
-  warnings.push(...validated.warnings);
-  return { profile: validated.profile, rationale, warnings: warnings.slice(0, 8), validated: true };
+  return parseJsonFromAssistantText(text, (value) => {
+    const parsed =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const rawProfile = parsed.profile ?? parsed;
+    const parsedProfile = validateBrowserProviderProfile(rawProfile);
+    const rationale = Array.isArray(parsed.rationale)
+      ? parsed.rationale.filter((value): value is string => typeof value === 'string').slice(0, 8)
+      : [];
+    const warnings = Array.isArray(parsed.warnings)
+      ? parsed.warnings.filter((value): value is string => typeof value === 'string').slice(0, 8)
+      : [];
+    const validated = trace
+      ? validateWorkingLocatorEvidence(parsedProfile, trace)
+      : { profile: parsedProfile, warnings: [] };
+    warnings.push(...validated.warnings);
+    return {
+      profile: validated.profile,
+      rationale,
+      warnings: warnings.slice(0, 8),
+      validated: true
+    };
+  });
 }
 
 export async function proposeBrowserProviderProfile(params: {

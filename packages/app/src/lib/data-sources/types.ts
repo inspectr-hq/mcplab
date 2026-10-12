@@ -35,6 +35,7 @@ import type {
 
 export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
+  calculatePassRate,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
@@ -96,6 +97,8 @@ export interface WorkspaceRunSummary {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;

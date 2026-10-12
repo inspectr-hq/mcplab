@@ -14,6 +14,8 @@ type RunParamsBase = {
   oauthServerNames?: string[];
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
+  newConversationBeforeStart?: boolean;
+  newConversationBetweenScenarios?: boolean;
 };
 
 export type McplabRunParams = RunParamsBase & {

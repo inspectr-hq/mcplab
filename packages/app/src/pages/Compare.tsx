@@ -1,4 +1,4 @@
-import { calculatePassRate } from '@inspectr/mcplab-core';
+import { calculatePassRate } from '@/types/eval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,

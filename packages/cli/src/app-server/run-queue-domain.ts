@@ -194,7 +194,7 @@ export function createRunQueueService(params: {
     deps.addJobEvent(job, {
       type: 'error',
       ts: new Date().toISOString(),
-      payload: { message }
+      payload: { message, status: 'stopped' }
     });
   }
 
@@ -646,7 +646,9 @@ export function createRunQueueService(params: {
             type: 'evaluation_started',
             ts: new Date().toISOString(),
             evaluationRunId: runParams.evaluationRunId,
-            evaluationName: runParams.evaluationName
+            evaluationName: runParams.evaluationName,
+            newConversationBeforeStart: runParams.newConversationBeforeStart,
+            newConversationBetweenScenarios: runParams.newConversationBetweenScenarios
           });
         }
       }
@@ -923,6 +925,7 @@ export function createRunQueueService(params: {
         )
           continue;
         job.roverLease.connectionId = worker.connectionId;
+        job.roverLease.registrationVersion = worker.registrationVersion;
         job.roverLease.expiresAt = new Date(now + 30_000).toISOString();
         scheduleLeaseExpiry(job);
       }

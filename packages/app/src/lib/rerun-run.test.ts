@@ -43,7 +43,9 @@ describe('rerunWithSameSettings', () => {
       rerunAgents: ['agent-explicit-a', 'agent-explicit-b'],
       rerunScenarioIds: ['scn-1'],
       rerunServerOverrideAll: ['replacement-server'],
-      rerunScenarioServerOverrides: { 'scn-1': ['scenario-server'] }
+      rerunScenarioServerOverrides: { 'scn-1': ['scenario-server'] },
+      rerunNewConversationBeforeStart: false,
+      rerunNewConversationBetweenScenarios: false
     };
     vi.mocked(source.getResult).mockResolvedValue(detailed);
 
@@ -55,7 +57,9 @@ describe('rerunWithSameSettings', () => {
         scenarioIds: ['scn-1'],
         agents: ['agent-explicit-a', 'agent-explicit-b'],
         serverOverrideAll: ['replacement-server'],
-        scenarioServerOverrides: { 'scn-1': ['scenario-server'] }
+        scenarioServerOverrides: { 'scn-1': ['scenario-server'] },
+        newConversationBeforeStart: false,
+        newConversationBetweenScenarios: false
       })
     );
   });

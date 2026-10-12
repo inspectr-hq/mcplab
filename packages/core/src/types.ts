@@ -512,6 +512,8 @@ export interface ResultsJson {
     rerun_scenario_ids?: string[];
     rerun_server_override_all?: string[];
     rerun_scenario_server_overrides?: Record<string, string[]>;
+    rerun_new_conversation_before_start?: boolean;
+    rerun_new_conversation_between_scenarios?: boolean;
     tool_tokens_total?: number | null;
     total_duration_ms?: number;
     total_tool_duration_ms?: number;
