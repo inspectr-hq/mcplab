@@ -112,8 +112,8 @@ export function AssistantMessageRow({
       )}
       <div className="relative max-w-[92%]">
         <div
-          className={`max-w-full break-words rounded-md border px-3 py-2 text-sm ${
-            isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-sm'
+          className={`max-w-full wrap-break-word rounded-md border px-3 py-2 text-sm ${
+            isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-xs'
           }`}
         >
           {!isUser && assistantLabel && (
@@ -322,7 +322,7 @@ export function AssistantComposer({
   const controlsDisabled = disabled || loading;
 
   return (
-    <div className="rounded-xl border bg-background p-2 shadow-sm">
+    <div className="rounded-xl border bg-background p-2 shadow-xs">
       <Textarea
         ref={inputRef}
         value={input}

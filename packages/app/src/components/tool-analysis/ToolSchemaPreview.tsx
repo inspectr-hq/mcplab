@@ -108,10 +108,10 @@ function ExplorerNode({
             ) : (
               <ChevronRight className="h-3 w-3 shrink-0" />
             )}
-            <span className="break-words">{name}</span>
+            <span className="wrap-break-word">{name}</span>
           </button>
         ) : (
-          <span className="break-words font-medium">{name}</span>
+          <span className="wrap-break-word font-medium">{name}</span>
         )}
         <Badge variant="outline" className="text-[10px]">
           {schemaType(record)}
@@ -119,17 +119,17 @@ function ExplorerNode({
         {required && <span className="text-[10px] text-rose-600">required</span>}
       </div>
       {typeof record.description === 'string' && (
-        <div className="max-w-full break-words text-[11px] text-muted-foreground">
+        <div className="max-w-full wrap-break-word text-[11px] text-muted-foreground">
           {record.description}
         </div>
       )}
       {Array.isArray(record.enum) && (
-        <div className="max-w-full break-words text-[11px] text-muted-foreground">
+        <div className="max-w-full wrap-break-word text-[11px] text-muted-foreground">
           Enum: {record.enum.map((value) => String(value)).join(', ')}
         </div>
       )}
       {record.default !== undefined && (
-        <div className="max-w-full break-words text-[11px] text-muted-foreground">
+        <div className="max-w-full wrap-break-word text-[11px] text-muted-foreground">
           Default: {safeJsonStringify(record.default)}
         </div>
       )}
@@ -310,7 +310,7 @@ export function ToolSchemaPreview({
                 type="button"
                 role="tab"
                 aria-selected={mode === nextMode}
-                className="rounded px-2 py-0.5 text-[11px] font-medium capitalize data-[active=true]:bg-background data-[active=true]:shadow-sm"
+                className="rounded px-2 py-0.5 text-[11px] font-medium capitalize data-[active=true]:bg-background data-[active=true]:shadow-xs"
                 data-active={mode === nextMode}
                 onClick={(event) => {
                   event.preventDefault();
@@ -331,7 +331,7 @@ export function ToolSchemaPreview({
             {inputSchema !== undefined && (
               <div className="space-y-1">
                 <SchemaHeading title="Input schema" schema={inputSchema} />
-                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
+                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/20 p-2 text-[11px]">
                   {safeJsonStringify(inputSchema)}
                 </pre>
               </div>
@@ -339,7 +339,7 @@ export function ToolSchemaPreview({
             {outputSchema !== undefined && (
               <div className="space-y-1">
                 <SchemaHeading title="Output schema" schema={outputSchema} />
-                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
+                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/20 p-2 text-[11px]">
                   {safeJsonStringify(outputSchema)}
                 </pre>
               </div>

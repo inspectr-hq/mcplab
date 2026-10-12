@@ -2104,8 +2104,8 @@ const ResultDetail = () => {
                             <MarkdownContent text={message.text} className="text-sm" />
                             {isPendingApproval && linkedPendingToolCall && (
                               <>
-                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                                  <code className="break-words">
+                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/50 p-2 text-xs">
+                                  <code className="wrap-break-word">
                                     {JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}
                                   </code>
                                 </pre>
@@ -2168,7 +2168,7 @@ const ResultDetail = () => {
                                 ? 'border-amber-400/30 bg-amber-50/70'
                                 : isTool
                                   ? 'border-blue-300/30 bg-blue-50/50'
-                                  : 'border-border/80 bg-background shadow-sm'
+                                  : 'border-border/80 bg-background shadow-xs'
                           }`}
                         >
                           {!(isUser || isSystem) && (
@@ -2270,8 +2270,8 @@ const ResultDetail = () => {
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </summary>
                           <div className="border-t px-3 pb-3 pt-2">
-                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                              <code className="break-words">
+                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/50 p-2 text-xs">
+                              <code className="wrap-break-word">
                                 {JSON.stringify(call.arguments ?? {}, null, 2)}
                               </code>
                             </pre>
@@ -2518,7 +2518,7 @@ const ResultDetail = () => {
                       <div className="min-w-0 flex items-center gap-2">
                         <span className="text-muted-foreground">Run note:</span>
                         <span
-                          className={`break-words ${
+                          className={`wrap-break-word ${
                             result.runNote ? 'text-foreground' : 'text-muted-foreground'
                           }`}
                         >

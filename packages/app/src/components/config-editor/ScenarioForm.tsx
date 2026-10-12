@@ -840,7 +840,7 @@ function ScenarioCard({
           {readOnly ? (
             <div className="flex items-center gap-2">
               {scenarioOrigin && (
-                <Badge variant={scenarioOrigin === 'inline' ? 'secondary' : 'outline'}>
+                <Badge variant={scenarioOrigin === 'inline' ? 'secondary' : 'outline-solid'}>
                   {scenarioOrigin === 'referenced' ? 'Referenced' : 'Inline'}
                 </Badge>
               )}
@@ -953,7 +953,7 @@ function ScenarioCard({
                 {servers.map((srv) => (
                   <Badge
                     key={srv.id}
-                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline'}
+                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline-solid'}
                     className={`cursor-pointer text-xs ${
                       scenario.serverIds.includes(srv.id) ? '' : 'opacity-50'
                     }`}
@@ -1357,7 +1357,7 @@ function ScenarioCard({
                                       {rule.label || 'Unnamed check'}
                                     </div>
                                     {rule.prompt && (
-                                      <div className="mt-0.5 break-words text-[11px] leading-snug text-muted-foreground">
+                                      <div className="mt-0.5 wrap-break-word text-[11px] leading-snug text-muted-foreground">
                                         {rule.prompt}
                                       </div>
                                     )}
@@ -1453,7 +1453,7 @@ function ScenarioCard({
                               <RuleTypeSelect
                                 value={newRuleType}
                                 onValueChange={setNewRuleType}
-                                className="h-8 w-[14.5rem] shrink-0 text-xs"
+                                className="h-8 w-58 shrink-0 text-xs"
                               />
                               <Input
                                 value={newRuleLabel}
@@ -1483,7 +1483,7 @@ function ScenarioCard({
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
-                              className="h-8 w-[14.5rem] shrink-0 text-xs"
+                              className="h-8 w-58 shrink-0 text-xs"
                               hideToolSequence={
                                 hasToolSequenceRule && newRuleType !== 'tool_sequence'
                               }
@@ -1504,7 +1504,7 @@ function ScenarioCard({
                                     value={newRuleEquals}
                                     onChange={(e) => setNewRuleEquals(e.target.value)}
                                     placeholder="Equals (optional)"
-                                    className="h-8 w-[12rem] text-xs font-mono"
+                                    className="h-8 w-48 text-xs font-mono"
                                     onKeyDown={(e) =>
                                       e.key === 'Enter' && (e.preventDefault(), addRule())
                                     }
@@ -1547,7 +1547,7 @@ function ScenarioCard({
                                     value={newRuleEquals}
                                     onChange={(e) => setNewRuleEquals(e.target.value)}
                                     placeholder="Equals (optional)"
-                                    className="h-8 w-[10rem] text-xs font-mono"
+                                    className="h-8 w-40 text-xs font-mono"
                                   />
                                 ) : (
                                   <Input
@@ -1558,7 +1558,7 @@ function ScenarioCard({
                                         ? 'Regex pattern'
                                         : 'Text present in input'
                                     }
-                                    className="h-8 w-[10rem] text-xs font-mono"
+                                    className="h-8 w-40 text-xs font-mono"
                                   />
                                 )}
                               </>

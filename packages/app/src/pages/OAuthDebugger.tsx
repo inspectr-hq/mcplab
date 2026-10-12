@@ -605,7 +605,7 @@ export default function OAuthDebuggerPage() {
 
   const severityBadge = (severity: 'error' | 'warning' | 'info') => {
     if (severity === 'error') return 'destructive' as const;
-    if (severity === 'warning') return 'outline' as const;
+    if (severity === 'warning') return 'outline-solid' as const;
     return 'secondary' as const;
   };
 
@@ -635,7 +635,7 @@ export default function OAuthDebuggerPage() {
                 className="rounded-full"
               >
                 <Badge
-                  variant={active ? 'default' : 'outline'}
+                  variant={active ? 'default' : 'outline-solid'}
                   className={!allowed ? 'opacity-50' : ''}
                 >
                   {step.label}
@@ -848,7 +848,7 @@ export default function OAuthDebuggerPage() {
             </CardContent>
           </Card>
 
-          <details className="rounded-md border bg-card p-3 shadow-sm">
+          <details className="rounded-md border bg-card p-3 shadow-xs">
             <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
             <div className="mt-3 space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
@@ -1196,10 +1196,10 @@ export default function OAuthDebuggerPage() {
                               s.status === 'failed'
                                 ? 'destructive'
                                 : s.status === 'completed'
-                                  ? 'outline'
+                                  ? 'outline-solid'
                                   : s.status === 'active'
                                     ? 'secondary'
-                                    : 'outline'
+                                    : 'outline-solid'
                             }
                             className={
                               s.status === 'completed'
@@ -1396,7 +1396,7 @@ export default function OAuthDebuggerPage() {
                         </div>
                       </div>
 
-                      <div className="max-h-[34rem] min-w-0 space-y-2 overflow-auto">
+                      <div className="max-h-136 min-w-0 space-y-2 overflow-auto">
                         {filteredNetwork.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
                             No network exchanges captured yet.

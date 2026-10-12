@@ -1094,10 +1094,7 @@ const Compare = () => {
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                  >
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
                     <Command>
                       <CommandInput placeholder="Search scenarios..." />
                       <CommandList id="compare-within-run-scenario-command-list">
@@ -1158,7 +1155,7 @@ const Compare = () => {
       {mode === 'runs' && (
         <Card>
           <CardContent className="p-0">
-            <Table containerClassName="max-h-[36rem] overflow-auto">
+            <Table containerClassName="max-h-144 overflow-auto">
               <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                 <TableRow>
                   <TableHead className="w-10" />
@@ -1389,7 +1386,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Summary Comparison</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[24rem] overflow-auto p-0">
+            <CardContent className="max-h-96 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1481,7 +1478,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenario Breakdown</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[26rem] overflow-auto p-0">
+            <CardContent className="max-h-104 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1612,7 +1609,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Agent Summary</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[24rem] overflow-auto p-0">
+            <CardContent className="max-h-96 overflow-auto p-0">
               <Table>
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1676,7 +1673,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenario × Agent Matrix</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[34rem] overflow-auto p-0">
+            <CardContent className="max-h-136 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>

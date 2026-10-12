@@ -857,7 +857,7 @@ const ConfigEditor = () => {
       {/* Stats bar */}
       <div className="flex gap-4">
         <Badge
-          variant={activeTab === 'scenarios' ? 'default' : 'outline'}
+          variant={activeTab === 'scenarios' ? 'default' : 'outline-solid'}
           className="py-1 px-3 text-xs"
         >
           <Link
@@ -869,7 +869,7 @@ const ConfigEditor = () => {
           </Link>
         </Badge>
         <Badge
-          variant={activeTab === 'agents' ? 'default' : 'outline'}
+          variant={activeTab === 'agents' ? 'default' : 'outline-solid'}
           className="py-1 px-3 text-xs"
         >
           <Link
@@ -1061,7 +1061,9 @@ const ConfigEditor = () => {
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowName}</span>
-                            <Badge variant={entry.kind === 'inline' ? 'secondary' : 'outline'}>
+                            <Badge
+                              variant={entry.kind === 'inline' ? 'secondary' : 'outline-solid'}
+                            >
                               {entry.kind === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
                             <Badge variant="outline" className="font-mono text-[10px]">
@@ -1313,7 +1315,9 @@ const ConfigEditor = () => {
                                 Default
                               </Badge>
                             )}
-                            <Badge variant={row.origin === 'inline' ? 'secondary' : 'outline'}>
+                            <Badge
+                              variant={row.origin === 'inline' ? 'secondary' : 'outline-solid'}
+                            >
                               {row.origin === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
                             <Button
@@ -1478,7 +1482,9 @@ const ConfigEditor = () => {
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowTitle}</span>
-                            <Badge variant={entry.kind === 'inline' ? 'secondary' : 'outline'}>
+                            <Badge
+                              variant={entry.kind === 'inline' ? 'secondary' : 'outline-solid'}
+                            >
                               {entry.kind === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
                             {hasOverrides && <Badge variant="secondary">Override</Badge>}
@@ -1581,7 +1587,7 @@ const ConfigEditor = () => {
                                     key={`${entry.ref}-override-server-${server.id}`}
                                     type="button"
                                     size="sm"
-                                    variant={selected ? 'default' : 'outline'}
+                                    variant={selected ? 'default' : 'outline-solid'}
                                     className={`h-7 text-xs ${selected ? '' : 'opacity-70'}`}
                                     onClick={() => {
                                       const current = (entry.mcpServers ?? [])

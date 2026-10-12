@@ -1148,7 +1148,7 @@ const RunEvaluation = () => {
                                 return (
                                   <Badge
                                     key={serverId}
-                                    variant={selected ? 'default' : 'outline'}
+                                    variant={selected ? 'default' : 'outline-solid'}
                                     className={`cursor-pointer text-xs ${
                                       selected ? '' : 'opacity-60 hover:opacity-100'
                                     }`}
@@ -1202,7 +1202,7 @@ const RunEvaluation = () => {
                       return (
                         <Badge
                           key={serverId}
-                          variant={selected ? 'default' : 'outline'}
+                          variant={selected ? 'default' : 'outline-solid'}
                           className={`cursor-pointer text-xs ${
                             selected ? '' : 'opacity-60 hover:opacity-100'
                           }`}
