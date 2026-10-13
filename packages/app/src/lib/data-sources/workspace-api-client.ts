@@ -33,7 +33,7 @@ import type {
   CoreLibraryBundle,
   ScenarioAssistantSseEvent,
   WorkspaceSettings,
-  EvaluationDecisionConfig
+  WorkspaceSettingsPatch
 } from './types';
 
 function getBaseUrl(): string {
@@ -169,12 +169,7 @@ function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, valu
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () => request<WorkspaceSettings>('/api/settings'),
-  updateSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string | null;
-    evaluationDecision?: EvaluationDecisionConfig | null;
-  }) =>
+  updateSettings: (patch: WorkspaceSettingsPatch) =>
     request<WorkspaceSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)

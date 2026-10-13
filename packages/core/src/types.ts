@@ -1,4 +1,85 @@
-export type { EvaluationDecisionConfig } from './decision-config.js';
+export interface EvaluationDecisionConfig {
+  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama';
+  model: string;
+  passThreshold: number;
+  failThreshold: number;
+  baseUrl?: string;
+}
+
+export interface WorkspaceEvaluationSettings {
+  evaluationJudgeAgentName?: string;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsOverrides {
+  scenario_assistant_agent_name?: string;
+  evaluation_judge_agent_name?: string;
+  default_queue_workers?: unknown;
+  evaluation_decision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsPatch {
+  defaultQueueWorkers?: number;
+  scenarioAssistantAgentName?: string | null;
+  evaluationJudgeAgentName?: string | null;
+  evaluationDecision?: EvaluationDecisionConfig | null;
+  evalsDir?: string;
+  runsDir?: string;
+  librariesDir?: string;
+}
+
+export interface EvaluationJudge {
+  name: string;
+  agent: LlmAgentConfig;
+}
+
+export interface WorkspaceEvaluation {
+  evaluationJudge?: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface ResolveWorkspaceEvaluationParams {
+  agents: EvalConfig['agents'];
+  scenarios: ReadonlyArray<Pick<Scenario, 'id' | 'eval'>>;
+  scenarioId?: string;
+  settings: WorkspaceEvaluationSettings | WorkspaceSettingsOverrides;
+}
+
+export interface AgentAssertionJudgeResult {
+  label: string;
+  pass: boolean;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticEvaluationParams {
+  assertions: AgentAssertion[];
+  finalText: string;
+  context?: AgentJudgeContext;
+  judge: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+  signal?: AbortSignal;
+}
+
+export interface DecisionCheck {
+  id: string;
+  prompt: string;
+}
+
+export interface DecisionAnswer {
+  id: string;
+  probability?: number;
+  model?: string;
+  durationMs: number;
+  fallback?: string;
+}
+
+export interface DecisionRequest {
+  config: EvaluationDecisionConfig;
+  evidence: unknown;
+  checks: DecisionCheck[];
+  signal?: AbortSignal;
+}
 
 export type TransportType = 'http';
 

@@ -165,6 +165,47 @@ describe('SettingsPage', () => {
     );
   });
 
+  it('limits Cloudflare models and permits custom TypeSafe models', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Cloudflare Clef' }));
+    expect(screen.getByRole('combobox', { name: 'Decision model' })).toHaveTextContent(
+      'clef-flash'
+    );
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision model' }));
+    fireEvent.click(screen.getByRole('option', { name: 'clef' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: {
+          provider: 'cloudflare',
+          model: 'clef',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Decision provider' })).toBeEnabled()
+    );
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'TypeSafe Jev' }));
+    expect(screen.getByLabelText('Decision model')).toHaveValue('jev-1.13.0');
+    fireEvent.change(screen.getByLabelText('Decision model'), { target: { value: 'jev-custom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenLastCalledWith({
+        evaluationDecision: {
+          provider: 'typesafe',
+          model: 'jev-custom',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
+      })
+    );
+  });
+
   it('requires a judge backup and retains the draft when saving fails', async () => {
     sourceMock.getWorkspaceSettings.mockResolvedValueOnce({ evaluationJudgeAgentName: '' });
     render(<SettingsPage />);

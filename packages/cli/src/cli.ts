@@ -10,6 +10,8 @@ import {
   hashConfig,
   selectScenarios,
   runAll,
+  resolveWorkspaceEvaluation,
+  loadWorkspaceSettingsOverrides,
   renderSummaryMarkdown,
   expandConfigForAgents,
   applyRuntimeServerOverrides,
@@ -24,8 +26,6 @@ import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
-import { resolveEvaluationJudge } from './app-server/run-queue-executor.js';
-import { loadWorkspaceSettingsOverrides } from './app-server/settings-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import {
   resolveRunOptions,
@@ -869,10 +869,10 @@ async function executeSingleConfigRun(params: {
     runsDir: String(options.runsDir),
     cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
-    evaluationDecision: workspaceSettings.evaluation_decision,
-    evaluationJudge: resolveEvaluationJudge({
+    ...resolveWorkspaceEvaluation({
       agents: libraryAgents,
-      evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name
+      scenarios: expanded.scenarios,
+      settings: workspaceSettings
     }),
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);

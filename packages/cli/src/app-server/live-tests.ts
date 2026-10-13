@@ -6,9 +6,8 @@ import {
   hashConfig,
   evaluateSemanticAssertions,
   throwIfAborted,
-  type EvaluationDecisionConfig,
+  type WorkspaceEvaluation,
   tallyCheckCounts,
-  type AgentConfig,
   type EvalConfig,
   type RunOutcome,
   type Scenario,
@@ -110,8 +109,7 @@ export interface LiveTestServiceOptions {
   cliVersion: string;
   readScenarios: (input?: LiveTestStartInput) => Scenario[];
   persist: (params: PersistEvaluationArtifactsParams) => void;
-  getEvaluationJudge?: () => { name: string; agent: AgentConfig } | undefined;
-  getEvaluationDecision?: () => EvaluationDecisionConfig | undefined;
+  getWorkspaceEvaluation?: (scenario: Scenario) => WorkspaceEvaluation;
   ttlMs?: number;
   now?: () => Date;
   appendJournalEvent?: typeof appendExecutionEvent;
@@ -240,7 +238,8 @@ export class LiveTestService {
       throw new LiveTestError('Live Test session was already completed with different data.', 409);
     }
 
-    const judge = this.options.getEvaluationJudge?.();
+    const { evaluationJudge: judge, evaluationDecision } =
+      this.options.getWorkspaceEvaluation?.(session.testCase) ?? {};
     if (session.testCase.eval?.agent_assertions?.length && !judge) {
       throw new LiveTestError('Agent checks require a configured evaluation judge.', 400);
     }
@@ -262,7 +261,7 @@ export class LiveTestService {
               context: judgeInput.context,
               finalText: normalized.finalText,
               judge,
-              evaluationDecision: this.options.getEvaluationDecision?.(),
+              evaluationDecision,
               signal
             })
         : undefined

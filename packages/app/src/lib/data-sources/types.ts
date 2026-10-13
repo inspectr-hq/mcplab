@@ -26,7 +26,9 @@ import type {
   RunOutcome,
   ExecutionSource,
   BrowserProviderProfile,
-  EvaluationDecisionConfig
+  EvaluationDecisionConfig,
+  WorkspaceSettingsPatch,
+  WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -37,6 +39,9 @@ import type {
 export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
   calculatePassRate,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
@@ -60,7 +65,7 @@ export type {
 };
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
-export type { EvaluationDecisionConfig };
+export type { EvaluationDecisionConfig, WorkspaceSettingsPatch };
 export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -170,15 +175,13 @@ export interface WorkspaceHealthResponse {
   mcp: HealthMcpConnectionInfo;
 }
 
-export interface WorkspaceSettings {
+export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
-  evaluationJudgeAgentName?: string;
-  evaluationDecision?: EvaluationDecisionConfig;
 }
 
 export interface StartRunResponse {
@@ -828,12 +831,7 @@ export interface EvalDataSource {
     provider: 'anthropic' | 'openai' | 'azure'
   ) => Promise<ProviderModelsResponse>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
-  updateWorkspaceSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string | null;
-    evaluationDecision?: EvaluationDecisionConfig | null;
-  }) => Promise<WorkspaceSettings | null>;
+  updateWorkspaceSettings: (patch: WorkspaceSettingsPatch) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (
     params: {
       configId?: string;

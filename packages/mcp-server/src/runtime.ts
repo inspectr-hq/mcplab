@@ -24,7 +24,7 @@ import {
   hashConfig,
   runAll,
   loadWorkspaceSettingsOverrides,
-  resolveEvaluationJudge,
+  resolveWorkspaceEvaluation,
   selectScenarios,
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
@@ -1979,7 +1979,10 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(
+          loaded.config,
+          readLibraryAgentsAndServers(bundleRoot)
+        );
         const selected = selectScenarios(mergedConfig, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
@@ -2050,7 +2053,8 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const libraries = readLibraryAgentsAndServers(bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, libraries);
         const selected = selectScenarios(mergedConfig, scenario_id);
         const runtimeOverridden = applyRuntimeServerOverrides(selected, {
           serverOverrideAll: server_override_all,
@@ -2062,7 +2066,6 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden.run_defaults?.selected_agents
         );
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
-        const { agents: libraryAgents } = readLibraryAgentsAndServers(bundleRoot);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
@@ -2070,10 +2073,10 @@ export function registerTools(server: McpServer): void {
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir(),
           cwd: process.cwd(),
-          evaluationDecision: workspaceSettings.evaluation_decision,
-          evaluationJudge: resolveEvaluationJudge({
-            agents: libraryAgents,
-            evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name
+          ...resolveWorkspaceEvaluation({
+            agents: libraries.agents,
+            scenarios: executable.scenarios,
+            settings: workspaceSettings
           })
         });
 
@@ -3471,8 +3474,10 @@ function resolveBundleRoot(): string {
   return SERVER_OWNED_ROOTS.bundleRoot;
 }
 
-function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): EvalConfig {
-  const libraries = readLibraryAgentsAndServers(bundleRoot);
+function mergeLibraryServersAndAgents(
+  config: EvalConfig,
+  libraries: ReturnType<typeof readLibraryAgentsAndServers>
+): EvalConfig {
   return {
     ...config,
     agents: { ...libraries.agents, ...config.agents },

@@ -10,39 +10,16 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { normalizeEvaluationDecisionConfig } from '@inspectr/mcplab-core';
-import type { EvaluationDecisionConfig } from '@/lib/data-sources/types';
+import {
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  normalizeEvaluationDecisionConfig,
+  type EvaluationDecisionConfig
+} from '@/types/eval';
 import { RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
-
-const decisionProviders = {
-  openai: {
-    label: 'OpenAI Decisions',
-    model: 'gpt-6-luna',
-    credentials: 'Requires OPENAI_API_KEY on the MCPLab backend.'
-  },
-  cloudflare: {
-    label: 'Cloudflare Clef',
-    model: 'clef-flash',
-    credentials: 'Requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AUTH_TOKEN on the MCPLab backend.'
-  },
-  typesafe: {
-    label: 'TypeSafe Jev',
-    model: 'jev-1.13.0',
-    credentials: 'Requires TYPESAFE_API_KEY on the MCPLab backend.'
-  },
-  ollama: {
-    label: 'Ollama',
-    model: 'clef-flash',
-    credentials:
-      'Requests use the MCPLab backend. Install a supported decision model on your Ollama server; models are not downloaded automatically.'
-  }
-} satisfies Record<
-  EvaluationDecisionConfig['provider'],
-  { label: string; model: string; credentials: string }
->;
 
 const SettingsPage = () => {
   const { source } = useDataSource();
@@ -56,9 +33,13 @@ const SettingsPage = () => {
     EvaluationDecisionConfig['provider'] | ''
   >('');
   const [decisionModel, setDecisionModel] = useState('');
-  const [decisionBaseUrl, setDecisionBaseUrl] = useState('http://localhost:11434');
-  const [decisionPassThreshold, setDecisionPassThreshold] = useState('0.9');
-  const [decisionFailThreshold, setDecisionFailThreshold] = useState('0.1');
+  const [decisionBaseUrl, setDecisionBaseUrl] = useState<string>(DECISION_DEFAULTS.baseUrl);
+  const [decisionPassThreshold, setDecisionPassThreshold] = useState(
+    String(DECISION_DEFAULTS.passThreshold)
+  );
+  const [decisionFailThreshold, setDecisionFailThreshold] = useState(
+    String(DECISION_DEFAULTS.failThreshold)
+  );
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
   const [decisionError, setDecisionError] = useState('');
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
@@ -75,9 +56,9 @@ const SettingsPage = () => {
     }
     setDecisionProvider(normalized?.provider ?? '');
     setDecisionModel(normalized?.model ?? '');
-    setDecisionBaseUrl(normalized?.baseUrl ?? 'http://localhost:11434');
-    setDecisionPassThreshold(String(normalized?.passThreshold ?? 0.9));
-    setDecisionFailThreshold(String(normalized?.failThreshold ?? 0.1));
+    setDecisionBaseUrl(normalized?.baseUrl ?? DECISION_DEFAULTS.baseUrl);
+    setDecisionPassThreshold(String(normalized?.passThreshold ?? DECISION_DEFAULTS.passThreshold));
+    setDecisionFailThreshold(String(normalized?.failThreshold ?? DECISION_DEFAULTS.failThreshold));
     setDecisionError(error);
   };
 
@@ -370,7 +351,7 @@ const SettingsPage = () => {
                   const provider =
                     value === '__none__' ? '' : (value as EvaluationDecisionConfig['provider']);
                   setDecisionProvider(provider);
-                  setDecisionModel(provider ? decisionProviders[provider].model : '');
+                  setDecisionModel(provider ? DECISION_PROVIDERS[provider].defaultModel : '');
                   setDecisionError('');
                 }}
               >
@@ -379,7 +360,7 @@ const SettingsPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
-                  {Object.entries(decisionProviders).map(([provider, { label }]) => (
+                  {Object.entries(DECISION_PROVIDERS).map(([provider, { label }]) => (
                     <SelectItem key={provider} value={provider}>
                       {label}
                     </SelectItem>
@@ -392,7 +373,8 @@ const SettingsPage = () => {
                 <Label htmlFor="decision-model" className="text-xs">
                   Decision model
                 </Label>
-                {decisionProvider === 'cloudflare' ? (
+                {!DECISION_PROVIDERS[decisionProvider].editableModel &&
+                DECISION_PROVIDERS[decisionProvider].models.length > 1 ? (
                   <Select
                     value={decisionModel}
                     onValueChange={setDecisionModel}
@@ -402,8 +384,11 @@ const SettingsPage = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="clef-flash">clef-flash</SelectItem>
-                      <SelectItem value="clef">clef</SelectItem>
+                      {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
+                        <SelectItem key={model} value={model}>
+                          {model}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -412,15 +397,13 @@ const SettingsPage = () => {
                     value={decisionModel}
                     onChange={(event) => setDecisionModel(event.target.value)}
                     disabled={savingSettings || loadingSettings}
+                    readOnly={!DECISION_PROVIDERS[decisionProvider].editableModel}
                     list="decision-model-suggestions"
                     aria-describedby={decisionError ? 'decision-error' : undefined}
                   />
                 )}
                 <datalist id="decision-model-suggestions">
-                  {(decisionProvider === 'ollama'
-                    ? ['clef-flash', 'clef', 'nimble', 'tev1']
-                    : [decisionProviders[decisionProvider].model]
-                  ).map((model) => (
+                  {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
                     <option key={model} value={model} />
                   ))}
                 </datalist>
@@ -430,7 +413,7 @@ const SettingsPage = () => {
           {decisionProvider && (
             <>
               <p className="text-xs text-muted-foreground">
-                {decisionProviders[decisionProvider].credentials}
+                {DECISION_PROVIDERS[decisionProvider].credentials}
               </p>
               {decisionProvider === 'ollama' && (
                 <div className="space-y-1.5">

@@ -1,10 +1,51 @@
-export interface EvaluationDecisionConfig {
-  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama';
-  model: string;
-  passThreshold: number;
-  failThreshold: number;
-  baseUrl?: string;
-}
+import type { EvaluationDecisionConfig } from './types.js';
+
+export const DECISION_PROVIDERS = {
+  openai: {
+    label: 'OpenAI Decisions',
+    defaultModel: 'gpt-6-luna',
+    models: ['gpt-6-luna'],
+    editableModel: false,
+    credentials: 'Requires OPENAI_API_KEY on the MCPLab backend.'
+  },
+  cloudflare: {
+    label: 'Cloudflare Clef',
+    defaultModel: 'clef-flash',
+    models: ['clef-flash', 'clef'],
+    editableModel: false,
+    credentials: 'Requires CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AUTH_TOKEN on the MCPLab backend.'
+  },
+  typesafe: {
+    label: 'TypeSafe Jev',
+    defaultModel: 'jev-1.13.0',
+    models: ['jev-1.13.0'],
+    editableModel: true,
+    credentials: 'Requires TYPESAFE_API_KEY on the MCPLab backend.'
+  },
+  ollama: {
+    label: 'Ollama',
+    defaultModel: 'clef-flash',
+    models: ['clef-flash', 'clef', 'nimble', 'tev1'],
+    editableModel: true,
+    credentials:
+      'Requests use the MCPLab backend. Install a supported decision model on your Ollama server; models are not downloaded automatically.'
+  }
+} as const satisfies Record<
+  EvaluationDecisionConfig['provider'],
+  {
+    label: string;
+    defaultModel: string;
+    models: readonly string[];
+    editableModel: boolean;
+    credentials: string;
+  }
+>;
+
+export const DECISION_DEFAULTS = {
+  passThreshold: 0.9,
+  failThreshold: 0.1,
+  baseUrl: 'http://localhost:11434'
+} as const;
 
 /** Shared validation for workspace settings and the settings form. */
 export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecisionConfig {
@@ -12,27 +53,23 @@ export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecis
     throw new Error('Decision engine configuration must be an object.');
   }
   const value = raw as Record<string, unknown>;
-  const provider = value.provider;
-  if (
-    provider !== 'openai' &&
-    provider !== 'cloudflare' &&
-    provider !== 'typesafe' &&
-    provider !== 'ollama'
-  ) {
+  const rawProvider = value.provider;
+  if (typeof rawProvider !== 'string' || !Object.hasOwn(DECISION_PROVIDERS, rawProvider)) {
     throw new Error('Choose a supported decision engine provider.');
   }
+  const provider = rawProvider as EvaluationDecisionConfig['provider'];
+  const definition = DECISION_PROVIDERS[provider];
   if (typeof value.model !== 'string' || !value.model.trim()) {
     throw new Error('Decision engine model is required.');
   }
   const model = value.model.trim();
-  if (provider === 'openai' && model !== 'gpt-6-luna') {
-    throw new Error('OpenAI Decisions currently supports gpt-6-luna.');
+  if (!definition.editableModel && !(definition.models as readonly string[]).includes(model)) {
+    throw new Error(`${definition.label} supports ${definition.models.join(' or ')}.`);
   }
-  if (provider === 'cloudflare' && model !== 'clef' && model !== 'clef-flash') {
-    throw new Error('Cloudflare decision model must be clef or clef-flash.');
-  }
-  const passThreshold = value.passThreshold === undefined ? 0.9 : value.passThreshold;
-  const failThreshold = value.failThreshold === undefined ? 0.1 : value.failThreshold;
+  const passThreshold =
+    value.passThreshold === undefined ? DECISION_DEFAULTS.passThreshold : value.passThreshold;
+  const failThreshold =
+    value.failThreshold === undefined ? DECISION_DEFAULTS.failThreshold : value.failThreshold;
   if (
     typeof passThreshold !== 'number' ||
     typeof failThreshold !== 'number' ||
@@ -54,7 +91,7 @@ export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecis
     if (value.baseUrl !== undefined && typeof value.baseUrl !== 'string') {
       throw new Error('Ollama server URL must be a string.');
     }
-    const url = new URL((value.baseUrl as string | undefined)?.trim() || 'http://localhost:11434');
+    const url = new URL((value.baseUrl as string | undefined)?.trim() || DECISION_DEFAULTS.baseUrl);
     if (
       !['http:', 'https:'].includes(url.protocol) ||
       url.username ||

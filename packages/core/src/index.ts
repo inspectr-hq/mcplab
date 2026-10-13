@@ -12,18 +12,18 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
+export { createRunId, runAll, type RunProgressEvent } from './runner.js';
+export { judgeAgentAssertions } from './judge.js';
+export { evaluateSemanticAssertions } from './decisions.js';
 export {
-  createRunId,
-  judgeAgentAssertions,
-  evaluateSemanticAssertions,
-  runAll,
-  type RunProgressEvent
-} from './runner.js';
-export { normalizeEvaluationDecisionConfig } from './decision-config.js';
+  normalizeEvaluationDecisionConfig,
+  DECISION_PROVIDERS,
+  DECISION_DEFAULTS
+} from './decision-config.js';
 export {
   loadWorkspaceSettingsOverrides,
   resolveEvaluationJudge,
-  type WorkspaceSettingsOverrides
+  resolveWorkspaceEvaluation
 } from './workspace-settings.js';
 export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';
 export { aggregateResults, renderSummaryMarkdown } from './results.js';

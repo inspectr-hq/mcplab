@@ -9,9 +9,11 @@ import {
   hashConfig,
   createRunId,
   runAll,
+  resolveWorkspaceEvaluation,
   applyRuntimeServerOverrides,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
+  type WorkspaceEvaluation,
   type BrowserAgentConfig,
   type ScenarioAttachment,
   type ScenarioRunTraceRecord
@@ -26,8 +28,7 @@ import {
 import {
   applyLibraryEntries,
   filterScenarioOverridesToSelectedScenarios,
-  mergeLibraryEntriesIntoConfig,
-  resolveEvaluationJudge
+  mergeLibraryEntriesIntoConfig
 } from './run-queue-executor.js';
 import type { RunQueueService } from './run-queue-domain.js';
 
@@ -628,16 +629,6 @@ export async function handleRunsRoutes(params: {
     }
 
     const libraries = readLibraries(settings.librariesDir);
-    let evaluationJudge;
-    try {
-      evaluationJudge = resolveEvaluationJudge({
-        agents: libraries.agents,
-        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
-      });
-    } catch (error: unknown) {
-      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
-      return true;
-    }
     const selectedAgentName = pickDefaultAssistantAgentName({
       requested: String(body.selectedAgentName ?? '').trim(),
       settingsDefault: settings.scenarioAssistantAgentName,
@@ -703,6 +694,17 @@ export async function handleRunsRoutes(params: {
       ]
     };
     const expandedPreviewConfig = expandConfigForAgents(previewConfigBase, [selectedAgentName]);
+    let evaluation: WorkspaceEvaluation;
+    try {
+      evaluation = resolveWorkspaceEvaluation({
+        agents: libraries.agents,
+        scenarios: expandedPreviewConfig.scenarios,
+        settings
+      });
+    } catch (error: unknown) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     const previewRunsRoot = mkdtempSync(join(tmpdir(), 'mcplab-preview-'));
 
     try {
@@ -713,8 +715,7 @@ export async function handleRunsRoutes(params: {
         runsDir: resolve(previewRunsRoot),
         cwd: settings.workspaceRoot,
         mcpServerAuthHeaders,
-        evaluationJudge,
-        evaluationDecision: settings.evaluationDecision
+        ...evaluation
       });
       const scenario = results.scenarios[0];
       const run = scenario?.runs?.[0];

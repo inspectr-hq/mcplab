@@ -6,10 +6,20 @@ import type {
   RoverAgentProvider,
   RunOutcome
 } from '@/lib/data-sources/types';
-export { calculatePassRate, tallyCheckCounts } from '@/lib/data-sources/types';
+export {
+  calculatePassRate,
+  tallyCheckCounts,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  normalizeEvaluationDecisionConfig
+} from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
-export type { ScenarioAttachment } from '@/lib/data-sources/types';
+export type {
+  ScenarioAttachment,
+  EvaluationDecisionConfig,
+  WorkspaceSettingsPatch
+} from '@/lib/data-sources/types';
 
 export interface ServerConfig {
   id: string;

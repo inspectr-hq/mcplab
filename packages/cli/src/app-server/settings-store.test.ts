@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   applyEvaluationSettingsPatch,
   applySettingsOverrides,
-  loadWorkspaceSettingsOverrides,
   persistSettingsOverrides
 } from './settings-store.js';
+import { loadWorkspaceSettingsOverrides } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 
 const roots: string[] = [];
@@ -19,6 +19,54 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
+  it.each(['deleted', undefined])(
+    'does not revalidate %s judge when saving unrelated settings',
+    (name) => {
+      const settings = {
+        ...fixture(),
+        evaluationJudgeAgentName: name,
+        evaluationDecision: decision
+      };
+      const readAgents = () => {
+        throw new Error('Agent library must not be read');
+      };
+      expect(
+        applyEvaluationSettingsPatch(settings, { defaultQueueWorkers: 4 }, readAgents)
+          .evaluationDecision
+      ).toEqual(decision);
+    }
+  );
+  it('allows clearing the engine when its backup judge has been deleted', () => {
+    const settings = {
+      ...fixture(),
+      evaluationJudgeAgentName: 'deleted',
+      evaluationDecision: decision
+    };
+    expect(
+      applyEvaluationSettingsPatch(settings, { evaluationDecision: null }, {}).evaluationDecision
+    ).toBeUndefined();
+  });
+  it('allows switching to a workspace with a saved engine and no matching judge', () => {
+    const settings = fixture();
+    const newWorkspace = fixture();
+    persistSettingsOverrides({
+      ...newWorkspace,
+      evaluationDecision: decision,
+      evaluationJudgeAgentName: 'deleted'
+    });
+    const candidate = { ...settings, librariesDir: newWorkspace.librariesDir };
+    applySettingsOverrides(candidate);
+    const readAgents = () => {
+      throw new Error('Agent library must not be read');
+    };
+    expect(
+      applyEvaluationSettingsPatch(
+        candidate,
+        { librariesDir: newWorkspace.librariesDir },
+        readAgents
+      )
+    ).toMatchObject({ librariesDir: newWorkspace.librariesDir, evaluationDecision: decision });
+  });
   const decision = {
     provider: 'ollama' as const,
     model: 'clef-flash',

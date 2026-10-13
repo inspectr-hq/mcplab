@@ -14,21 +14,20 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { basename, extname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type {
-  AgentConfig,
   BrowserProviderProfile,
   EvalConfig,
   ExecutableEvalConfig,
   LlmMessage,
-  LlmAgentConfig,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
   expandConfigForAgents,
-  isLlmAgent,
   loadConfig,
   readLibraryAgentsAndServers,
+  resolveEvaluationJudge,
+  resolveWorkspaceEvaluation,
   McpClientManager,
   validateBrowserProviderProfile,
   runAll
@@ -121,7 +120,6 @@ import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
-import { resolveEvaluationJudge } from './run-queue-executor.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
 import {
@@ -174,10 +172,6 @@ export function releaseRegisteredRoverJob(
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
-
-export function isEvaluationJudgeAgent(agent: AgentConfig | undefined): agent is LlmAgentConfig {
-  return agent !== undefined && isLlmAgent(agent);
-}
 
 export async function startAppServer(options: AppServerOptions) {
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -237,12 +231,11 @@ export async function startAppServer(options: AppServerOptions) {
       return [];
     },
     persist: persistAppRunArtifacts,
-    getEvaluationDecision: () => settings.evaluationDecision,
-    getEvaluationJudge: () => {
-      const libraries = readLibraries(settings.librariesDir);
-      return resolveEvaluationJudge({
-        agents: libraries.agents,
-        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+    getWorkspaceEvaluation: (scenario) => {
+      return resolveWorkspaceEvaluation({
+        agents: readLibraryAgentsAndServers(settings.librariesDir).agents,
+        scenarios: [scenario],
+        settings
       });
     }
   });
@@ -523,7 +516,7 @@ export async function startAppServer(options: AppServerOptions) {
           candidate = applyEvaluationSettingsPatch(
             candidate,
             body,
-            readLibraryAgentsAndServers(candidate.librariesDir).agents
+            () => readLibraryAgentsAndServers(candidate.librariesDir).agents
           );
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
@@ -656,7 +649,7 @@ export async function startAppServer(options: AppServerOptions) {
                 ? body.agentName
                 : settings.evaluationJudgeAgentName
           });
-          if (!judge || !isEvaluationJudgeAgent(judge.agent)) {
+          if (!judge) {
             asJson(res, 400, {
               error: 'Configure an LLM evaluation judge before requesting a provider proposal.'
             });

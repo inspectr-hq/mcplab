@@ -2,6 +2,7 @@ import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
 import type {
   AgentAssertion,
+  AgentAssertionJudgeResult,
   AgentJudgeContext,
   CheckResult,
   EvalRules,
@@ -17,11 +18,13 @@ export interface EvalResult {
   check_results: CheckResult[];
 }
 
-export interface AgentAssertionJudgeResult {
-  label: string;
-  pass: boolean;
-  reason: string;
-  metadata?: Record<string, unknown>;
+export function toJudgeErrorResults(
+  assertions: AgentAssertion[],
+  error: unknown
+): AgentAssertionJudgeResult[] {
+  if (isAbortError(error)) throw error;
+  const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
+  return assertions.map(({ label }) => ({ label, pass: false, reason }));
 }
 
 export interface JudgeAgentAssertionsInput {
@@ -222,15 +225,13 @@ export async function evaluateScenarioWithAgentChecks(
       });
     }
   } catch (error) {
-    if (isAbortError(error)) throw error;
-    const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
-    for (const assertion of agentAssertions) {
-      failures.push(reason);
+    for (const result of toJudgeErrorResults(agentAssertions, error)) {
+      failures.push(result.reason);
       check_results.push({
         type: 'agent_check',
-        label: assertion.label,
+        label: result.label,
         status: 'failed',
-        reason
+        reason: result.reason
       });
     }
   }

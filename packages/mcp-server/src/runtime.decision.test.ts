@@ -27,7 +27,19 @@ describe('immediate MCP decision evaluation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadConfig.mockReturnValue({
-      config: { name: 'test', servers: {}, agents: {}, scenarios: [] },
+      config: {
+        name: 'test',
+        servers: {},
+        agents: {},
+        scenarios: [
+          {
+            id: 'semantic',
+            servers: [],
+            prompt: 'Answer',
+            eval: { agent_assertions: [{ label: 'Check', prompt: 'Valid?' }] }
+          }
+        ]
+      },
       hash: 'test'
     });
     mocks.readLibraryAgentsAndServers.mockReturnValue({ agents: { judge: agent }, servers: {} });
@@ -48,6 +60,42 @@ describe('immediate MCP decision evaluation', () => {
       }
     } as any);
   });
+
+  it.each(['deleted', 'browser'])(
+    'runs deterministic checks despite a %s workspace judge',
+    async (name) => {
+      mocks.loadConfig.mockReturnValue({
+        config: {
+          servers: {},
+          agents: {},
+          scenarios: [
+            {
+              id: 'deterministic',
+              servers: [],
+              prompt: 'Answer',
+              eval: { response_assertions: [{ type: 'contains', value: 'done' }] }
+            }
+          ]
+        }
+      });
+      mocks.loadWorkspaceSettingsOverrides.mockReturnValue({
+        evaluation_judge_agent_name: name,
+        evaluation_decision: decision
+      });
+      mocks.readLibraryAgentsAndServers.mockReturnValue({
+        agents: {
+          main: agent,
+          browser: { type: 'browser', provider: 'polo', url: 'https://polo.example' }
+        },
+        servers: {}
+      });
+      const result = await runTool({ config_path: '/tmp/eval.yaml' });
+      expect(result.isError).not.toBe(true);
+      const options = mocks.runAll.mock.calls[0][1];
+      expect(options.evaluationJudge).toBeUndefined();
+      expect(options.evaluationDecision).toBeUndefined();
+    }
+  );
 
   it('uses shared workspace decision configuration and LLM judge backup', async () => {
     mocks.loadWorkspaceSettingsOverrides.mockReturnValue({

@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { normalizeEvaluationDecisionConfig } from './decision-config.js';
-import { requestDecisionAnswers } from './decisions.js';
-import { evaluateSemanticAssertions, runAll } from './runner.js';
+import { evaluateSemanticAssertions, requestDecisionAnswers } from './decisions.js';
+import type { LlmAgentConfig, SemanticEvaluationParams } from './types.js';
 
 const { chatMock } = vi.hoisted(() => ({ chatMock: vi.fn() }));
 vi.mock('./agent.js', async (original) => ({
@@ -176,6 +176,79 @@ describe('decision providers', () => {
     expect(result[0].probability).toBe(0.95);
     expect(result[64].fallback).toBe('http_error');
   });
+  it('starts limited batches together and preserves input order when they finish out of order', async () => {
+    const many = Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' }));
+    const finish: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => finish.push(resolve)));
+    const pending = requestDecisionAnswers({
+      ...input,
+      checks: many,
+      config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' })
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    finish[1](response({ '64': { type: 'noul', noul: 0.05 } }));
+    finish[0](
+      response(
+        Object.fromEntries(many.slice(0, 64).map(({ id }) => [id, { type: 'noul', noul: 0.95 }]))
+      )
+    );
+    const result = await pending;
+    expect(result.map(({ id }) => id)).toEqual(many.map(({ id }) => id));
+    expect(result.slice(0, 64).every(({ probability }) => probability === 0.95)).toBe(true);
+    expect(result[64].probability).toBe(0.05);
+  });
+  it('preserves completed batch answers when a concurrent batch times out', async () => {
+    vi.useFakeTimers();
+    const many = Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' }));
+    fetchMock
+      .mockResolvedValueOnce(
+        response(
+          Object.fromEntries(many.slice(0, 64).map(({ id }) => [id, { type: 'noul', noul: 0.95 }]))
+        )
+      )
+      .mockImplementationOnce(
+        (_url, request) =>
+          new Promise((_resolve, reject) => {
+            request.signal.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError'))
+            );
+          })
+      );
+    const pending = requestDecisionAnswers({
+      ...input,
+      checks: many,
+      config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' })
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    const result = await pending;
+    expect(result[0].probability).toBe(0.95);
+    expect(result[64].fallback).toBe('timeout');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it('cancels every concurrent batch without fallback results', async () => {
+    const controller = new AbortController();
+    const signals: AbortSignal[] = [];
+    fetchMock.mockImplementation(
+      (_url, request) =>
+        new Promise((_resolve, reject) => {
+          signals.push(request.signal);
+          request.signal.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          );
+        })
+    );
+    const pending = requestDecisionAnswers({
+      ...input,
+      checks: Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' })),
+      config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' }),
+      signal: controller.signal
+    });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
   it('rejects duplicates, refusals, and invalid probabilities per answer', async () => {
     fetchMock.mockResolvedValue(
       response([
@@ -242,47 +315,43 @@ describe('decision providers', () => {
 });
 
 describe('semantic decision routing', () => {
-  it('rejects a browser judge backup before requesting decisions', async () => {
-    await expect(
-      evaluateSemanticAssertions({
-        ...semanticInput,
-        judge: {
-          name: 'browser',
-          agent: { type: 'browser', provider: 'chatgpt', url: 'https://chatgpt.com' }
-        }
-      })
-    ).rejects.toThrow(/LLM/);
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('requires an LLM judge at the typed evaluation boundary', () => {
+    expectTypeOf<SemanticEvaluationParams['judge']['agent']>().toEqualTypeOf<LlmAgentConfig>();
   });
-  it('requires a valid LLM backup before starting a semantic scenario run', async () => {
-    await expect(
-      runAll(
-        {
-          servers: {},
-          agents: { main: { provider: 'openai', model: 'main' } },
-          scenarios: [
-            {
-              id: 'semantic',
-              agent: 'main',
-              servers: [],
-              prompt: 'Answer',
-              eval: { agent_assertions: [{ label: 'Check', prompt: 'Valid?' }] }
-            }
-          ]
-        },
-        {
-          runsPerScenario: 1,
-          configHash: 'test',
-          cliVersion: 'test',
-          evaluationDecision: config,
-          evaluationJudge: {
-            name: 'browser',
-            agent: { type: 'browser', provider: 'chatgpt', url: 'https://chatgpt.com' }
-          }
-        }
+  it('keeps completed chunk verdicts and judges only an unavailable concurrent chunk', async () => {
+    const assertions = Array.from({ length: 65 }, (_, n) => ({
+      label: `Check ${n + 1}`,
+      prompt: 'Valid?'
+    }));
+    fetchMock
+      .mockImplementationOnce(async (_url, request) =>
+        response(
+          Object.fromEntries(
+            Object.keys(JSON.parse(request.body).questions).map((id, n) => [
+              id,
+              { type: 'noul', noul: n === 0 ? 0.05 : 0.95 }
+            ])
+          )
+        )
       )
-    ).rejects.toThrow(/LLM/);
-    expect(fetchMock).not.toHaveBeenCalled();
+      .mockResolvedValueOnce(new Response('', { status: 503 }));
+    const result = await evaluateSemanticAssertions({
+      ...semanticInput,
+      assertions,
+      evaluationDecision: normalizeEvaluationDecisionConfig({
+        provider: 'ollama',
+        model: 'clef-flash'
+      })
+    });
+    expect(result[0]).toMatchObject({ pass: false, metadata: { evaluator: 'decision' } });
+    expect(result[63]).toMatchObject({ pass: true, metadata: { evaluator: 'decision' } });
+    expect(result[64]).toMatchObject({
+      pass: true,
+      metadata: { evaluator: 'judge', decision_fallback: 'http_error' }
+    });
+    expect(result.map(({ label }) => label)).toEqual(assertions.map(({ label }) => label));
+    const judged = JSON.parse(chatMock.mock.calls[0][0].messages[0].content);
+    expect(judged.checks.map(({ label }: { label: string }) => label)).toEqual(['Check 65']);
   });
   it('retains definite verdicts when the fallback judge fails', async () => {
     fetchMock.mockResolvedValue(

@@ -9,7 +9,6 @@ import {
   type WorkspaceSettingsOverrides
 } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
-export { loadWorkspaceSettingsOverrides } from '@inspectr/mcplab-core';
 
 const DEFAULT_QUEUE_WORKERS = 1;
 const MAX_QUEUE_WORKERS = 8;
@@ -57,7 +56,7 @@ export function applySettingsOverrides(settings: AppSettings): void {
 export function applyEvaluationSettingsPatch(
   settings: AppSettings,
   body: Record<string, unknown>,
-  agents: EvalConfig['agents']
+  agents: EvalConfig['agents'] | (() => EvalConfig['agents'])
 ): AppSettings {
   const candidate = { ...settings };
   const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
@@ -72,9 +71,9 @@ export function applyEvaluationSettingsPatch(
         ? undefined
         : normalizeEvaluationDecisionConfig(body.evaluationDecision);
   }
-  if (hasJudge || candidate.evaluationDecision) {
+  if (hasJudge || (hasDecision && candidate.evaluationDecision)) {
     const judge = resolveEvaluationJudge({
-      agents,
+      agents: typeof agents === 'function' ? agents() : agents,
       evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
     });
     if (candidate.evaluationDecision && !judge) {

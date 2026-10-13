@@ -10,15 +10,13 @@ vi.mock('./agent.js', async (importOriginal) => ({
 }));
 import {
   buildFallbackScenarioRequestId,
-  buildJudgeBatchPayload,
   buildMcpServerAuthHeaders,
   filterScenariosForRun,
-  mapJudgeBatchResults,
   buildScenarioRequestId,
   createRunId,
-  extractJudgeJson,
   runAll
 } from './runner.js';
+import { buildJudgeBatchPayload, mapJudgeBatchResults, extractJudgeJson } from './judge.js';
 
 const temporaryRunDirs: string[] = [];
 afterEach(() => {

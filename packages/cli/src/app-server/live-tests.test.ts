@@ -63,12 +63,14 @@ describe('LiveTestService', () => {
           eval: { agent_assertions: [{ label: 'City', prompt: 'Does it address Antwerp?' }] }
         }
       ],
-      getEvaluationJudge: () => ({ name: 'backup', agent: { provider: 'openai', model: 'judge' } }),
-      getEvaluationDecision: () => ({
-        provider: 'ollama',
-        model: 'clef-flash',
-        passThreshold: 0.9,
-        failThreshold: 0.1
+      getWorkspaceEvaluation: () => ({
+        evaluationJudge: { name: 'backup', agent: { provider: 'openai', model: 'judge' } },
+        evaluationDecision: {
+          provider: 'ollama',
+          model: 'clef-flash',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
       })
     });
     const session = service.start({ testCaseId: 'semantic', client: 'browser' });
@@ -122,8 +124,7 @@ describe('LiveTestService', () => {
           }
         }
       ],
-      getEvaluationJudge: () => judge,
-      getEvaluationDecision: () => evaluationDecision
+      getWorkspaceEvaluation: () => ({ evaluationJudge: judge, evaluationDecision })
     });
     const session = service.start({ testCaseId: 'semantic', client: 'polo' });
     const result = await service.complete(session.id, {
@@ -158,11 +159,13 @@ describe('LiveTestService', () => {
           }
         }
       ],
-      getEvaluationDecision: () => ({
-        provider: 'ollama',
-        model: 'clef-flash',
-        passThreshold: 0.9,
-        failThreshold: 0.1
+      getWorkspaceEvaluation: () => ({
+        evaluationDecision: {
+          provider: 'ollama',
+          model: 'clef-flash',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
       })
     });
     const session = service.start({ testCaseId: 'semantic', client: 'polo' });

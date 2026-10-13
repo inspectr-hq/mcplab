@@ -1,8 +1,10 @@
 export { tallyCheckCounts } from './check-counts.js';
 export {
   normalizeEvaluationDecisionConfig,
-  type EvaluationDecisionConfig
+  DECISION_PROVIDERS,
+  DECISION_DEFAULTS
 } from './decision-config.js';
+export type { EvaluationDecisionConfig, WorkspaceSettingsPatch } from './types.js';
 export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,

@@ -5,7 +5,8 @@ import {
   evaluateScenario,
   evaluateScenarioWithAgentChecks,
   extractValues,
-  normalizeToolConstraintAliases
+  normalizeToolConstraintAliases,
+  toJudgeErrorResults
 } from './eval.js';
 import type { ToolCall } from './types.js';
 
@@ -931,5 +932,18 @@ describe('extractValues', () => {
     ]);
     expect(result.count).toBe(5);
     expect(result.status).toBe('done');
+  });
+});
+
+describe('judge error results', () => {
+  const assertions = [{ label: 'Check', prompt: 'Verify' }];
+  it('normalizes non-Error failures for shared semantic evaluation', () => {
+    expect(toJudgeErrorResults(assertions, 'Unavailable')).toEqual([
+      { label: 'Check', pass: false, reason: 'Agent check failed: Unavailable' }
+    ]);
+  });
+  it('propagates cancellation instead of converting it to failed checks', () => {
+    const error = createAbortError();
+    expect(() => toJudgeErrorResults(assertions, error)).toThrow(error);
   });
 });

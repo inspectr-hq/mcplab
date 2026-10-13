@@ -2,35 +2,24 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type {
-  AgentAssertion,
-  AgentConfig,
-  AgentJudgeContext,
   ExecutableEvalConfig,
   ScenarioRunResult,
   ResultsJson,
   ExecutableScenario,
   ScenarioRunTraceRecord,
-  RunOutcome
+  RunOutcome,
+  EvaluationJudge,
+  EvaluationDecisionConfig
 } from './types.js';
-import { isLlmAgent } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
+import { isLlmAgent } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
-import {
-  buildBatchJudgeResponseFormat,
-  chatWithAgent,
-  runAgentScenario,
-  type AgentRunProgressEvent
-} from './agent.js';
+import { runAgentScenario, type AgentRunProgressEvent } from './agent.js';
 import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
 import { aggregateResults } from './results.js';
 import { evaluateScenarioObservation } from './scenario-observation.js';
-import {
-  normalizeEvaluationDecisionConfig,
-  type EvaluationDecisionConfig
-} from './decision-config.js';
-import { requestDecisionAnswers, type DecisionAnswer } from './decisions.js';
-import type { AgentAssertionJudgeResult } from './eval.js';
+import { evaluateSemanticAssertions } from './decisions.js';
 import { persistEvaluationArtifacts } from './artifacts.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 import {
@@ -54,10 +43,7 @@ export interface RunOptions {
     serverNames: string[],
     options?: { signal?: AbortSignal }
   ) => Promise<Record<string, Record<string, string>>>;
-  evaluationJudge?: {
-    name: string;
-    agent: AgentConfig;
-  };
+  evaluationJudge?: EvaluationJudge;
   evaluationDecision?: EvaluationDecisionConfig;
   signal?: AbortSignal;
   /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
@@ -133,13 +119,6 @@ export async function runAll(
         .map((scenario) => scenario.id)
         .join(', ')}`
     );
-  }
-  if (
-    scenariosWithAgentChecks.length > 0 &&
-    options.evaluationJudge &&
-    !isLlmAgent(options.evaluationJudge.agent)
-  ) {
-    throw new Error('Evaluation judge must be an LLM agent.');
   }
   const emitProgress = async (event: RunProgressEvent): Promise<void> => {
     if (!options.onProgress) return;
@@ -521,295 +500,6 @@ export async function runAll(
     await mcp.disconnectAll();
     if (!traceExporterFlushed) await traceExporter.flush();
   }
-}
-
-export function buildJudgeBatchPayload(
-  finalText: string,
-  assertions: AgentAssertion[],
-  context?: AgentJudgeContext
-) {
-  return {
-    final_answer: finalText,
-    ...(context && Object.keys(context).length > 0 ? { context } : {}),
-    checks: assertions.map((assertion, index) => ({
-      id: `agent-check-${index + 1}`,
-      label: assertion.label,
-      prompt: assertion.prompt
-    }))
-  };
-}
-
-type JudgeBatchPayload = ReturnType<typeof buildJudgeBatchPayload>;
-
-export function mapJudgeBatchResults(params: {
-  judgeName: string;
-  judgeAgent: AgentConfig;
-  batch: JudgeBatchPayload;
-  raw: string;
-}): Array<{ label: string; pass: boolean; reason: string; metadata?: Record<string, unknown> }> {
-  let parsed: { results?: unknown };
-  try {
-    parsed = JSON.parse(extractJudgeJson(params.raw));
-  } catch {
-    throw new Error(`judge "${params.judgeName}" returned invalid JSON for batched agent checks`);
-  }
-  if (!Array.isArray(parsed.results)) {
-    throw new Error(
-      `judge "${params.judgeName}" returned invalid results array for batched agent checks`
-    );
-  }
-
-  const resultsById = new Map<string, { id: string; pass: boolean; reason: string }>();
-  for (const item of parsed.results) {
-    if (!item || typeof item !== 'object') {
-      throw new Error(
-        `judge "${params.judgeName}" returned invalid result item for batched agent checks`
-      );
-    }
-    const candidate = item as Record<string, unknown>;
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.pass !== 'boolean' ||
-      typeof candidate.reason !== 'string'
-    ) {
-      throw new Error(
-        `judge "${params.judgeName}" returned invalid result item for batched agent checks`
-      );
-    }
-    if (!resultsById.has(candidate.id)) {
-      resultsById.set(candidate.id, {
-        id: candidate.id,
-        pass: candidate.pass,
-        reason: candidate.reason
-      });
-    }
-  }
-
-  return params.batch.checks.map((check) => {
-    const matched = resultsById.get(check.id);
-    if (!matched) {
-      return {
-        label: check.label,
-        pass: false,
-        reason: `Judge did not return a result for "${check.label}"`,
-        metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
-      };
-    }
-
-    const trimmedReason = matched.reason.trim();
-    return {
-      label: check.label,
-      pass: matched.pass,
-      reason:
-        trimmedReason.length > 0
-          ? trimmedReason
-          : matched.pass
-            ? `Agent check passed: ${check.label}`
-            : `Agent check failed: ${check.label}`,
-      metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
-    };
-  });
-}
-
-/** Prefer bounded decisions; use the conversational judge only for unavailable/uncertain checks. */
-export async function evaluateSemanticAssertions(
-  params: Parameters<typeof judgeAgentAssertions>[0] & {
-    evaluationDecision?: EvaluationDecisionConfig;
-  }
-): Promise<AgentAssertionJudgeResult[]> {
-  throwIfAborted(params.signal);
-  if (params.assertions.length === 0) return [];
-  if (!isLlmAgent(params.judge.agent)) throw new Error('Evaluation judge must be an LLM agent.');
-  if (!params.evaluationDecision) return judgeAgentAssertions(params);
-  const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
-  let config: EvaluationDecisionConfig | undefined;
-  let answers: DecisionAnswer[];
-  try {
-    config = normalizeEvaluationDecisionConfig(params.evaluationDecision);
-  } catch {
-    answers = batch.checks.map(({ id }) => ({
-      id,
-      fallback: 'invalid_configuration',
-      durationMs: 0
-    }));
-  }
-  if (config) {
-    answers = await requestDecisionAnswers({
-      config,
-      evidence: {
-        final_answer: batch.final_answer,
-        ...(batch.context ? { context: batch.context } : {})
-      },
-      checks: batch.checks,
-      signal: params.signal
-    });
-  }
-  throwIfAborted(params.signal);
-  const results: AgentAssertionJudgeResult[] = [];
-  const fallbackIndexes: number[] = [];
-  const metadataByIndex: Record<string, unknown>[] = [];
-  for (const [index, check] of batch.checks.entries()) {
-    const answer = answers![index];
-    const probability = answer.probability;
-    const fallback =
-      answer.fallback ??
-      (probability !== undefined &&
-      config &&
-      (probability >= config.passThreshold || probability <= config.failThreshold)
-        ? undefined
-        : 'uncertain');
-    const metadata = {
-      check_id: check.id,
-      decision_provider: params.evaluationDecision.provider,
-      decision_requested_model: params.evaluationDecision.model,
-      ...(answer.model ? { decision_model: answer.model } : {}),
-      ...(probability !== undefined ? { decision_probability: probability } : {}),
-      decision_pass_threshold: config?.passThreshold,
-      decision_fail_threshold: config?.failThreshold,
-      decision_duration_ms: answer.durationMs,
-      evaluator: fallback ? 'judge' : 'decision',
-      ...(fallback ? { decision_fallback: fallback } : {})
-    };
-    metadataByIndex[index] = metadata;
-    if (fallback) {
-      fallbackIndexes.push(index);
-      continue;
-    }
-    const pass = probability! >= config!.passThreshold;
-    results[index] = {
-      label: check.label,
-      pass,
-      reason: pass
-        ? `Satisfaction probability ${probability} met the pass threshold ${config!.passThreshold}.`
-        : `Satisfaction probability ${probability} met the fail threshold ${config!.failThreshold}.`,
-      metadata
-    };
-  }
-  if (fallbackIndexes.length) {
-    let judged: AgentAssertionJudgeResult[];
-    try {
-      judged = await judgeAgentAssertions({
-        ...params,
-        assertions: fallbackIndexes.map((index) => params.assertions[index])
-      });
-    } catch (error) {
-      throwIfAborted(params.signal);
-      if (isAbortError(error)) throw error;
-      const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
-      judged = fallbackIndexes.map((index) => ({
-        label: params.assertions[index].label,
-        pass: false,
-        reason
-      }));
-    }
-    throwIfAborted(params.signal);
-    for (const [position, index] of fallbackIndexes.entries()) {
-      const result = judged[position];
-      results[index] = { ...result, metadata: { ...result.metadata, ...metadataByIndex[index] } };
-    }
-  }
-  return results;
-}
-
-export async function judgeAgentAssertions(params: {
-  assertions: AgentAssertion[];
-  finalText: string;
-  context?: AgentJudgeContext;
-  judge: NonNullable<RunOptions['evaluationJudge']>;
-  signal?: AbortSignal;
-}): Promise<
-  Array<{ label: string; pass: boolean; reason: string; metadata?: Record<string, unknown> }>
-> {
-  const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
-  const system = [
-    'You evaluate whether a final answer satisfies a set of semantic checks.',
-    'Evaluate each check independently against final_answer.',
-    'Use final_answer as the primary answer being judged.',
-    'If context.scenario_prompt is provided, use it to decide whether the final answer addresses the original request.',
-    'If context.tool_sequence is provided, use it only to understand which tools were called.',
-    'If context.tool_inputs is provided, use the tool names and arguments to reason about how the tools were used.',
-    'Do not require context fields that are not provided.',
-    'Return JSON only.',
-    'Schema: {"results":[{"id":"abc","pass":true,"reason":"text"}]}.',
-    'Keep each reason short and concrete.'
-  ].join(' ');
-  const response = await chatWithAgent({
-    agent: params.judge.agent,
-    system,
-    tools: [],
-    signal: params.signal,
-    responseFormat: buildBatchJudgeResponseFormat(),
-    messages: [
-      {
-        role: 'user',
-        content: JSON.stringify(batch)
-      }
-    ]
-  });
-  return mapJudgeBatchResults({
-    judgeName: params.judge.name,
-    judgeAgent: params.judge.agent,
-    batch,
-    raw: String(response.content ?? '').trim()
-  });
-}
-
-function buildJudgeCheckMetadata(judgeName: string, judgeAgent: AgentConfig, checkId: string) {
-  if (!isLlmAgent(judgeAgent)) throw new Error('Browser agents cannot be evaluation judges.');
-  return {
-    check_id: checkId,
-    judge_agent: judgeName,
-    judge_model: judgeAgent.model,
-    judge_provider: judgeAgent.provider
-  };
-}
-
-export function extractJudgeJson(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return trimmed;
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fencedMatch?.[1]) return fencedMatch[1].trim();
-  const objectStart = trimmed.indexOf('{');
-  if (objectStart >= 0) {
-    const objectEnd = findMatchingJsonObjectEnd(trimmed, objectStart);
-    if (objectEnd > objectStart) {
-      return trimmed.slice(objectStart, objectEnd + 1).trim();
-    }
-  }
-  return trimmed;
-}
-
-function findMatchingJsonObjectEnd(text: string, startIndex: number): number {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = startIndex; index < text.length; index += 1) {
-    const char = text[index];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (char === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === '}') {
-      depth -= 1;
-      if (depth === 0) return index;
-    }
-  }
-
-  return -1;
 }
 
 export function filterScenariosForRun(

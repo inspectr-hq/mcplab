@@ -85,7 +85,15 @@ describe('executeRunJob', () => {
             }),
             expandConfigForAgents: (config: any) => ({
               ...config,
-              scenarios: [{ id: 's1', prompt: 'hi', agent: 'mini', servers: [] }]
+              scenarios: [
+                {
+                  id: 's1',
+                  prompt: 'hi',
+                  agent: 'mini',
+                  servers: [],
+                  eval: { agent_assertions: [{ label: 'Check', prompt: 'Valid?' }] }
+                }
+              ]
             }),
             resolveRunSelectedAgents: () => ['mini'],
             readLibraries: () => ({
@@ -119,42 +127,77 @@ describe('executeRunJob', () => {
     expect(getCompletedRunId({ runParams: {} } as any, 'execution-1')).toBe('execution-1');
   });
 
-  it('fails early when evaluation judge setting points to a missing agent', async () => {
-    const fixture = createOauthEvalFixture();
-    try {
-      const job = createQueuedJob(fixture.configPath, 'job-bad-judge');
-      const addJobEvent = (jobEventTarget: any, event: any) => {
-        jobEventTarget.events.push(event);
-      };
-      const result = await executeRunJob({
-        job,
-        settings: {
-          evalsDir: fixture.evalsDir,
-          runsDir: fixture.runsDir,
-          librariesDir: fixture.librariesDir,
-          workspaceRoot: fixture.root,
-          evaluationJudgeAgentName: 'missing-judge'
-        },
-        oauthSessionManager: {} as any,
-        deps: {
-          addJobEvent,
-          getScenarioRunTraceRecords: () => [],
-          selectScenarioIds: (config: any) => config,
-          expandConfigForAgents: (config: any) => config,
-          resolveRunSelectedAgents: () => ['mini'],
-          readLibraries: () => ({
-            agents: { mini: { provider: 'openai', model: 'gpt-5-mini' } },
-            servers: {},
-            scenarios: {}
-          }),
-          pkgVersion: 'test'
-        } as any
-      });
+  it.each([
+    ['missing-judge', false],
+    ['browser', false],
+    ['missing-judge', true],
+    ['browser', true]
+  ] as const)(
+    'validates judge %s only for semantic queued runs=%s',
+    async (judgeName, hasSemanticChecks) => {
+      const fixture = createOauthEvalFixture();
+      try {
+        const job = createQueuedJob(fixture.configPath, 'job-bad-judge');
+        runAllMock.mockReset();
+        runAllMock.mockResolvedValueOnce({
+          runDir: fixture.runsDir,
+          results: aggregateResults({
+            runId: 'execution',
+            timestamp: '2026-10-13T00:00:00Z',
+            configHash: 'test',
+            cliVersion: 'test',
+            scenarioRuns: []
+          })
+        });
+        const addJobEvent = (jobEventTarget: any, event: any) => {
+          jobEventTarget.events.push(event);
+        };
+        const result = await executeRunJob({
+          job,
+          settings: {
+            evalsDir: fixture.evalsDir,
+            runsDir: fixture.runsDir,
+            librariesDir: fixture.librariesDir,
+            workspaceRoot: fixture.root,
+            evaluationJudgeAgentName: judgeName
+          },
+          oauthSessionManager: {} as any,
+          deps: {
+            addJobEvent,
+            getScenarioRunTraceRecords: () => [],
+            selectScenarioIds: (config: any) => ({
+              ...config,
+              scenarios: [
+                {
+                  id: 's1',
+                  prompt: 'test',
+                  servers: [],
+                  ...(hasSemanticChecks
+                    ? { eval: { agent_assertions: [{ label: 'Valid', prompt: 'Valid?' }] } }
+                    : {})
+                }
+              ]
+            }),
+            expandConfigForAgents: (config: any) => config,
+            resolveRunSelectedAgents: () => ['mini'],
+            readLibraries: () => ({
+              agents: {
+                mini: { provider: 'openai', model: 'gpt-5-mini' },
+                browser: { type: 'browser', provider: 'chatgpt', url: 'https://chatgpt.com' }
+              },
+              servers: {},
+              scenarios: {}
+            }),
+            pkgVersion: 'test'
+          } as any
+        });
 
-      expect(result).toEqual({ status: 'error' });
-      expect(job.events.some((event: any) => event.type === 'error')).toBe(true);
-    } finally {
-      cleanupFixtureRoot(fixture.root);
+        expect(result.status).toBe(hasSemanticChecks ? 'error' : 'completed');
+        expect(runAllMock).toHaveBeenCalledTimes(hasSemanticChecks ? 0 : 1);
+        if (!hasSemanticChecks) expect(runAllMock.mock.calls[0][1].evaluationJudge).toBeUndefined();
+      } finally {
+        cleanupFixtureRoot(fixture.root);
+      }
     }
-  });
+  );
 });
