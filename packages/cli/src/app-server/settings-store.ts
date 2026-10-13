@@ -71,12 +71,14 @@ export function applyEvaluationSettingsPatch(
         ? undefined
         : normalizeEvaluationDecisionConfig(body.evaluationDecision);
   }
-  if (hasJudge || (hasDecision && candidate.evaluationDecision)) {
+  const engineEnabled =
+    candidate.evaluationDecision && candidate.evaluationDecision.enabled !== false;
+  if (hasJudge || (hasDecision && engineEnabled)) {
     const judge = resolveEvaluationJudge({
       agents: typeof agents === 'function' ? agents() : agents,
       evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
     });
-    if (candidate.evaluationDecision && !judge) {
+    if (engineEnabled && !judge) {
       throw new Error('Decision engines require a configured LLM evaluation judge as backup.');
     }
   }

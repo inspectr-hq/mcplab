@@ -6,6 +6,17 @@ import {
 } from './decision-config.js';
 
 describe('decision provider configuration', () => {
+  it('preserves an explicit enabled flag and keeps legacy configurations enabled by default', () => {
+    const raw = { provider: 'openai', model: 'gpt-6-luna' };
+    expect(normalizeEvaluationDecisionConfig({ ...raw, enabled: false }).enabled).toBe(false);
+    expect(normalizeEvaluationDecisionConfig({ ...raw, enabled: true }).enabled).toBe(true);
+    expect(normalizeEvaluationDecisionConfig(raw).enabled).toBeUndefined();
+  });
+  it.each(['false', 0, null])('rejects a non-boolean enabled flag %j', (enabled) => {
+    expect(() =>
+      normalizeEvaluationDecisionConfig({ provider: 'openai', model: 'gpt-6-luna', enabled })
+    ).toThrow('boolean');
+  });
   it.each(['openai', 'cloudflare', 'typesafe', 'ollama'] as const)(
     'accepts the advertised %s default with shared threshold defaults',
     (provider) => {

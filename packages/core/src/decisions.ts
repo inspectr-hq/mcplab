@@ -1,11 +1,12 @@
 import { createAbortError, throwIfAborted } from './abort.js';
-import { normalizeEvaluationDecisionConfig } from './decision-config.js';
+import { DECISION_PROVIDERS, normalizeEvaluationDecisionConfig } from './decision-config.js';
 import { toJudgeErrorResults } from './eval.js';
 import { buildJudgeBatchPayload, judgeAgentAssertions } from './judge.js';
 import type {
   AgentAssertionJudgeResult,
   DecisionAdapter,
   DecisionAnswer,
+  DecisionConnectionTestResult,
   DecisionRequest,
   EvaluationDecisionConfig,
   SemanticEvaluationParams
@@ -55,6 +56,7 @@ const adapters = {
     url: (_config: EvaluationDecisionConfig) => 'https://api.openai.com/v1/decisions',
     timeoutMs: 10_000,
     maxBatchSize: Infinity,
+    sequential: false,
     body({ config, evidence, checks }: DecisionRequest) {
       return {
         model: config.model,
@@ -85,6 +87,7 @@ const adapters = {
       `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(process.env.CLOUDFLARE_ACCOUNT_ID!)}/ai/run/@cf/cloudflare/${config.model}`,
     timeoutMs: 10_000,
     maxBatchSize: 64,
+    sequential: false,
     extract(raw: unknown) {
       const envelope = asRecord(raw);
       if (envelope?.success === false) return undefined;
@@ -97,14 +100,16 @@ const adapters = {
     authEnv: 'TYPESAFE_API_KEY',
     url: (_config: EvaluationDecisionConfig) => 'https://api.typesafe.ai/v1/systemone',
     timeoutMs: 10_000,
-    maxBatchSize: Infinity
+    maxBatchSize: Infinity,
+    sequential: false
   },
   ollama: {
     ...systemOneCodec,
     requiredEnv: [],
     url: (config: EvaluationDecisionConfig) => `${config.baseUrl}/v1/systemone`,
     timeoutMs: 120_000,
-    maxBatchSize: 64
+    maxBatchSize: 64,
+    sequential: true
   }
 } satisfies Record<EvaluationDecisionConfig['provider'], DecisionAdapter>;
 
@@ -193,15 +198,12 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
 /** Transport and normalization only; the semantic evaluator owns threshold/fallback policy. */
 export async function requestDecisionAnswers(params: DecisionRequest): Promise<DecisionAnswer[]> {
   const batches: DecisionRequest[] = [];
-  const batchSize = Math.min(
-    adapters[params.config.provider].maxBatchSize,
-    Math.max(1, params.checks.length)
-  );
+  const adapter = adapters[params.config.provider];
+  const batchSize = Math.min(adapter.maxBatchSize, Math.max(1, params.checks.length));
   for (let offset = 0; offset < params.checks.length; offset += batchSize) {
     batches.push({ ...params, checks: params.checks.slice(offset, offset + batchSize) });
   }
-  if (params.config.provider === 'ollama') {
-    // Local servers load and evaluate one batch at a time.
+  if (adapter.sequential) {
     const answers: DecisionAnswer[] = [];
     for (const batch of batches) answers.push(...(await requestBatch(batch)));
     return answers;
@@ -210,13 +212,60 @@ export async function requestDecisionAnswers(params: DecisionRequest): Promise<D
   return (await Promise.all(batches.map(requestBatch))).flat();
 }
 
+/** Probe the actual decision endpoint/model without saving settings or invoking a judge. */
+export async function testDecisionConnection(
+  raw: unknown,
+  signal?: AbortSignal
+): Promise<DecisionConnectionTestResult> {
+  throwIfAborted(signal);
+  const config = normalizeEvaluationDecisionConfig(raw);
+  const [answer] = await requestDecisionAnswers({
+    config,
+    evidence: { final_answer: 'The connection test is ready.' },
+    checks: [
+      { id: 'connection-check', prompt: 'Does the answer state that the connection test is ready?' }
+    ],
+    signal
+  });
+  throwIfAborted(signal);
+  const ok = answer.probability !== undefined;
+  const failures: Record<string, string> = {
+    missing_credentials: `Missing backend credentials. ${DECISION_PROVIDERS[config.provider].credentials} Set the required variables and restart MCPLab.`,
+    http_error:
+      'The decision provider returned an unsuccessful HTTP response. Check credentials, model availability, and endpoint support.',
+    connection_error:
+      'Could not connect to the decision provider. Check network access and, for Ollama, the server URL and that the server is running.',
+    timeout:
+      'The decision request timed out. Check provider availability; Ollama may still be loading the model.',
+    invalid_response: 'The decision provider returned invalid JSON.',
+    missing_answer: 'The decision provider did not return an answer to the connection check.',
+    duplicate_answer: 'The decision provider returned duplicate answers to the connection check.',
+    refusal: 'The decision provider refused the connection check.',
+    invalid_answer: 'The decision provider did not return a valid satisfaction probability.'
+  };
+  return {
+    ok,
+    message: ok
+      ? `${DECISION_PROVIDERS[config.provider].label} returned a valid decision for ${answer.model ?? config.model}.`
+      : (failures[answer.fallback ?? 'invalid_answer'] ?? failures.invalid_answer),
+    provider: config.provider,
+    requestedModel: config.model,
+    model: answer.model,
+    probability: answer.probability,
+    durationMs: answer.durationMs,
+    ...(ok ? {} : { failure: answer.fallback ?? 'invalid_answer' })
+  };
+}
+
 /** Prefer bounded decisions; use the conversational judge only for unavailable/uncertain checks. */
 export async function evaluateSemanticAssertions(
   params: SemanticEvaluationParams
 ): Promise<AgentAssertionJudgeResult[]> {
   throwIfAborted(params.signal);
   if (params.assertions.length === 0) return [];
-  if (!params.evaluationDecision) return judgeAgentAssertions(params);
+  if (!params.evaluationDecision || params.evaluationDecision.enabled === false) {
+    return judgeAgentAssertions(params);
+  }
   const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
   let config: EvaluationDecisionConfig | undefined;
   try {
@@ -257,6 +306,7 @@ export async function evaluateSemanticAssertions(
       check_id: check.id,
       decision_provider: params.evaluationDecision.provider,
       decision_requested_model: params.evaluationDecision.model,
+      decision_prompt: check.prompt,
       ...(answer.model ? { decision_model: answer.model } : {}),
       ...(probability !== undefined ? { decision_probability: probability } : {}),
       decision_pass_threshold: config?.passThreshold,

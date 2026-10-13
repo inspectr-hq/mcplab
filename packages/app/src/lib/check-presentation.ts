@@ -20,6 +20,7 @@ interface CheckPresentationItem {
   status: CheckResult['status'];
   failureReason?: string;
   decisionDetails?: string;
+  decisionInput?: string;
 }
 
 export function formatDecisionDetails(metadata?: CheckResult['metadata']): string | undefined {
@@ -50,9 +51,12 @@ export function formatDecisionDetails(metadata?: CheckResult['metadata']): strin
     details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
   }
   if (typeof metadata.decision_fallback === 'string') {
-    details.push(`Judge fallback: ${metadata.decision_fallback.replaceAll('_', ' ')}`);
+    details.push('Evaluated by LLM judge');
+    if (metadata.decision_fallback !== 'uncertain') {
+      details.push(`Decision unavailable: ${metadata.decision_fallback.replaceAll('_', ' ')}`);
+    }
   } else if (metadata.evaluator === 'judge') {
-    details.push('Evaluated by judge');
+    details.push('Evaluated by LLM judge');
   } else if (metadata.evaluator === 'decision') {
     details.push('Evaluated by decision');
   }
@@ -87,10 +91,18 @@ export function buildCheckItems({
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
       const decisionDetails =
         rule.type === 'agent_check' ? formatDecisionDetails(match?.metadata) : undefined;
+      const decisionInput =
+        rule.type === 'agent_check' && match?.metadata?.evaluator === 'decision'
+          ? (typeof match.metadata.decision_prompt === 'string'
+              ? match.metadata.decision_prompt
+              : rule.prompt
+            )?.trim()
+          : undefined;
       return {
         rule,
         status: match?.status ?? ('not_executed' as const),
         failureReason: match?.reason,
+        ...(decisionInput ? { decisionInput } : {}),
         ...(decisionDetails ? { decisionDetails } : {})
       };
     });

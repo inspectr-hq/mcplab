@@ -18,6 +18,7 @@ export type CheckCounts = CoreCheckCounts;
 export type {
   ScenarioAttachment,
   EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
   WorkspaceSettingsPatch
 } from '@/lib/data-sources/types';
 

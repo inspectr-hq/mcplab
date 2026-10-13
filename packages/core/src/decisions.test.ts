@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { normalizeEvaluationDecisionConfig } from './decision-config.js';
-import { evaluateSemanticAssertions, requestDecisionAnswers } from './decisions.js';
+import {
+  evaluateSemanticAssertions,
+  requestDecisionAnswers,
+  testDecisionConnection
+} from './decisions.js';
 import type { LlmAgentConfig, SemanticEvaluationParams } from './types.js';
 
 const { chatMock } = vi.hoisted(() => ({ chatMock: vi.fn() }));
@@ -362,7 +366,119 @@ describe('decision providers', () => {
   });
 });
 
+describe('decision connection probe', () => {
+  it.each([0, 0.5, 1])(
+    'accepts a valid probability %s without judging or applying thresholds',
+    async (probability) => {
+      fetchMock.mockImplementation(async (_url, request) => {
+        const question = JSON.parse(request.body).questions[0];
+        return response([{ name: question.name, type: 'predicate', probability }]);
+      });
+      const result = await testDecisionConnection(config);
+      expect(result).toMatchObject({
+        ok: true,
+        provider: 'openai',
+        requestedModel: config.model,
+        model: 'resolved-model',
+        probability
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).questions).toHaveLength(1);
+      expect(chatMock).not.toHaveBeenCalled();
+    }
+  );
+  it('reports the required backend credentials without attempting a request', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '');
+    const result = await testDecisionConnection(config);
+    expect(result).toMatchObject({ ok: false, failure: 'missing_credentials', durationMs: 0 });
+    expect(result.message).toContain('OPENAI_API_KEY');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['http_error', () => Promise.resolve(new Response('private provider error', { status: 401 }))],
+    ['connection_error', () => Promise.reject(new Error('private connection details'))],
+    ['missing_answer', () => Promise.resolve(response([]))],
+    ['invalid_response', () => Promise.resolve(new Response('not JSON'))]
+  ] as const)(
+    'reports %s without judge fallback or exposing raw errors',
+    async (failure, implementation) => {
+      fetchMock.mockImplementation(implementation);
+      const result = await testDecisionConnection(config);
+      expect(result).toMatchObject({ ok: false, failure });
+      expect(result.message).not.toContain('private');
+      expect(chatMock).not.toHaveBeenCalled();
+    }
+  );
+  it('tests the configured Ollama URL/model even when automatic decision evaluation is off', async () => {
+    fetchMock.mockImplementation(async (_url, request) => {
+      const id = Object.keys(JSON.parse(request.body).questions)[0];
+      return response({ [id]: { type: 'noul', noul: 0.5 } });
+    });
+    const result = await testDecisionConnection({
+      ...config,
+      provider: 'ollama',
+      model: 'tev1:0.8b',
+      enabled: false,
+      baseUrl: 'http://ollama:11434/'
+    });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://ollama:11434/v1/systemone',
+      expect.objectContaining({ body: expect.stringContaining('tev1:0.8b') })
+    );
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+  it('validates draft settings before sending a request', async () => {
+    await expect(testDecisionConnection({ ...config, failThreshold: 0.99 })).rejects.toThrow(
+      'thresholds'
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('times out the probe without invoking the judge', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url, request) =>
+        new Promise((_resolve, reject) =>
+          request.signal.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          )
+        )
+    );
+    const pending = testDecisionConnection(config);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+  it('propagates user cancellation without invoking the judge', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementation(
+      (_url, request) =>
+        new Promise((_resolve, reject) =>
+          request.signal.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          )
+        )
+    );
+    const pending = testDecisionConnection(config, controller.signal);
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('semantic decision routing', () => {
+  it('uses the judge directly when the saved decision engine is off', async () => {
+    const result = await evaluateSemanticAssertions({
+      ...semanticInput,
+      evaluationDecision: { ...config, enabled: false }
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(result.every(({ reason }) => reason === 'Judge explanation')).toBe(true);
+    expect(result.every(({ metadata }) => metadata?.decision_provider === undefined)).toBe(true);
+  });
   it('requires an LLM judge at the typed evaluation boundary', () => {
     expectTypeOf<SemanticEvaluationParams['judge']['agent']>().toEqualTypeOf<LlmAgentConfig>();
   });
@@ -430,7 +546,11 @@ describe('semantic decision routing', () => {
     );
     const result = await evaluateSemanticAssertions(semanticInput);
     expect(result.map((r) => r.pass)).toEqual([true, false, true]);
-    expect(result[0].metadata).toMatchObject({ evaluator: 'decision', decision_probability: 0.9 });
+    expect(result[0].metadata).toMatchObject({
+      evaluator: 'decision',
+      decision_probability: 0.9,
+      decision_prompt: checks[0].prompt
+    });
     expect(result[1].metadata).toMatchObject({ evaluator: 'decision', decision_probability: 0.1 });
     expect(result[2].metadata).toMatchObject({
       evaluator: 'judge',

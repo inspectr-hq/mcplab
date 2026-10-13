@@ -1512,13 +1512,20 @@ const ResultDetail = () => {
                                                                   {formatEvalRuleLabel(check.rule)}
                                                                 </span>
                                                               </div>
-                                                              {check.failureReason && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
-                                                                  {formatFailureReason(
-                                                                    check.failureReason
-                                                                  )}
+                                                              {check.decisionInput && (
+                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                                                                  Assertion prompt:{' '}
+                                                                  {check.decisionInput}
                                                                 </p>
                                                               )}
+                                                              {!check.decisionInput &&
+                                                                check.failureReason && (
+                                                                  <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
+                                                                    {formatFailureReason(
+                                                                      check.failureReason
+                                                                    )}
+                                                                  </p>
+                                                                )}
                                                               {check.decisionDetails && (
                                                                 <p className="mt-1 pl-5 text-xs text-muted-foreground">
                                                                   {check.decisionDetails}

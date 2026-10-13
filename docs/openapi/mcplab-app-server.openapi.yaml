@@ -125,7 +125,7 @@ paths:
                     - type: string
                     - type: "null"
                 evaluationDecision:
-                  description: Optional decision engine for semantic checks. Requires an LLM evaluation judge as backup. Null clears the configuration.
+                  description: Optional decision engine for semantic checks. When enabled, requires an LLM evaluation judge as backup. Set enabled to false to retain configuration while using the judge. Null clears the configuration.
                   oneOf:
                     - $ref: "#/components/schemas/EvaluationDecisionConfig"
                     - type: "null"
@@ -137,6 +137,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceSettings"
+
+  /api/settings/decision/test:
+    post:
+      tags: [Settings]
+      summary: Test a draft Decision Engine configuration
+      description: Sends one synthetic semantic check through the selected provider using backend credentials. Does not save settings or invoke an Evaluation Judge. A valid probability indicates a successful connection, regardless of thresholds. Uses the normal provider timeout without automatic retries.
+      operationId: testDecisionConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationDecisionConfig"
+      responses:
+        "200":
+          description: Connection test result; ok is false for missing credentials or an unavailable/invalid decision response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionConnectionTestResult"
+        "400":
+          $ref: "#/components/responses/Error400"
 
   /api/libraries:
     get:
@@ -1612,6 +1634,10 @@ components:
       required: [provider, model, passThreshold, failThreshold]
       description: Satisfaction probabilities at or above passThreshold pass; at or below failThreshold fail. Other answers use the judge. failThreshold must be less than passThreshold.
       properties:
+        enabled:
+          type: boolean
+          default: true
+          description: False retains the saved configuration but routes semantic checks directly to the LLM judge. Omitted means enabled for existing workspaces. Explicit connection tests still send a request.
         provider:
           type: string
           enum: [openai, cloudflare, typesafe, ollama]
@@ -1623,6 +1649,21 @@ components:
           format: uri
           description: Ollama-only HTTP or HTTPS server URL, reachable from the MCPLab backend.
           default: http://localhost:11434
+      additionalProperties: false
+    DecisionConnectionTestResult:
+      type: object
+      required: [ok, message, provider, requestedModel, durationMs]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        provider: { type: string, enum: [openai, cloudflare, typesafe, ollama] }
+        requestedModel: { type: string }
+        model: { type: string }
+        probability: { type: number, minimum: 0, maximum: 1 }
+        durationMs: { type: number, minimum: 0 }
+        failure:
+          type: string
+          description: Failure category, present only when the connection test fails.
       additionalProperties: false
     WorkspaceSettings:
       type: object

@@ -33,7 +33,9 @@ import type {
   CoreLibraryBundle,
   ScenarioAssistantSseEvent,
   WorkspaceSettings,
-  WorkspaceSettingsPatch
+  WorkspaceSettingsPatch,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult
 } from './types';
 
 function getBaseUrl(): string {
@@ -169,6 +171,12 @@ function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, valu
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () => request<WorkspaceSettings>('/api/settings'),
+  testDecisionConnection: (config: EvaluationDecisionConfig, signal?: AbortSignal) =>
+    request<DecisionConnectionTestResult>('/api/settings/decision/test', {
+      method: 'POST',
+      body: JSON.stringify(config),
+      signal
+    }),
   updateSettings: (patch: WorkspaceSettingsPatch) =>
     request<WorkspaceSettings>('/api/settings', {
       method: 'PUT',

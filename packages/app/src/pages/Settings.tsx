@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -10,11 +10,13 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   normalizeEvaluationDecisionConfig,
-  type EvaluationDecisionConfig
+  type EvaluationDecisionConfig,
+  type DecisionConnectionTestResult
 } from '@/types/eval';
 import { RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -33,6 +35,7 @@ const SettingsPage = () => {
     EvaluationDecisionConfig['provider'] | ''
   >('');
   const [decisionModel, setDecisionModel] = useState('');
+  const [decisionEnabled, setDecisionEnabled] = useState(false);
   const [decisionBaseUrl, setDecisionBaseUrl] = useState<string>(DECISION_DEFAULTS.baseUrl);
   const [decisionPassThreshold, setDecisionPassThreshold] = useState(
     String(DECISION_DEFAULTS.passThreshold)
@@ -42,7 +45,34 @@ const SettingsPage = () => {
   );
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
   const [decisionError, setDecisionError] = useState('');
+  const [testingDecision, setTestingDecision] = useState(false);
+  const [decisionConnectionResult, setDecisionConnectionResult] =
+    useState<DecisionConnectionTestResult>();
+  const decisionTestController = useRef<AbortController | null>(null);
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
+
+  useEffect(() => {
+    decisionTestController.current?.abort();
+    decisionTestController.current = null;
+    setTestingDecision(false);
+    setDecisionConnectionResult(undefined);
+  }, [
+    decisionProvider,
+    decisionEnabled,
+    decisionModel,
+    decisionBaseUrl,
+    decisionPassThreshold,
+    decisionFailThreshold,
+    source
+  ]);
+
+  useEffect(
+    () => () => {
+      decisionTestController.current?.abort();
+      decisionTestController.current = null;
+    },
+    []
+  );
 
   const applyDecisionSettings = (decision?: EvaluationDecisionConfig) => {
     setSavedDecision(decision);
@@ -55,6 +85,7 @@ const SettingsPage = () => {
         'Saved Decision Engine configuration is invalid. Select a provider to replace it, or save None to clear it. Semantic checks fall back to the Evaluation Judge.';
     }
     setDecisionProvider(normalized?.provider ?? '');
+    setDecisionEnabled(Boolean(normalized) && normalized?.enabled !== false);
     setDecisionModel(normalized?.model ?? '');
     setDecisionBaseUrl(normalized?.baseUrl ?? DECISION_DEFAULTS.baseUrl);
     setDecisionPassThreshold(String(normalized?.passThreshold ?? DECISION_DEFAULTS.passThreshold));
@@ -145,9 +176,9 @@ const SettingsPage = () => {
   };
 
   const saveEvaluationJudgeSetting = async (nextAgentName: string) => {
-    if (!nextAgentName && savedDecision) {
+    if (!nextAgentName && savedDecision && savedDecision.enabled !== false) {
       setDecisionError(
-        'Clear and save the Decision Engine before removing its backup LLM evaluation judge.'
+        'Turn off and save, or clear, the Decision Engine before removing its backup LLM evaluation judge.'
       );
       return;
     }
@@ -176,10 +207,55 @@ const SettingsPage = () => {
     }
   };
 
+  const readDecisionDraft = (): EvaluationDecisionConfig | null => {
+    if (!decisionProvider) return null;
+    if (!decisionPassThreshold.trim() || !decisionFailThreshold.trim()) {
+      throw new Error('Enter both pass and fail probability thresholds.');
+    }
+    return normalizeEvaluationDecisionConfig({
+      provider: decisionProvider,
+      model: decisionModel,
+      passThreshold: Number(decisionPassThreshold),
+      failThreshold: Number(decisionFailThreshold),
+      ...(!decisionEnabled ? { enabled: false } : {}),
+      ...(decisionProvider === 'ollama' ? { baseUrl: decisionBaseUrl } : {})
+    });
+  };
+
+  const testDecisionSettings = async () => {
+    let decision: EvaluationDecisionConfig | null;
+    try {
+      decision = readDecisionDraft();
+      if (!decision) throw new Error('Select a Decision Engine before testing the connection.');
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const controller = new AbortController();
+    decisionTestController.current = controller;
+    setTestingDecision(true);
+    setDecisionError('');
+    setDecisionConnectionResult(undefined);
+    try {
+      const result = await source.testDecisionConnection(decision, controller.signal);
+      if (!controller.signal.aborted) setDecisionConnectionResult(result);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setDecisionError(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (decisionTestController.current === controller) {
+        decisionTestController.current = null;
+        setTestingDecision(false);
+      }
+    }
+  };
+
   const saveDecisionSettings = async () => {
     let decision: EvaluationDecisionConfig | null = null;
     try {
-      if (decisionProvider) {
+      decision = readDecisionDraft();
+      if (decision && decision.enabled !== false) {
         if (
           !llmAgents.some(
             (agent) =>
@@ -190,16 +266,6 @@ const SettingsPage = () => {
             'Select an LLM evaluation judge as backup before enabling the Decision Engine.'
           );
         }
-        if (!decisionPassThreshold.trim() || !decisionFailThreshold.trim()) {
-          throw new Error('Enter both pass and fail probability thresholds.');
-        }
-        decision = normalizeEvaluationDecisionConfig({
-          provider: decisionProvider,
-          model: decisionModel,
-          passThreshold: Number(decisionPassThreshold),
-          failThreshold: Number(decisionFailThreshold),
-          ...(decisionProvider === 'ollama' ? { baseUrl: decisionBaseUrl } : {})
-        });
       }
     } catch (error) {
       setDecisionError(error instanceof Error ? error.message : String(error));
@@ -244,7 +310,7 @@ const SettingsPage = () => {
           size="sm"
           variant="outline"
           onClick={() => void refreshAll()}
-          disabled={librariesLoading || loadingSettings || savingSettings}
+          disabled={librariesLoading || loadingSettings || savingSettings || testingDecision}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
@@ -332,82 +398,118 @@ const SettingsPage = () => {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Decision Engine</CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle className="text-base">Decision Engine</CardTitle>
+            <Switch
+              id="decision-enabled"
+              className="shrink-0"
+              checked={decisionEnabled}
+              onCheckedChange={setDecisionEnabled}
+              disabled={!decisionProvider || savingSettings || loadingSettings}
+              aria-label="Use Decision Engine"
+              aria-describedby="decision-enabled-help"
+            />
+          </div>
           <CardDescription>
             Optionally evaluate semantic checks with a decision model. The Evaluation Judge handles
             uncertain decisions and unavailable engines.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="decision-provider" className="text-xs">
-                Decision provider
-              </Label>
-              <Select
-                value={decisionProvider || '__none__'}
-                disabled={savingSettings || loadingSettings}
-                onValueChange={(value) => {
-                  const provider =
-                    value === '__none__' ? '' : (value as EvaluationDecisionConfig['provider']);
-                  setDecisionProvider(provider);
-                  setDecisionModel(provider ? DECISION_PROVIDERS[provider].defaultModel : '');
-                  setDecisionError('');
-                }}
-              >
-                <SelectTrigger id="decision-provider" className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {Object.entries(DECISION_PROVIDERS).map(([provider, { label }]) => (
-                    <SelectItem key={provider} value={provider}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {decisionProvider && (
+          <p id="decision-enabled-help" className="text-xs text-muted-foreground">
+            {decisionEnabled
+              ? 'On: semantic checks use the Decision Engine with judge fallback.'
+              : 'Off: semantic checks use the Evaluation Judge. Your decision configuration is kept.'}{' '}
+            Click Save Decision Engine to apply changes.
+          </p>
+          <div className="space-y-1.5">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="decision-model" className="text-xs">
-                  Decision model
+                <Label htmlFor="decision-provider" className="text-xs">
+                  Decision provider
                 </Label>
-                {!DECISION_PROVIDERS[decisionProvider].editableModel &&
-                DECISION_PROVIDERS[decisionProvider].models.length > 1 ? (
-                  <Select
-                    value={decisionModel}
-                    onValueChange={setDecisionModel}
-                    disabled={savingSettings || loadingSettings}
-                  >
-                    <SelectTrigger id="decision-model" className="h-9 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
-                        <SelectItem key={model} value={model}>
-                          {model}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    id="decision-model"
-                    value={decisionModel}
-                    onChange={(event) => setDecisionModel(event.target.value)}
-                    disabled={savingSettings || loadingSettings}
-                    readOnly={!DECISION_PROVIDERS[decisionProvider].editableModel}
-                    list="decision-model-suggestions"
-                    aria-describedby={decisionError ? 'decision-error' : undefined}
-                  />
-                )}
-                <datalist id="decision-model-suggestions">
-                  {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
+                <Select
+                  value={decisionProvider || '__none__'}
+                  disabled={savingSettings || loadingSettings}
+                  onValueChange={(value) => {
+                    const provider =
+                      value === '__none__' ? '' : (value as EvaluationDecisionConfig['provider']);
+                    setDecisionProvider(provider);
+                    if (!provider) setDecisionEnabled(false);
+                    else if (!decisionProvider) setDecisionEnabled(true);
+                    setDecisionModel(provider ? DECISION_PROVIDERS[provider].defaultModel : '');
+                    setDecisionError('');
+                  }}
+                >
+                  <SelectTrigger id="decision-provider" className="h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {Object.entries(DECISION_PROVIDERS).map(([provider, { label }]) => (
+                      <SelectItem key={provider} value={provider}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              {decisionProvider && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="decision-model" className="text-xs">
+                    {decisionProvider === 'ollama' ? 'Ollama model name' : 'Decision model'}
+                  </Label>
+                  {!DECISION_PROVIDERS[decisionProvider].editableModel &&
+                  DECISION_PROVIDERS[decisionProvider].models.length > 1 ? (
+                    <Select
+                      value={decisionModel}
+                      onValueChange={setDecisionModel}
+                      disabled={savingSettings || loadingSettings}
+                    >
+                      <SelectTrigger id="decision-model" className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="decision-model"
+                      className="h-9 text-sm"
+                      value={decisionModel}
+                      onChange={(event) => setDecisionModel(event.target.value)}
+                      disabled={savingSettings || loadingSettings}
+                      readOnly={!DECISION_PROVIDERS[decisionProvider].editableModel}
+                      list="decision-model-suggestions"
+                      aria-describedby={
+                        [
+                          decisionProvider === 'ollama' ? 'ollama-model-help' : undefined,
+                          decisionError ? 'decision-error' : undefined
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
+                    />
+                  )}
+                  <datalist id="decision-model-suggestions">
+                    {DECISION_PROVIDERS[decisionProvider].models.map((model) => (
+                      <option key={model} value={model} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+            </div>
+            {decisionProvider === 'ollama' && (
+              <p id="ollama-model-help" className="text-xs text-muted-foreground">
+                Enter the exact model name from <code>ollama list</code>, including its tag (for
+                example <code>tev1:4b</code> or <code>tev1:0.8b</code>). Suggestions do not show
+                which models are installed.
+              </p>
             )}
           </div>
           {decisionProvider && (
@@ -482,13 +584,37 @@ const SettingsPage = () => {
               {decisionError}
             </p>
           )}
-          <Button
-            type="button"
-            onClick={() => void saveDecisionSettings()}
-            disabled={savingSettings || loadingSettings || librariesLoading}
-          >
-            {savingSettings ? 'Saving...' : 'Save Decision Engine'}
-          </Button>
+          {decisionConnectionResult && (
+            <p
+              role={decisionConnectionResult.ok ? 'status' : 'alert'}
+              className={`text-sm ${decisionConnectionResult.ok ? 'text-success' : 'text-destructive'}`}
+            >
+              {decisionConnectionResult.message}
+            </p>
+          )}
+          {decisionProvider && (
+            <p className="text-xs text-muted-foreground">
+              Test connection sends one small decision request using the current values without
+              saving them.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => void saveDecisionSettings()}
+              disabled={savingSettings || loadingSettings || librariesLoading || testingDecision}
+            >
+              {savingSettings ? 'Saving...' : 'Save Decision Engine'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void testDecisionSettings()}
+              disabled={!decisionProvider || savingSettings || loadingSettings || testingDecision}
+            >
+              {testingDecision ? 'Testing...' : 'Test connection'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

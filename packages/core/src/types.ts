@@ -1,4 +1,6 @@
 export interface EvaluationDecisionConfig {
+  /** Omitted means enabled for compatibility with existing saved configurations. */
+  enabled?: boolean;
   provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama';
   model: string;
   passThreshold: number;
@@ -74,6 +76,17 @@ export interface DecisionAnswer {
   fallback?: string;
 }
 
+export interface DecisionConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: EvaluationDecisionConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  probability?: number;
+  durationMs: number;
+  failure?: string;
+}
+
 export interface DecisionRequest {
   config: EvaluationDecisionConfig;
   evidence: unknown;
@@ -87,6 +100,7 @@ export interface DecisionAdapter {
   url(config: EvaluationDecisionConfig): string;
   timeoutMs: number;
   maxBatchSize: number;
+  sequential: boolean;
   body(params: DecisionRequest): unknown;
   extract(raw: unknown): Record<string, unknown> | undefined;
   entries(raw: unknown): Array<[string, unknown]>;

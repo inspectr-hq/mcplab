@@ -6,7 +6,8 @@ vi.mock('./workspace-api-client', () => ({
   workspaceApiClient: {
     listRuns: vi.fn(),
     getRun: vi.fn(),
-    getRunTrace: vi.fn()
+    getRunTrace: vi.fn(),
+    testDecisionConnection: vi.fn()
   }
 }));
 
@@ -116,5 +117,32 @@ describe('workspaceSource.listResults', () => {
     expect(results).toHaveLength(3);
     expect(workspaceApiClient.getRun).toHaveBeenCalledTimes(3);
     expect(workspaceApiClient.getRunTrace).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('workspaceSource.testDecisionConnection', () => {
+  it('forwards the draft configuration, cancellation signal, and result', async () => {
+    const config = {
+      provider: 'ollama' as const,
+      model: 'tev1:4b',
+      passThreshold: 0.9,
+      failThreshold: 0.1,
+      baseUrl: 'http://ollama:11434'
+    };
+    const result = {
+      ok: true,
+      message: 'Connection successful',
+      provider: 'ollama' as const,
+      requestedModel: config.model,
+      probability: 0.5,
+      durationMs: 20
+    };
+    vi.mocked(workspaceApiClient.testDecisionConnection).mockResolvedValue(result);
+    const controller = new AbortController();
+    expect(await workspaceSource.testDecisionConnection(config, controller.signal)).toEqual(result);
+    expect(workspaceApiClient.testDecisionConnection).toHaveBeenCalledWith(
+      config,
+      controller.signal
+    );
   });
 });

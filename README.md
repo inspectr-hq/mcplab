@@ -405,15 +405,22 @@ Supported providers:
 
 For Ollama, install Ollama 0.35.1 or later and run `ollama pull clef-flash` yourself. MCPLab calls the server's `/v1/systemone` endpoint from its backend. The server URL must be reachable from the machine running MCPLab. Other decision models, including `clef`, `nimble`, and `tev1`, can be selected by model name. MCPLab does not download models automatically.
 
+The **Ollama model name** field is editable. Enter the exact installed model name and tag from `ollama list`, such as `tev1:4b` after running `ollama pull tev1:4b`, or `tev1:0.8b` for the smaller variant. Suggestions are examples, not a list of installed models. Tev1 requires Ollama 0.35 or later; Clef and Clef Flash require 0.35.1 or later. See the [Ollama decision documentation](https://docs.ollama.com/capabilities/decision) and [Tev1 model reference](https://ollama.com/library/tev1).
+
 Set **Pass probability threshold** and **Fail probability threshold**, then click **Save Decision Engine**. Both refer to the probability that the answer satisfies a semantic assertion. By default, probabilities at or above `0.9` pass, probabilities at or below `0.1` fail, and probabilities between them use the Evaluation Judge. The settings must satisfy `0 ≤ failThreshold < passThreshold ≤ 1`. These are routing thresholds, not guarantees of correctness; check them against reviewed examples from your own scenarios.
+
+Use **Test connection** to check the current provider, model, and Ollama URL before saving. MCPLab sends one small synthetic decision request using backend credentials and reports success or failure, including missing credentials. The test does not save settings or call the Evaluation Judge. Any valid probability counts as a successful connection; thresholds do not determine connection success. Hosted requests use a 10-second timeout, and Ollama uses 120 seconds. Changing the form clears the test result and cancels any pending test.
 
 A valid LLM Evaluation Judge remains required as backup. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
 
-Choose **None** and save to return to judge-only evaluation. Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory):
+Turn **Use Decision Engine** off and click **Save Decision Engine** to use the LLM judge while keeping the provider, model, URL, and thresholds. Turn it back on and save to resume decision evaluation. **Test connection** remains available while off and sends an explicit test request. Existing configurations without an `enabled` flag remain on. Choosing **None** and saving clears the configuration instead.
+
+Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory):
 
 ```yaml
 evaluation_judge_agent_name: my-judge
 evaluation_decision:
+  enabled: true
   provider: ollama
   model: clef-flash
   baseUrl: http://localhost:11434
@@ -421,7 +428,7 @@ evaluation_decision:
   failThreshold: 0.1
 ```
 
-Results show decision probabilities, thresholds, model, and judge fallback where applicable. Required tools, tool sequences, and other deterministic assertions continue to use their existing checks. Browser captures still cannot establish tool use when telemetry is unavailable.
+In result details, checks decided by the engine show their assertion prompt alongside the decision probability, thresholds, model, and final evaluator. Checks evaluated by the judge retain the judge's explanation and fallback information where applicable. Required tools, tool sequences, and other deterministic assertions continue to use their existing checks. Browser captures still cannot establish tool use when telemetry is unavailable.
 
 ## 🔑 Environment Variables
 

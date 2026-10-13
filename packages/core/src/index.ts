@@ -14,7 +14,7 @@ export {
 } from './config.js';
 export { createRunId, runAll, type RunProgressEvent } from './runner.js';
 export { judgeAgentAssertions } from './judge.js';
-export { evaluateSemanticAssertions } from './decisions.js';
+export { evaluateSemanticAssertions, testDecisionConnection } from './decisions.js';
 export {
   normalizeEvaluationDecisionConfig,
   DECISION_PROVIDERS,
@@ -22,6 +22,7 @@ export {
 } from './decision-config.js';
 export {
   loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
   resolveEvaluationJudge,
   resolveWorkspaceEvaluation
 } from './workspace-settings.js';

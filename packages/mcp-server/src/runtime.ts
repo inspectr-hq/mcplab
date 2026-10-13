@@ -24,6 +24,7 @@ import {
   hashConfig,
   runAll,
   loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
   resolveWorkspaceEvaluation,
   selectScenarios,
   loadOrBuildSearchIndex,
@@ -2076,10 +2077,7 @@ export function registerTools(server: McpServer): void {
           ...resolveWorkspaceEvaluation({
             agents: libraries.agents,
             scenarios: executable.scenarios,
-            settings: {
-              evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name,
-              evaluationDecision: workspaceSettings.evaluation_decision
-            }
+            settings: toWorkspaceEvaluationSettings(workspaceSettings)
           })
         });
 

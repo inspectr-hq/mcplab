@@ -70,6 +70,74 @@ describe('matchFailureReasonForRule', () => {
 });
 
 describe('buildCheckItems', () => {
+  it.each(['passed', 'failed'] as const)(
+    'provides the saved assertion prompt for a decided %s check',
+    (status) => {
+      const reason = 'Satisfaction probability 0.95 met the pass threshold 0.9.';
+      const result = buildCheckItems({
+        evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Current edited assertion' }],
+        failureReasons: status === 'failed' ? [reason] : [],
+        checkResults: [
+          {
+            type: 'agent_check',
+            label: 'Test',
+            status,
+            reason,
+            metadata: {
+              evaluator: 'decision',
+              decision_provider: 'ollama',
+              decision_prompt: 'Original assertion sent to the engine',
+              decision_probability: 0.95
+            }
+          }
+        ]
+      });
+      expect(result[0].decisionInput).toBe('Original assertion sent to the engine');
+      expect(result[0].failureReason).toBe(reason);
+      expect(result[0].decisionDetails).toContain('probability 0.950');
+    }
+  );
+  it('uses the assertion from the scenario for older decision results without a saved prompt', () => {
+    const result = buildCheckItems({
+      evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Original assertion' }],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Test',
+          status: 'passed',
+          reason: 'Satisfaction probability 0.95 met the pass threshold 0.9.',
+          metadata: { evaluator: 'decision', decision_provider: 'ollama' }
+        }
+      ]
+    });
+    expect(result[0].decisionInput).toBe('Original assertion');
+    expect(result[0].failureReason).toBe(
+      'Satisfaction probability 0.95 met the pass threshold 0.9.'
+    );
+  });
+  it('keeps the judge explanation for fallback results', () => {
+    const result = buildCheckItems({
+      evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Original assertion' }],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Test',
+          status: 'passed',
+          reason: 'Judge explanation',
+          metadata: {
+            evaluator: 'judge',
+            decision_provider: 'ollama',
+            decision_prompt: 'Original assertion',
+            decision_fallback: 'uncertain'
+          }
+        }
+      ]
+    });
+    expect(result[0].decisionInput).toBeUndefined();
+    expect(result[0].failureReason).toBe('Judge explanation');
+  });
   const evalRules: EvalRule[] = [
     {
       type: 'agent_check',
@@ -110,7 +178,8 @@ describe('buildCheckItems', () => {
     expect(result[0].decisionDetails).toContain('pass ≥ 0.900');
     expect(result[0].decisionDetails).toContain('fail ≤ 0.100');
     expect(result[0].decisionDetails).toContain('15 ms');
-    expect(result[0].decisionDetails).toContain('Judge fallback: uncertain');
+    expect(result[0].decisionDetails).toContain('Evaluated by LLM judge');
+    expect(result[0].decisionDetails).not.toContain('Decision probability between thresholds');
   });
 
   it('prefers structured check results when present', () => {

@@ -36,6 +36,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
+import { handleDecisionRoutes } from './decision-routes.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
 import {
@@ -502,6 +503,8 @@ export async function startAppServer(options: AppServerOptions) {
         asJson(res, resumed ? 200 : 404, { ok: resumed });
         return;
       }
+
+      if (await handleDecisionRoutes({ req, res, pathname, method })) return;
 
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);

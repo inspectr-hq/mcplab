@@ -371,7 +371,64 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByText('Scenario 1'));
     expect(screen.getByText('Answer is correct.')).toBeInTheDocument();
     expect(
-      screen.getByText(/Decision Engine · ollama.*probability 0.500.*Judge fallback: uncertain/)
+      screen.getByText(/Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge/)
+    ).toBeInTheDocument();
+  });
+
+  it('shows the assertion prompt instead of the automatic decision reason', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      {
+        type: 'agent_check',
+        label: 'Accuracy',
+        status: 'passed',
+        reason: 'Satisfaction probability 0.9355110270855933 met the pass threshold 0.9.',
+        metadata: {
+          decision_provider: 'ollama',
+          decision_model: 'clef-flash',
+          decision_probability: 0.9355110270855933,
+          decision_pass_threshold: 0.9,
+          decision_fail_threshold: 0.1,
+          evaluator: 'decision',
+          decision_prompt: 'Original assertion evaluated by the engine'
+        }
+      }
+    ];
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(
+      screen.queryByText('Satisfaction probability 0.9355110270855933 met the pass threshold 0.9.')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Assertion prompt: Original assertion evaluated by the engine')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Decision Engine · ollama.*probability 0.936.*Evaluated by decision/)
     ).toBeInTheDocument();
   });
 

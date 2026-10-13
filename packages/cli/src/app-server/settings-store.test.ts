@@ -46,6 +46,44 @@ describe('Decision Engine settings', () => {
       applyEvaluationSettingsPatch(settings, { evaluationDecision: null }, {}).evaluationDecision
     ).toBeUndefined();
   });
+  it('stores a disabled engine without revalidating a missing judge, and preserves it on reload', () => {
+    const settings = {
+      ...fixture(),
+      evaluationJudgeAgentName: 'deleted',
+      evaluationDecision: decision
+    };
+    const disabled = { ...decision, enabled: false };
+    const next = applyEvaluationSettingsPatch(settings, { evaluationDecision: disabled }, () => {
+      throw new Error('Must not read the judge');
+    });
+    persistSettingsOverrides(next);
+    applySettingsOverrides(settings);
+    expect(settings.evaluationDecision).toEqual(disabled);
+    expect(loadWorkspaceSettingsOverrides(settings.librariesDir).evaluation_decision).toEqual(
+      disabled
+    );
+    expect(() =>
+      applyEvaluationSettingsPatch(
+        next,
+        { evaluationDecision: { ...disabled, enabled: true } },
+        agents
+      )
+    ).toThrow('not found');
+  });
+  it('allows removing a judge while retaining a disabled engine, but requires backup to enable it', () => {
+    const disabled = { ...decision, enabled: false };
+    const settings = {
+      ...fixture(),
+      evaluationJudgeAgentName: 'judge',
+      evaluationDecision: disabled
+    };
+    const next = applyEvaluationSettingsPatch(settings, { evaluationJudgeAgentName: null }, agents);
+    expect(next.evaluationDecision).toEqual(disabled);
+    expect(next.evaluationJudgeAgentName).toBeUndefined();
+    expect(() =>
+      applyEvaluationSettingsPatch(next, { evaluationDecision: decision }, agents)
+    ).toThrow('backup');
+  });
   it('allows switching to a workspace with a saved engine and no matching judge', () => {
     const settings = fixture();
     const newWorkspace = fixture();

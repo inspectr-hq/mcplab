@@ -12,6 +12,7 @@ import {
   runAll,
   resolveWorkspaceEvaluation,
   loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
   expandConfigForAgents,
   applyRuntimeServerOverrides,
@@ -872,10 +873,7 @@ async function executeSingleConfigRun(params: {
     ...resolveWorkspaceEvaluation({
       agents: libraryAgents,
       scenarios: expanded.scenarios,
-      settings: {
-        evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name,
-        evaluationDecision: workspaceSettings.evaluation_decision
-      }
+      settings: toWorkspaceEvaluationSettings(workspaceSettings)
     }),
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);

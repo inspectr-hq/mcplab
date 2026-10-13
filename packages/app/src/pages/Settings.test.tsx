@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from './Settings';
 
@@ -17,6 +17,7 @@ const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
     agentsRef,
     reloadMock: vi.fn(),
     sourceMock: {
+      testDecisionConnection: vi.fn(),
       getWorkspaceSettings: vi.fn().mockResolvedValue({
         workspaceRoot: '/tmp/workspace',
         evalsDir: '/tmp/evals',
@@ -77,8 +78,226 @@ describe('SettingsPage', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     sourceMock.getWorkspaceSettings.mockClear();
     sourceMock.updateWorkspaceSettings.mockClear();
+    sourceMock.testDecisionConnection.mockReset().mockResolvedValue({
+      ok: true,
+      message: 'OpenAI Decisions returned a valid decision.',
+      provider: 'openai',
+      requestedModel: 'gpt-6-luna',
+      probability: 0.5,
+      durationMs: 10
+    });
     reloadMock.mockClear();
     agentsRef.value = [{ id: 'assistant-1', name: 'Assistant One', model: 'gpt-4o' }];
+  });
+
+  it('turns a saved engine off without clearing its configuration', async () => {
+    const decision = {
+      provider: 'ollama',
+      model: 'tev1:4b',
+      baseUrl: 'http://ollama:11434',
+      passThreshold: 0.85,
+      failThreshold: 0.15
+    };
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeAgentName: 'assistant-1',
+      evaluationDecision: decision
+    });
+    render(<SettingsPage />);
+    const toggle = await screen.findByRole('switch', { name: 'Use Decision Engine' });
+    await waitFor(() => expect(toggle).toBeChecked());
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByLabelText('Ollama model name')).toHaveValue('tev1:4b');
+    expect(screen.getByLabelText('Ollama server URL')).toHaveValue('http://ollama:11434');
+    expect(screen.getByLabelText('Pass probability threshold')).toHaveValue(0.85);
+    expect(screen.getByLabelText('Fail probability threshold')).toHaveValue(0.15);
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: { ...decision, enabled: false }
+      })
+    );
+  });
+  it('reloads a disabled engine and turns it back on with the retained settings', async () => {
+    const decision = {
+      provider: 'typesafe',
+      model: 'jev-custom',
+      passThreshold: 0.85,
+      failThreshold: 0.15
+    };
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeAgentName: 'assistant-1',
+      evaluationDecision: { ...decision, enabled: false }
+    });
+    render(<SettingsPage />);
+    await waitFor(() => expect(screen.getByLabelText('Decision model')).toHaveValue('jev-custom'));
+    const toggle = screen.getByRole('switch', { name: 'Use Decision Engine' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: decision
+      })
+    );
+  });
+  it('saves an off engine without a judge, but requires backup when turning it on', async () => {
+    const decision = {
+      provider: 'openai',
+      model: 'gpt-6-luna',
+      passThreshold: 0.9,
+      failThreshold: 0.1,
+      enabled: false
+    };
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeAgentName: '',
+      evaluationDecision: decision
+    });
+    render(<SettingsPage />);
+    await waitFor(() => expect(screen.getByLabelText('Decision model')).toHaveValue('gpt-6-luna'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: decision
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save Decision Engine' })).toBeEnabled()
+    );
+    fireEvent.click(screen.getByRole('switch', { name: 'Use Decision Engine' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/LLM.*judge/i);
+    expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledTimes(1);
+  });
+  it('allows removing the judge once the engine is saved off', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeAgentName: 'assistant-1',
+      evaluationDecision: {
+        provider: 'openai',
+        model: 'gpt-6-luna',
+        passThreshold: 0.9,
+        failThreshold: 0.1,
+        enabled: false
+      }
+    });
+    render(<SettingsPage />);
+    await waitFor(() => expect(screen.getByLabelText('Decision model')).toHaveValue('gpt-6-luna'));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Default Evaluation Judge' }));
+    fireEvent.click(screen.getByRole('option', { name: 'None' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationJudgeAgentName: null
+      })
+    );
+  });
+  it('can explicitly test a connection while the engine is off', async () => {
+    const decision = {
+      provider: 'openai',
+      model: 'gpt-6-luna',
+      passThreshold: 0.9,
+      failThreshold: 0.1,
+      enabled: false
+    };
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({ evaluationDecision: decision });
+    render(<SettingsPage />);
+    await waitFor(() => expect(screen.getByLabelText('Decision model')).toHaveValue('gpt-6-luna'));
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('returned a valid decision')
+    );
+    expect(sourceMock.testDecisionConnection).toHaveBeenCalledWith(
+      decision,
+      expect.any(AbortSignal)
+    );
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalled();
+  });
+
+  it('tests the current draft without saving or requiring a judge backup', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({ evaluationJudgeAgentName: '' });
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Ollama' }));
+    fireEvent.change(screen.getByLabelText('Ollama model name'), { target: { value: 'tev1:4b' } });
+    fireEvent.change(screen.getByLabelText('Ollama server URL'), {
+      target: { value: 'http://ollama:11434' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(sourceMock.testDecisionConnection).toHaveBeenCalledWith(
+      {
+        provider: 'ollama',
+        model: 'tev1:4b',
+        baseUrl: 'http://ollama:11434',
+        passThreshold: 0.9,
+        failThreshold: 0.1
+      },
+      expect.any(AbortSignal)
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('returned a valid decision')
+    );
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Pass probability threshold'), {
+      target: { value: '0.8' }
+    });
+    expect(
+      screen.queryByText('OpenAI Decisions returned a valid decision.')
+    ).not.toBeInTheDocument();
+  });
+  it('shows missing credentials as a failed connection test', async () => {
+    sourceMock.testDecisionConnection.mockResolvedValue({
+      ok: false,
+      message: 'Missing backend credentials. Requires OPENAI_API_KEY.',
+      provider: 'openai',
+      requestedModel: 'gpt-6-luna',
+      failure: 'missing_credentials',
+      durationMs: 0
+    });
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Decisions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('OPENAI_API_KEY'));
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalled();
+  });
+  it('cancels pending tests and ignores old responses after the draft changes', async () => {
+    let resolveProbe!: (result: { ok: boolean; message: string }) => void;
+    sourceMock.testDecisionConnection.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveProbe = resolve;
+        })
+    );
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Decisions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save Decision Engine' })).toBeDisabled();
+    const signal = sourceMock.testDecisionConnection.mock.calls[0][1] as AbortSignal;
+    fireEvent.change(screen.getByLabelText('Pass probability threshold'), {
+      target: { value: '0.8' }
+    });
+    expect(signal.aborted).toBe(true);
+    await act(async () => resolveProbe({ ok: true, message: 'Old connection result' }));
+    expect(screen.queryByText('Old connection result')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+  });
+  it('does not send a connection test for invalid thresholds', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Decisions' }));
+    fireEvent.change(screen.getByLabelText('Fail probability threshold'), {
+      target: { value: '0.9' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(sourceMock.testDecisionConnection).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/fail.*pass/i);
   });
 
   it('saves the whole optional engine configuration only on explicit save', async () => {
@@ -136,7 +355,9 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
     fireEvent.click(screen.getByRole('option', { name: 'Ollama' }));
     expect(screen.getByLabelText('Ollama server URL')).toHaveValue('http://localhost:11434');
-    fireEvent.change(screen.getByLabelText('Decision model'), { target: { value: 'clef:custom' } });
+    const modelInput = screen.getByLabelText('Ollama model name');
+    expect(modelInput).toHaveAccessibleDescription(/ollama list/);
+    fireEvent.change(modelInput, { target: { value: 'tev1:0.8b' } });
     fireEvent.change(screen.getByLabelText('Ollama server URL'), {
       target: { value: 'http://ollama:11434' }
     });
@@ -145,7 +366,7 @@ describe('SettingsPage', () => {
       expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
         evaluationDecision: {
           provider: 'ollama',
-          model: 'clef:custom',
+          model: 'tev1:0.8b',
           baseUrl: 'http://ollama:11434',
           passThreshold: 0.9,
           failThreshold: 0.1

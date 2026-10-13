@@ -25,7 +25,7 @@ export const DECISION_PROVIDERS = {
   ollama: {
     label: 'Ollama',
     defaultModel: 'clef-flash',
-    models: ['clef-flash', 'clef', 'nimble', 'tev1'],
+    models: ['clef-flash', 'clef', 'nimble', 'tev1:4b', 'tev1:0.8b'],
     editableModel: true,
     credentials:
       'Requests use the MCPLab backend. Install a supported decision model on your Ollama server; models are not downloaded automatically.'
@@ -53,6 +53,10 @@ export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecis
     throw new Error('Decision engine configuration must be an object.');
   }
   const value = raw as Record<string, unknown>;
+  const enabled = value.enabled;
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    throw new Error('Decision engine enabled must be a boolean.');
+  }
   const rawProvider = value.provider;
   if (typeof rawProvider !== 'string' || !Object.hasOwn(DECISION_PROVIDERS, rawProvider)) {
     throw new Error('Choose a supported decision engine provider.');
@@ -105,5 +109,12 @@ export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecis
     }
     baseUrl = url.toString().replace(/\/+$/, '');
   }
-  return { provider, model, passThreshold, failThreshold, ...(baseUrl ? { baseUrl } : {}) };
+  return {
+    provider,
+    model,
+    passThreshold,
+    failThreshold,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(enabled !== undefined ? { enabled } : {})
+  };
 }

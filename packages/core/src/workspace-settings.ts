@@ -7,6 +7,7 @@ import {
   type EvaluationJudge,
   type ResolveWorkspaceEvaluationParams,
   type WorkspaceEvaluation,
+  type WorkspaceEvaluationSettings,
   type WorkspaceSettingsOverrides
 } from './types.js';
 
@@ -31,6 +32,15 @@ export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceS
   } catch {
     return {};
   }
+}
+
+export function toWorkspaceEvaluationSettings(
+  settings: WorkspaceSettingsOverrides
+): WorkspaceEvaluationSettings {
+  return {
+    evaluationJudgeAgentName: settings.evaluation_judge_agent_name,
+    evaluationDecision: settings.evaluation_decision
+  };
 }
 
 export function resolveEvaluationJudge(params: {

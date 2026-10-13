@@ -225,6 +225,9 @@ export const workspaceSource: EvalDataSource = {
   async updateWorkspaceSettings(patch) {
     return workspaceApiClient.updateSettings(patch);
   },
+  async testDecisionConnection(config, signal) {
+    return workspaceApiClient.testDecisionConnection(config, signal);
+  },
   async createScenarioAssistantSession(params, signal) {
     return workspaceApiClient.createScenarioAssistantSession(params, signal);
   },

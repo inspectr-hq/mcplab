@@ -27,6 +27,7 @@ import type {
   ExecutionSource,
   BrowserProviderProfile,
   EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
   WorkspaceSettingsPatch,
   WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
@@ -65,7 +66,7 @@ export type {
 };
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
-export type { EvaluationDecisionConfig, WorkspaceSettingsPatch };
+export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
 export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -832,6 +833,10 @@ export interface EvalDataSource {
   ) => Promise<ProviderModelsResponse>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
   updateWorkspaceSettings: (patch: WorkspaceSettingsPatch) => Promise<WorkspaceSettings | null>;
+  testDecisionConnection: (
+    config: EvaluationDecisionConfig,
+    signal?: AbortSignal
+  ) => Promise<DecisionConnectionTestResult>;
   createScenarioAssistantSession: (
     params: {
       configId?: string;
