@@ -25,7 +25,8 @@ import type {
   RoverAgentProvider,
   RunOutcome,
   ExecutionSource,
-  BrowserProviderProfile
+  BrowserProviderProfile,
+  EvaluationDecisionConfig
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -59,6 +60,7 @@ export type {
 };
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
+export type { EvaluationDecisionConfig };
 export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -176,6 +178,7 @@ export interface WorkspaceSettings {
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
   evaluationJudgeAgentName?: string;
+  evaluationDecision?: EvaluationDecisionConfig;
 }
 
 export interface StartRunResponse {
@@ -828,7 +831,8 @@ export interface EvalDataSource {
   updateWorkspaceSettings: (patch: {
     defaultQueueWorkers?: number;
     scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string;
+    evaluationJudgeAgentName?: string | null;
+    evaluationDecision?: EvaluationDecisionConfig | null;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (
     params: {

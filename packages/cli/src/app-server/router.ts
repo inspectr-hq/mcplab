@@ -28,6 +28,7 @@ import {
   expandConfigForAgents,
   isLlmAgent,
   loadConfig,
+  readLibraryAgentsAndServers,
   McpClientManager,
   validateBrowserProviderProfile,
   runAll
@@ -40,6 +41,7 @@ import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
 import {
   applySettingsOverrides,
+  applyEvaluationSettingsPatch,
   normalizeQueueWorkerCount,
   persistSettingsOverrides
 } from './settings-store.js';
@@ -235,6 +237,7 @@ export async function startAppServer(options: AppServerOptions) {
       return [];
     },
     persist: persistAppRunArtifacts,
+    getEvaluationDecision: () => settings.evaluationDecision,
     getEvaluationJudge: () => {
       const libraries = readLibraries(settings.librariesDir);
       return resolveEvaluationJudge({
@@ -509,56 +512,43 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
-        if (body.evalsDir) {
-          settings.evalsDir = resolve(String(body.evalsDir));
-          mkdirSync(settings.evalsDir, { recursive: true });
-        }
-        if (body.runsDir) {
-          settings.runsDir = resolve(String(body.runsDir));
-          mkdirSync(settings.runsDir, { recursive: true });
-        }
+        let candidate = { ...settings };
+        if (body.evalsDir) candidate.evalsDir = resolve(String(body.evalsDir));
+        if (body.runsDir) candidate.runsDir = resolve(String(body.runsDir));
         if (body.librariesDir) {
-          settings.librariesDir = resolve(String(body.librariesDir));
-          mkdirSync(settings.librariesDir, { recursive: true });
-          mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
-          applySettingsOverrides(settings);
-          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
-            hostHeader: req.headers.host
-          });
-          oauthSessionManager.setLibrariesDir(settings.librariesDir);
+          candidate.librariesDir = resolve(String(body.librariesDir));
+          applySettingsOverrides(candidate);
         }
-        let settingsChanged = false;
+        try {
+          candidate = applyEvaluationSettingsPatch(
+            candidate,
+            body,
+            readLibraryAgentsAndServers(candidate.librariesDir).agents
+          );
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+          return;
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
-          const next = String(body.scenarioAssistantAgentName ?? '').trim();
-          settings.scenarioAssistantAgentName = next || undefined;
-          settingsChanged = true;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName')) {
-          const next = String(body.evaluationJudgeAgentName ?? '').trim();
-          if (next) {
-            try {
-              resolveEvaluationJudge({
-                agents: readLibraries(settings.librariesDir).agents,
-                evaluationJudgeAgentName: next
-              });
-            } catch (error: unknown) {
-              asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
-              return;
-            }
-          }
-          settings.evaluationJudgeAgentName = next || undefined;
-          settingsChanged = true;
+          candidate.scenarioAssistantAgentName = String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
-          settings.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
-          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
-            hostHeader: req.headers.host
-          });
-          settingsChanged = true;
+          candidate.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
         }
-        if (settingsChanged) {
-          persistSettingsOverrides(settings);
+        if (body.evalsDir) mkdirSync(candidate.evalsDir, { recursive: true });
+        if (body.runsDir) mkdirSync(candidate.runsDir, { recursive: true });
+        if (body.librariesDir) {
+          mkdirSync(candidate.librariesDir, { recursive: true });
+          mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
         }
+        const settingsChanged = ['scenarioAssistantAgentName', 'evaluationJudgeAgentName', 'evaluationDecision', 'defaultQueueWorkers']
+          .some((key) => Object.prototype.hasOwnProperty.call(body, key));
+        if (settingsChanged) persistSettingsOverrides(candidate);
+        Object.assign(settings, candidate);
+        if (body.librariesDir || Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
+          runQueueService.setWorkerCount(settings.defaultQueueWorkers, { hostHeader: req.headers.host });
+        }
+        if (body.librariesDir) oauthSessionManager.setLibrariesDir(settings.librariesDir);
         asJson(res, 200, settings);
         return;
       }

@@ -25,6 +25,9 @@ import {
 import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
 import { aggregateResults } from './results.js';
 import { evaluateScenarioObservation } from './scenario-observation.js';
+import { normalizeEvaluationDecisionConfig, type EvaluationDecisionConfig } from './decision-config.js';
+import { requestDecisionAnswers, type DecisionAnswer } from './decisions.js';
+import type { AgentAssertionJudgeResult } from './eval.js';
 import { persistEvaluationArtifacts } from './artifacts.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 import {
@@ -52,6 +55,7 @@ export interface RunOptions {
     name: string;
     agent: AgentConfig;
   };
+  evaluationDecision?: EvaluationDecisionConfig;
   signal?: AbortSignal;
   /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
   scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
@@ -126,6 +130,9 @@ export async function runAll(
         .map((scenario) => scenario.id)
         .join(', ')}`
     );
+  }
+  if (scenariosWithAgentChecks.length > 0 && options.evaluationJudge && !isLlmAgent(options.evaluationJudge.agent)) {
+    throw new Error('Evaluation judge must be an LLM agent.');
   }
   const emitProgress = async (event: RunProgressEvent): Promise<void> => {
     if (!options.onProgress) return;
@@ -311,11 +318,12 @@ export async function runAll(
             },
             judgeAgentAssertions: options.evaluationJudge
               ? async (input) =>
-                  judgeAgentAssertions({
+                  evaluateSemanticAssertions({
                     assertions: input.assertions,
                     context: input.context,
                     finalText: runResult.finalText,
                     judge: options.evaluationJudge!,
+                    evaluationDecision: options.evaluationDecision,
                     signal: runSignal
                   })
               : undefined
@@ -594,6 +602,85 @@ export function mapJudgeBatchResults(params: {
       metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
     };
   });
+}
+
+/** Prefer bounded decisions; use the conversational judge only for unavailable/uncertain checks. */
+export async function evaluateSemanticAssertions(
+  params: Parameters<typeof judgeAgentAssertions>[0] & { evaluationDecision?: EvaluationDecisionConfig }
+): Promise<AgentAssertionJudgeResult[]> {
+  throwIfAborted(params.signal);
+  if (params.assertions.length === 0) return [];
+  if (!isLlmAgent(params.judge.agent)) throw new Error('Evaluation judge must be an LLM agent.');
+  if (!params.evaluationDecision) return judgeAgentAssertions(params);
+  const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
+  let config: EvaluationDecisionConfig | undefined;
+  let answers: DecisionAnswer[];
+  try {
+    config = normalizeEvaluationDecisionConfig(params.evaluationDecision);
+  } catch {
+    answers = batch.checks.map(({ id }) => ({ id, fallback: 'invalid_configuration', durationMs: 0 }));
+  }
+  if (config) {
+    answers = await requestDecisionAnswers({
+      config,
+      evidence: { final_answer: batch.final_answer, ...(batch.context ? { context: batch.context } : {}) },
+      checks: batch.checks,
+      signal: params.signal
+    });
+  }
+  throwIfAborted(params.signal);
+  const results: AgentAssertionJudgeResult[] = [];
+  const fallbackIndexes: number[] = [];
+  const metadataByIndex: Record<string, unknown>[] = [];
+  for (const [index, check] of batch.checks.entries()) {
+    const answer = answers![index];
+    const probability = answer.probability;
+    const fallback = answer.fallback ?? (probability !== undefined && config &&
+      (probability >= config.passThreshold || probability <= config.failThreshold) ? undefined : 'uncertain');
+    const metadata = {
+      check_id: check.id,
+      decision_provider: params.evaluationDecision.provider,
+      decision_requested_model: params.evaluationDecision.model,
+      ...(answer.model ? { decision_model: answer.model } : {}),
+      ...(probability !== undefined ? { decision_probability: probability } : {}),
+      decision_pass_threshold: config?.passThreshold,
+      decision_fail_threshold: config?.failThreshold,
+      decision_duration_ms: answer.durationMs,
+      evaluator: fallback ? 'judge' : 'decision',
+      ...(fallback ? { decision_fallback: fallback } : {})
+    };
+    metadataByIndex[index] = metadata;
+    if (fallback) {
+      fallbackIndexes.push(index);
+      continue;
+    }
+    const pass = probability! >= config!.passThreshold;
+    results[index] = {
+      label: check.label,
+      pass,
+      reason: pass
+        ? `Satisfaction probability ${probability} met the pass threshold ${config!.passThreshold}.`
+        : `Satisfaction probability ${probability} met the fail threshold ${config!.failThreshold}.`,
+      metadata
+    };
+  }
+  if (fallbackIndexes.length) {
+    let judged: AgentAssertionJudgeResult[];
+    try {
+      judged = await judgeAgentAssertions({ ...params, assertions: fallbackIndexes.map((index) => params.assertions[index]) });
+    } catch (error) {
+      throwIfAborted(params.signal);
+      if (isAbortError(error)) throw error;
+      const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
+      judged = fallbackIndexes.map((index) => ({ label: params.assertions[index].label, pass: false, reason }));
+    }
+    throwIfAborted(params.signal);
+    for (const [position, index] of fallbackIndexes.entries()) {
+      const result = judged[position];
+      results[index] = { ...result, metadata: { ...result.metadata, ...metadataByIndex[index] } };
+    }
+  }
+  return results;
 }
 
 export async function judgeAgentAssertions(params: {

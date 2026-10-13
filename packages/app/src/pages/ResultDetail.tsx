@@ -1519,6 +1519,11 @@ const ResultDetail = () => {
                                                                   )}
                                                                 </p>
                                                               )}
+                                                              {check.decisionDetails && (
+                                                                <p className="mt-1 pl-5 text-xs text-muted-foreground">
+                                                                  {check.decisionDetails}
+                                                                </p>
+                                                              )}
                                                             </div>
                                                             <Badge
                                                               variant="outline"

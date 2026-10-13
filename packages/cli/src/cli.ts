@@ -869,6 +869,7 @@ async function executeSingleConfigRun(params: {
     runsDir: String(options.runsDir),
     cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
+    evaluationDecision: workspaceSettings.evaluation_decision,
     evaluationJudge: resolveEvaluationJudge({
       agents: libraryAgents,
       evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name

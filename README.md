@@ -390,6 +390,39 @@ run_defaults:
 
 ---
 
+### Optional Decision Engine
+
+In **Settings**, configure an **Evaluation Judge**, then select a **Decision Engine** beside it. Decision engines evaluate semantic `agent_assertions` on the completed answers of API and browser agents. They do not run scenarios or replace conversational assistants.
+
+Supported providers:
+
+| Provider | Default model | Backend configuration |
+| --- | --- | --- |
+| OpenAI Decisions | `gpt-6-luna` | `OPENAI_API_KEY` |
+| Cloudflare Clef | `clef-flash` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AUTH_TOKEN` |
+| TypeSafe Jev | `jev-1.13.0` | `TYPESAFE_API_KEY` |
+| Ollama | `clef-flash` | Server URL, default `http://localhost:11434`; no API key |
+
+For Ollama, install Ollama 0.35.1 or later and run `ollama pull clef-flash` yourself. MCPLab calls the server's `/v1/systemone` endpoint from its backend. The server URL must be reachable from the machine running MCPLab. Other decision models, including `clef`, `nimble`, and `tev1`, can be selected by model name. MCPLab does not download models automatically.
+
+Set **Pass probability threshold** and **Fail probability threshold**, then click **Save Decision Engine**. Both refer to the probability that the answer satisfies a semantic assertion. By default, probabilities at or above `0.9` pass, probabilities at or below `0.1` fail, and probabilities between them use the Evaluation Judge. The settings must satisfy `0 ≤ failThreshold < passThreshold ≤ 1`. These are routing thresholds, not guarantees of correctness; check them against reviewed examples from your own scenarios.
+
+A valid LLM Evaluation Judge remains required as backup. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
+
+Choose **None** and save to return to judge-only evaluation. Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory):
+
+```yaml
+evaluation_judge_agent_name: my-judge
+evaluation_decision:
+  provider: ollama
+  model: clef-flash
+  baseUrl: http://localhost:11434
+  passThreshold: 0.9
+  failThreshold: 0.1
+```
+
+Results show decision probabilities, thresholds, model, and judge fallback where applicable. Required tools, tool sequences, and other deterministic assertions continue to use their existing checks. Browser captures still cannot establish tool use when telemetry is unavailable.
+
 ## 🔑 Environment Variables
 
 Add your LLM Agent API keys to `.env` for each provider you want to use:

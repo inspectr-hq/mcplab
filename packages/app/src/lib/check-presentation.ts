@@ -15,6 +15,50 @@ export interface CheckPresentationInput {
   checkResults?: CheckResult[];
 }
 
+interface CheckPresentationItem {
+  rule: EvalRule;
+  status: CheckResult['status'];
+  failureReason?: string;
+  decisionDetails?: string;
+}
+
+export function formatDecisionDetails(metadata?: CheckResult['metadata']): string | undefined {
+  if (typeof metadata?.decision_provider !== 'string') return undefined;
+  const details = [`Decision Engine · ${metadata.decision_provider}`];
+  const model = metadata.decision_model ?? metadata.decision_requested_model;
+  if (typeof model === 'string') details.push(model);
+  if (
+    typeof metadata.decision_requested_model === 'string' &&
+    metadata.decision_requested_model !== model
+  ) {
+    details.push(`requested ${metadata.decision_requested_model}`);
+  }
+  for (const [key, label] of [
+    ['decision_probability', 'probability'],
+    ['decision_pass_threshold', 'pass ≥'],
+    ['decision_fail_threshold', 'fail ≤']
+  ]) {
+    const value = metadata[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) {
+      details.push(`${label} ${value.toFixed(3)}`);
+    }
+  }
+  if (
+    typeof metadata.decision_duration_ms === 'number' &&
+    Number.isFinite(metadata.decision_duration_ms)
+  ) {
+    details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
+  }
+  if (typeof metadata.decision_fallback === 'string') {
+    details.push(`Judge fallback: ${metadata.decision_fallback.replaceAll('_', ' ')}`);
+  } else if (metadata.evaluator === 'judge') {
+    details.push('Evaluated by judge');
+  } else if (metadata.evaluator === 'decision') {
+    details.push('Evaluated by decision');
+  }
+  return details.join(' · ');
+}
+
 export function formatCheckStatusLabel(
   status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed'
 ): string {
@@ -28,7 +72,7 @@ export function buildCheckItems({
   failureReasons,
   runError,
   checkResults
-}: CheckPresentationInput) {
+}: CheckPresentationInput): CheckPresentationItem[] {
   const scenarioError =
     runError || failureReasons.find((reason) => reason.startsWith('Scenario error:'));
   if (scenarioError) {
@@ -41,10 +85,13 @@ export function buildCheckItems({
   if (checkResults?.length) {
     return evalRules.map((rule) => {
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
+      const decisionDetails =
+        rule.type === 'agent_check' ? formatDecisionDetails(match?.metadata) : undefined;
       return {
         rule,
         status: match?.status ?? ('not_executed' as const),
-        failureReason: match?.reason
+        failureReason: match?.reason,
+        ...(decisionDetails ? { decisionDetails } : {})
       };
     });
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCheckItems,
   formatCheckStatusLabel,
+  formatDecisionDetails,
   formatEvalRuleLabel,
   matchFailureReasonForRule
 } from './check-presentation';
@@ -77,6 +78,40 @@ describe('buildCheckItems', () => {
     },
     { type: 'response_contains', value: 'ready' }
   ];
+
+  it('retains probability and judge fallback details for semantic checks', () => {
+    const result = buildCheckItems({
+      evalRules,
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Logical range',
+          status: 'passed',
+          metadata: {
+            check_id: 'range',
+            decision_provider: 'openai',
+            decision_requested_model: 'gpt-6-luna',
+            decision_model: 'gpt-6-luna-2026',
+            decision_probability: 0.5,
+            decision_pass_threshold: 0.9,
+            decision_fail_threshold: 0.1,
+            decision_duration_ms: 15,
+            evaluator: 'judge',
+            decision_fallback: 'uncertain'
+          }
+        }
+      ]
+    });
+    expect(result[0].decisionDetails).toContain('openai');
+    expect(result[0].decisionDetails).toContain('gpt-6-luna-2026');
+    expect(result[0].decisionDetails).toContain('requested gpt-6-luna');
+    expect(result[0].decisionDetails).toContain('probability 0.500');
+    expect(result[0].decisionDetails).toContain('pass ≥ 0.900');
+    expect(result[0].decisionDetails).toContain('fail ≤ 0.100');
+    expect(result[0].decisionDetails).toContain('15 ms');
+    expect(result[0].decisionDetails).toContain('Judge fallback: uncertain');
+  });
 
   it('prefers structured check results when present', () => {
     const result = buildCheckItems({
@@ -211,5 +246,29 @@ describe('buildCheckItems', () => {
     });
 
     expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
+  });
+});
+
+describe('formatDecisionDetails', () => {
+  it('preserves historical checks without decision metadata', () => {
+    expect(formatDecisionDetails(undefined)).toBeUndefined();
+    expect(formatDecisionDetails({ check_id: 'old' })).toBeUndefined();
+  });
+
+  it('includes zero probability without rendering malformed probabilities', () => {
+    expect(
+      formatDecisionDetails({
+        evaluator: 'decision',
+        decision_provider: 'ollama',
+        decision_probability: 0
+      })
+    ).toContain('probability 0.000');
+    expect(
+      formatDecisionDetails({
+        evaluator: 'decision',
+        decision_provider: 'ollama',
+        decision_probability: NaN
+      })
+    ).not.toContain('NaN');
   });
 });

@@ -23,6 +23,8 @@ import {
   loadConfig,
   hashConfig,
   runAll,
+  loadWorkspaceSettingsOverrides,
+  resolveEvaluationJudge,
   selectScenarios,
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
@@ -2059,13 +2061,20 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden,
           runtimeOverridden.run_defaults?.selected_agents
         );
+        const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
+        const { agents: libraryAgents } = readLibraryAgentsAndServers(bundleRoot);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
           configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir(),
-          cwd: process.cwd()
+          cwd: process.cwd(),
+          evaluationDecision: workspaceSettings.evaluation_decision,
+          evaluationJudge: resolveEvaluationJudge({
+            agents: libraryAgents,
+            evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name
+          })
         });
 
         const reportHtml = renderReport(results);

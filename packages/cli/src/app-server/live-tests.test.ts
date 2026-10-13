@@ -1,7 +1,12 @@
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+const { semanticEvaluator } = vi.hoisted(() => ({ semanticEvaluator: vi.fn() }));
+vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@inspectr/mcplab-core')>()),
+  evaluateSemanticAssertions: semanticEvaluator
+}));
 import { LiveTestService, listLiveTestCases, type LiveTestSession } from './live-tests.js';
 
 const scenarios = [
@@ -37,6 +42,60 @@ describe('Live Test catalog', () => {
 });
 
 describe('LiveTestService', () => {
+  it('aborts an in-flight decision evaluation and never persists a cancelled completion', async () => {
+    let finish!: (results: unknown) => void;
+    semanticEvaluator.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const persist = vi.fn();
+    const service = new LiveTestService({
+      runsDir: '/tmp', cliVersion: 'test', persist,
+      readScenarios: () => [{ id: 'semantic', servers: [], prompt: 'Find Antwerp', eval: { agent_assertions: [{ label: 'City', prompt: 'Does it address Antwerp?' }] } }],
+      getEvaluationJudge: () => ({ name: 'backup', agent: { provider: 'openai', model: 'judge' } }),
+      getEvaluationDecision: () => ({ provider: 'ollama', model: 'clef-flash', passThreshold: .9, failThreshold: .1 })
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'browser' });
+    const pending = service.complete(session.id, { finalText: 'Antwerp', startedAt: '2026-10-13T00:00:00Z', completedAt: '2026-10-13T00:00:01Z' });
+    const rejected = expect(pending).rejects.toThrow(/cancelled/);
+    service.cancel(session.id);
+    const signal = semanticEvaluator.mock.lastCall?.[0].signal;
+    finish([{ label: 'City', pass: true, reason: 'done' }]);
+    await rejected;
+    expect(signal?.aborted).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+    expect(service.get(session.id).status).toBe('cancelled');
+  });
+  it('routes Rover semantic assertions through the shared decision evaluator with browser context', async () => {
+    const evaluationDecision = { provider: 'ollama' as const, model: 'clef-flash', passThreshold: 0.9, failThreshold: 0.1 };
+    const judge = { name: 'backup', agent: { provider: 'openai' as const, model: 'gpt-5-mini' } };
+    semanticEvaluator.mockResolvedValueOnce([{ label: 'Addresses city', pass: true, reason: 'Probability 0.99', metadata: { evaluator: 'decision' } }]);
+    const service = new LiveTestService({
+      runsDir: '/tmp', cliVersion: 'test', persist: () => undefined,
+      appendJournalEvent: () => undefined,
+      readScenarios: () => [{ id: 'semantic', servers: [], prompt: 'Find Antwerp', eval: {
+        agent_assertions: [{ label: 'Addresses city', prompt: 'Does it address Antwerp?' }],
+        agent_context: { include_prompt: true, include_tool_sequence: true, include_tool_inputs: true }
+      } }],
+      getEvaluationJudge: () => judge, getEvaluationDecision: () => evaluationDecision
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'polo' });
+    const result = await service.complete(session.id, { finalText: 'Antwerp is in Belgium.', startedAt: '2026-10-13T00:00:00Z', completedAt: '2026-10-13T00:00:01Z' });
+    expect(result.outcome).toBe('passed');
+    expect(semanticEvaluator).toHaveBeenCalledWith(expect.objectContaining({
+      evaluationDecision, judge, finalText: 'Antwerp is in Belgium.',
+      context: { scenario_prompt: 'Find Antwerp' }
+    }));
+  });
+
+  it('requires judge backup before Rover semantic evaluation even when a decision engine is enabled', async () => {
+    semanticEvaluator.mockClear();
+    const service = new LiveTestService({
+      runsDir: '/tmp', cliVersion: 'test', persist: () => undefined,
+      readScenarios: () => [{ id: 'semantic', servers: [], prompt: 'Find Antwerp', eval: { agent_assertions: [{ label: 'Addresses city', prompt: 'Does it address Antwerp?' }] } }],
+      getEvaluationDecision: () => ({ provider: 'ollama', model: 'clef-flash', passThreshold: 0.9, failThreshold: 0.1 })
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'polo' });
+    await expect(service.complete(session.id, { finalText: 'Antwerp', startedAt: '2026-10-13T00:00:00Z', completedAt: '2026-10-13T00:00:01Z' })).rejects.toThrow('configured evaluation judge');
+    expect(semanticEvaluator).not.toHaveBeenCalled();
+  });
   it('uses the queued scenario snapshot for managed runs instead of a matching library ID', () => {
     const libraryScenario = {
       id: 'shared-id',

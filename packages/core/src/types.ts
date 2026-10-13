@@ -1,3 +1,5 @@
+export type { EvaluationDecisionConfig } from './decision-config.js';
+
 export type TransportType = 'http';
 
 export interface ServerAuthBearer {

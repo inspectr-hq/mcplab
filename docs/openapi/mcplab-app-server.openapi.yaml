@@ -120,6 +120,16 @@ paths:
                   oneOf:
                     - type: string
                     - type: "null"
+                evaluationJudgeAgentName:
+                  oneOf:
+                    - type: string
+                    - type: "null"
+                evaluationDecision:
+                  description: Optional decision engine for semantic checks. Requires an LLM evaluation judge as backup. Null clears the configuration.
+                  oneOf:
+                    - $ref: "#/components/schemas/EvaluationDecisionConfig"
+                    - type: "null"
+                defaultQueueWorkers: { type: integer, minimum: 1, maximum: 8 }
       responses:
         "200":
           description: Updated settings
@@ -1597,6 +1607,23 @@ components:
           enum: [models, deployments]
         source:
           type: string
+    EvaluationDecisionConfig:
+      type: object
+      required: [provider, model, passThreshold, failThreshold]
+      description: Satisfaction probabilities at or above passThreshold pass; at or below failThreshold fail. Other answers use the judge. failThreshold must be less than passThreshold.
+      properties:
+        provider:
+          type: string
+          enum: [openai, cloudflare, typesafe, ollama]
+        model: { type: string, minLength: 1 }
+        passThreshold: { type: number, minimum: 0, maximum: 1, default: 0.9 }
+        failThreshold: { type: number, minimum: 0, maximum: 1, default: 0.1 }
+        baseUrl:
+          type: string
+          format: uri
+          description: Ollama-only HTTP or HTTPS server URL, reachable from the MCPLab backend.
+          default: http://localhost:11434
+      additionalProperties: false
     WorkspaceSettings:
       type: object
       required: [workspaceRoot, evalsDir, runsDir, librariesDir]
@@ -1607,6 +1634,10 @@ components:
         librariesDir: { type: string }
         toolAnalysisResultsDir: { type: string }
         scenarioAssistantAgentName: { type: string }
+        evaluationJudgeAgentName: { type: string }
+        evaluationDecision:
+          $ref: "#/components/schemas/EvaluationDecisionConfig"
+        defaultQueueWorkers: { type: integer, minimum: 1, maximum: 8 }
       additionalProperties: true
     LibrariesPayload:
       type: object

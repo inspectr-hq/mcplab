@@ -713,7 +713,8 @@ export async function handleRunsRoutes(params: {
         runsDir: resolve(previewRunsRoot),
         cwd: settings.workspaceRoot,
         mcpServerAuthHeaders,
-        evaluationJudge
+        evaluationJudge,
+        evaluationDecision: settings.evaluationDecision
       });
       const scenario = results.scenarios[0];
       const run = scenario?.runs?.[0];

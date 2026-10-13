@@ -1,4 +1,4 @@
-import type { HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
+import type { EvaluationDecisionConfig, HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
 
 export type { HealthMcpConnectionInfo };
 
@@ -22,6 +22,7 @@ export interface AppSettings {
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
   evaluationJudgeAgentName?: string;
+  evaluationDecision?: EvaluationDecisionConfig;
 }
 
 // Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo

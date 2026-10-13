@@ -5,6 +5,8 @@ import {
   hashConfig,
   loadConfig,
   runAll,
+  resolveEvaluationJudge,
+  type EvaluationDecisionConfig,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -59,18 +61,7 @@ export function filterScenarioOverridesToSelectedScenarios(
   return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
 
-export function resolveEvaluationJudge(params: {
-  agents: EvalConfig['agents'];
-  evaluationJudgeAgentName?: string;
-}): { name: string; agent: EvalConfig['agents'][string] } | undefined {
-  const selected = params.evaluationJudgeAgentName?.trim();
-  if (!selected) return undefined;
-  const agent = params.agents[selected];
-  if (!agent) {
-    throw new Error(`Evaluation judge agent not found: ${selected}`);
-  }
-  return { name: selected, agent };
-}
+export { resolveEvaluationJudge } from '@inspectr/mcplab-core';
 
 export type AdmissionResult =
   | { status: 'ready'; readyServers: string[] }
@@ -166,6 +157,7 @@ export async function executeRunJob(params: {
     librariesDir: string;
     workspaceRoot: string;
     evaluationJudgeAgentName?: string;
+    evaluationDecision?: EvaluationDecisionConfig;
   };
   oauthSessionManager: OAuthSessionManager;
   deps: RunsRouteDeps;
@@ -350,6 +342,7 @@ export async function executeRunJob(params: {
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
       evaluationJudge,
+      evaluationDecision: settings.evaluationDecision,
       resolveMcpServerAuthHeaders:
         oauthServers.length > 0
           ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {
