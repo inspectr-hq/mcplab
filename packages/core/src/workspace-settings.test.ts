@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { ResolveWorkspaceEvaluationParams, WorkspaceEvaluationSettings } from './types.js';
 import { resolveWorkspaceEvaluation } from './workspace-settings.js';
 
 const agents = {
@@ -21,6 +22,11 @@ const decision = {
 };
 
 describe('resolveWorkspaceEvaluation', () => {
+  it('accepts the shared camelCase evaluation settings contract', () => {
+    expectTypeOf<
+      ResolveWorkspaceEvaluationParams['settings']
+    >().toEqualTypeOf<WorkspaceEvaluationSettings>();
+  });
   it.each(['deleted', 'browser'])('ignores a %s judge for deterministic-only scenarios', (name) => {
     expect(
       resolveWorkspaceEvaluation({
@@ -36,11 +42,11 @@ describe('resolveWorkspaceEvaluation', () => {
         agents,
         scenarios: [semantic, deterministic],
         scenarioId: 'deterministic',
-        settings: { evaluation_judge_agent_name: 'deleted', evaluation_decision: decision }
+        settings: { evaluationJudgeAgentName: 'deleted', evaluationDecision: decision }
       })
     ).toEqual({});
   });
-  it('resolves app settings and persisted YAML settings to the same evaluation options', () => {
+  it('resolves the configured judge and decision for semantic scenarios', () => {
     const expected = {
       evaluationJudge: { name: 'judge', agent: agents.judge },
       evaluationDecision: decision
@@ -50,13 +56,6 @@ describe('resolveWorkspaceEvaluation', () => {
         agents,
         scenarios: [semantic],
         settings: { evaluationJudgeAgentName: 'judge', evaluationDecision: decision }
-      })
-    ).toEqual(expected);
-    expect(
-      resolveWorkspaceEvaluation({
-        agents,
-        scenarios: [semantic],
-        settings: { evaluation_judge_agent_name: 'judge', evaluation_decision: decision }
       })
     ).toEqual(expected);
   });

@@ -4,6 +4,7 @@ import { toJudgeErrorResults } from './eval.js';
 import { buildJudgeBatchPayload, judgeAgentAssertions } from './judge.js';
 import type {
   AgentAssertionJudgeResult,
+  DecisionAdapter,
   DecisionAnswer,
   DecisionRequest,
   EvaluationDecisionConfig,
@@ -100,20 +101,19 @@ const adapters = {
   },
   ollama: {
     ...systemOneCodec,
-    requiredEnv: [] as string[],
-    authEnv: undefined,
+    requiredEnv: [],
     url: (config: EvaluationDecisionConfig) => `${config.baseUrl}/v1/systemone`,
     timeoutMs: 120_000,
     maxBatchSize: 64
   }
-};
+} satisfies Record<EvaluationDecisionConfig['provider'], DecisionAdapter>;
 
 function normalizeAnswers(
   raw: unknown,
   params: DecisionRequest,
   durationMs: number
 ): DecisionAnswer[] {
-  const adapter = adapters[params.config.provider];
+  const adapter: DecisionAdapter = adapters[params.config.provider];
   const payload = adapter.extract(raw);
   const model = typeof payload?.model === 'string' ? payload.model : undefined;
   const byId = new Map<string, Record<string, unknown>>();
@@ -151,7 +151,7 @@ function normalizeAnswers(
 
 async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> {
   throwIfAborted(params.signal);
-  const adapter = adapters[params.config.provider];
+  const adapter: DecisionAdapter = adapters[params.config.provider];
   const unavailable = (fallback: string, durationMs = 0) =>
     params.checks.map(({ id }) => ({ id, fallback, durationMs }));
   if (adapter.requiredEnv.some((name) => !process.env[name]?.trim())) {
@@ -192,18 +192,22 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
 
 /** Transport and normalization only; the semantic evaluator owns threshold/fallback policy. */
 export async function requestDecisionAnswers(params: DecisionRequest): Promise<DecisionAnswer[]> {
-  const batches: Promise<DecisionAnswer[]>[] = [];
+  const batches: DecisionRequest[] = [];
   const batchSize = Math.min(
     adapters[params.config.provider].maxBatchSize,
     Math.max(1, params.checks.length)
   );
   for (let offset = 0; offset < params.checks.length; offset += batchSize) {
-    batches.push(
-      requestBatch({ ...params, checks: params.checks.slice(offset, offset + batchSize) })
-    );
+    batches.push({ ...params, checks: params.checks.slice(offset, offset + batchSize) });
+  }
+  if (params.config.provider === 'ollama') {
+    // Local servers load and evaluate one batch at a time.
+    const answers: DecisionAnswer[] = [];
+    for (const batch of batches) answers.push(...(await requestBatch(batch)));
+    return answers;
   }
   // Promise.all preserves input order even when later chunks finish first.
-  return (await Promise.all(batches)).flat();
+  return (await Promise.all(batches.map(requestBatch))).flat();
 }
 
 /** Prefer bounded decisions; use the conversational judge only for unavailable/uncertain checks. */

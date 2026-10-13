@@ -7,7 +7,6 @@ import {
   type EvaluationJudge,
   type ResolveWorkspaceEvaluationParams,
   type WorkspaceEvaluation,
-  type WorkspaceEvaluationSettings,
   type WorkspaceSettingsOverrides
 } from './types.js';
 
@@ -56,13 +55,12 @@ export function resolveWorkspaceEvaluation(
       (scenario.eval?.agent_assertions?.length ?? 0) > 0
   );
   if (!needsJudge) return {};
-  const settings = params.settings as WorkspaceEvaluationSettings & WorkspaceSettingsOverrides;
+  const settings = params.settings;
   return {
     evaluationJudge: resolveEvaluationJudge({
       agents: params.agents,
-      evaluationJudgeAgentName:
-        settings.evaluationJudgeAgentName ?? settings.evaluation_judge_agent_name
+      evaluationJudgeAgentName: settings.evaluationJudgeAgentName
     }),
-    evaluationDecision: settings.evaluationDecision ?? settings.evaluation_decision
+    evaluationDecision: settings.evaluationDecision
   };
 }

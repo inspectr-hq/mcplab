@@ -176,7 +176,7 @@ describe('decision providers', () => {
     expect(result[0].probability).toBe(0.95);
     expect(result[64].fallback).toBe('http_error');
   });
-  it('starts limited batches together and preserves input order when they finish out of order', async () => {
+  it('waits for an Ollama batch to finish before starting the next batch', async () => {
     const many = Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' }));
     const finish: Array<(value: Response) => void> = [];
     fetchMock.mockImplementation(() => new Promise<Response>((resolve) => finish.push(resolve)));
@@ -184,6 +184,54 @@ describe('decision providers', () => {
       ...input,
       checks: many,
       config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' })
+    });
+    const initialRequests = fetchMock.mock.calls.length;
+    finish[0](
+      response(
+        Object.fromEntries(many.slice(0, 64).map(({ id }) => [id, { type: 'noul', noul: 0.95 }]))
+      )
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    finish[1](response({ '64': { type: 'noul', noul: 0.05 } }));
+    const result = await pending;
+    expect(initialRequests).toBe(1);
+    expect(result.map(({ id }) => id)).toEqual(many.map(({ id }) => id));
+    expect(result.slice(0, 64).every(({ probability }) => probability === 0.95)).toBe(true);
+    expect(result[64].probability).toBe(0.05);
+  });
+  it('does not start queued Ollama batches or invoke the judge after cancellation', async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementation(
+      (_url, request) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          );
+        })
+    );
+    const pending = evaluateSemanticAssertions({
+      ...semanticInput,
+      assertions: Array.from({ length: 65 }, () => ({ label: 'Check', prompt: 'Valid?' })),
+      evaluationDecision: normalizeEvaluationDecisionConfig({
+        provider: 'ollama',
+        model: 'clef-flash'
+      }),
+      signal: controller.signal
+    });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    controller.abort();
+    await rejected;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+  it('starts hosted batches together and preserves input order when they finish out of order', async () => {
+    const many = Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' }));
+    const finish: Array<(value: Response) => void> = [];
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => finish.push(resolve)));
+    const pending = requestDecisionAnswers({
+      ...input,
+      checks: many,
+      config: normalizeEvaluationDecisionConfig({ provider: 'cloudflare', model: 'clef-flash' })
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     finish[1](response({ '64': { type: 'noul', noul: 0.05 } }));
@@ -217,9 +265,9 @@ describe('decision providers', () => {
     const pending = requestDecisionAnswers({
       ...input,
       checks: many,
-      config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' })
+      config: normalizeEvaluationDecisionConfig({ provider: 'cloudflare', model: 'clef-flash' })
     });
-    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     const result = await pending;
     expect(result[0].probability).toBe(0.95);
     expect(result[64].fallback).toBe('timeout');
@@ -240,7 +288,7 @@ describe('decision providers', () => {
     const pending = requestDecisionAnswers({
       ...input,
       checks: Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' })),
-      config: normalizeEvaluationDecisionConfig({ provider: 'ollama', model: 'clef-flash' }),
+      config: normalizeEvaluationDecisionConfig({ provider: 'cloudflare', model: 'clef-flash' }),
       signal: controller.signal
     });
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
@@ -339,7 +387,7 @@ describe('semantic decision routing', () => {
       ...semanticInput,
       assertions,
       evaluationDecision: normalizeEvaluationDecisionConfig({
-        provider: 'ollama',
+        provider: 'cloudflare',
         model: 'clef-flash'
       })
     });

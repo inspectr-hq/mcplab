@@ -2076,7 +2076,10 @@ export function registerTools(server: McpServer): void {
           ...resolveWorkspaceEvaluation({
             agents: libraries.agents,
             scenarios: executable.scenarios,
-            settings: workspaceSettings
+            settings: {
+              evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name,
+              evaluationDecision: workspaceSettings.evaluation_decision
+            }
           })
         });
 

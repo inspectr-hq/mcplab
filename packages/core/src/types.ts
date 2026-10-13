@@ -42,7 +42,7 @@ export interface ResolveWorkspaceEvaluationParams {
   agents: EvalConfig['agents'];
   scenarios: ReadonlyArray<Pick<Scenario, 'id' | 'eval'>>;
   scenarioId?: string;
-  settings: WorkspaceEvaluationSettings | WorkspaceSettingsOverrides;
+  settings: WorkspaceEvaluationSettings;
 }
 
 export interface AgentAssertionJudgeResult {
@@ -79,6 +79,19 @@ export interface DecisionRequest {
   evidence: unknown;
   checks: DecisionCheck[];
   signal?: AbortSignal;
+}
+
+export interface DecisionAdapter {
+  requiredEnv: readonly string[];
+  authEnv?: string;
+  url(config: EvaluationDecisionConfig): string;
+  timeoutMs: number;
+  maxBatchSize: number;
+  body(params: DecisionRequest): unknown;
+  extract(raw: unknown): Record<string, unknown> | undefined;
+  entries(raw: unknown): Array<[string, unknown]>;
+  answerType: string;
+  probabilityField: string;
 }
 
 export type TransportType = 'http';
