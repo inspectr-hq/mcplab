@@ -530,7 +530,8 @@ export async function startAppServer(options: AppServerOptions) {
           return;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
-          candidate.scenarioAssistantAgentName = String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
+          candidate.scenarioAssistantAgentName =
+            String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
           candidate.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
@@ -541,12 +542,21 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(candidate.librariesDir, { recursive: true });
           mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
         }
-        const settingsChanged = ['scenarioAssistantAgentName', 'evaluationJudgeAgentName', 'evaluationDecision', 'defaultQueueWorkers']
-          .some((key) => Object.prototype.hasOwnProperty.call(body, key));
+        const settingsChanged = [
+          'scenarioAssistantAgentName',
+          'evaluationJudgeAgentName',
+          'evaluationDecision',
+          'defaultQueueWorkers'
+        ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
         if (settingsChanged) persistSettingsOverrides(candidate);
         Object.assign(settings, candidate);
-        if (body.librariesDir || Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
-          runQueueService.setWorkerCount(settings.defaultQueueWorkers, { hostHeader: req.headers.host });
+        if (
+          body.librariesDir ||
+          Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')
+        ) {
+          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
+            hostHeader: req.headers.host
+          });
         }
         if (body.librariesDir) oauthSessionManager.setLibrariesDir(settings.librariesDir);
         asJson(res, 200, settings);

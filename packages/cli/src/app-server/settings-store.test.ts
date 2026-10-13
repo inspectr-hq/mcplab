@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyEvaluationSettingsPatch, applySettingsOverrides, loadWorkspaceSettingsOverrides, persistSettingsOverrides } from './settings-store.js';
+import {
+  applyEvaluationSettingsPatch,
+  applySettingsOverrides,
+  loadWorkspaceSettingsOverrides,
+  persistSettingsOverrides
+} from './settings-store.js';
 import type { AppSettings } from './types.js';
 
 const roots: string[] = [];
@@ -14,14 +19,27 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
-  const decision = { provider: 'ollama' as const, model: 'clef-flash', passThreshold: 0.9, failThreshold: 0.1, baseUrl: 'http://localhost:11434' };
-  const agents = { judge: { provider: 'openai' as const, model: 'gpt-5-mini' }, browser: { type: 'browser' as const, provider: 'polo', url: 'https://polo.example' } };
+  const decision = {
+    provider: 'ollama' as const,
+    model: 'clef-flash',
+    passThreshold: 0.9,
+    failThreshold: 0.1,
+    baseUrl: 'http://localhost:11434'
+  };
+  const agents = {
+    judge: { provider: 'openai' as const, model: 'gpt-5-mini' },
+    browser: { type: 'browser' as const, provider: 'polo', url: 'https://polo.example' }
+  };
   const fixture = () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-decision-settings-'));
     roots.push(root);
     const settings: AppSettings = {
-      workspaceRoot: root, evalsDir: join(root, 'evals'), runsDir: join(root, 'runs'),
-      toolAnalysisResultsDir: join(root, 'analysis'), librariesDir: join(root, 'libs'), defaultQueueWorkers: 1
+      workspaceRoot: root,
+      evalsDir: join(root, 'evals'),
+      runsDir: join(root, 'runs'),
+      toolAnalysisResultsDir: join(root, 'analysis'),
+      librariesDir: join(root, 'libs'),
+      defaultQueueWorkers: 1
     };
     mkdirSync(settings.librariesDir, { recursive: true });
     return settings;
@@ -29,23 +47,39 @@ describe('Decision Engine settings', () => {
 
   it('persists and reloads the decision configuration without agent library changes', () => {
     const settings = fixture();
-    const next = applyEvaluationSettingsPatch(settings, { evaluationJudgeAgentName: 'judge', evaluationDecision: decision }, agents);
+    const next = applyEvaluationSettingsPatch(
+      settings,
+      { evaluationJudgeAgentName: 'judge', evaluationDecision: decision },
+      agents
+    );
     persistSettingsOverrides(next);
     applySettingsOverrides(settings);
     expect(settings.evaluationJudgeAgentName).toBe('judge');
     expect(settings.evaluationDecision).toEqual(decision);
-    expect(loadWorkspaceSettingsOverrides(settings.librariesDir).evaluation_decision).toEqual(decision);
+    expect(loadWorkspaceSettingsOverrides(settings.librariesDir).evaluation_decision).toEqual(
+      decision
+    );
   });
 
   it('clears decision settings with null and leaves historical settings judge-only', () => {
-    const settings = { ...fixture(), evaluationJudgeAgentName: 'judge', evaluationDecision: decision };
+    const settings = {
+      ...fixture(),
+      evaluationJudgeAgentName: 'judge',
+      evaluationDecision: decision
+    };
     persistSettingsOverrides(settings);
-    const next = applyEvaluationSettingsPatch(settings, { evaluationDecision: null, evaluationJudgeAgentName: null }, agents);
+    const next = applyEvaluationSettingsPatch(
+      settings,
+      { evaluationDecision: null, evaluationJudgeAgentName: null },
+      agents
+    );
     persistSettingsOverrides(next);
     applySettingsOverrides(settings);
     expect(settings.evaluationDecision).toBeUndefined();
     expect(settings.evaluationJudgeAgentName).toBeUndefined();
-    expect(readFileSync(join(settings.librariesDir, '.mcplab-app-settings.yaml'), 'utf8')).not.toContain('evaluation_decision');
+    expect(
+      readFileSync(join(settings.librariesDir, '.mcplab-app-settings.yaml'), 'utf8')
+    ).not.toContain('evaluation_decision');
   });
 
   it.each([
@@ -56,23 +90,46 @@ describe('Decision Engine settings', () => {
   ])('rejects invalid thresholds without changing current settings: %j', (thresholds) => {
     const settings = fixture();
     const original = { ...settings };
-    expect(() => applyEvaluationSettingsPatch(settings, { evaluationJudgeAgentName: 'judge', evaluationDecision: { ...decision, ...thresholds } }, agents)).toThrow();
+    expect(() =>
+      applyEvaluationSettingsPatch(
+        settings,
+        { evaluationJudgeAgentName: 'judge', evaluationDecision: { ...decision, ...thresholds } },
+        agents
+      )
+    ).toThrow();
     expect(settings).toEqual(original);
   });
 
   it('requires an LLM judge when enabling and rejects clearing an existing backup atomically', () => {
     const settings = fixture();
-    expect(() => applyEvaluationSettingsPatch(settings, { evaluationDecision: decision }, agents)).toThrow('backup');
-    expect(() => applyEvaluationSettingsPatch(settings, { evaluationDecision: decision, evaluationJudgeAgentName: 'browser' }, agents)).toThrow('LLM');
-    const enabled = applyEvaluationSettingsPatch(settings, { evaluationJudgeAgentName: 'judge', evaluationDecision: decision }, agents);
-    expect(() => applyEvaluationSettingsPatch(enabled, { evaluationJudgeAgentName: null }, agents)).toThrow('backup');
+    expect(() =>
+      applyEvaluationSettingsPatch(settings, { evaluationDecision: decision }, agents)
+    ).toThrow('backup');
+    expect(() =>
+      applyEvaluationSettingsPatch(
+        settings,
+        { evaluationDecision: decision, evaluationJudgeAgentName: 'browser' },
+        agents
+      )
+    ).toThrow('LLM');
+    const enabled = applyEvaluationSettingsPatch(
+      settings,
+      { evaluationJudgeAgentName: 'judge', evaluationDecision: decision },
+      agents
+    );
+    expect(() =>
+      applyEvaluationSettingsPatch(enabled, { evaluationJudgeAgentName: null }, agents)
+    ).toThrow('backup');
     expect(enabled.evaluationJudgeAgentName).toBe('judge');
     expect(enabled.evaluationDecision).toEqual(decision);
   });
 
   it('preserves malformed persisted decision configuration for runtime judge fallback', () => {
     const settings = fixture();
-    writeFileSync(join(settings.librariesDir, '.mcplab-app-settings.yaml'), 'evaluation_judge_agent_name: judge\nevaluation_decision:\n  provider: unknown\n');
+    writeFileSync(
+      join(settings.librariesDir, '.mcplab-app-settings.yaml'),
+      'evaluation_judge_agent_name: judge\nevaluation_decision:\n  provider: unknown\n'
+    );
     applySettingsOverrides(settings);
     expect(settings.evaluationDecision).toEqual({ provider: 'unknown' });
     expect(settings.evaluationJudgeAgentName).toBe('judge');

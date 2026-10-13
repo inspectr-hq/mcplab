@@ -57,12 +57,21 @@ describe('SettingsPage', () => {
   it('allows repairing an unsupported provider in persisted decision settings', async () => {
     sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
       evaluationJudgeAgentName: 'assistant-1',
-      evaluationDecision: { provider: 'unknown', model: 'bad-model', passThreshold: .9, failThreshold: .1 }
+      evaluationDecision: {
+        provider: 'unknown',
+        model: 'bad-model',
+        passThreshold: 0.9,
+        failThreshold: 0.1
+      }
     });
     render(<SettingsPage />);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/saved decision engine/i));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/saved decision engine/i)
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
-    await waitFor(() => expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({ evaluationDecision: null }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({ evaluationDecision: null })
+    );
   });
   beforeEach(() => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);

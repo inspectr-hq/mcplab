@@ -63,15 +63,20 @@ export function applyEvaluationSettingsPatch(
   const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
   const hasDecision = Object.prototype.hasOwnProperty.call(body, 'evaluationDecision');
   if (hasJudge) {
-    candidate.evaluationJudgeAgentName = String(body.evaluationJudgeAgentName ?? '').trim() || undefined;
+    candidate.evaluationJudgeAgentName =
+      String(body.evaluationJudgeAgentName ?? '').trim() || undefined;
   }
   if (hasDecision) {
-    candidate.evaluationDecision = body.evaluationDecision === null
-      ? undefined
-      : normalizeEvaluationDecisionConfig(body.evaluationDecision);
+    candidate.evaluationDecision =
+      body.evaluationDecision === null
+        ? undefined
+        : normalizeEvaluationDecisionConfig(body.evaluationDecision);
   }
   if (hasJudge || candidate.evaluationDecision) {
-    const judge = resolveEvaluationJudge({ agents, evaluationJudgeAgentName: candidate.evaluationJudgeAgentName });
+    const judge = resolveEvaluationJudge({
+      agents,
+      evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
+    });
     if (candidate.evaluationDecision && !judge) {
       throw new Error('Decision engines require a configured LLM evaluation judge as backup.');
     }

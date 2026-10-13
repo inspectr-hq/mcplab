@@ -196,13 +196,16 @@ export class LiveTestService {
       );
     }
     const controller = new AbortController();
-    const promise = this.completeInternal(id, input, controller.signal).catch((error: unknown) => {
-      if (controller.signal.aborted) throw new LiveTestError('Live Test session was cancelled or expired.', 409);
-      throw error;
-    }).finally(() => {
-      if (this.completionsInFlight.get(id)?.promise === promise)
-        this.completionsInFlight.delete(id);
-    });
+    const promise = this.completeInternal(id, input, controller.signal)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted)
+          throw new LiveTestError('Live Test session was cancelled or expired.', 409);
+        throw error;
+      })
+      .finally(() => {
+        if (this.completionsInFlight.get(id)?.promise === promise)
+          this.completionsInFlight.delete(id);
+      });
     this.completionsInFlight.set(id, { inputKey, promise, controller });
     return promise;
   }

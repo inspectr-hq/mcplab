@@ -25,7 +25,10 @@ import {
 import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
 import { aggregateResults } from './results.js';
 import { evaluateScenarioObservation } from './scenario-observation.js';
-import { normalizeEvaluationDecisionConfig, type EvaluationDecisionConfig } from './decision-config.js';
+import {
+  normalizeEvaluationDecisionConfig,
+  type EvaluationDecisionConfig
+} from './decision-config.js';
 import { requestDecisionAnswers, type DecisionAnswer } from './decisions.js';
 import type { AgentAssertionJudgeResult } from './eval.js';
 import { persistEvaluationArtifacts } from './artifacts.js';
@@ -131,7 +134,11 @@ export async function runAll(
         .join(', ')}`
     );
   }
-  if (scenariosWithAgentChecks.length > 0 && options.evaluationJudge && !isLlmAgent(options.evaluationJudge.agent)) {
+  if (
+    scenariosWithAgentChecks.length > 0 &&
+    options.evaluationJudge &&
+    !isLlmAgent(options.evaluationJudge.agent)
+  ) {
     throw new Error('Evaluation judge must be an LLM agent.');
   }
   const emitProgress = async (event: RunProgressEvent): Promise<void> => {
@@ -606,7 +613,9 @@ export function mapJudgeBatchResults(params: {
 
 /** Prefer bounded decisions; use the conversational judge only for unavailable/uncertain checks. */
 export async function evaluateSemanticAssertions(
-  params: Parameters<typeof judgeAgentAssertions>[0] & { evaluationDecision?: EvaluationDecisionConfig }
+  params: Parameters<typeof judgeAgentAssertions>[0] & {
+    evaluationDecision?: EvaluationDecisionConfig;
+  }
 ): Promise<AgentAssertionJudgeResult[]> {
   throwIfAborted(params.signal);
   if (params.assertions.length === 0) return [];
@@ -618,12 +627,19 @@ export async function evaluateSemanticAssertions(
   try {
     config = normalizeEvaluationDecisionConfig(params.evaluationDecision);
   } catch {
-    answers = batch.checks.map(({ id }) => ({ id, fallback: 'invalid_configuration', durationMs: 0 }));
+    answers = batch.checks.map(({ id }) => ({
+      id,
+      fallback: 'invalid_configuration',
+      durationMs: 0
+    }));
   }
   if (config) {
     answers = await requestDecisionAnswers({
       config,
-      evidence: { final_answer: batch.final_answer, ...(batch.context ? { context: batch.context } : {}) },
+      evidence: {
+        final_answer: batch.final_answer,
+        ...(batch.context ? { context: batch.context } : {})
+      },
       checks: batch.checks,
       signal: params.signal
     });
@@ -635,8 +651,13 @@ export async function evaluateSemanticAssertions(
   for (const [index, check] of batch.checks.entries()) {
     const answer = answers![index];
     const probability = answer.probability;
-    const fallback = answer.fallback ?? (probability !== undefined && config &&
-      (probability >= config.passThreshold || probability <= config.failThreshold) ? undefined : 'uncertain');
+    const fallback =
+      answer.fallback ??
+      (probability !== undefined &&
+      config &&
+      (probability >= config.passThreshold || probability <= config.failThreshold)
+        ? undefined
+        : 'uncertain');
     const metadata = {
       check_id: check.id,
       decision_provider: params.evaluationDecision.provider,
@@ -667,12 +688,19 @@ export async function evaluateSemanticAssertions(
   if (fallbackIndexes.length) {
     let judged: AgentAssertionJudgeResult[];
     try {
-      judged = await judgeAgentAssertions({ ...params, assertions: fallbackIndexes.map((index) => params.assertions[index]) });
+      judged = await judgeAgentAssertions({
+        ...params,
+        assertions: fallbackIndexes.map((index) => params.assertions[index])
+      });
     } catch (error) {
       throwIfAborted(params.signal);
       if (isAbortError(error)) throw error;
       const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
-      judged = fallbackIndexes.map((index) => ({ label: params.assertions[index].label, pass: false, reason }));
+      judged = fallbackIndexes.map((index) => ({
+        label: params.assertions[index].label,
+        pass: false,
+        reason
+      }));
     }
     throwIfAborted(params.signal);
     for (const [position, index] of fallbackIndexes.entries()) {

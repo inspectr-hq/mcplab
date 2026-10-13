@@ -70,7 +70,8 @@ const SettingsPage = () => {
     try {
       normalized = decision ? normalizeEvaluationDecisionConfig(decision) : undefined;
     } catch {
-      error = 'Saved Decision Engine configuration is invalid. Select a provider to replace it, or save None to clear it. Semantic checks fall back to the Evaluation Judge.';
+      error =
+        'Saved Decision Engine configuration is invalid. Select a provider to replace it, or save None to clear it. Semantic checks fall back to the Evaluation Judge.';
     }
     setDecisionProvider(normalized?.provider ?? '');
     setDecisionModel(normalized?.model ?? '');

@@ -25,10 +25,18 @@ describe('executeRunJob', () => {
       try {
         const job = createQueuedJob(fixture.configPath, 'job-child-stop');
         job.runParams.runsPerScenario = runsPerScenario;
-        const evaluationDecision = { provider: 'openai' as const, model: 'gpt-6-luna', passThreshold: 0.9, failThreshold: 0.1 };
+        const evaluationDecision = {
+          provider: 'openai' as const,
+          model: 'gpt-6-luna',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        };
         runAllMock.mockImplementationOnce(async (_config, options) => {
           expect(options.evaluationDecision).toEqual(evaluationDecision);
-          expect(options.evaluationJudge).toEqual({ name: 'mini', agent: { provider: 'openai', model: 'test' } });
+          expect(options.evaluationJudge).toEqual({
+            name: 'mini',
+            agent: { provider: 'openai', model: 'test' }
+          });
           const event = {
             scenarioId: 's1',
             agentName: 'mini',
