@@ -52,14 +52,8 @@ export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): stri
     return details.join(' · ');
   }
   const details = [`Decision Engine · ${metadata.decision_provider}`];
-  const model = metadata.decision_model ?? metadata.decision_requested_model;
+  const model = metadata.decision_requested_model ?? metadata.decision_model;
   if (typeof model === 'string') details.push(model);
-  if (
-    typeof metadata.decision_requested_model === 'string' &&
-    metadata.decision_requested_model !== model
-  ) {
-    details.push(`requested ${metadata.decision_requested_model}`);
-  }
   for (const [key, label] of [
     ['decision_probability', 'probability'],
     ['decision_pass_threshold', 'pass ≥'],
@@ -75,9 +69,6 @@ export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): stri
     Number.isFinite(metadata.decision_duration_ms)
   ) {
     details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
-  }
-  if (metadata.evaluator === 'decision') {
-    details.push('Evaluated by decision');
   }
   return details.join(' · ');
 }

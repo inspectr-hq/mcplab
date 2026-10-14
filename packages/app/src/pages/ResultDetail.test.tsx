@@ -375,9 +375,9 @@ describe('ResultDetail conversation toggle', () => {
     expect(
       screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')
-    ).toHaveClass('text-[9px]');
+    expect(screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')).toHaveClass(
+      'text-[9px]'
+    );
   });
 
   it('shows the Evaluation Judge model below its response in smaller metadata text', async () => {
@@ -480,9 +480,8 @@ describe('ResultDetail conversation toggle', () => {
     expect(
       screen.getByText('Assertion prompt: Original assertion evaluated by the engine')
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Decision Engine · ollama.*probability 0.936.*Evaluated by decision/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Decision Engine · ollama.*probability 0.936/)).toBeInTheDocument();
+    expect(screen.queryByText(/Evaluated by decision/)).not.toBeInTheDocument();
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {

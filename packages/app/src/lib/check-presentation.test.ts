@@ -335,6 +335,17 @@ describe('formatEvaluatorDetails', () => {
     ).not.toContain('NaN');
   });
 
+  it('shows the configured deployment name without a redundant requested model label', () => {
+    expect(
+      formatEvaluatorDetails({
+        evaluator: 'decision',
+        decision_provider: 'azure_foundry',
+        decision_model: 'microsoft-decision-1',
+        decision_requested_model: 'Jev-Decision-1'
+      })
+    ).toBe('Decision Engine · azure_foundry · Jev-Decision-1');
+  });
+
   it('shows the Evaluation Judge provider and model for direct judge results', () => {
     expect(
       formatEvaluatorDetails({
