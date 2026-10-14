@@ -354,7 +354,7 @@ export async function evaluateSemanticAssertions(
       pass,
       reason: pass
         ? `Satisfaction probability ${probability} met the pass threshold ${config!.passThreshold}.`
-        : `Agent check · ${check.label}: satisfaction probability ${probability} is at or below the fail threshold ${config!.failThreshold}.`,
+        : `Agent check · ${check.label} failed.`,
       metadata
     };
   }
