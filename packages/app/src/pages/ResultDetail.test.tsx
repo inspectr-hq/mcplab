@@ -373,6 +373,57 @@ describe('ResultDetail conversation toggle', () => {
     expect(
       screen.getByText(/Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge/)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge/)
+    ).toHaveClass('text-[10px]');
+  });
+
+  it('shows the Evaluation Judge model below its response in smaller metadata text', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      {
+        type: 'agent_check',
+        label: 'Accuracy',
+        status: 'passed',
+        reason: 'Answer is correct.',
+        metadata: {
+          judge_agent: 'quality-judge',
+          judge_provider: 'openai',
+          judge_model: 'gpt-4o-mini'
+        }
+      }
+    ];
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText('Answer is correct.')).toHaveClass('text-[11px]');
+    expect(screen.getByText('Evaluation Judge · OpenAI · gpt-4o-mini')).toHaveClass('text-[10px]');
   });
 
   it('shows the assertion prompt instead of the automatic decision reason', async () => {

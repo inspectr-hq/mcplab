@@ -1527,7 +1527,7 @@ const ResultDetail = () => {
                                                                   </p>
                                                                 )}
                                                               {check.decisionDetails && (
-                                                                <p className="mt-1 pl-5 text-xs text-muted-foreground">
+                                                                <p className="mt-1 pl-5 text-[9px] text-muted-foreground">
                                                                   {check.decisionDetails}
                                                                 </p>
                                                               )}

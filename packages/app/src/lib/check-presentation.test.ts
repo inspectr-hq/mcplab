@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCheckItems,
   formatCheckStatusLabel,
-  formatDecisionDetails,
+  formatEvaluatorDetails,
   formatEvalRuleLabel,
   matchFailureReasonForRule
 } from './check-presentation';
@@ -318,26 +318,36 @@ describe('buildCheckItems', () => {
   });
 });
 
-describe('formatDecisionDetails', () => {
+describe('formatEvaluatorDetails', () => {
   it('preserves historical checks without decision metadata', () => {
-    expect(formatDecisionDetails(undefined)).toBeUndefined();
-    expect(formatDecisionDetails({ check_id: 'old' })).toBeUndefined();
+    expect(formatEvaluatorDetails(undefined)).toBeUndefined();
+    expect(formatEvaluatorDetails({ check_id: 'old' })).toBeUndefined();
   });
 
   it('includes zero probability without rendering malformed probabilities', () => {
     expect(
-      formatDecisionDetails({
+      formatEvaluatorDetails({
         evaluator: 'decision',
         decision_provider: 'ollama',
         decision_probability: 0
       })
     ).toContain('probability 0.000');
     expect(
-      formatDecisionDetails({
+      formatEvaluatorDetails({
         evaluator: 'decision',
         decision_provider: 'ollama',
         decision_probability: NaN
       })
     ).not.toContain('NaN');
+  });
+
+  it('shows the Evaluation Judge provider and model for direct judge results', () => {
+    expect(
+      formatEvaluatorDetails({
+        judge_agent: 'quality-judge',
+        judge_provider: 'openai',
+        judge_model: 'gpt-4o-mini'
+      })
+    ).toBe('Evaluation Judge · OpenAI · gpt-4o-mini');
   });
 });

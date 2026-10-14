@@ -23,8 +23,22 @@ interface CheckPresentationItem {
   decisionInput?: string;
 }
 
-export function formatDecisionDetails(metadata?: CheckResult['metadata']): string | undefined {
-  if (typeof metadata?.decision_provider !== 'string') return undefined;
+export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): string | undefined {
+  if (typeof metadata?.decision_provider !== 'string') {
+    if (typeof metadata?.judge_provider !== 'string') return undefined;
+    const providerLabels: Record<string, string> = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      azure_openai: 'Azure OpenAI',
+      azure_foundry: 'Azure Foundry'
+    };
+    const details = [
+      'Evaluation Judge',
+      providerLabels[metadata.judge_provider] ?? metadata.judge_provider
+    ];
+    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
+    return details.join(' · ');
+  }
   const details = [`Decision Engine · ${metadata.decision_provider}`];
   const model = metadata.decision_model ?? metadata.decision_requested_model;
   if (typeof model === 'string') details.push(model);
@@ -90,7 +104,7 @@ export function buildCheckItems({
     return evalRules.map((rule) => {
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
       const decisionDetails =
-        rule.type === 'agent_check' ? formatDecisionDetails(match?.metadata) : undefined;
+        rule.type === 'agent_check' ? formatEvaluatorDetails(match?.metadata) : undefined;
       const decisionInput =
         rule.type === 'agent_check' && match?.metadata?.evaluator === 'decision'
           ? (typeof match.metadata.decision_prompt === 'string'
