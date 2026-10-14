@@ -126,6 +126,19 @@ describe('decision providers', () => {
     expect(answers[1].probability).toBe(0.5);
     expect(answers[2].fallback).toBe('missing_answer');
   });
+  it('normalizes the Foundry deployment target URI ending in /models', async () => {
+    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models');
+    fetchMock.mockResolvedValue(response({ [checks[0].id]: { type: 'noul', noul: 0.95 } }));
+
+    await requestDecisionAnswers({
+      ...input,
+      config: { ...config, provider: 'azure_foundry' }
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://foundry.example/providers/microsoft/v1/systemone'
+    );
+  });
   it.each(['AZURE_FOUNDRY_ENDPOINT', 'AZURE_FOUNDRY_API_KEY'])(
     'does not request Foundry without %s',
     async (name) => {

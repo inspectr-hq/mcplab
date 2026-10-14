@@ -41,7 +41,7 @@ export const DECISION_PROVIDERS = {
     models: ['Microsoft-Decision-1'],
     editableModel: true,
     credentials:
-      'Requires AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY (or AZURE_OPENAI_API_KEY for the same resource) on the MCPLab backend. Enter the name of your Microsoft-Decision-1 deployment, which may differ from the model name. Use the Foundry resource endpoint, not the project endpoint.'
+      'Requires AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY (or AZURE_OPENAI_API_KEY for the same resource) on the MCPLab backend. Enter the name of your Microsoft-Decision-1 deployment, which may differ from the model name. Use the Foundry resource endpoint, not the project endpoint. If the deployment Target URI ends in /models, MCPLab removes that suffix.'
   }
 } as const satisfies Record<
   EvaluationDecisionConfig['provider'],

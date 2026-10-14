@@ -55,5 +55,6 @@ export function resolveAzureFoundryConnection(): { endpoint: string; apiKey: str
       'AZURE_FOUNDRY_ENDPOINT must be an HTTP or HTTPS resource endpoint without credentials, query, or fragment.'
     );
   }
+  if (url.pathname.replace(/\/+$/, '') === '/models') url.pathname = '/';
   return { endpoint: url.toString().replace(/\/+$/, ''), apiKey };
 }
