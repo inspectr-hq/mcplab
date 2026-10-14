@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { testDecisionConnection } from '@inspectr/mcplab-core';
+import { testAgentConnection, testDecisionConnection } from '@inspectr/mcplab-core';
 import { asJson, parseBody } from './http.js';
 
-export async function handleDecisionRoutes({
+export async function handleConnectionTestRoutes({
   req,
   res,
   pathname,
@@ -13,14 +13,20 @@ export async function handleDecisionRoutes({
   pathname: string;
   method: string;
 }): Promise<boolean> {
-  if (pathname !== '/api/settings/decision/test' || method !== 'POST') return false;
+  if (method !== 'POST') return false;
+  const probes = {
+    '/api/settings/decision/test': testDecisionConnection,
+    '/api/agents/test': testAgentConnection
+  };
+  if (!Object.hasOwn(probes, pathname)) return false;
+  const probe = probes[pathname as keyof typeof probes];
   const controller = new AbortController();
   const onClose = () => {
     if (!res.writableEnded) controller.abort();
   };
   res.on('close', onClose);
   try {
-    const result = await testDecisionConnection(await parseBody(req), controller.signal);
+    const result = await probe(await parseBody(req), controller.signal);
     if (!controller.signal.aborted) asJson(res, 200, result);
   } catch (error: unknown) {
     if (!controller.signal.aborted) {

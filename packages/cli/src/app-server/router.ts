@@ -36,7 +36,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
-import { handleDecisionRoutes } from './decision-routes.js';
+import { handleConnectionTestRoutes } from './connection-test-routes.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
 import {
@@ -449,7 +449,9 @@ export async function startAppServer(options: AppServerOptions) {
       if (pathname === '/api/providers/models' && method === 'GET') {
         const provider = String(url.searchParams.get('provider') ?? '').trim();
         if (!provider) {
-          asJson(res, 400, { error: 'provider is required (anthropic|openai|azure)' });
+          asJson(res, 400, {
+            error: 'provider is required (anthropic|openai|azure|azure_foundry)'
+          });
           return;
         }
         try {
@@ -504,7 +506,7 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
-      if (await handleDecisionRoutes({ req, res, pathname, method })) return;
+      if (await handleConnectionTestRoutes({ req, res, pathname, method })) return;
 
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);

@@ -457,7 +457,7 @@ const SettingsPage = () => {
               {decisionProvider && (
                 <div className="space-y-1.5">
                   <Label htmlFor="decision-model" className="text-xs">
-                    {decisionProvider === 'ollama' ? 'Ollama model name' : 'Decision model'}
+                    {DECISION_PROVIDERS[decisionProvider].modelLabel}
                   </Label>
                   {!DECISION_PROVIDERS[decisionProvider].editableModel &&
                   DECISION_PROVIDERS[decisionProvider].models.length > 1 ? (

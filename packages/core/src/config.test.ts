@@ -60,6 +60,22 @@ describe('expandConfigForAgents', () => {
 });
 
 describe('browser agent normalization', () => {
+  it.each([' ', 123])('rejects an invalid Foundry deployment %j', (model) => {
+    expect(() => normalizeLibraryAgents({ foundry: { provider: 'azure_foundry', model } })).toThrow(
+      'deployment'
+    );
+  });
+  it('loads Foundry deployments alongside legacy Azure configurations', () => {
+    expect(
+      normalizeLibraryAgents({
+        foundry: { provider: 'azure_foundry', model: 'my-deployment' },
+        legacy: { provider: 'azure_openai', model: 'gpt-model' }
+      })
+    ).toMatchObject({
+      foundry: { provider: 'azure_foundry', model: 'my-deployment' },
+      legacy: { provider: 'azure_openai', model: 'gpt-model' }
+    });
+  });
   it('loads browser agents alongside legacy LLM agents', () => {
     const agents = normalizeLibraryAgents({
       claude: { provider: 'anthropic', model: 'claude-sonnet-4-6' },

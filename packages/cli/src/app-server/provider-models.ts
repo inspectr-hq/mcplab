@@ -1,11 +1,22 @@
-export interface ProviderModelsResponse {
-  provider: 'anthropic' | 'openai' | 'azure';
-  items: string[];
-  kind: 'models' | 'deployments';
-  source: string;
-}
+import type { ProviderModelsResponse } from '@inspectr/mcplab-core';
 
 export async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
+  if (provider === 'azure_foundry') {
+    const items = [
+      ...new Set(
+        (process.env.AZURE_FOUNDRY_DEPLOYMENTS ?? '')
+          .split(',')
+          .map((name) => name.trim())
+          .filter(Boolean)
+      )
+    ].sort();
+    return {
+      provider,
+      items,
+      kind: 'deployments',
+      source: 'AZURE_FOUNDRY_DEPLOYMENTS environment variable'
+    };
+  }
   if (provider === 'anthropic') {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');

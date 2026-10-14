@@ -19,6 +19,8 @@ export type {
   ScenarioAttachment,
   EvaluationDecisionConfig,
   DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
   WorkspaceSettingsPatch
 } from '@/lib/data-sources/types';
 
@@ -56,7 +58,7 @@ export interface LlmAgentConfig {
   id: string;
   name: string;
   type?: 'llm';
-  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
+  provider: 'openai' | 'anthropic' | 'azure' | 'azure_foundry' | 'google' | 'custom';
   model: string;
   temperature?: number;
   maxTokens: number;

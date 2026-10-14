@@ -1,4 +1,4 @@
-import type { EvalConfig, EvalResult, EvalRule, ScenarioRun } from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
@@ -28,6 +28,8 @@ import type {
   BrowserProviderProfile,
   EvaluationDecisionConfig,
   DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
   WorkspaceSettingsPatch,
   WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
@@ -67,6 +69,7 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -161,13 +164,6 @@ export type { QueueEntry, QueueResponse };
 export type RunQueueSseEvent =
   | RunQueueEvent
   | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
-
-export interface ProviderModelsResponse {
-  provider: 'anthropic' | 'openai' | 'azure';
-  items: string[];
-  kind: 'models' | 'deployments';
-  source: string;
-}
 
 // Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo
 export interface WorkspaceHealthResponse {
@@ -829,8 +825,12 @@ export interface EvalDataSource {
   getLibraries: () => Promise<LibraryBundle>;
   saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
-    provider: 'anthropic' | 'openai' | 'azure'
+    provider: ProviderModelsResponse['provider']
   ) => Promise<ProviderModelsResponse>;
+  testAgentConnection: (
+    agent: LlmAgentConfig,
+    signal?: AbortSignal
+  ) => Promise<AgentConnectionTestResult>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
   updateWorkspaceSettings: (patch: WorkspaceSettingsPatch) => Promise<WorkspaceSettings | null>;
   testDecisionConnection: (

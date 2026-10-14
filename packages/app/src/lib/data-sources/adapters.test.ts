@@ -14,6 +14,20 @@ import type { EvalConfig } from '@/types/eval';
 // (ServerListEntry, ScenarioListEntry) would require verbose type guards in tests.
 type AnyRecord = Record<string, unknown>;
 
+it('round-trips Foundry agents without converting them to OpenAI', () => {
+  const libraries = fromCoreLibraries({
+    agents: { foundry: { provider: 'azure_foundry', model: 'deployment-a', max_tokens: 512 } },
+    servers: {},
+    scenarios: []
+  });
+  expect(libraries.agents[0]).toMatchObject({ provider: 'azure_foundry', model: 'deployment-a' });
+  expect(toCoreLibraries(libraries).agents.foundry).toMatchObject({
+    provider: 'azure_foundry',
+    model: 'deployment-a',
+    max_tokens: 512
+  });
+});
+
 function baseResults(): CoreResultsJson {
   return {
     metadata: {

@@ -3,6 +3,7 @@ import type { EvaluationDecisionConfig } from './types.js';
 export const DECISION_PROVIDERS = {
   openai: {
     label: 'OpenAI Decisions',
+    modelLabel: 'Decision model',
     defaultModel: 'gpt-6-luna',
     models: ['gpt-6-luna'],
     editableModel: false,
@@ -10,6 +11,7 @@ export const DECISION_PROVIDERS = {
   },
   cloudflare: {
     label: 'Cloudflare Clef',
+    modelLabel: 'Decision model',
     defaultModel: 'clef-flash',
     models: ['clef-flash', 'clef'],
     editableModel: false,
@@ -17,6 +19,7 @@ export const DECISION_PROVIDERS = {
   },
   typesafe: {
     label: 'TypeSafe Jev',
+    modelLabel: 'Decision model',
     defaultModel: 'jev-1.13.0',
     models: ['jev-1.13.0'],
     editableModel: true,
@@ -24,16 +27,27 @@ export const DECISION_PROVIDERS = {
   },
   ollama: {
     label: 'Ollama',
+    modelLabel: 'Ollama model name',
     defaultModel: 'clef-flash',
     models: ['clef-flash', 'clef', 'nimble', 'tev1:4b', 'tev1:0.8b'],
     editableModel: true,
     credentials:
       'Requests use the MCPLab backend. Install a supported decision model on your Ollama server; models are not downloaded automatically.'
+  },
+  azure_foundry: {
+    label: 'Azure Foundry',
+    modelLabel: 'Deployment name',
+    defaultModel: 'Microsoft-Decision-1',
+    models: ['Microsoft-Decision-1'],
+    editableModel: true,
+    credentials:
+      'Requires AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY (or AZURE_OPENAI_API_KEY for the same resource) on the MCPLab backend. Enter the name of your Microsoft-Decision-1 deployment, which may differ from the model name. Use the Foundry resource endpoint, not the project endpoint.'
   }
 } as const satisfies Record<
   EvaluationDecisionConfig['provider'],
   {
     label: string;
+    modelLabel: string;
     defaultModel: string;
     models: readonly string[];
     editableModel: boolean;

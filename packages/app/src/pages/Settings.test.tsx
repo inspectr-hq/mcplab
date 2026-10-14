@@ -300,6 +300,47 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/fail.*pass/i);
   });
 
+  it('tests and saves a custom Azure Foundry deployment using backend credentials', async () => {
+    sourceMock.testDecisionConnection.mockResolvedValue({
+      ok: true,
+      message: 'Azure Foundry returned a valid decision.',
+      provider: 'azure_foundry',
+      requestedModel: 'my-decision-deployment',
+      model: 'microsoft-decision-1',
+      probability: 0.95,
+      durationMs: 15
+    });
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Azure Foundry' }));
+    expect(screen.getByLabelText('Deployment name')).toHaveValue('Microsoft-Decision-1');
+    expect(screen.getByText(/AZURE_FOUNDRY_ENDPOINT.*AZURE_FOUNDRY_API_KEY/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Ollama server URL')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Deployment name'), {
+      target: { value: 'my-decision-deployment' }
+    });
+    const config = {
+      provider: 'azure_foundry',
+      model: 'my-decision-deployment',
+      passThreshold: 0.9,
+      failThreshold: 0.1
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Azure Foundry'));
+    expect(sourceMock.testDecisionConnection).toHaveBeenCalledWith(config, expect.any(AbortSignal));
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save Decision Engine' })).toBeEnabled()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: config
+      })
+    );
+  });
+
   it('saves the whole optional engine configuration only on explicit save', async () => {
     render(<SettingsPage />);
     await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());

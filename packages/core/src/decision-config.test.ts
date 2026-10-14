@@ -17,7 +17,7 @@ describe('decision provider configuration', () => {
       normalizeEvaluationDecisionConfig({ provider: 'openai', model: 'gpt-6-luna', enabled })
     ).toThrow('boolean');
   });
-  it.each(['openai', 'cloudflare', 'typesafe', 'ollama'] as const)(
+  it.each(['openai', 'cloudflare', 'typesafe', 'ollama', 'azure_foundry'] as const)(
     'accepts the advertised %s default with shared threshold defaults',
     (provider) => {
       const config = normalizeEvaluationDecisionConfig({
@@ -38,11 +38,14 @@ describe('decision provider configuration', () => {
     expect(() => normalizeEvaluationDecisionConfig({ provider, model: 'custom-model' })).toThrow();
   });
 
-  it.each(['typesafe', 'ollama'] as const)('accepts custom models for %s', (provider) => {
-    expect(normalizeEvaluationDecisionConfig({ provider, model: ' custom-model ' }).model).toBe(
-      'custom-model'
-    );
-  });
+  it.each(['typesafe', 'ollama', 'azure_foundry'] as const)(
+    'accepts custom models for %s',
+    (provider) => {
+      expect(normalizeEvaluationDecisionConfig({ provider, model: ' custom-model ' }).model).toBe(
+        'custom-model'
+      );
+    }
+  );
 
   it.each(['toString', '__proto__', 'constructor'])(
     'rejects inherited registry key %s',

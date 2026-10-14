@@ -40,6 +40,9 @@ beforeEach(() => {
   vi.stubEnv('TYPESAFE_API_KEY', 'test-key');
   vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'account');
   vi.stubEnv('CLOUDFLARE_AUTH_TOKEN', 'test-key');
+  vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/');
+  vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
+  vi.stubEnv('AZURE_OPENAI_API_KEY', '');
   fetchMock.mockReset();
   chatMock.mockReset();
   chatMock.mockImplementation(async ({ messages }) => ({
@@ -83,6 +86,70 @@ describe('decision configuration', () => {
 });
 
 describe('decision providers', () => {
+  it('reuses the Azure OpenAI backend key for Foundry decisions when the dedicated key is absent', async () => {
+    vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
+    vi.stubEnv('AZURE_OPENAI_API_KEY', 'shared-resource-key');
+    fetchMock.mockResolvedValue(response({ [checks[0].id]: { type: 'noul', noul: 0.95 } }));
+    expect(
+      (
+        await requestDecisionAnswers({ ...input, config: { ...config, provider: 'azure_foundry' } })
+      )[0].probability
+    ).toBe(0.95);
+    expect(fetchMock.mock.calls[0][1].headers['api-key']).toBe('shared-resource-key');
+  });
+  it('uses the Foundry resource endpoint, api-key header, and deployment name with System One questions', async () => {
+    fetchMock.mockResolvedValue(
+      response(
+        {
+          [checks[1].id]: { type: 'noul', noul: 0.5 },
+          [checks[0].id]: { type: 'noul', noul: 0.97 }
+        },
+        { model: 'microsoft-decision-1' }
+      )
+    );
+    const answers = await requestDecisionAnswers({
+      ...input,
+      config: { ...config, provider: 'azure_foundry', model: 'my-decision-deployment' }
+    });
+    const [url, request] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://foundry.example/providers/microsoft/v1/systemone');
+    expect(request.headers['api-key']).toBe('foundry-key');
+    expect(request.headers.Authorization).toBeUndefined();
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe('my-decision-deployment');
+    expect(body.state).toEqual(input.evidence);
+    expect(body.questions[checks[0].id]).toMatchObject({
+      type: 'noul',
+      criteria: { true: expect.any(String), false: expect.any(String) }
+    });
+    expect(answers[0]).toMatchObject({ probability: 0.97, model: 'microsoft-decision-1' });
+    expect(answers[1].probability).toBe(0.5);
+    expect(answers[2].fallback).toBe('missing_answer');
+  });
+  it.each(['AZURE_FOUNDRY_ENDPOINT', 'AZURE_FOUNDRY_API_KEY'])(
+    'does not request Foundry without %s',
+    async (name) => {
+      vi.stubEnv(name, '');
+      const result = await requestDecisionAnswers({
+        ...input,
+        config: { ...config, provider: 'azure_foundry' }
+      });
+      expect(result.every((answer) => answer.fallback === 'missing_credentials')).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+  it.each([401, 403, 404, 422, 429, 503])(
+    'does not retry an unsuccessful Foundry HTTP %s response',
+    async (status) => {
+      fetchMock.mockResolvedValue(new Response('', { status }));
+      const result = await requestDecisionAnswers({
+        ...input,
+        config: { ...config, provider: 'azure_foundry' }
+      });
+      expect(result.every((answer) => answer.fallback === 'http_error')).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
   it('respects the Cloudflare 64-question request limit', async () => {
     const many = Array.from({ length: 65 }, (_, n) => ({ id: String(n), prompt: 'Check' }));
     fetchMock.mockImplementation(async (_url, request) =>
@@ -329,20 +396,23 @@ describe('decision providers', () => {
     expect((await requestDecisionAnswers(input))[0].fallback).toBe('missing_credentials');
     expect(fetchMock).not.toHaveBeenCalled();
   });
-  it('times out hosted requests and returns unavailable answers', async () => {
-    vi.useFakeTimers();
-    fetchMock.mockImplementation(
-      (_url, request) =>
-        new Promise((_resolve, reject) =>
-          request.signal.addEventListener('abort', () =>
-            reject(new DOMException('Aborted', 'AbortError'))
+  it.each(['openai', 'azure_foundry'] as const)(
+    'times out %s requests and returns unavailable answers',
+    async (provider) => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(
+        (_url, request) =>
+          new Promise((_resolve, reject) =>
+            request.signal.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError'))
+            )
           )
-        )
-    );
-    const pending = requestDecisionAnswers(input);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect((await pending)[0].fallback).toBe('timeout');
-  });
+      );
+      const pending = requestDecisionAnswers({ ...input, config: { ...config, provider } });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect((await pending)[0].fallback).toBe('timeout');
+    }
+  );
   it('uses the longer Ollama loading timeout', async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation(
@@ -450,25 +520,56 @@ describe('decision connection probe', () => {
     expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
     expect(chatMock).not.toHaveBeenCalled();
   });
-  it('propagates user cancellation without invoking the judge', async () => {
-    const controller = new AbortController();
-    fetchMock.mockImplementation(
-      (_url, request) =>
-        new Promise((_resolve, reject) =>
-          request.signal.addEventListener('abort', () =>
-            reject(new DOMException('Aborted', 'AbortError'))
+  it.each(['openai', 'azure_foundry'] as const)(
+    'propagates %s cancellation without invoking the judge',
+    async (provider) => {
+      const controller = new AbortController();
+      fetchMock.mockImplementation(
+        (_url, request) =>
+          new Promise((_resolve, reject) =>
+            request.signal.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError'))
+            )
           )
-        )
-    );
-    const pending = testDecisionConnection(config, controller.signal);
-    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    controller.abort();
-    await rejected;
-    expect(chatMock).not.toHaveBeenCalled();
-  });
+      );
+      const pending = testDecisionConnection({ ...config, provider }, controller.signal);
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      controller.abort();
+      await rejected;
+      expect(chatMock).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe('semantic decision routing', () => {
+  it('accepts bounded Foundry decisions and judges only uncertain or missing answers', async () => {
+    fetchMock.mockResolvedValue(
+      response(
+        {
+          [checks[0].id]: { type: 'noul', noul: 0.95 },
+          [checks[1].id]: { type: 'noul', noul: 0.05 }
+        },
+        { model: 'microsoft-decision-1' }
+      )
+    );
+    const result = await evaluateSemanticAssertions({
+      ...semanticInput,
+      evaluationDecision: { ...config, provider: 'azure_foundry', model: 'my-decision-deployment' }
+    });
+    expect(result.map(({ pass }) => pass)).toEqual([true, false, true]);
+    expect(result[0].metadata).toMatchObject({
+      decision_provider: 'azure_foundry',
+      decision_requested_model: 'my-decision-deployment',
+      decision_model: 'microsoft-decision-1',
+      evaluator: 'decision'
+    });
+    expect(result[2].metadata).toMatchObject({
+      evaluator: 'judge',
+      decision_fallback: 'missing_answer'
+    });
+    const judged = JSON.parse(chatMock.mock.calls[0][0].messages[0].content);
+    expect(judged.checks.map(({ label }: { label: string }) => label)).toEqual([checks[2].label]);
+  });
   it('uses the judge directly when the saved decision engine is off', async () => {
     const result = await evaluateSemanticAssertions({
       ...semanticInput,

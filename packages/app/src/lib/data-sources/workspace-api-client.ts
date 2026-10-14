@@ -31,6 +31,8 @@ import type {
   ScenarioPreviewCoreRunResponse,
   WorkspaceHealthResponse,
   CoreLibraryBundle,
+  CoreAgentConfig,
+  AgentConnectionTestResult,
   ScenarioAssistantSseEvent,
   WorkspaceSettings,
   WorkspaceSettingsPatch,
@@ -171,6 +173,12 @@ function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, valu
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () => request<WorkspaceSettings>('/api/settings'),
+  testAgentConnection: (agent: CoreAgentConfig, signal?: AbortSignal) =>
+    request<AgentConnectionTestResult>('/api/agents/test', {
+      method: 'POST',
+      body: JSON.stringify(agent),
+      signal
+    }),
   testDecisionConnection: (config: EvaluationDecisionConfig, signal?: AbortSignal) =>
     request<DecisionConnectionTestResult>('/api/settings/decision/test', {
       method: 'POST',
@@ -379,7 +387,7 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(params)
     }),
-  listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
+  listProviderModels: (provider: ProviderModelsResponse['provider']) =>
     request<ProviderModelsResponse>(
       `/api/providers/models?provider=${encodeURIComponent(provider)}`
     ),

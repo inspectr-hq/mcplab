@@ -1,7 +1,7 @@
 export interface EvaluationDecisionConfig {
   /** Omitted means enabled for compatibility with existing saved configurations. */
   enabled?: boolean;
-  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama';
+  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama' | 'azure_foundry';
   model: string;
   passThreshold: number;
   failThreshold: number;
@@ -95,8 +95,10 @@ export interface DecisionRequest {
 }
 
 export interface DecisionAdapter {
-  requiredEnv: readonly string[];
-  authEnv?: string;
+  requiredEnv: readonly (string | readonly string[])[];
+  authEnv?: string | readonly string[];
+  authHeader?: string;
+  authPrefix?: string;
   url(config: EvaluationDecisionConfig): string;
   timeoutMs: number;
   maxBatchSize: number;
@@ -172,12 +174,29 @@ export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 export interface LlmAgentConfig {
   type?: 'llm';
   name?: string;
-  provider: 'openai' | 'anthropic' | 'azure_openai';
+  provider: 'openai' | 'anthropic' | 'azure_openai' | 'azure_foundry';
   model: string;
   temperature?: number;
   max_tokens?: number;
   max_turns?: number;
   system?: string;
+}
+
+export interface AgentConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: LlmAgentConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  durationMs: number;
+  failure?: string;
+}
+
+export interface ProviderModelsResponse {
+  provider: 'anthropic' | 'openai' | 'azure' | 'azure_foundry';
+  items: string[];
+  kind: 'models' | 'deployments';
+  source: string;
 }
 
 export interface BrowserAgentConfig {

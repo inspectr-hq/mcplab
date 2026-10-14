@@ -1165,6 +1165,7 @@ const ConfigEditor = () => {
                                             | 'openai'
                                             | 'anthropic'
                                             | 'azure'
+                                            | 'azure_foundry'
                                             | 'google'
                                             | 'custom'
                                         }
@@ -1179,6 +1180,7 @@ const ConfigEditor = () => {
                                       <SelectItem value="openai">OpenAI</SelectItem>
                                       <SelectItem value="anthropic">Anthropic</SelectItem>
                                       <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                      <SelectItem value="azure_foundry">Azure Foundry</SelectItem>
                                       <SelectItem value="google">Google</SelectItem>
                                       <SelectItem value="custom">Custom</SelectItem>
                                     </SelectContent>

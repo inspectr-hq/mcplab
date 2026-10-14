@@ -1,4 +1,9 @@
 import { createAbortError, throwIfAborted } from './abort.js';
+import {
+  AZURE_FOUNDRY_API_KEY_ENVS,
+  readEnvironmentVariable,
+  resolveAzureFoundryConnection
+} from './azure-config.js';
 import { DECISION_PROVIDERS, normalizeEvaluationDecisionConfig } from './decision-config.js';
 import { toJudgeErrorResults } from './eval.js';
 import { buildJudgeBatchPayload, judgeAgentAssertions } from './judge.js';
@@ -103,6 +108,18 @@ const adapters = {
     maxBatchSize: Infinity,
     sequential: false
   },
+  azure_foundry: {
+    ...systemOneCodec,
+    requiredEnv: ['AZURE_FOUNDRY_ENDPOINT', AZURE_FOUNDRY_API_KEY_ENVS],
+    authEnv: AZURE_FOUNDRY_API_KEY_ENVS,
+    authHeader: 'api-key',
+    authPrefix: '',
+    url: (_config: EvaluationDecisionConfig) =>
+      `${resolveAzureFoundryConnection().endpoint}/providers/microsoft/v1/systemone`,
+    timeoutMs: 10_000,
+    maxBatchSize: Infinity,
+    sequential: false
+  },
   ollama: {
     ...systemOneCodec,
     requiredEnv: [],
@@ -159,11 +176,14 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
   const adapter: DecisionAdapter = adapters[params.config.provider];
   const unavailable = (fallback: string, durationMs = 0) =>
     params.checks.map(({ id }) => ({ id, fallback, durationMs }));
-  if (adapter.requiredEnv.some((name) => !process.env[name]?.trim())) {
+  if (adapter.requiredEnv.some((name) => !readEnvironmentVariable(name))) {
     return unavailable('missing_credentials');
   }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (adapter.authEnv) headers.Authorization = `Bearer ${process.env[adapter.authEnv]}`;
+  if (adapter.authEnv) {
+    headers[adapter.authHeader ?? 'Authorization'] =
+      `${adapter.authPrefix ?? 'Bearer '}${readEnvironmentVariable(adapter.authEnv)}`;
+  }
   const timeout = new AbortController();
   const signal = params.signal ? AbortSignal.any([params.signal, timeout.signal]) : timeout.signal;
   const timer = setTimeout(() => timeout.abort(), adapter.timeoutMs);

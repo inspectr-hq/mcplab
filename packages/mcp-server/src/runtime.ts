@@ -192,7 +192,7 @@ const LibraryScenarioEntrySchema = z.object({
 });
 
 const AgentEntrySchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'azure_openai']),
+  provider: z.enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry']),
   model: z.string(),
   temperature: z.number().optional(),
   max_tokens: z.number().int().positive().optional(),
@@ -1424,9 +1424,11 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().describe('Agent id key (kebab-case recommended).'),
         provider: z
-          .enum(['openai', 'anthropic', 'azure_openai'])
+          .enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry'])
           .describe('LLM provider supported by MCPLab.'),
-        model: z.string().describe('Model id or deployment name (for Azure OpenAI).'),
+        model: z
+          .string()
+          .describe('Model id or deployment name (for Azure OpenAI and Azure Foundry).'),
         temperature: z.number().optional().describe('Sampling temperature.'),
         max_tokens: z.number().int().positive().optional().describe('Maximum output tokens.'),
         system: z.string().optional().describe('Optional system prompt.')

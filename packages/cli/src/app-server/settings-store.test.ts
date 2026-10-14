@@ -147,6 +147,37 @@ describe('Decision Engine settings', () => {
     );
   });
 
+  it('persists a Foundry deployment without persisting backend credentials', () => {
+    const settings = fixture();
+    const foundry = {
+      provider: 'azure_foundry' as const,
+      model: 'my-decision-deployment',
+      enabled: true,
+      passThreshold: 0.9,
+      failThreshold: 0.1
+    };
+    const next = applyEvaluationSettingsPatch(
+      settings,
+      {
+        evaluationJudgeAgentName: 'judge',
+        evaluationDecision: {
+          ...foundry,
+          apiKey: 'must-not-persist',
+          endpoint: 'https://must-not-persist.example'
+        }
+      },
+      agents
+    );
+    persistSettingsOverrides(next);
+    applySettingsOverrides(settings);
+    expect(settings.evaluationDecision).toEqual(foundry);
+    expect(loadWorkspaceSettingsOverrides(settings.librariesDir).evaluation_decision).toEqual(
+      foundry
+    );
+    const yaml = readFileSync(join(settings.librariesDir, '.mcplab-app-settings.yaml'), 'utf8');
+    expect(yaml).not.toContain('must-not-persist');
+  });
+
   it('clears decision settings with null and leaves historical settings judge-only', () => {
     const settings = {
       ...fixture(),

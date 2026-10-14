@@ -55,7 +55,7 @@ See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/
 
 ### Core Capabilities
 - **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
-- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
+- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI, Azure Foundry
 - **Browser Agents** - Run evaluations in browser chats through the MCPLab Rover extension
 - **Rich Assertions** - Validate tool usage, sequences, and response content
 - **Variance Testing** - Run multiple iterations to measure stability
@@ -268,6 +268,26 @@ agents:
     system: "You are a helpful assistant."
 ```
 
+The legacy Azure OpenAI provider uses `AZURE_OPENAI_DEPLOYMENT` at runtime. Existing configurations retain this behavior.
+
+**Azure Foundry:**
+
+```yaml
+agents:
+  - id: foundry-agent
+    provider: azure_foundry
+    model: my-chat-deployment
+    max_tokens: 2048
+```
+
+Each Foundry agent uses its own `model` value as the deployment name. Configure `AZURE_FOUNDRY_ENDPOINT` with the resource endpoint, such as `https://your-resource.services.ai.azure.com`, and `AZURE_FOUNDRY_API_KEY` on the backend. If the dedicated key is absent, MCPLab uses `AZURE_OPENAI_API_KEY`; that key must belong to the same resource. The endpoint remains explicit. Restart MCPLab after changing environment variables.
+
+In **Libraries → Agents**, choose **Azure Foundry**, enter the deployment name, and save. **Test Connection** sends a small inference request using the current provider and deployment, even before saving a new agent. It uses a 30-second timeout and clears or cancels the test when the draft changes. Success confirms basic inference access; it does not establish support for every tool or structured-output capability.
+
+Optional `AZURE_FOUNDRY_DEPLOYMENTS` contains comma-separated deployment suggestions. **Load configured deployments** reads this backend environment variable and does not query Azure. Manual entry works without suggestions. Foundry agents can be selected for evaluation runs, assistants, or the Evaluation Judge. Decision Engine deployment and threshold settings remain independent.
+
+V1 supports API-key authentication and deployments compatible with Foundry's `/openai/v1/chat/completions` API through the existing OpenAI SDK. Microsoft-Decision-1 uses the separate Decision Engine setting. Entra authentication, Responses API, and native Anthropic endpoints are outside this integration. See [Microsoft's v1 API documentation](https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle).
+
 **Browser agents (Rover):**
 
 Define a reusable browser agent in `mcplab/agents.yaml`:
@@ -294,6 +314,7 @@ Use `claude` for Claude, `chatgpt-com` for ChatGPT, or the id of a learned provi
 - Anthropic: `ANTHROPIC_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Azure: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
+- Azure Foundry: `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY` (or `AZURE_OPENAI_API_KEY` for the same resource)
 
 ### Scenarios
 

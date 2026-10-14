@@ -7,7 +7,8 @@ vi.mock('./workspace-api-client', () => ({
     listRuns: vi.fn(),
     getRun: vi.fn(),
     getRunTrace: vi.fn(),
-    testDecisionConnection: vi.fn()
+    testDecisionConnection: vi.fn(),
+    testAgentConnection: vi.fn()
   }
 }));
 
@@ -121,6 +122,30 @@ describe('workspaceSource.listResults', () => {
 });
 
 describe('workspaceSource.testDecisionConnection', () => {
+  it('converts a Foundry editor draft to the core agent contract for inference testing', async () => {
+    const result = {
+      ok: true,
+      provider: 'azure_foundry' as const,
+      requestedModel: 'deployment',
+      durationMs: 10,
+      message: 'Responded'
+    };
+    vi.mocked(workspaceApiClient.testAgentConnection).mockResolvedValue(result);
+    const controller = new AbortController();
+    const draft = {
+      id: 'foundry',
+      name: 'Foundry',
+      type: 'llm' as const,
+      provider: 'azure_foundry' as const,
+      model: 'deployment',
+      maxTokens: 512
+    };
+    expect(await workspaceSource.testAgentConnection(draft, controller.signal)).toEqual(result);
+    expect(workspaceApiClient.testAgentConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'azure_foundry', model: 'deployment', max_tokens: 512 }),
+      controller.signal
+    );
+  });
   it('forwards the draft configuration, cancellation signal, and result', async () => {
     const config = {
       provider: 'ollama' as const,

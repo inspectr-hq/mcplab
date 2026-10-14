@@ -79,14 +79,42 @@ paths:
           required: true
           schema:
             type: string
-            enum: [anthropic, openai, azure]
+            enum: [anthropic, openai, azure, azure_foundry]
       responses:
         "200":
-          description: Provider model list
+          description: Provider model list. Azure deployment suggestions come from backend environment variables and do not establish inference connectivity.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProviderModelsResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/agents/test:
+    post:
+      tags: [Providers]
+      summary: Test inference for a draft LLM agent
+      description: Sends a bounded synthetic prompt using backend credentials and the selected model or deployment. Does not save the agent. Uses a 30-second timeout and cancels on client disconnect.
+      operationId: testAgentConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, model]
+              properties:
+                provider: { type: string, enum: [openai, anthropic, azure_openai, azure_foundry] }
+                model: { type: string, minLength: 1 }
+                type: { type: string, enum: [llm] }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Explicit inference success or provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentConnectionTestResult"
         "400":
           $ref: "#/components/responses/Error400"
 
@@ -1620,7 +1648,7 @@ components:
       properties:
         provider:
           type: string
-          enum: [anthropic, openai, azure]
+          enum: [anthropic, openai, azure, azure_foundry]
         items:
           type: array
           items: { type: string }
@@ -1629,6 +1657,18 @@ components:
           enum: [models, deployments]
         source:
           type: string
+    AgentConnectionTestResult:
+      type: object
+      required: [ok, message, provider, requestedModel, durationMs]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        provider: { type: string, enum: [openai, anthropic, azure_openai, azure_foundry] }
+        requestedModel: { type: string }
+        model: { type: string }
+        durationMs: { type: number, minimum: 0 }
+        failure: { type: string }
+      additionalProperties: false
     EvaluationDecisionConfig:
       type: object
       required: [provider, model, passThreshold, failThreshold]
@@ -1640,8 +1680,11 @@ components:
           description: False retains the saved configuration but routes semantic checks directly to the LLM judge. Omitted means enabled for existing workspaces. Explicit connection tests still send a request.
         provider:
           type: string
-          enum: [openai, cloudflare, typesafe, ollama]
-        model: { type: string, minLength: 1 }
+          enum: [openai, cloudflare, typesafe, ollama, azure_foundry]
+        model:
+          type: string
+          minLength: 1
+          description: Model ID, or the Microsoft-Decision-1 deployment name for Azure Foundry. Azure Foundry uses backend AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY, falling back to AZURE_OPENAI_API_KEY for the same resource when the dedicated key is absent.
         passThreshold: { type: number, minimum: 0, maximum: 1, default: 0.9 }
         failThreshold: { type: number, minimum: 0, maximum: 1, default: 0.1 }
         baseUrl:
@@ -1656,7 +1699,7 @@ components:
       properties:
         ok: { type: boolean }
         message: { type: string }
-        provider: { type: string, enum: [openai, cloudflare, typesafe, ollama] }
+        provider: { type: string, enum: [openai, cloudflare, typesafe, ollama, azure_foundry] }
         requestedModel: { type: string }
         model: { type: string }
         probability: { type: number, minimum: 0, maximum: 1 }

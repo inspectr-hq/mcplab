@@ -76,7 +76,7 @@ function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
   };
 }
 
-function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
+export function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
   if (agent.type === 'browser')
     return {
       id: agent.id,
@@ -94,8 +94,8 @@ function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
     provider:
       agent.provider === 'azure'
         ? 'azure_openai'
-        : agent.provider === 'anthropic'
-          ? 'anthropic'
+        : agent.provider === 'anthropic' || agent.provider === 'azure_foundry'
+          ? agent.provider
           : 'openai',
     model: agent.model,
     ...withOptionalTemperature(agent.temperature),
