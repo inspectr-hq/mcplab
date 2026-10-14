@@ -496,19 +496,29 @@ const RunEvaluation = () => {
       const nextEvaluationIds = new Set(nextEvaluations.map((item) => item.evaluationRunId));
       const previousEvaluations = queueEvaluationsRef.current;
       if (detectCompletedEvaluation && !attachedJobIdRef.current) {
-        const justCompleted = Array.from(previousEvaluations.values()).find(
+        const disappearedEvaluation = Array.from(previousEvaluations.values()).find(
           (item) =>
             ['queued', 'running'].includes(item.status) &&
             !nextEvaluationIds.has(item.evaluationRunId)
         );
-        if (justCompleted) {
-          setDone(true);
-          setRunning(false);
-          setProgress(100);
-          setStopped(false);
-          setCompletionHasErrors(false);
-          setCompletionSummary(null);
-          setRunId(justCompleted.evaluationRunId);
+        if (disappearedEvaluation) {
+          void source
+            .getResult(disappearedEvaluation.evaluationRunId)
+            .then((result) => {
+              if (!result || attachedJobIdRef.current) return;
+              const hasStoppedRuns =
+                (result.outcomes?.stopped ?? 0) > 0 || (result.outcomes?.incomplete ?? 0) > 0;
+              setRunning(false);
+              setProgress(100);
+              setRunId(disappearedEvaluation.evaluationRunId);
+              setCompletionSummary(null);
+              setCompletionHasErrors((result.outcomes?.error ?? 0) > 0);
+              setStopped(hasStoppedRuns);
+              setDone(!hasStoppedRuns);
+            })
+            .catch(() => {
+              // A missing or unavailable result does not prove the evaluation completed.
+            });
         }
       }
       queueEvaluationsRef.current = new Map(

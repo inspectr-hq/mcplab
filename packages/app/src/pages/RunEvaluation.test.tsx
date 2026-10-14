@@ -31,6 +31,7 @@ const {
       queueEventHandlerRef,
       sourceMock: {
         getRunQueue,
+        getResult: vi.fn(),
         subscribeRunQueue: vi.fn((callback: (event: unknown) => void) => {
           queueEventHandlerRef.current = callback;
           return vi.fn();
@@ -88,6 +89,7 @@ beforeEach(() => {
   libraryAgentsRef.value = [];
   sourceMock.startRun.mockReset();
   sourceMock.startRun.mockResolvedValue({ jobId: 'job-1' });
+  sourceMock.getResult.mockReset().mockResolvedValue(undefined);
   sourceMock.subscribeRunJob.mockReset();
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
   sourceMock.subscribeRunQueue.mockClear();
@@ -181,6 +183,7 @@ describe('RunEvaluation', () => {
         queued: [],
         evaluations: []
       });
+    sourceMock.getResult.mockResolvedValue({ id: 'evaluation-queue-complete' });
     render(
       <MemoryRouter initialEntries={['/run']}>
         <Routes>
@@ -207,10 +210,114 @@ describe('RunEvaluation', () => {
     });
 
     expect(await screen.findByText('Evaluation Complete')).toBeInTheDocument();
+    expect(sourceMock.getResult).toHaveBeenCalledWith('evaluation-queue-complete');
     expect(screen.getByRole('link', { name: 'View Results' })).toHaveAttribute(
       'href',
       '/results/evaluation-queue-complete'
     );
+  });
+
+  it('does not show a completion card when a removed evaluation disappears from the queue', async () => {
+    const activeEvaluation = {
+      evaluationRunId: 'evaluation-removed',
+      status: 'queued' as const,
+      totalJobs: 1,
+      completedJobs: 0,
+      failedJobs: 0,
+      stoppedJobs: 0,
+      pausedJobs: 0,
+      jobs: [{ jobId: 'job-removed', status: 'queued' as const, runParams: {} }]
+    };
+    sourceMock.getRunQueue
+      .mockResolvedValueOnce({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [activeEvaluation]
+      })
+      .mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: []
+      });
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(sourceMock.getRunQueue).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      queueEventHandlerRef.current?.({
+        type: 'queue_event',
+        ts: '2026-10-14T10:00:00.000Z',
+        payload: {
+          event: { active: null, active_jobs: [], admitting_jobs: [], queued: [], evaluations: [] }
+        }
+      });
+    });
+
+    await waitFor(() => expect(sourceMock.getResult).toHaveBeenCalledWith('evaluation-removed'));
+    expect(screen.queryByText('Evaluation Complete')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'View Results' })).not.toBeInTheDocument();
+  });
+
+  it('shows a stopped state instead of success when a stopped evaluation disappears', async () => {
+    const activeEvaluation = {
+      evaluationRunId: 'evaluation-stopped',
+      status: 'running' as const,
+      totalJobs: 1,
+      completedJobs: 0,
+      failedJobs: 0,
+      stoppedJobs: 0,
+      pausedJobs: 0,
+      jobs: [{ jobId: 'job-stopped', status: 'running' as const, runParams: {} }]
+    };
+    sourceMock.getRunQueue
+      .mockResolvedValueOnce({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: [activeEvaluation]
+      })
+      .mockResolvedValue({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [],
+        evaluations: []
+      });
+    sourceMock.getResult.mockResolvedValue({
+      id: 'evaluation-stopped',
+      outcomes: { passed: 1, stopped: 1 }
+    });
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(sourceMock.getRunQueue).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      queueEventHandlerRef.current?.({
+        type: 'queue_event',
+        ts: '2026-10-14T10:00:00.000Z',
+        payload: {
+          event: { active: null, active_jobs: [], admitting_jobs: [], queued: [], evaluations: [] }
+        }
+      });
+    });
+
+    expect(await screen.findByText('Run stopped')).toBeInTheDocument();
+    expect(screen.queryByText('Evaluation Complete')).not.toBeInTheDocument();
   });
 
   it('refreshes the visible queue when the server sends a queue event', async () => {
