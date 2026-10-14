@@ -128,13 +128,15 @@ describe('executeRunJob', () => {
   });
 
   it.each([
-    ['missing-judge', false],
-    ['browser', false],
-    ['missing-judge', true],
-    ['browser', true]
+    ['missing-judge', false, true],
+    ['browser', false, true],
+    ['missing-judge', true, true],
+    ['browser', true, true],
+    ['missing-judge', true, false],
+    ['browser', true, false]
   ] as const)(
-    'validates judge %s only for semantic queued runs=%s',
-    async (judgeName, hasSemanticChecks) => {
+    'validates judge %s only for semantic queued runs=%s and enabled=%s',
+    async (judgeName, hasSemanticChecks, evaluationJudgeEnabled) => {
       const fixture = createOauthEvalFixture();
       try {
         const job = createQueuedJob(fixture.configPath, 'job-bad-judge');
@@ -159,7 +161,8 @@ describe('executeRunJob', () => {
             runsDir: fixture.runsDir,
             librariesDir: fixture.librariesDir,
             workspaceRoot: fixture.root,
-            evaluationJudgeAgentName: judgeName
+            evaluationJudgeAgentName: judgeName,
+            evaluationJudgeEnabled
           },
           oauthSessionManager: {} as any,
           deps: {
@@ -192,9 +195,16 @@ describe('executeRunJob', () => {
           } as any
         });
 
-        expect(result.status).toBe(hasSemanticChecks ? 'error' : 'completed');
-        expect(runAllMock).toHaveBeenCalledTimes(hasSemanticChecks ? 0 : 1);
-        if (!hasSemanticChecks) expect(runAllMock.mock.calls[0][1].evaluationJudge).toBeUndefined();
+        expect(result.status).toBe(
+          hasSemanticChecks && evaluationJudgeEnabled ? 'error' : 'completed'
+        );
+        expect(runAllMock).toHaveBeenCalledTimes(
+          hasSemanticChecks && evaluationJudgeEnabled ? 0 : 1
+        );
+        if (!hasSemanticChecks || !evaluationJudgeEnabled)
+          expect(runAllMock.mock.calls[0][1].evaluationJudge).toBeUndefined();
+        if (!evaluationJudgeEnabled)
+          expect(runAllMock.mock.calls[0][1].evaluationJudgeEnabled).toBe(false);
       } finally {
         cleanupFixtureRoot(fixture.root);
       }

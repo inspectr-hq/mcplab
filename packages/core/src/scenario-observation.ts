@@ -4,7 +4,8 @@ import type {
   RunOutcome,
   Scenario,
   ScenarioRunResult,
-  ToolCall
+  ToolCall,
+  WorkspaceEvaluation
 } from './types.js';
 import {
   buildNotExecutedCheckResults,
@@ -26,7 +27,10 @@ export interface ScenarioObservation {
   client?: string;
 }
 
-export interface EvaluateScenarioObservationParams {
+export interface EvaluateScenarioObservationParams extends Pick<
+  WorkspaceEvaluation,
+  'evaluationJudgeEnabled'
+> {
   scenario: Scenario;
   observation: ScenarioObservation;
   runIndex?: number;
@@ -69,6 +73,7 @@ export async function evaluateScenarioObservation({
   scenario,
   observation,
   runIndex = 0,
+  evaluationJudgeEnabled,
   judgeAgentAssertions
 }: EvaluateScenarioObservationParams): Promise<ScenarioRunResult> {
   const hasToolTelemetry = observation.toolCalls !== undefined;
@@ -82,6 +87,7 @@ export async function evaluateScenarioObservation({
       toolCalls,
       availableToolNames: observation.availableToolNames,
       scenarioPrompt: scenario.prompt,
+      evaluationJudgeEnabled,
       judgeAgentAssertions
     }
   );

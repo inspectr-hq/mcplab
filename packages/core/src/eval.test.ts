@@ -504,6 +504,44 @@ describe('evaluateScenario — tool_input_assertions', () => {
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {
+  it('marks disabled semantic checks not evaluated without calling the judge', async () => {
+    const judgeAgentAssertions = vi.fn();
+    const result = await evaluateScenarioWithAgentChecks(
+      'done',
+      ['search'],
+      {
+        tool_constraints: { required_tools: ['search'] },
+        response_assertions: [{ type: 'contains', value: 'done' }],
+        agent_assertions: [{ label: 'Semantic', prompt: 'Is it correct?' }]
+      },
+      { evaluationJudgeEnabled: false, judgeAgentAssertions }
+    );
+    expect(result.failures).toEqual([]);
+    expect(result.check_results).toEqual([
+      expect.objectContaining({ type: 'required_tool', status: 'passed' }),
+      expect.objectContaining({ type: 'response_contains', status: 'passed' }),
+      expect.objectContaining({
+        type: 'agent_check',
+        status: 'not_evaluated',
+        reason: expect.stringContaining('turned off')
+      })
+    ]);
+    expect(judgeAgentAssertions).not.toHaveBeenCalled();
+  });
+  it('retains deterministic failures while semantic evaluation is disabled and no judge exists', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      'wrong',
+      [],
+      {
+        response_assertions: [{ type: 'contains', value: 'done' }],
+        agent_assertions: [{ label: 'Semantic', prompt: 'Is it correct?' }]
+      },
+      { evaluationJudgeEnabled: false }
+    );
+    expect(result.pass).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(result.check_results[1]).toMatchObject({ status: 'not_evaluated' });
+  });
   it('passes when the batched judge returns pass=true for a single check', async () => {
     const result = await evaluateScenarioWithAgentChecks(
       'has valid timestamps',
@@ -836,6 +874,20 @@ describe('evaluateScenarioWithAgentChecks', () => {
 });
 
 describe('buildNotExecutedCheckResults', () => {
+  it('keeps disabled semantic checks not evaluated when execution ends early', () => {
+    expect(
+      buildNotExecutedCheckResults(
+        {
+          response_assertions: [{ type: 'contains', value: 'done' }],
+          agent_assertions: [{ label: 'Semantic', prompt: 'Is it correct?' }]
+        },
+        { evaluationJudgeEnabled: false }
+      )
+    ).toEqual([
+      expect.objectContaining({ status: 'not_executed' }),
+      expect.objectContaining({ type: 'agent_check', status: 'not_evaluated' })
+    ]);
+  });
   it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
     const results = buildNotExecutedCheckResults({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },

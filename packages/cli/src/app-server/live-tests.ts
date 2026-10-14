@@ -238,14 +238,22 @@ export class LiveTestService {
       throw new LiveTestError('Live Test session was already completed with different data.', 409);
     }
 
-    const { evaluationJudge: judge, evaluationDecision } =
-      this.options.getWorkspaceEvaluation?.(session.testCase) ?? {};
-    if (session.testCase.eval?.agent_assertions?.length && !judge) {
+    const {
+      evaluationJudge: judge,
+      evaluationDecision,
+      evaluationJudgeEnabled
+    } = this.options.getWorkspaceEvaluation?.(session.testCase) ?? {};
+    if (
+      session.testCase.eval?.agent_assertions?.length &&
+      evaluationJudgeEnabled !== false &&
+      !judge
+    ) {
       throw new LiveTestError('Agent checks require a configured evaluation judge.', 400);
     }
     const requestId = `rover:${session.id}`;
     const run = await evaluateScenarioObservation({
       scenario: session.testCase,
+      evaluationJudgeEnabled,
       observation: {
         finalText: normalized.finalText,
         startedAt: normalized.startedAt,

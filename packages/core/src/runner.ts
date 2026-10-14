@@ -8,8 +8,7 @@ import type {
   ExecutableScenario,
   ScenarioRunTraceRecord,
   RunOutcome,
-  EvaluationJudge,
-  EvaluationDecisionConfig
+  WorkspaceEvaluation
 } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
 import { isLlmAgent } from './types.js';
@@ -28,7 +27,7 @@ import {
   type TraceExporter
 } from './langsmith-tracing.js';
 
-export interface RunOptions {
+export interface RunOptions extends WorkspaceEvaluation {
   runsPerScenario: number;
   scenarioId?: string;
   runNote?: string;
@@ -43,8 +42,6 @@ export interface RunOptions {
     serverNames: string[],
     options?: { signal?: AbortSignal }
   ) => Promise<Record<string, Record<string, string>>>;
-  evaluationJudge?: EvaluationJudge;
-  evaluationDecision?: EvaluationDecisionConfig;
   signal?: AbortSignal;
   /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
   scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
@@ -113,7 +110,11 @@ export async function runAll(
   const scenariosWithAgentChecks = scenariosToRun.filter(
     (scenario) => (scenario.eval?.agent_assertions?.length ?? 0) > 0
   );
-  if (scenariosWithAgentChecks.length > 0 && !options.evaluationJudge) {
+  if (
+    scenariosWithAgentChecks.length > 0 &&
+    options.evaluationJudgeEnabled !== false &&
+    !options.evaluationJudge
+  ) {
     throw new Error(
       `Agent checks require a default evaluation judge agent. Configure one in workspace settings before running scenarios: ${scenariosWithAgentChecks
         .map((scenario) => scenario.id)
@@ -292,6 +293,7 @@ export async function runAll(
           const scenarioRun = await evaluateScenarioObservation({
             scenario: { ...scenario, eval: effectiveScenarioEval },
             runIndex,
+            evaluationJudgeEnabled: options.evaluationJudgeEnabled,
             observation: {
               finalText: runResult.finalText,
               toolCalls: runResult.toolCalls,
@@ -413,7 +415,7 @@ export async function runAll(
             outcome,
             ...(stopped ? { stop_reason: errorMessage } : { error: errorMessage }),
             failures: stopped ? [] : [`Scenario error: ${errorMessage}`],
-            check_results: buildNotExecutedCheckResults(scenario.eval),
+            check_results: buildNotExecutedCheckResults(scenario.eval, options),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],

@@ -543,6 +543,7 @@ export async function startAppServer(options: AppServerOptions) {
         const settingsChanged = [
           'scenarioAssistantAgentName',
           'evaluationJudgeAgentName',
+          'evaluationJudgeEnabled',
           'evaluationDecision',
           'defaultQueueWorkers'
         ].some((key) => Object.prototype.hasOwnProperty.call(body, key));

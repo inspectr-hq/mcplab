@@ -55,6 +55,68 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 describe('SettingsPage', () => {
+  it('keeps Decision Engine configuration editable without a backup judge while semantic evaluation is off', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({ evaluationJudgeEnabled: false });
+    agentsRef.value = [];
+    render(<SettingsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).not.toBeChecked()
+    );
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Ollama' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: expect.objectContaining({ provider: 'ollama' })
+      })
+    );
+    expect(
+      screen.getByText(/Semantic evaluation is off. This configuration is kept/)
+    ).toBeInTheDocument();
+  });
+  it('saves the judge toggle immediately while preserving the selected judge and engine', async () => {
+    render(<SettingsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).toBeEnabled()
+    );
+    expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).toBeChecked();
+    fireEvent.click(screen.getByRole('switch', { name: 'Use Evaluation Judge' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationJudgeEnabled: false
+      })
+    );
+    expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Default Evaluation Judge' })).toHaveTextContent(
+      'Assistant One'
+    );
+    expect(
+      screen.getByText(/Off: semantic agent checks are marked Not evaluated/)
+    ).toBeInTheDocument();
+    expect(sourceMock.updateWorkspaceSettings).not.toHaveBeenCalledWith(
+      expect.objectContaining({ evaluationJudgeAgentName: null })
+    );
+  });
+  it('loads a disabled judge and rolls back a failed attempt to re-enable it', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeEnabled: false,
+      evaluationJudgeAgentName: 'assistant-1'
+    });
+    sourceMock.updateWorkspaceSettings.mockRejectedValueOnce(new Error('Judge unavailable'));
+    render(<SettingsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).not.toBeChecked()
+    );
+    fireEvent.click(screen.getByRole('switch', { name: 'Use Evaluation Judge' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationJudgeEnabled: true
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Use Evaluation Judge' })).not.toBeChecked()
+    );
+  });
   it('allows repairing an unsupported provider in persisted decision settings', async () => {
     sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
       evaluationJudgeAgentName: 'assistant-1',

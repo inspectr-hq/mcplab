@@ -9,11 +9,14 @@ export interface EvaluationDecisionConfig {
 }
 
 export interface WorkspaceEvaluationSettings {
+  /** Omitted means semantic evaluation is enabled for legacy workspaces. */
+  evaluationJudgeEnabled?: boolean;
   evaluationJudgeAgentName?: string;
   evaluationDecision?: EvaluationDecisionConfig;
 }
 
 export interface WorkspaceSettingsOverrides {
+  evaluation_judge_enabled?: boolean;
   scenario_assistant_agent_name?: string;
   evaluation_judge_agent_name?: string;
   default_queue_workers?: unknown;
@@ -21,6 +24,7 @@ export interface WorkspaceSettingsOverrides {
 }
 
 export interface WorkspaceSettingsPatch {
+  evaluationJudgeEnabled?: boolean;
   defaultQueueWorkers?: number;
   scenarioAssistantAgentName?: string | null;
   evaluationJudgeAgentName?: string | null;
@@ -36,6 +40,7 @@ export interface EvaluationJudge {
 }
 
 export interface WorkspaceEvaluation {
+  evaluationJudgeEnabled?: boolean;
   evaluationJudge?: EvaluationJudge;
   evaluationDecision?: EvaluationDecisionConfig;
 }
@@ -366,7 +371,7 @@ export interface CheckResult {
 export interface CheckCounts {
   passed: number;
   failed: number;
-  /** Checks intentionally outside the execution source's capabilities. */
+  /** Checks intentionally disabled or outside the execution source's capabilities. */
   not_evaluated: number;
   /** Checks expected to run but skipped because execution ended early. */
   not_executed?: number;

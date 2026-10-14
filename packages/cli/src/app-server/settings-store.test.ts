@@ -19,6 +19,82 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
+  it('turns off semantic evaluation without looking up a deleted judge and retains configuration on reload', () => {
+    const settings = {
+      ...fixture(),
+      evaluationJudgeAgentName: 'deleted',
+      evaluationDecision: decision
+    };
+    const next = applyEvaluationSettingsPatch(settings, { evaluationJudgeEnabled: false }, () => {
+      throw new Error('Must not load the judge');
+    });
+    expect(next.evaluationJudgeEnabled).toBe(false);
+    persistSettingsOverrides(next);
+    applySettingsOverrides(settings);
+    expect(settings).toMatchObject({
+      evaluationJudgeEnabled: false,
+      evaluationJudgeAgentName: 'deleted',
+      evaluationDecision: decision
+    });
+    expect(loadWorkspaceSettingsOverrides(settings.librariesDir).evaluation_judge_enabled).toBe(
+      false
+    );
+  });
+  it.each(['false', null, 0])('rejects an invalid judge enabled value %j atomically', (value) => {
+    const settings = fixture();
+    const original = { ...settings };
+    expect(() =>
+      applyEvaluationSettingsPatch(settings, { evaluationJudgeEnabled: value }, agents)
+    ).toThrow('boolean');
+    expect(settings).toEqual(original);
+  });
+  it('allows configuring a retained Decision Engine while semantic evaluation is off, and validates backup on re-enable', () => {
+    const settings = {
+      ...fixture(),
+      evaluationJudgeEnabled: false,
+      evaluationJudgeAgentName: 'deleted'
+    };
+    const disabled = applyEvaluationSettingsPatch(settings, { evaluationDecision: decision }, {});
+    expect(disabled.evaluationDecision).toEqual(decision);
+    expect(() =>
+      applyEvaluationSettingsPatch(disabled, { evaluationJudgeEnabled: true }, agents)
+    ).toThrow('not found');
+    const enabled = applyEvaluationSettingsPatch(
+      disabled,
+      { evaluationJudgeEnabled: true, evaluationJudgeAgentName: 'judge' },
+      agents
+    );
+    expect(enabled).toMatchObject({
+      evaluationJudgeEnabled: true,
+      evaluationJudgeAgentName: 'judge',
+      evaluationDecision: decision
+    });
+    persistSettingsOverrides(enabled);
+    applySettingsOverrides(settings);
+    expect(settings.evaluationJudgeEnabled).toBe(true);
+  });
+  it('requires a valid LLM judge on explicit re-enable even without a Decision Engine', () => {
+    for (const name of [undefined, 'deleted', 'browser']) {
+      expect(() =>
+        applyEvaluationSettingsPatch(
+          { ...fixture(), evaluationJudgeEnabled: false, evaluationJudgeAgentName: name },
+          { evaluationJudgeEnabled: true },
+          agents
+        )
+      ).toThrow();
+    }
+  });
+  it('defaults legacy and malformed persisted judge flags to on', () => {
+    const settings = fixture();
+    applySettingsOverrides(settings);
+    expect(settings.evaluationJudgeEnabled).toBe(true);
+    writeFileSync(
+      join(settings.librariesDir, '.mcplab-app-settings.yaml'),
+      'evaluation_judge_enabled: "false"\n'
+    );
+    applySettingsOverrides(settings);
+    expect(settings.evaluationJudgeEnabled).toBe(true);
+  });
   it.each(['deleted', undefined])(
     'does not revalidate %s judge when saving unrelated settings',
     (name) => {

@@ -20,6 +20,10 @@ export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceS
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     return {
       ...parsed,
+      evaluation_judge_enabled:
+        typeof parsed.evaluation_judge_enabled === 'boolean'
+          ? parsed.evaluation_judge_enabled
+          : undefined,
       scenario_assistant_agent_name:
         typeof parsed.scenario_assistant_agent_name === 'string'
           ? parsed.scenario_assistant_agent_name.trim() || undefined
@@ -38,6 +42,7 @@ export function toWorkspaceEvaluationSettings(
   settings: WorkspaceSettingsOverrides
 ): WorkspaceEvaluationSettings {
   return {
+    evaluationJudgeEnabled: settings.evaluation_judge_enabled,
     evaluationJudgeAgentName: settings.evaluation_judge_agent_name,
     evaluationDecision: settings.evaluation_decision
   };
@@ -66,6 +71,7 @@ export function resolveWorkspaceEvaluation(
   );
   if (!needsJudge) return {};
   const settings = params.settings;
+  if (settings.evaluationJudgeEnabled === false) return { evaluationJudgeEnabled: false };
   return {
     evaluationJudge: resolveEvaluationJudge({
       agents: params.agents,

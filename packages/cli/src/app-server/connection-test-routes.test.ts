@@ -32,9 +32,12 @@ function call(
   res = response(),
   body: unknown = config,
   pathname = '/api/settings/decision/test',
-  method = 'POST'
+  method = 'POST',
+  origin?: string
 ) {
-  const req = Readable.from([JSON.stringify(body)]) as unknown as IncomingMessage;
+  const req = Object.assign(Readable.from([JSON.stringify(body)]), {
+    headers: { host: 'localhost:8787', ...(origin ? { origin } : {}) }
+  }) as unknown as IncomingMessage;
   return handleConnectionTestRoutes({
     req,
     res: res as unknown as ServerResponse,
@@ -82,6 +85,22 @@ describe('decision test route', () => {
     await call(res, { ...config, passThreshold: -1 });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({ error: 'Invalid decision thresholds' });
+  });
+  it('rejects cross-origin probes before contacting the configured provider', async () => {
+    const res = response();
+    expect(
+      await call(res, config, '/api/settings/decision/test', 'POST', 'https://attacker.example')
+    ).toBe(true);
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({ error: 'Cross-origin request rejected.' });
+    expect(probe).not.toHaveBeenCalled();
+  });
+  it('allows a same-origin probe', async () => {
+    const res = response();
+    expect(
+      await call(res, config, '/api/settings/decision/test', 'POST', 'http://localhost:8787')
+    ).toBe(true);
+    expect(probe).toHaveBeenCalledOnce();
   });
   it.each(['/api/settings/decision/test', '/api/agents/test'])(
     'aborts %s when the client disconnects and removes the listener',

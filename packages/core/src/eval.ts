@@ -9,7 +9,8 @@ import type {
   ResponseAssertion,
   ToolConstraints,
   ToolCall,
-  ToolInputAssertion
+  ToolInputAssertion,
+  WorkspaceEvaluation
 } from './types.js';
 
 export interface EvalResult {
@@ -32,14 +33,29 @@ export interface JudgeAgentAssertionsInput {
   context?: AgentJudgeContext;
 }
 
-export interface EvaluateScenarioWithAgentChecksOptions {
+export interface EvaluateScenarioWithAgentChecksOptions extends Pick<
+  WorkspaceEvaluation,
+  'evaluationJudgeEnabled'
+> {
   toolCalls?: ToolCall[];
   availableToolNames?: string[];
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
   scenarioPrompt?: string;
 }
 
-export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
+function buildDisabledAgentCheckResults(assertions: AgentAssertion[]): CheckResult[] {
+  return assertions.map(({ label }) => ({
+    type: 'agent_check',
+    label,
+    status: 'not_evaluated',
+    reason: 'Evaluation Judge is turned off in workspace settings.'
+  }));
+}
+
+export function buildNotExecutedCheckResults(
+  evalRules?: EvalRules,
+  options?: Pick<WorkspaceEvaluation, 'evaluationJudgeEnabled'>
+): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
@@ -75,12 +91,12 @@ export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult
       }
     });
   }
-  for (const assertion of evalRules.agent_assertions ?? []) {
-    results.push({
-      type: 'agent_check',
-      label: assertion.label,
-      status: 'not_executed'
-    });
+  if (options?.evaluationJudgeEnabled === false) {
+    results.push(...buildDisabledAgentCheckResults(evalRules.agent_assertions ?? []));
+  } else {
+    for (const assertion of evalRules.agent_assertions ?? []) {
+      results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
+    }
   }
   return results;
 }
@@ -162,6 +178,14 @@ export async function evaluateScenarioWithAgentChecks(
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
     return { pass: failures.length === 0, failures, check_results };
+  }
+
+  if (options?.evaluationJudgeEnabled === false) {
+    return {
+      pass: failures.length === 0,
+      failures,
+      check_results: [...check_results, ...buildDisabledAgentCheckResults(agentAssertions)]
+    };
   }
 
   if (!options?.judgeAgentAssertions) {
