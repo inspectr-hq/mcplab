@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import {
   isDecisionEngineEnabled,
+  isSemanticEvaluationEnabled,
   loadWorkspaceSettingsOverrides,
   normalizeEvaluationDecisionConfig,
   resolveEvaluationJudge,
@@ -81,7 +82,7 @@ export function applyEvaluationSettingsPatch(
   }
   const engineEnabled = isDecisionEngineEnabled(candidate.evaluationDecision);
   if (
-    candidate.evaluationJudgeEnabled !== false &&
+    isSemanticEvaluationEnabled(candidate) &&
     (hasJudge || hasJudgeEnabled || (hasDecision && engineEnabled))
   ) {
     const judge = resolveEvaluationJudge({

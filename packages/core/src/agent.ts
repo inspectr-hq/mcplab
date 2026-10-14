@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { resolveAzureFoundryConnection } from './azure-config.js';
+import { AgentConnectionError } from './agent-errors.js';
 import type {
   AgentConfig,
   LlmAgentConfig,
@@ -559,7 +560,7 @@ class OpenAiAdapter implements LlmAdapter {
   private client: OpenAI;
 
   constructor(apiKey?: string) {
-    if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing OPENAI_API_KEY');
     this.client = new OpenAI({ apiKey });
   }
 
@@ -613,9 +614,12 @@ class AzureChatAdapter implements LlmAdapter {
     v1?: boolean;
   }) {
     const { apiKey, endpoint, deployment, apiVersion, v1 } = params;
-    if (!apiKey) throw new Error('Missing AZURE_OPENAI_API_KEY');
-    if (!endpoint) throw new Error('Missing AZURE_OPENAI_ENDPOINT');
-    if (!deployment) throw new Error('Missing AZURE_OPENAI_DEPLOYMENT');
+    if (!apiKey)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_API_KEY');
+    if (!endpoint)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_ENDPOINT');
+    if (!deployment)
+      throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
     this.deployment = deployment;
     this.apiVersion = apiVersion ?? '2024-02-15-preview';
     this.client = new OpenAI({
@@ -706,7 +710,7 @@ class AnthropicAdapter implements LlmAdapter {
   private client: Anthropic;
 
   constructor(apiKey?: string) {
-    if (!apiKey) throw new Error('Missing ANTHROPIC_API_KEY');
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing ANTHROPIC_API_KEY');
     this.client = new Anthropic({ apiKey });
   }
 

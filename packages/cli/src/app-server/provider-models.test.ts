@@ -21,6 +21,17 @@ describe('configured Azure deployments', () => {
     });
     expect(fetch).not.toHaveBeenCalled();
   });
+  it('uses the same sorted, deduplicated deployment parsing and empty behavior for Azure', async () => {
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', ' second,first,second ');
+    expect(await fetchProviderModels('azure')).toMatchObject({
+      items: ['first', 'second'],
+      kind: 'deployments'
+    });
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', '');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', '');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT_NAME', '');
+    expect((await fetchProviderModels('azure')).items).toEqual([]);
+  });
   it('allows manual deployment entry without configured suggestions', async () => {
     vi.stubEnv('AZURE_FOUNDRY_DEPLOYMENTS', '');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'unrelated-deployment');

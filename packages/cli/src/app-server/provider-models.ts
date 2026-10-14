@@ -1,15 +1,16 @@
 import type { ProviderModelsResponse } from '@inspectr/mcplab-core';
 
+function parseDeploymentSuggestions(values: Array<string | undefined>): string[] {
+  return [
+    ...new Set(values.flatMap((value) => (value ?? '').split(',').map((item) => item.trim())))
+  ]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
 export async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
   if (provider === 'azure_foundry') {
-    const items = [
-      ...new Set(
-        (process.env.AZURE_FOUNDRY_DEPLOYMENTS ?? '')
-          .split(',')
-          .map((name) => name.trim())
-          .filter(Boolean)
-      )
-    ].sort();
+    const items = parseDeploymentSuggestions([process.env.AZURE_FOUNDRY_DEPLOYMENTS]);
     return {
       provider,
       items,
@@ -59,20 +60,11 @@ export async function fetchProviderModels(provider: string): Promise<ProviderMod
   }
 
   if (provider === 'azure') {
-    const envCandidates = [
+    const items = parseDeploymentSuggestions([
       process.env.AZURE_OPENAI_DEPLOYMENTS,
       process.env.AZURE_OPENAI_DEPLOYMENT,
       process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-    ]
-      .flatMap((value) => (value ?? '').split(','))
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const items = Array.from(new Set(envCandidates)).sort((a, b) => a.localeCompare(b));
-    if (items.length === 0) {
-      throw new Error(
-        'Azure OpenAI discovery uses deployment names. Set AZURE_OPENAI_DEPLOYMENTS (comma-separated) or AZURE_OPENAI_DEPLOYMENT.'
-      );
-    }
+    ]);
     return { provider: 'azure', items, kind: 'deployments', source: 'environment variables' };
   }
 

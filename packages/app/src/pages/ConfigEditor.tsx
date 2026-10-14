@@ -42,6 +42,7 @@ import type {
   AgentConfig,
   AgentEntry,
   EvalConfig,
+  LlmAgentConfig,
   Scenario,
   ScenarioEntry,
   ServerConfig,
@@ -1161,13 +1162,7 @@ const ConfigEditor = () => {
                                         kind: 'inline',
                                         agent: {
                                           ...current,
-                                          provider: value as
-                                            | 'openai'
-                                            | 'anthropic'
-                                            | 'azure'
-                                            | 'azure_foundry'
-                                            | 'google'
-                                            | 'custom'
+                                          provider: value as LlmAgentConfig['provider']
                                         }
                                       };
                                       setAgentEntries(nextEntries);

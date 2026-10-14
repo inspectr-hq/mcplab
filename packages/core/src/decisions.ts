@@ -1,9 +1,6 @@
-import { createAbortError, throwIfAborted } from './abort.js';
-import {
-  AZURE_FOUNDRY_API_KEY_ENVS,
-  readEnvironmentVariable,
-  resolveAzureFoundryConnection
-} from './azure-config.js';
+import { createAbortError, throwIfAborted, withTimeoutSignal } from './abort.js';
+import { AZURE_FOUNDRY_API_KEY_ENVS, resolveAzureFoundryConnection } from './azure-config.js';
+import { readEnvironmentVariable } from './environment.js';
 import {
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
@@ -206,16 +203,14 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
     headers[adapter.authHeader ?? 'Authorization'] =
       `${adapter.authPrefix ?? 'Bearer '}${readEnvironmentVariable(adapter.authEnv)}`;
   }
-  const timeout = new AbortController();
-  const signal = params.signal ? AbortSignal.any([params.signal, timeout.signal]) : timeout.signal;
-  const timer = setTimeout(() => timeout.abort(), adapter.timeoutMs);
+  const timeout = withTimeoutSignal(params.signal, adapter.timeoutMs);
   const started = Date.now();
   try {
     const response = await fetch(adapter.url(params.config), {
       method: 'POST',
       headers,
       body: JSON.stringify(adapter.body(params)),
-      signal
+      signal: timeout.signal
     });
     throwIfAborted(params.signal);
     if (!response.ok) return unavailable('http_error', Date.now() - started);
@@ -225,7 +220,7 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
   } catch (error) {
     if (params.signal?.aborted) throw createAbortError();
     return unavailable(
-      timeout.signal.aborted
+      timeout.timeoutSignal.aborted
         ? 'timeout'
         : error instanceof SyntaxError
           ? 'invalid_response'
@@ -233,7 +228,7 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
       Date.now() - started
     );
   } finally {
-    clearTimeout(timer);
+    timeout.dispose();
   }
 }
 
@@ -296,7 +291,7 @@ export async function evaluateSemanticAssertions(
   throwIfAborted(params.signal);
   if (params.assertions.length === 0) return [];
   const decisionConfig = params.evaluationDecision;
-  if (!decisionConfig || !isDecisionEngineEnabled(decisionConfig)) {
+  if (!isDecisionEngineEnabled(decisionConfig)) {
     return judgeAgentAssertions(params);
   }
   const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);

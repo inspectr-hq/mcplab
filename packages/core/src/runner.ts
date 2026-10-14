@@ -11,6 +11,7 @@ import type {
   WorkspaceEvaluation
 } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
+import { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 import { isLlmAgent } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -112,7 +113,7 @@ export async function runAll(
   );
   if (
     scenariosWithAgentChecks.length > 0 &&
-    options.evaluationJudgeEnabled !== false &&
+    isSemanticEvaluationEnabled(options) &&
     !options.evaluationJudge
   ) {
     throw new Error(

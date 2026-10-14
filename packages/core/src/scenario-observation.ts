@@ -43,6 +43,7 @@ export function deriveRunOutcome(
   if (run.error) return 'error';
   if (run.check_results?.some((check) => check.status === 'failed')) return 'failed';
   if (run.check_results?.some((check) => check.status === 'not_executed')) return 'incomplete';
+  if (run.check_results?.some(isDisabledSemanticCheck)) return 'incomplete';
   return run.pass ? 'passed' : 'failed';
 }
 
@@ -98,7 +99,8 @@ export async function evaluateScenarioObservation({
   const checkResults = [...evaluated.check_results, ...(hasToolTelemetry ? [] : unobservedChecks)];
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
-    : checkResults.some((check) => check.status === 'not_executed')
+    : checkResults.some((check) => check.status === 'not_executed') ||
+        checkResults.some(isDisabledSemanticCheck)
       ? 'incomplete'
       : 'passed';
   const toolUsage: Record<string, number> = {};
@@ -126,4 +128,16 @@ export async function evaluateScenarioObservation({
       scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
     )
   };
+}
+
+function isDisabledSemanticCheck(check: {
+  status: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return (
+    check.status === 'not_evaluated' &&
+    (check.metadata?.semantic_evaluation_disabled === true ||
+      check.reason?.startsWith('Evaluation Judge is turned off in workspace settings.') === true)
+  );
 }

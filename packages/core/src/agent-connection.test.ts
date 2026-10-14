@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { chat } = vi.hoisted(() => ({ chat: vi.fn() }));
 vi.mock('./agent.js', () => ({ chatWithAgent: chat }));
 import { testAgentConnection } from './agent-connection.js';
+import { AgentConnectionError } from './agent-errors.js';
 const agent = { provider: 'azure_foundry', model: 'my-deployment' };
 beforeEach(() => {
   chat.mockReset().mockResolvedValue({ content: 'Ready', raw: { model: 'underlying-model' } });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 describe('agent inference connection test', () => {
   it('tests the configured deployment without tools, saving, or evaluating an assertion', async () => {
     expect(await testAgentConnection(agent)).toMatchObject({
@@ -54,12 +58,20 @@ describe('agent inference connection test', () => {
     });
   });
   it('reports missing credentials without claiming connectivity', async () => {
-    chat.mockRejectedValue(new Error('Missing AZURE_FOUNDRY_ENDPOINT'));
+    chat.mockRejectedValue(
+      new AgentConnectionError('missing_credentials', 'Missing AZURE_FOUNDRY_ENDPOINT')
+    );
     expect(await testAgentConnection(agent)).toMatchObject({
       ok: false,
       failure: 'missing_credentials',
       message: expect.stringContaining('AZURE_FOUNDRY_ENDPOINT')
     });
+  });
+  it('reports the configured legacy Azure deployment, not the form model', async () => {
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'actual-deployment');
+    expect(
+      await testAgentConnection({ provider: 'azure_openai', model: 'form-model' })
+    ).toMatchObject({ ok: true, requestedModel: 'actual-deployment' });
   });
   it('times out a hung inference request', async () => {
     vi.useFakeTimers();

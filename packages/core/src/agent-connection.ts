@@ -1,7 +1,13 @@
 import { chatWithAgent } from './agent.js';
-import { createAbortError, throwIfAborted } from './abort.js';
+import { createAbortError, throwIfAborted, withTimeoutSignal } from './abort.js';
+import { AgentConnectionError } from './agent-errors.js';
 import { normalizeLibraryAgents } from './config.js';
-import { isLlmAgent, type AgentConnectionTestResult } from './types.js';
+import { readEnvironmentVariable } from './environment.js';
+import {
+  isLlmAgent,
+  type AgentConnectionFailure,
+  type AgentConnectionTestResult
+} from './types.js';
 
 /** Probe inference with a bounded synthetic prompt, independent of saving or evaluation. */
 export async function testAgentConnection(
@@ -19,19 +25,21 @@ export async function testAgentConnection(
     probe: { provider: input.provider, model: input.model.trim(), max_tokens: 64 }
   }).probe;
   if (!isLlmAgent(agent)) throw new Error('Connection tests require an LLM agent.');
-  const timeout = new AbortController();
-  const requestSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
-  const timer = setTimeout(() => timeout.abort(), 30_000);
+  const timeout = withTimeoutSignal(signal, 30_000);
   const started = Date.now();
-  const base = { provider: agent.provider, requestedModel: agent.model };
+  const requestedModel =
+    agent.provider === 'azure_openai'
+      ? (readEnvironmentVariable('AZURE_OPENAI_DEPLOYMENT') ?? agent.model)
+      : agent.model;
+  const base = { provider: agent.provider, requestedModel };
   try {
     const response = await chatWithAgent({
       agent,
       messages: [{ role: 'user', content: 'Reply with Ready.' }],
-      signal: requestSignal
+      signal: timeout.signal
     });
     throwIfAborted(signal);
-    if (timeout.signal.aborted) throw createAbortError();
+    if (timeout.timeoutSignal.aborted) throw createAbortError();
     const responseModel =
       response.raw && typeof response.raw === 'object'
         ? (response.raw as Record<string, unknown>).model
@@ -48,14 +56,17 @@ export async function testAgentConnection(
     const message = error instanceof Error ? error.message : String(error);
     const status =
       error && typeof error === 'object' ? (error as { status?: number }).status : undefined;
-    let failure = 'connection_error';
+    let failure: AgentConnectionFailure = 'connection_error';
     let hint = 'Check the backend endpoint and network access.';
-    if (timeout.signal.aborted) {
+    if (timeout.timeoutSignal.aborted) {
       failure = 'timeout';
       hint = 'The inference request timed out after 30 seconds.';
-    } else if (message.startsWith('Missing ')) {
-      failure = 'missing_credentials';
-      hint = 'Set the required backend environment variables and restart MCPLab.';
+    } else if (error instanceof AgentConnectionError) {
+      failure = error.failure;
+      hint =
+        error.failure === 'deployment'
+          ? 'Set AZURE_OPENAI_DEPLOYMENT to the deployment used by the backend and restart MCPLab.'
+          : 'Set the required backend environment variables and restart MCPLab.';
     } else if (status === 401 || status === 403) {
       failure = 'authentication';
       hint = 'Check credentials and access to the configured deployment.';
@@ -73,10 +84,10 @@ export async function testAgentConnection(
       ...base,
       ok: false,
       failure,
-      message: timeout.signal.aborted ? hint : `${hint} ${message}`,
+      message: timeout.timeoutSignal.aborted ? hint : `${hint} ${message}`,
       durationMs: Date.now() - started
     };
   } finally {
-    clearTimeout(timer);
+    timeout.dispose();
   }
 }

@@ -10,6 +10,7 @@ import {
   type WorkspaceEvaluationSettings,
   type WorkspaceSettingsOverrides
 } from './types.js';
+import { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 
 /** Preserve malformed decision configuration so evaluation can fall back to the judge. */
 export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceSettingsOverrides {
@@ -71,7 +72,7 @@ export function resolveWorkspaceEvaluation(
   );
   if (!needsJudge) return {};
   const settings = params.settings;
-  if (settings.evaluationJudgeEnabled === false) return { evaluationJudgeEnabled: false };
+  if (!isSemanticEvaluationEnabled(settings)) return { evaluationJudgeEnabled: false };
   return {
     evaluationJudge: resolveEvaluationJudge({
       agents: params.agents,

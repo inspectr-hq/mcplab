@@ -5,6 +5,7 @@ import {
   evaluateScenarioObservation,
   hashConfig,
   evaluateSemanticAssertions,
+  isSemanticEvaluationEnabled,
   throwIfAborted,
   type WorkspaceEvaluation,
   tallyCheckCounts,
@@ -245,7 +246,7 @@ export class LiveTestService {
     } = this.options.getWorkspaceEvaluation?.(session.testCase) ?? {};
     if (
       session.testCase.eval?.agent_assertions?.length &&
-      evaluationJudgeEnabled !== false &&
+      isSemanticEvaluationEnabled({ evaluationJudgeEnabled }) &&
       !judge
     ) {
       throw new LiveTestError('Agent checks require a configured evaluation judge.', 400);

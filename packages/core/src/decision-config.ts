@@ -61,9 +61,9 @@ export const DECISION_DEFAULTS = {
   baseUrl: 'http://localhost:11434'
 } as const;
 
-export function isDecisionEngineEnabled(
-  config?: Pick<EvaluationDecisionConfig, 'enabled'> | null
-): boolean {
+export function isDecisionEngineEnabled<
+  T extends Pick<EvaluationDecisionConfig, 'enabled'> | null | undefined
+>(config: T): config is NonNullable<T> {
   return Boolean(config) && config?.enabled !== false;
 }
 

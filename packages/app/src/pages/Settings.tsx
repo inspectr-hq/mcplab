@@ -15,6 +15,7 @@ import {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
+  isSemanticEvaluationEnabled,
   normalizeEvaluationDecisionConfig,
   type EvaluationDecisionConfig,
   type DecisionConnectionTestResult
@@ -93,7 +94,7 @@ const SettingsPage = () => {
       const settings = await source.getWorkspaceSettings();
       setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
-      setEvaluationJudgeEnabled(settings?.evaluationJudgeEnabled !== false);
+      setEvaluationJudgeEnabled(isSemanticEvaluationEnabled(settings));
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       applyDecisionSettings(settings?.evaluationDecision);
     } catch (error: unknown) {

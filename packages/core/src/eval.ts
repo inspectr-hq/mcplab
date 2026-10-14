@@ -1,5 +1,6 @@
 import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
+import { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 import type {
   AgentAssertion,
   AgentAssertionJudgeResult,
@@ -48,7 +49,8 @@ function buildDisabledAgentCheckResults(assertions: AgentAssertion[]): CheckResu
     type: 'agent_check',
     label,
     status: 'not_evaluated',
-    reason: 'Evaluation Judge is turned off in workspace settings.'
+    reason: 'Evaluation Judge is turned off in workspace settings.',
+    metadata: { semantic_evaluation_disabled: true }
   }));
 }
 
@@ -91,7 +93,7 @@ export function buildNotExecutedCheckResults(
       }
     });
   }
-  if (options?.evaluationJudgeEnabled === false) {
+  if (!isSemanticEvaluationEnabled(options)) {
     results.push(...buildDisabledAgentCheckResults(evalRules.agent_assertions ?? []));
   } else {
     for (const assertion of evalRules.agent_assertions ?? []) {
@@ -180,9 +182,9 @@ export async function evaluateScenarioWithAgentChecks(
     return { pass: failures.length === 0, failures, check_results };
   }
 
-  if (options?.evaluationJudgeEnabled === false) {
+  if (!isSemanticEvaluationEnabled(options)) {
     return {
-      pass: failures.length === 0,
+      pass: false,
       failures,
       check_results: [...check_results, ...buildDisabledAgentCheckResults(agentAssertions)]
     };

@@ -207,8 +207,17 @@ export interface AgentConnectionTestResult {
   requestedModel: string;
   model?: string;
   durationMs: number;
-  failure?: string;
+  failure?: AgentConnectionFailure;
 }
+
+export type AgentConnectionFailure =
+  | 'missing_credentials'
+  | 'authentication'
+  | 'deployment'
+  | 'capability'
+  | 'rate_limit'
+  | 'connection_error'
+  | 'timeout';
 
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure' | 'azure_foundry';

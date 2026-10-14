@@ -62,6 +62,33 @@ describe('evaluateScenarioObservation', () => {
     ]);
   });
 
+  it('marks semantic checks incomplete when they were disabled and nothing was evaluated', async () => {
+    const result = await evaluateScenarioObservation({
+      scenario: {
+        id: 'disabled-agent-check',
+        servers: [],
+        prompt: 'Answer the question',
+        eval: { agent_assertions: [{ label: 'Correct answer', prompt: 'Is the answer correct?' }] }
+      },
+      observation: {
+        finalText: 'An answer.',
+        startedAt: '2026-09-08T10:00:00.000Z',
+        completedAt: '2026-09-08T10:00:01.000Z',
+        executionSource: 'mcplab'
+      },
+      evaluationJudgeEnabled: false
+    });
+    expect(result.outcome).toBe('incomplete');
+    expect(result.pass).toBe(false);
+    expect(result.check_results).toEqual([
+      expect.objectContaining({
+        type: 'agent_check',
+        status: 'not_evaluated',
+        metadata: { semantic_evaluation_disabled: true }
+      })
+    ]);
+  });
+
   it('evaluates an observed empty tool sequence as a failure', async () => {
     const result = await evaluateScenarioObservation({
       scenario: {
