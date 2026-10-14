@@ -2,10 +2,21 @@ import { describe, expect, it } from 'vitest';
 import {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig
 } from './decision-config.js';
 
 describe('decision provider configuration', () => {
+  it.each([
+    [undefined, false],
+    [{ provider: 'openai', model: 'gpt-6-luna' }, true],
+    [{ provider: 'openai', model: 'gpt-6-luna', enabled: true }, true],
+    [{ provider: 'openai', model: 'gpt-6-luna', enabled: false }, false]
+  ])('resolves whether a configured decision engine is enabled', (config, expected) => {
+    expect(isDecisionEngineEnabled(config as Parameters<typeof isDecisionEngineEnabled>[0])).toBe(
+      expected
+    );
+  });
   it('preserves an explicit enabled flag and keeps legacy configurations enabled by default', () => {
     const raw = { provider: 'openai', model: 'gpt-6-luna' };
     expect(normalizeEvaluationDecisionConfig({ ...raw, enabled: false }).enabled).toBe(false);

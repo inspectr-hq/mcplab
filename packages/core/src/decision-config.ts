@@ -61,6 +61,12 @@ export const DECISION_DEFAULTS = {
   baseUrl: 'http://localhost:11434'
 } as const;
 
+export function isDecisionEngineEnabled(
+  config?: Pick<EvaluationDecisionConfig, 'enabled'> | null
+): boolean {
+  return Boolean(config) && config?.enabled !== false;
+}
+
 /** Shared validation for workspace settings and the settings form. */
 export function normalizeEvaluationDecisionConfig(raw: unknown): EvaluationDecisionConfig {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {

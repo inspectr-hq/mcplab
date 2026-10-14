@@ -17,6 +17,7 @@ export { judgeAgentAssertions } from './judge.js';
 export { evaluateSemanticAssertions, testDecisionConnection } from './decisions.js';
 export {
   normalizeEvaluationDecisionConfig,
+  isDecisionEngineEnabled,
   DECISION_PROVIDERS,
   DECISION_DEFAULTS
 } from './decision-config.js';

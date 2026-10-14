@@ -1,6 +1,7 @@
 export { tallyCheckCounts } from './check-counts.js';
 export {
   normalizeEvaluationDecisionConfig,
+  isDecisionEngineEnabled,
   DECISION_PROVIDERS,
   DECISION_DEFAULTS
 } from './decision-config.js';

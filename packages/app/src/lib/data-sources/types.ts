@@ -44,6 +44,7 @@ export {
   calculatePassRate,
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,

@@ -136,6 +136,43 @@ describe('SettingsPage', () => {
       expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({ evaluationDecision: null })
     );
   });
+  it('keeps the saved configuration warning visible while testing a replacement draft', async () => {
+    let finishTest!: (result: { ok: boolean; message: string }) => void;
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      evaluationJudgeAgentName: 'assistant-1',
+      evaluationDecision: {
+        provider: 'unknown',
+        model: 'bad-model',
+        passThreshold: 0.9,
+        failThreshold: 0.1
+      }
+    });
+    sourceMock.testDecisionConnection.mockImplementationOnce(
+      () => new Promise((resolve) => (finishTest = resolve))
+    );
+    render(<SettingsPage />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/saved decision engine/i);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Decisions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByRole('button', { name: 'Testing...' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/saved decision engine/i);
+    await act(async () => finishTest({ ok: true, message: 'Connection succeeded.' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Decision Engine' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        evaluationDecision: {
+          provider: 'openai',
+          model: 'gpt-6-luna',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
+      })
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(/saved decision engine/i)).not.toBeInTheDocument()
+    );
+  });
   beforeEach(() => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     sourceMock.getWorkspaceSettings.mockClear();
@@ -304,9 +341,7 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByLabelText('Pass probability threshold'), {
       target: { value: '0.8' }
     });
-    expect(
-      screen.queryByText('OpenAI Decisions returned a valid decision.')
-    ).not.toBeInTheDocument();
+    expect(screen.getByText('OpenAI Decisions returned a valid decision.')).toBeInTheDocument();
   });
   it('shows missing credentials as a failed connection test', async () => {
     sourceMock.testDecisionConnection.mockResolvedValue({
@@ -341,13 +376,30 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save Decision Engine' })).toBeDisabled();
     const signal = sourceMock.testDecisionConnection.mock.calls[0][1] as AbortSignal;
-    fireEvent.change(screen.getByLabelText('Pass probability threshold'), {
-      target: { value: '0.8' }
-    });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Ollama' }));
     expect(signal.aborted).toBe(true);
     await act(async () => resolveProbe({ ok: true, message: 'Old connection result' }));
     expect(screen.queryByText('Old connection result')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+  });
+  it('keeps a connection test running when only probability thresholds change', async () => {
+    let resolveProbe!: (result: { ok: boolean; message: string }) => void;
+    sourceMock.testDecisionConnection.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveProbe = resolve))
+    );
+    render(<SettingsPage />);
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox', { name: 'Decision provider' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Ollama' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    const signal = sourceMock.testDecisionConnection.mock.calls[0][1] as AbortSignal;
+    fireEvent.change(screen.getByLabelText('Pass probability threshold'), {
+      target: { value: '0.8' }
+    });
+    expect(signal.aborted).toBe(false);
+    await act(async () => resolveProbe({ ok: true, message: 'Connection succeeded.' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Connection succeeded.');
   });
   it('does not send a connection test for invalid thresholds', async () => {
     render(<SettingsPage />);

@@ -11,6 +11,7 @@ export {
   tallyCheckCounts,
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;

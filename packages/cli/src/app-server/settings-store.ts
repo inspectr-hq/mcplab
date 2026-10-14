@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import {
+  isDecisionEngineEnabled,
   loadWorkspaceSettingsOverrides,
   normalizeEvaluationDecisionConfig,
   resolveEvaluationJudge,
@@ -78,8 +79,7 @@ export function applyEvaluationSettingsPatch(
         ? undefined
         : normalizeEvaluationDecisionConfig(body.evaluationDecision);
   }
-  const engineEnabled =
-    candidate.evaluationDecision && candidate.evaluationDecision.enabled !== false;
+  const engineEnabled = isDecisionEngineEnabled(candidate.evaluationDecision);
   if (
     candidate.evaluationJudgeEnabled !== false &&
     (hasJudge || hasJudgeEnabled || (hasDecision && engineEnabled))

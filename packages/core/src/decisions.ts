@@ -4,7 +4,11 @@ import {
   readEnvironmentVariable,
   resolveAzureFoundryConnection
 } from './azure-config.js';
-import { DECISION_PROVIDERS, normalizeEvaluationDecisionConfig } from './decision-config.js';
+import {
+  DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
+  normalizeEvaluationDecisionConfig
+} from './decision-config.js';
 import { toJudgeErrorResults } from './eval.js';
 import { buildJudgeBatchPayload, judgeAgentAssertions } from './judge.js';
 import type {
@@ -12,6 +16,7 @@ import type {
   DecisionAdapter,
   DecisionAnswer,
   DecisionConnectionTestResult,
+  DecisionFallback,
   DecisionRequest,
   EvaluationDecisionConfig,
   SemanticEvaluationParams
@@ -22,6 +27,23 @@ const instruction =
 const criteria = {
   true: 'The final answer satisfies the semantic check.',
   false: 'The final answer does not satisfy the semantic check.'
+};
+
+const decisionFallbackMessages: Record<DecisionFallback, string> = {
+  missing_credentials: `Missing backend credentials.`,
+  http_error:
+    'The decision provider returned an unsuccessful HTTP response. Check credentials, model availability, and endpoint support.',
+  connection_error:
+    'Could not connect to the decision provider. Check network access and, for Ollama, the server URL and that the server is running.',
+  timeout:
+    'The decision request timed out. Check provider availability; Ollama may still be loading the model.',
+  invalid_response: 'The decision provider returned invalid JSON.',
+  missing_answer: 'The decision provider did not return an answer to the connection check.',
+  duplicate_answer: 'The decision provider returned duplicate answers to the connection check.',
+  refusal: 'The decision provider refused the connection check.',
+  invalid_answer: 'The decision provider did not return a valid satisfaction probability.',
+  invalid_configuration: 'The saved decision engine configuration is invalid.',
+  uncertain: 'The decision probability did not meet either configured threshold.'
 };
 
 function asRecord(raw: unknown): Record<string, unknown> | undefined {
@@ -149,7 +171,7 @@ function normalizeAnswers(
   return params.checks.map(({ id }) => {
     const answer = byId.get(id);
     const probability = answer?.[adapter.probabilityField];
-    const fallback = duplicates.has(id)
+    const fallback: DecisionFallback | undefined = duplicates.has(id)
       ? 'duplicate_answer'
       : !answer
         ? 'missing_answer'
@@ -174,7 +196,7 @@ function normalizeAnswers(
 async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> {
   throwIfAborted(params.signal);
   const adapter: DecisionAdapter = adapters[params.config.provider];
-  const unavailable = (fallback: string, durationMs = 0) =>
+  const unavailable = (fallback: DecisionFallback, durationMs = 0) =>
     params.checks.map(({ id }) => ({ id, fallback, durationMs }));
   if (adapter.requiredEnv.some((name) => !readEnvironmentVariable(name))) {
     return unavailable('missing_credentials');
@@ -249,25 +271,15 @@ export async function testDecisionConnection(
   });
   throwIfAborted(signal);
   const ok = answer.probability !== undefined;
-  const failures: Record<string, string> = {
-    missing_credentials: `Missing backend credentials. ${DECISION_PROVIDERS[config.provider].credentials} Set the required variables and restart MCPLab.`,
-    http_error:
-      'The decision provider returned an unsuccessful HTTP response. Check credentials, model availability, and endpoint support.',
-    connection_error:
-      'Could not connect to the decision provider. Check network access and, for Ollama, the server URL and that the server is running.',
-    timeout:
-      'The decision request timed out. Check provider availability; Ollama may still be loading the model.',
-    invalid_response: 'The decision provider returned invalid JSON.',
-    missing_answer: 'The decision provider did not return an answer to the connection check.',
-    duplicate_answer: 'The decision provider returned duplicate answers to the connection check.',
-    refusal: 'The decision provider refused the connection check.',
-    invalid_answer: 'The decision provider did not return a valid satisfaction probability.'
-  };
+  const failureMessage =
+    answer.fallback === 'missing_credentials'
+      ? `${decisionFallbackMessages.missing_credentials} ${DECISION_PROVIDERS[config.provider].credentials} Set the required variables and restart MCPLab.`
+      : decisionFallbackMessages[answer.fallback ?? 'invalid_answer'];
   return {
     ok,
     message: ok
       ? `${DECISION_PROVIDERS[config.provider].label} returned a valid decision for ${answer.model ?? config.model}.`
-      : (failures[answer.fallback ?? 'invalid_answer'] ?? failures.invalid_answer),
+      : failureMessage,
     provider: config.provider,
     requestedModel: config.model,
     model: answer.model,
@@ -283,13 +295,14 @@ export async function evaluateSemanticAssertions(
 ): Promise<AgentAssertionJudgeResult[]> {
   throwIfAborted(params.signal);
   if (params.assertions.length === 0) return [];
-  if (!params.evaluationDecision || params.evaluationDecision.enabled === false) {
+  const decisionConfig = params.evaluationDecision;
+  if (!decisionConfig || !isDecisionEngineEnabled(decisionConfig)) {
     return judgeAgentAssertions(params);
   }
   const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
   let config: EvaluationDecisionConfig | undefined;
   try {
-    config = normalizeEvaluationDecisionConfig(params.evaluationDecision);
+    config = normalizeEvaluationDecisionConfig(decisionConfig);
   } catch {
     // Invalid persisted settings use the judge without attempting a provider request.
   }
@@ -324,15 +337,15 @@ export async function evaluateSemanticAssertions(
         : 'uncertain');
     const metadata = {
       check_id: check.id,
-      decision_provider: params.evaluationDecision.provider,
-      decision_requested_model: params.evaluationDecision.model,
-      decision_prompt: check.prompt,
+      decision_provider: decisionConfig.provider,
+      decision_requested_model: decisionConfig.model,
       ...(answer.model ? { decision_model: answer.model } : {}),
       ...(probability !== undefined ? { decision_probability: probability } : {}),
       decision_pass_threshold: config?.passThreshold,
       decision_fail_threshold: config?.failThreshold,
       decision_duration_ms: answer.durationMs,
       evaluator: fallback ? 'judge' : 'decision',
+      ...(!fallback ? { decision_prompt: check.prompt } : {}),
       ...(fallback ? { decision_fallback: fallback } : {})
     };
     metadataByIndex[index] = metadata;

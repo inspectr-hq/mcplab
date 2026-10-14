@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
   type EvaluationDecisionConfig,
   type DecisionConnectionTestResult
@@ -46,6 +47,7 @@ const SettingsPage = () => {
   );
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
   const [decisionError, setDecisionError] = useState('');
+  const [savedDecisionError, setSavedDecisionError] = useState('');
   const [testingDecision, setTestingDecision] = useState(false);
   const [decisionConnectionResult, setDecisionConnectionResult] =
     useState<DecisionConnectionTestResult>();
@@ -53,27 +55,13 @@ const SettingsPage = () => {
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
 
   useEffect(() => {
-    decisionTestController.current?.abort();
-    decisionTestController.current = null;
     setTestingDecision(false);
     setDecisionConnectionResult(undefined);
-  }, [
-    decisionProvider,
-    decisionEnabled,
-    decisionModel,
-    decisionBaseUrl,
-    decisionPassThreshold,
-    decisionFailThreshold,
-    source
-  ]);
-
-  useEffect(
-    () => () => {
+    return () => {
       decisionTestController.current?.abort();
       decisionTestController.current = null;
-    },
-    []
-  );
+    };
+  }, [decisionProvider, decisionModel, decisionBaseUrl, source]);
 
   const applyDecisionSettings = (decision?: EvaluationDecisionConfig) => {
     setSavedDecision(decision);
@@ -86,12 +74,12 @@ const SettingsPage = () => {
         'Saved Decision Engine configuration is invalid. Select a provider to replace it, or save None to clear it. Semantic checks fall back to the Evaluation Judge.';
     }
     setDecisionProvider(normalized?.provider ?? '');
-    setDecisionEnabled(Boolean(normalized) && normalized?.enabled !== false);
+    setDecisionEnabled(isDecisionEngineEnabled(normalized));
     setDecisionModel(normalized?.model ?? '');
     setDecisionBaseUrl(normalized?.baseUrl ?? DECISION_DEFAULTS.baseUrl);
     setDecisionPassThreshold(String(normalized?.passThreshold ?? DECISION_DEFAULTS.passThreshold));
     setDecisionFailThreshold(String(normalized?.failThreshold ?? DECISION_DEFAULTS.failThreshold));
-    setDecisionError(error);
+    setSavedDecisionError(error);
   };
 
   const effectiveAssistantAgentName = useMemo(
@@ -183,7 +171,7 @@ const SettingsPage = () => {
       evaluationJudgeEnabled &&
       !nextAgentName &&
       savedDecision &&
-      savedDecision.enabled !== false
+      isDecisionEngineEnabled(savedDecision)
     ) {
       setDecisionError(
         'Turn off and save, or clear, the Decision Engine before removing its backup LLM evaluation judge.'
@@ -288,7 +276,7 @@ const SettingsPage = () => {
     let decision: EvaluationDecisionConfig | null = null;
     try {
       decision = readDecisionDraft();
-      if (evaluationJudgeEnabled && decision && decision.enabled !== false) {
+      if (evaluationJudgeEnabled && isDecisionEngineEnabled(decision)) {
         if (
           !llmAgents.some(
             (agent) =>
@@ -309,6 +297,7 @@ const SettingsPage = () => {
     try {
       await source.updateWorkspaceSettings({ evaluationDecision: decision });
       setSavedDecision(decision ?? undefined);
+      setSavedDecisionError('');
       toast({
         title: 'Settings updated',
         description: decision
@@ -541,7 +530,8 @@ const SettingsPage = () => {
                       aria-describedby={
                         [
                           decisionProvider === 'ollama' ? 'ollama-model-help' : undefined,
-                          decisionError ? 'decision-error' : undefined
+                          decisionError ? 'decision-error' : undefined,
+                          savedDecisionError ? 'decision-config-error' : undefined
                         ]
                           .filter(Boolean)
                           .join(' ') || undefined
@@ -580,7 +570,14 @@ const SettingsPage = () => {
                     value={decisionBaseUrl}
                     onChange={(event) => setDecisionBaseUrl(event.target.value)}
                     disabled={savingSettings || loadingSettings}
-                    aria-describedby={decisionError ? 'decision-error' : undefined}
+                    aria-describedby={
+                      [
+                        decisionError ? 'decision-error' : undefined,
+                        savedDecisionError ? 'decision-config-error' : undefined
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
                     Use a URL reachable from the MCPLab backend. Ollama fallback uses the configured
@@ -603,7 +600,7 @@ const SettingsPage = () => {
                     onChange={(event) => setDecisionPassThreshold(event.target.value)}
                     disabled={savingSettings || loadingSettings}
                     aria-invalid={!!decisionError}
-                    aria-describedby={`decision-threshold-help${decisionError ? ' decision-error' : ''}`}
+                    aria-describedby={`decision-threshold-help${decisionError ? ' decision-error' : ''}${savedDecisionError ? ' decision-config-error' : ''}`}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -620,7 +617,7 @@ const SettingsPage = () => {
                     onChange={(event) => setDecisionFailThreshold(event.target.value)}
                     disabled={savingSettings || loadingSettings}
                     aria-invalid={!!decisionError}
-                    aria-describedby={`decision-threshold-help${decisionError ? ' decision-error' : ''}`}
+                    aria-describedby={`decision-threshold-help${decisionError ? ' decision-error' : ''}${savedDecisionError ? ' decision-config-error' : ''}`}
                   />
                 </div>
               </div>
@@ -630,6 +627,11 @@ const SettingsPage = () => {
                 Evaluation Judge decides. Use 0 ≤ fail threshold &lt; pass threshold ≤ 1.
               </p>
             </>
+          )}
+          {savedDecisionError && (
+            <p id="decision-config-error" role="alert" className="text-sm text-destructive">
+              {savedDecisionError}
+            </p>
           )}
           {decisionError && (
             <p id="decision-error" role="alert" className="text-sm text-destructive">

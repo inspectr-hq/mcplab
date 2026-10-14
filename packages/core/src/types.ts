@@ -73,12 +73,25 @@ export interface DecisionCheck {
   prompt: string;
 }
 
+export type DecisionFallback =
+  | 'missing_credentials'
+  | 'http_error'
+  | 'connection_error'
+  | 'timeout'
+  | 'invalid_response'
+  | 'missing_answer'
+  | 'duplicate_answer'
+  | 'refusal'
+  | 'invalid_answer'
+  | 'invalid_configuration'
+  | 'uncertain';
+
 export interface DecisionAnswer {
   id: string;
   probability?: number;
   model?: string;
   durationMs: number;
-  fallback?: string;
+  fallback?: DecisionFallback;
 }
 
 export interface DecisionConnectionTestResult {
@@ -89,7 +102,7 @@ export interface DecisionConnectionTestResult {
   model?: string;
   probability?: number;
   durationMs: number;
-  failure?: string;
+  failure?: DecisionFallback;
 }
 
 export interface DecisionRequest {

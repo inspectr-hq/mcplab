@@ -658,6 +658,7 @@ describe('semantic decision routing', () => {
       check_id: checks[2].id,
       decision_fallback: 'uncertain'
     });
+    expect(result[2].metadata).not.toHaveProperty('decision_prompt');
     const judged = JSON.parse(chatMock.mock.calls[0][0].messages[0].content);
     expect(judged.checks.map((c: { label: string }) => c.label)).toEqual(['Check 3']);
   });

@@ -33,10 +33,16 @@ function call(
   body: unknown = config,
   pathname = '/api/settings/decision/test',
   method = 'POST',
-  origin?: string
+  origin?: string,
+  host = 'localhost:8787'
 ) {
   const req = Object.assign(Readable.from([JSON.stringify(body)]), {
-    headers: { host: 'localhost:8787', ...(origin ? { origin } : {}) }
+    headers: { host, ...(origin ? { origin } : {}) },
+    socket: {
+      encrypted: false,
+      localAddress: '127.0.0.1',
+      localPort: 8787
+    }
   }) as unknown as IncomingMessage;
   return handleConnectionTestRoutes({
     req,
@@ -48,15 +54,13 @@ function call(
 
 beforeEach(() => {
   probe.mockReset().mockResolvedValue(result);
-  agentProbe
-    .mockReset()
-    .mockResolvedValue({
-      ok: true,
-      provider: 'azure_foundry',
-      requestedModel: 'my-deployment',
-      message: 'Inference responded',
-      durationMs: 20
-    });
+  agentProbe.mockReset().mockResolvedValue({
+    ok: true,
+    provider: 'azure_foundry',
+    requestedModel: 'my-deployment',
+    message: 'Inference responded',
+    durationMs: 20
+  });
 });
 describe('decision test route', () => {
   it('tests the submitted draft and returns the result without workspace settings', async () => {
@@ -86,21 +90,58 @@ describe('decision test route', () => {
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({ error: 'Invalid decision thresholds' });
   });
-  it('rejects cross-origin probes before contacting the configured provider', async () => {
-    const res = response();
-    expect(
-      await call(res, config, '/api/settings/decision/test', 'POST', 'https://attacker.example')
-    ).toBe(true);
-    expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({ error: 'Cross-origin request rejected.' });
-    expect(probe).not.toHaveBeenCalled();
-  });
+  it.each(['/api/settings/decision/test', '/api/agents/test'])(
+    'rejects cross-origin probes to %s before contacting the configured provider',
+    async (pathname) => {
+      const res = response();
+      expect(await call(res, config, pathname, 'POST', 'https://attacker.example')).toBe(true);
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.end.mock.calls[0][0])).toEqual({
+        error: 'Cross-origin request rejected.'
+      });
+      expect(probe).not.toHaveBeenCalled();
+      expect(agentProbe).not.toHaveBeenCalled();
+    }
+  );
   it('allows a same-origin probe', async () => {
     const res = response();
     expect(
       await call(res, config, '/api/settings/decision/test', 'POST', 'http://localhost:8787')
     ).toBe(true);
     expect(probe).toHaveBeenCalledOnce();
+  });
+  it('allows the local Vite app to test connections through the MCPLab backend', async () => {
+    const res = response();
+    expect(
+      await call(
+        res,
+        config,
+        '/api/settings/decision/test',
+        'POST',
+        'http://localhost:8685',
+        '127.0.0.1:8787'
+      )
+    ).toBe(true);
+    expect(probe).toHaveBeenCalledOnce();
+  });
+  it('rejects unrelated local web origins', async () => {
+    const res = response();
+    await call(res, config, '/api/settings/decision/test', 'POST', 'http://localhost:8686');
+    expect(res.statusCode).toBe(403);
+    expect(probe).not.toHaveBeenCalled();
+  });
+  it('rejects DNS-rebinding origins that match the Host header', async () => {
+    const res = response();
+    await call(
+      res,
+      config,
+      '/api/settings/decision/test',
+      'POST',
+      'http://attacker.example:8787',
+      'attacker.example:8787'
+    );
+    expect(res.statusCode).toBe(403);
+    expect(probe).not.toHaveBeenCalled();
   });
   it.each(['/api/settings/decision/test', '/api/agents/test'])(
     'aborts %s when the client disconnects and removes the listener',
