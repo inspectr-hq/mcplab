@@ -108,6 +108,7 @@ const RunEvaluation = () => {
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const attachedJobIdRef = useRef<string | null>(null);
+  const queueEvaluationsRef = useRef(new Map<string, EvaluationQueueItem>());
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
@@ -488,9 +489,31 @@ const RunEvaluation = () => {
     }
   };
 
-  const refreshQueue = async () => {
+  const refreshQueue = async (detectCompletedEvaluation = false) => {
     try {
       const q = await source.getRunQueue();
+      const nextEvaluations = q.evaluations ?? [];
+      const nextEvaluationIds = new Set(nextEvaluations.map((item) => item.evaluationRunId));
+      const previousEvaluations = queueEvaluationsRef.current;
+      if (detectCompletedEvaluation && !attachedJobIdRef.current) {
+        const justCompleted = Array.from(previousEvaluations.values()).find(
+          (item) =>
+            ['queued', 'running'].includes(item.status) &&
+            !nextEvaluationIds.has(item.evaluationRunId)
+        );
+        if (justCompleted) {
+          setDone(true);
+          setRunning(false);
+          setProgress(100);
+          setStopped(false);
+          setCompletionHasErrors(false);
+          setCompletionSummary(null);
+          setRunId(justCompleted.evaluationRunId);
+        }
+      }
+      queueEvaluationsRef.current = new Map(
+        nextEvaluations.map((item) => [item.evaluationRunId, item])
+      );
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
@@ -545,7 +568,7 @@ const RunEvaluation = () => {
     refreshConfigAndLibraries();
     void refreshQueue();
     const unsubscribeQueue = source.subscribeRunQueue((event) => {
-      if (event.type === 'queue_event') void refreshQueue();
+      if (event.type === 'queue_event') void refreshQueue(true);
     });
     const handleFocus = () => {
       refreshConfigAndLibraries();
