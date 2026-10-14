@@ -1,5 +1,17 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.10.0
+
+### Minor Changes
+
+- feat: add decision (Jev, Ollama, Clef, Microsoft-Decision-1) semantic evaluation
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.24.0
+  - @inspectr/mcplab-reporting@1.3.1
+
 ## 1.9.0
 
 ### Minor Changes

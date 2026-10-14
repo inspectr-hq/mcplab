@@ -1,5 +1,20 @@
 # @inspectr/mcplab
 
+## 1.30.0
+
+### Minor Changes
+
+- feat: add decision (Jev, Ollama, Clef, Microsoft-Decision-1) semantic evaluation
+- feat: add Azure Foundry LLM agents
+- feat: add configuration of decision engine
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.24.0
+  - @inspectr/mcplab-mcp-server@1.10.0
+  - @inspectr/mcplab-reporting@1.3.1
+
 ## 1.29.0
 
 ### Minor Changes
