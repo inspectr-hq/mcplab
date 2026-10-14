@@ -1,4 +1,7 @@
-import type { ProviderModelsResponse } from '@inspectr/mcplab-core';
+import {
+  getAzureOpenAIDeploymentSuggestions,
+  type ProviderModelsResponse
+} from '@inspectr/mcplab-core';
 
 function parseDeploymentSuggestions(values: Array<string | undefined>): string[] {
   return [
@@ -60,11 +63,7 @@ export async function fetchProviderModels(provider: string): Promise<ProviderMod
   }
 
   if (provider === 'azure') {
-    const items = parseDeploymentSuggestions([
-      process.env.AZURE_OPENAI_DEPLOYMENTS,
-      process.env.AZURE_OPENAI_DEPLOYMENT,
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-    ]);
+    const items = getAzureOpenAIDeploymentSuggestions();
     return { provider: 'azure', items, kind: 'deployments', source: 'environment variables' };
   }
 

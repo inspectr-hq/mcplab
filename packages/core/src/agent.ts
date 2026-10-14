@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { resolveAzureFoundryConnection } from './azure-config.js';
+import { resolveAzureFoundryConnection, resolveAzureOpenAIDeployment } from './azure-config.js';
 import { AgentConnectionError } from './agent-errors.js';
 import type {
   AgentConfig,
@@ -540,7 +540,7 @@ function createAdapter(agent: LlmAgentConfig): LlmAdapter {
     return new AzureChatAdapter({
       apiKey: process.env.AZURE_OPENAI_API_KEY,
       endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+      deployment: resolveAzureOpenAIDeployment(agent.model),
       apiVersion: process.env.AZURE_OPENAI_API_VERSION
     });
   }

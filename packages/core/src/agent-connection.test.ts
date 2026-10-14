@@ -67,11 +67,26 @@ describe('agent inference connection test', () => {
       message: expect.stringContaining('AZURE_FOUNDRY_ENDPOINT')
     });
   });
-  it('reports the configured legacy Azure deployment, not the form model', async () => {
+  it('reports the agent Azure deployment before the legacy environment fallback', async () => {
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'actual-deployment');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', 'form-model,actual-deployment');
     expect(
       await testAgentConnection({ provider: 'azure_openai', model: 'form-model' })
-    ).toMatchObject({ ok: true, requestedModel: 'actual-deployment' });
+    ).toMatchObject({ ok: true, requestedModel: 'form-model' });
+  });
+  it('reports the legacy deployment for built-in model suggestions', async () => {
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'actual-deployment');
+    expect(await testAgentConnection({ provider: 'azure_openai', model: 'gpt-4o' })).toMatchObject({
+      ok: true,
+      requestedModel: 'actual-deployment'
+    });
+  });
+  it('uses the legacy Azure deployment when the agent has no deployment', async () => {
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'actual-deployment');
+    expect(await testAgentConnection({ provider: 'azure_openai', model: ' ' })).toMatchObject({
+      ok: true,
+      requestedModel: 'actual-deployment'
+    });
   });
   it('times out a hung inference request', async () => {
     vi.useFakeTimers();

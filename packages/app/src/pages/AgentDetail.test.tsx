@@ -170,7 +170,9 @@ describe('Azure OpenAI deployment suggestions', () => {
     expect(screen.queryByText(/Set AZURE_OPENAI_DEPLOYMENTS/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Load configured deployments' }));
     expect(
-      await screen.findByText(/AZURE_OPENAI_DEPLOYMENTS \(comma-separated\)/)
+      await screen.findByText(
+        /Set AZURE_OPENAI_DEPLOYMENT on the MCPLab backend as the fallback\. AZURE_OPENAI_DEPLOYMENTS and AZURE_OPENAI_DEPLOYMENT_NAME add selectable deployment suggestions\./
+      )
     ).toBeInTheDocument();
   });
 
@@ -188,5 +190,27 @@ describe('Azure OpenAI deployment suggestions', () => {
       await screen.findByText(/Loaded 1 deployment names from configuration/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/Set AZURE_OPENAI_DEPLOYMENTS/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the last loaded deployments when a refresh fails', async () => {
+    mocks.list
+      .mockResolvedValueOnce({
+        provider: 'azure',
+        items: ['deployment-one'],
+        kind: 'deployments',
+        source: 'environment variables'
+      })
+      .mockRejectedValueOnce(new Error('temporary failure'));
+    setup();
+    await chooseAzure();
+    fireEvent.click(screen.getByRole('button', { name: 'Load configured deployments' }));
+    expect(
+      await screen.findByText(/Loaded 1 deployment names from configuration/)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load configured deployments' }));
+    await waitFor(() =>
+      expect(screen.getByText(/Loaded 1 deployment names from configuration/)).toBeInTheDocument()
+    );
   });
 });

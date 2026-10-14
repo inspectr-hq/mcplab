@@ -6,6 +6,28 @@ export const AZURE_FOUNDRY_API_KEY_ENVS = [
   'AZURE_OPENAI_API_KEY'
 ] as const;
 
+export function getAzureOpenAIDeploymentSuggestions(): string[] {
+  return [
+    ...new Set(
+      [
+        process.env.AZURE_OPENAI_DEPLOYMENTS,
+        process.env.AZURE_OPENAI_DEPLOYMENT,
+        process.env.AZURE_OPENAI_DEPLOYMENT_NAME
+      ].flatMap((value) => (value ?? '').split(',').map((item) => item.trim()))
+    )
+  ]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+export function resolveAzureOpenAIDeployment(agentModel: string): string | undefined {
+  const selectedDeployment = agentModel.trim();
+  if (selectedDeployment && getAzureOpenAIDeploymentSuggestions().includes(selectedDeployment)) {
+    return selectedDeployment;
+  }
+  return readEnvironmentVariable('AZURE_OPENAI_DEPLOYMENT');
+}
+
 export function resolveAzureFoundryConnection(): { endpoint: string; apiKey: string } {
   const endpoint = readEnvironmentVariable('AZURE_FOUNDRY_ENDPOINT');
   if (!endpoint)

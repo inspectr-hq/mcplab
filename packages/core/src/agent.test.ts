@@ -90,8 +90,9 @@ describe('Azure Foundry agents', () => {
     vi.stubEnv('AZURE_OPENAI_API_KEY', '');
     await expect(chatWithAgent({ agent, messages })).rejects.toThrow('AZURE_OPENAI_API_KEY');
   });
-  it('preserves legacy Azure endpoint, global deployment, and version behavior', async () => {
+  it('uses the per-agent Azure deployment with the legacy endpoint and version', async () => {
     vi.stubEnv('AZURE_OPENAI_API_VERSION', 'legacy-version');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', 'legacy-model-field,global-deployment');
     await chatWithAgent({
       agent: { provider: 'azure_openai', model: 'legacy-model-field' },
       messages
@@ -99,8 +100,26 @@ describe('Azure Foundry agents', () => {
     expect(openAiOptions).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'legacy-key',
-        baseURL: 'https://legacy.example/openai/deployments/global-deployment',
+        baseURL: 'https://legacy.example/openai/deployments/legacy-model-field',
         defaultQuery: { 'api-version': 'legacy-version' }
+      })
+    );
+    expect(openAiCreate.mock.calls[0][0].model).toBe('legacy-model-field');
+  });
+  it('keeps legacy model suggestions on the global deployment unless configured as deployments', async () => {
+    await chatWithAgent({ agent: { provider: 'azure_openai', model: 'gpt-4o' }, messages });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseURL: 'https://legacy.example/openai/deployments/global-deployment'
+      })
+    );
+    expect(openAiCreate.mock.calls[0][0].model).toBe('global-deployment');
+  });
+  it('falls back to the legacy Azure deployment when the agent has no deployment', async () => {
+    await chatWithAgent({ agent: { provider: 'azure_openai', model: ' ' }, messages });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseURL: 'https://legacy.example/openai/deployments/global-deployment'
       })
     );
     expect(openAiCreate.mock.calls[0][0].model).toBe('global-deployment');

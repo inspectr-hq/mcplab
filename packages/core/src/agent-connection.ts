@@ -1,6 +1,7 @@
 import { chatWithAgent } from './agent.js';
 import { createAbortError, throwIfAborted, withTimeoutSignal } from './abort.js';
 import { AgentConnectionError } from './agent-errors.js';
+import { resolveAzureOpenAIDeployment } from './azure-config.js';
 import { normalizeLibraryAgents } from './config.js';
 import { readEnvironmentVariable } from './environment.js';
 import {
@@ -18,18 +19,24 @@ export async function testAgentConnection(
   if (!raw || typeof raw !== 'object' || Array.isArray(raw))
     throw new Error('LLM agent configuration is required.');
   const input = raw as Record<string, unknown>;
-  if (input.type === 'browser' || typeof input.model !== 'string' || !input.model.trim()) {
+  const inputModel = typeof input.model === 'string' ? input.model.trim() : '';
+  const legacyAzureDeployment =
+    input.provider === 'azure_openai'
+      ? readEnvironmentVariable('AZURE_OPENAI_DEPLOYMENT')
+      : undefined;
+  const configuredModel = inputModel || legacyAzureDeployment || '';
+  if (input.type === 'browser' || !configuredModel) {
     throw new Error('Choose an LLM provider and enter a model or deployment name.');
   }
   const agent = normalizeLibraryAgents({
-    probe: { provider: input.provider, model: input.model.trim(), max_tokens: 64 }
+    probe: { provider: input.provider, model: configuredModel, max_tokens: 64 }
   }).probe;
   if (!isLlmAgent(agent)) throw new Error('Connection tests require an LLM agent.');
   const timeout = withTimeoutSignal(signal, 30_000);
   const started = Date.now();
   const requestedModel =
     agent.provider === 'azure_openai'
-      ? (readEnvironmentVariable('AZURE_OPENAI_DEPLOYMENT') ?? agent.model)
+      ? (resolveAzureOpenAIDeployment(agent.model) ?? agent.model)
       : agent.model;
   const base = { provider: agent.provider, requestedModel };
   try {

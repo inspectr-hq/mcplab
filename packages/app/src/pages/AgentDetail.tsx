@@ -210,7 +210,6 @@ const AgentDetail = () => {
     }
     const requestState = modelRequest.current;
     const requestId = ++requestState.revision;
-    setProviderModels(null);
     setLoadingModels(true);
     try {
       const response = await source.listProviderModels(
@@ -702,8 +701,9 @@ const AgentDetail = () => {
                 )}
                 {form.provider === 'azure' && (
                   <p className="text-xs text-muted-foreground">
-                    Legacy Azure OpenAI uses AZURE_OPENAI_DEPLOYMENT at runtime. Azure Foundry uses
-                    the deployment selected for each agent.
+                    Uses the selected deployment when it matches configured deployment suggestions;
+                    otherwise falls back to AZURE_OPENAI_DEPLOYMENT. Azure Foundry uses the
+                    deployment selected for each agent.
                   </p>
                 )}
                 {providerModels !== null &&
@@ -717,8 +717,9 @@ const AgentDetail = () => {
                     </p>
                   ) : form.provider === 'azure' ? (
                     <p className="text-xs text-muted-foreground">
-                      Set AZURE_OPENAI_DEPLOYMENTS (comma-separated), AZURE_OPENAI_DEPLOYMENT, or
-                      AZURE_OPENAI_DEPLOYMENT_NAME on the MCPLab backend.
+                      Set AZURE_OPENAI_DEPLOYMENT on the MCPLab backend as the fallback.
+                      AZURE_OPENAI_DEPLOYMENTS and AZURE_OPENAI_DEPLOYMENT_NAME add selectable
+                      deployment suggestions.
                     </p>
                   ) : null)}
               </div>
