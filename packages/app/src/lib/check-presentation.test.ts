@@ -173,17 +173,7 @@ describe('buildCheckItems', () => {
         }
       ]
     });
-    expect(result[0].decisionDetails).toContain('openai');
-    expect(result[0].decisionDetails).toContain('gpt-6-luna-2026');
-    expect(result[0].decisionDetails).toContain('requested gpt-6-luna');
-    expect(result[0].decisionDetails).toContain('probability 0.500');
-    expect(result[0].decisionDetails).toContain('pass ≥ 0.900');
-    expect(result[0].decisionDetails).toContain('fail ≤ 0.100');
-    expect(result[0].decisionDetails).toContain('15 ms');
-    expect(result[0].decisionDetails).toContain(
-      'Evaluated by LLM judge · OpenAI · gpt-4o-mini'
-    );
-    expect(result[0].decisionDetails).not.toContain('Decision probability between thresholds');
+    expect(result[0].decisionDetails).toBe('Evaluated by LLM judge · OpenAI · gpt-4o-mini');
   });
 
   it('prefers structured check results when present', () => {

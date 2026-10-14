@@ -31,6 +31,17 @@ interface CheckPresentationItem {
 }
 
 export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): string | undefined {
+  if (
+    typeof metadata?.decision_provider === 'string' &&
+    (typeof metadata.decision_fallback === 'string' || metadata.evaluator === 'judge')
+  ) {
+    const details = ['Evaluated by LLM judge'];
+    if (typeof metadata.judge_provider === 'string') {
+      details.push(evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider);
+    }
+    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
+    return details.join(' · ');
+  }
   if (typeof metadata?.decision_provider !== 'string') {
     if (typeof metadata?.judge_provider !== 'string') return undefined;
     const details = [
@@ -65,19 +76,7 @@ export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): stri
   ) {
     details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
   }
-  if (typeof metadata.decision_fallback === 'string' || metadata.evaluator === 'judge') {
-    details.push('Evaluated by LLM judge');
-    if (typeof metadata.judge_provider === 'string') {
-      details.push(evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider);
-    }
-    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
-    if (
-      typeof metadata.decision_fallback === 'string' &&
-      metadata.decision_fallback !== 'uncertain'
-    ) {
-      details.push(`Decision unavailable: ${metadata.decision_fallback.replaceAll('_', ' ')}`);
-    }
-  } else if (metadata.evaluator === 'decision') {
+  if (metadata.evaluator === 'decision') {
     details.push('Evaluated by decision');
   }
   return details.join(' · ');

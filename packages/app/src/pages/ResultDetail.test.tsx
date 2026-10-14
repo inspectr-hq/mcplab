@@ -339,8 +339,8 @@ describe('ResultDetail conversation toggle', () => {
           decision_fail_threshold: 0.1,
           evaluator: 'judge',
           decision_fallback: 'uncertain',
-          judge_provider: 'openai',
-          judge_model: 'gpt-4o-mini'
+          judge_provider: 'anthropic',
+          judge_model: 'claude-haiku-4-5'
         }
       }
     ];
@@ -373,14 +373,10 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByText('Scenario 1'));
     expect(screen.getByText('Answer is correct.')).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge · OpenAI · gpt-4o-mini/
-      )
+      screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge · OpenAI · gpt-4o-mini/
-      )
+      screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')
     ).toHaveClass('text-[9px]');
   });
 
