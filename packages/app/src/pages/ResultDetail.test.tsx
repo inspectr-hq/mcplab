@@ -338,7 +338,9 @@ describe('ResultDetail conversation toggle', () => {
           decision_pass_threshold: 0.9,
           decision_fail_threshold: 0.1,
           evaluator: 'judge',
-          decision_fallback: 'uncertain'
+          decision_fallback: 'uncertain',
+          judge_provider: 'openai',
+          judge_model: 'gpt-4o-mini'
         }
       }
     ];
@@ -371,11 +373,15 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByText('Scenario 1'));
     expect(screen.getByText('Answer is correct.')).toBeInTheDocument();
     expect(
-      screen.getByText(/Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge/)
+      screen.getByText(
+        /Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge · OpenAI · gpt-4o-mini/
+      )
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge/)
-    ).toHaveClass('text-[10px]');
+      screen.getByText(
+        /Decision Engine · ollama.*probability 0.500.*Evaluated by LLM judge · OpenAI · gpt-4o-mini/
+      )
+    ).toHaveClass('text-[9px]');
   });
 
   it('shows the Evaluation Judge model below its response in smaller metadata text', async () => {
@@ -423,7 +429,7 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
     expect(screen.getByText('Answer is correct.')).toHaveClass('text-[11px]');
-    expect(screen.getByText('Evaluation Judge · OpenAI · gpt-4o-mini')).toHaveClass('text-[10px]');
+    expect(screen.getByText('Evaluation Judge · OpenAI · gpt-4o-mini')).toHaveClass('text-[9px]');
   });
 
   it('shows the assertion prompt instead of the automatic decision reason', async () => {

@@ -8,6 +8,13 @@ import {
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
 
+const evaluatorProviderLabels: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  azure_openai: 'Azure OpenAI',
+  azure_foundry: 'Azure Foundry'
+};
+
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
   failureReasons: string[];
@@ -26,15 +33,9 @@ interface CheckPresentationItem {
 export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): string | undefined {
   if (typeof metadata?.decision_provider !== 'string') {
     if (typeof metadata?.judge_provider !== 'string') return undefined;
-    const providerLabels: Record<string, string> = {
-      openai: 'OpenAI',
-      anthropic: 'Anthropic',
-      azure_openai: 'Azure OpenAI',
-      azure_foundry: 'Azure Foundry'
-    };
     const details = [
       'Evaluation Judge',
-      providerLabels[metadata.judge_provider] ?? metadata.judge_provider
+      evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider
     ];
     if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
     return details.join(' · ');
@@ -64,13 +65,18 @@ export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): stri
   ) {
     details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
   }
-  if (typeof metadata.decision_fallback === 'string') {
+  if (typeof metadata.decision_fallback === 'string' || metadata.evaluator === 'judge') {
     details.push('Evaluated by LLM judge');
-    if (metadata.decision_fallback !== 'uncertain') {
+    if (typeof metadata.judge_provider === 'string') {
+      details.push(evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider);
+    }
+    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
+    if (
+      typeof metadata.decision_fallback === 'string' &&
+      metadata.decision_fallback !== 'uncertain'
+    ) {
       details.push(`Decision unavailable: ${metadata.decision_fallback.replaceAll('_', ' ')}`);
     }
-  } else if (metadata.evaluator === 'judge') {
-    details.push('Evaluated by LLM judge');
   } else if (metadata.evaluator === 'decision') {
     details.push('Evaluated by decision');
   }

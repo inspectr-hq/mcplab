@@ -166,7 +166,9 @@ describe('buildCheckItems', () => {
             decision_fail_threshold: 0.1,
             decision_duration_ms: 15,
             evaluator: 'judge',
-            decision_fallback: 'uncertain'
+            decision_fallback: 'uncertain',
+            judge_provider: 'openai',
+            judge_model: 'gpt-4o-mini'
           }
         }
       ]
@@ -178,7 +180,9 @@ describe('buildCheckItems', () => {
     expect(result[0].decisionDetails).toContain('pass ≥ 0.900');
     expect(result[0].decisionDetails).toContain('fail ≤ 0.100');
     expect(result[0].decisionDetails).toContain('15 ms');
-    expect(result[0].decisionDetails).toContain('Evaluated by LLM judge');
+    expect(result[0].decisionDetails).toContain(
+      'Evaluated by LLM judge · OpenAI · gpt-4o-mini'
+    );
     expect(result[0].decisionDetails).not.toContain('Decision probability between thresholds');
   });
 
