@@ -1,15 +1,8 @@
 import {
   getAzureOpenAIDeploymentSuggestions,
+  parseDeploymentSuggestions,
   type ProviderModelsResponse
 } from '@inspectr/mcplab-core';
-
-function parseDeploymentSuggestions(values: Array<string | undefined>): string[] {
-  return [
-    ...new Set(values.flatMap((value) => (value ?? '').split(',').map((item) => item.trim())))
-  ]
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-}
 
 export async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
   if (provider === 'azure_foundry') {

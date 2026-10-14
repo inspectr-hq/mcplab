@@ -51,10 +51,7 @@ export {
 export { McpClientManager } from './mcp.js';
 export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
-export {
-  getAzureOpenAIDeploymentSuggestions,
-  resolveAzureOpenAIDeployment
-} from './azure-config.js';
+export { getAzureOpenAIDeploymentSuggestions, parseDeploymentSuggestions } from './azure-config.js';
 export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
 export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
