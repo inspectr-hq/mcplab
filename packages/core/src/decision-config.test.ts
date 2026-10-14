@@ -9,6 +9,7 @@ import {
 describe('decision provider configuration', () => {
   it.each([
     [undefined, false],
+    [null, false],
     [{ provider: 'openai', model: 'gpt-6-luna' }, true],
     [{ provider: 'openai', model: 'gpt-6-luna', enabled: true }, true],
     [{ provider: 'openai', model: 'gpt-6-luna', enabled: false }, false]

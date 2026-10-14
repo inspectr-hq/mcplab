@@ -164,7 +164,7 @@ const SettingsPage = () => {
   };
 
   const saveEvaluationJudgeSetting = async (nextAgentName: string) => {
-    if (!nextAgentName && savedDecision && isDecisionEngineEnabled(savedDecision)) {
+    if (!nextAgentName && isDecisionEngineEnabled(savedDecision)) {
       setDecisionError(
         'Turn off and save, or clear, the Decision Engine before removing its backup LLM evaluation judge.'
       );

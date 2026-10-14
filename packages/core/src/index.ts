@@ -53,7 +53,7 @@ export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
 export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
-export { createAbortError, isAbortError, throwIfAborted, withTimeoutSignal } from './abort.js';
+export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
 export * from './run-directory-snapshots.js';

@@ -104,7 +104,7 @@ const AgentDetail = () => {
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: 'idle' });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
-  const [providerModels, setProviderModels] = useState<string[]>([]);
+  const [providerModels, setProviderModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
@@ -142,7 +142,7 @@ const AgentDetail = () => {
   useEffect(() => {
     const requestState = modelRequest.current;
     requestState.revision++;
-    setProviderModels([]);
+    setProviderModels(null);
     setLoadingModels(false);
     return () => {
       requestState.revision++;
@@ -154,7 +154,7 @@ const AgentDetail = () => {
     form.provider === 'anthropic' || form.provider === 'openai' || isAzureDeployment;
 
   const modelOptions = Array.from(
-    new Set([...(modelSuggestions[form.provider] || []), ...providerModels])
+    new Set([...(modelSuggestions[form.provider] || []), ...(providerModels ?? [])])
   );
 
   const isKnownModel = modelOptions.includes(form.model);
@@ -210,6 +210,7 @@ const AgentDetail = () => {
     }
     const requestState = modelRequest.current;
     const requestId = ++requestState.revision;
+    setProviderModels(null);
     setLoadingModels(true);
     try {
       const response = await source.listProviderModels(
@@ -701,20 +702,25 @@ const AgentDetail = () => {
                 )}
                 {form.provider === 'azure' && (
                   <p className="text-xs text-muted-foreground">
-                    Legacy Azure OpenAI uses AZURE_OPENAI_DEPLOYMENT at runtime. Suggestions come
-                    from environment variables. Azure Foundry uses the deployment selected for each
-                    agent.
+                    Legacy Azure OpenAI uses AZURE_OPENAI_DEPLOYMENT at runtime. Azure Foundry uses
+                    the deployment selected for each agent.
                   </p>
                 )}
-                {providerModels.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Loaded {providerModels.length}{' '}
-                    {isAzureDeployment
-                      ? 'deployment names from configuration'
-                      : 'models from provider discovery'}
-                    .
-                  </p>
-                )}
+                {providerModels !== null &&
+                  (providerModels.length > 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Loaded {providerModels.length}{' '}
+                      {isAzureDeployment
+                        ? 'deployment names from configuration'
+                        : 'models from provider discovery'}
+                      .
+                    </p>
+                  ) : form.provider === 'azure' ? (
+                    <p className="text-xs text-muted-foreground">
+                      Set AZURE_OPENAI_DEPLOYMENTS (comma-separated), AZURE_OPENAI_DEPLOYMENT, or
+                      AZURE_OPENAI_DEPLOYMENT_NAME on the MCPLab backend.
+                    </p>
+                  ) : null)}
               </div>
               <div className="space-y-1.5">
                 <Label>Max Tokens</Label>

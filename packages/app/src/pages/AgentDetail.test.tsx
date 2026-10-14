@@ -16,24 +16,20 @@ vi.mock('@/hooks/use-rover-status', () => ({ useRoverStatus: () => ({ connected:
 vi.mock('@/hooks/use-toast', () => ({ toast: vi.fn() }));
 beforeEach(() => {
   mocks.save.mockReset().mockResolvedValue(undefined);
-  mocks.test
-    .mockReset()
-    .mockResolvedValue({
-      ok: true,
-      provider: 'azure_foundry',
-      requestedModel: 'my-deployment',
-      model: 'resolved-model',
-      durationMs: 20,
-      message: 'Deployment returned an inference response.'
-    });
-  mocks.list
-    .mockReset()
-    .mockResolvedValue({
-      provider: 'azure_foundry',
-      items: ['suggested-deployment'],
-      kind: 'deployments',
-      source: 'AZURE_FOUNDRY_DEPLOYMENTS environment variable'
-    });
+  mocks.test.mockReset().mockResolvedValue({
+    ok: true,
+    provider: 'azure_foundry',
+    requestedModel: 'my-deployment',
+    model: 'resolved-model',
+    durationMs: 20,
+    message: 'Deployment returned an inference response.'
+  });
+  mocks.list.mockReset().mockResolvedValue({
+    provider: 'azure_foundry',
+    items: ['suggested-deployment'],
+    kind: 'deployments',
+    source: 'AZURE_FOUNDRY_DEPLOYMENTS environment variable'
+  });
 });
 function setup() {
   render(
@@ -50,6 +46,10 @@ async function chooseFoundry() {
   fireEvent.change(screen.getByLabelText('Deployment name'), {
     target: { value: 'my-deployment' }
   });
+}
+async function chooseAzure() {
+  fireEvent.click(screen.getByRole('combobox', { name: 'Provider' }));
+  fireEvent.click(screen.getByRole('option', { name: 'Azure OpenAI' }));
 }
 describe('Azure Foundry agent editor', () => {
   it('reports failed inference without claiming a successful connection', async () => {
@@ -155,5 +155,38 @@ describe('Azure Foundry agent editor', () => {
     await act(async () => finish!({ ok: true, message: 'Stale success' }));
     expect(screen.queryByText('Stale success')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test Connection' })).toBeEnabled();
+  });
+});
+describe('Azure OpenAI deployment suggestions', () => {
+  it('shows the configuration hint only after a successful empty lookup', async () => {
+    mocks.list.mockResolvedValue({
+      provider: 'azure',
+      items: [],
+      kind: 'deployments',
+      source: 'environment variables'
+    });
+    setup();
+    await chooseAzure();
+    expect(screen.queryByText(/Set AZURE_OPENAI_DEPLOYMENTS/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Load configured deployments' }));
+    expect(
+      await screen.findByText(/AZURE_OPENAI_DEPLOYMENTS \(comma-separated\)/)
+    ).toBeInTheDocument();
+  });
+
+  it('shows the loaded deployment count when deployments are returned', async () => {
+    mocks.list.mockResolvedValue({
+      provider: 'azure',
+      items: ['deployment-one'],
+      kind: 'deployments',
+      source: 'environment variables'
+    });
+    setup();
+    await chooseAzure();
+    fireEvent.click(screen.getByRole('button', { name: 'Load configured deployments' }));
+    expect(
+      await screen.findByText(/Loaded 1 deployment names from configuration/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Set AZURE_OPENAI_DEPLOYMENTS/)).not.toBeInTheDocument();
   });
 });
