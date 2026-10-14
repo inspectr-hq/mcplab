@@ -15,36 +15,35 @@ const {
   configsRef,
   libraryAgentsRef,
   queueEventHandlerRef
-} =
-  vi.hoisted(() => {
-    const getRunQueue = vi.fn().mockResolvedValue({ active: null, queued: [] });
-    const configReloadMock = vi.fn();
-    const librariesReloadMock = vi.fn();
-    const configsRef = { value: [] as EvalConfig[] };
-    const libraryAgentsRef = { value: [] as AgentConfig[] };
-    const queueEventHandlerRef: { current: ((event: unknown) => void) | null } = { current: null };
-    return {
-      configReloadMock,
-      librariesReloadMock,
-      configsRef,
-      libraryAgentsRef,
-      queueEventHandlerRef,
-      sourceMock: {
-        getRunQueue,
-        getResult: vi.fn(),
-        subscribeRunQueue: vi.fn((callback: (event: unknown) => void) => {
-          queueEventHandlerRef.current = callback;
-          return vi.fn();
-        }),
-        subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
-        stopRun: vi.fn(),
-        removeQueuedRun: vi.fn(),
-        removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
-        startRun: vi.fn(),
-        openRover: vi.fn().mockResolvedValue({ ok: true })
-      }
-    };
-  });
+} = vi.hoisted(() => {
+  const getRunQueue = vi.fn().mockResolvedValue({ active: null, queued: [] });
+  const configReloadMock = vi.fn();
+  const librariesReloadMock = vi.fn();
+  const configsRef = { value: [] as EvalConfig[] };
+  const libraryAgentsRef = { value: [] as AgentConfig[] };
+  const queueEventHandlerRef: { current: ((event: unknown) => void) | null } = { current: null };
+  return {
+    configReloadMock,
+    librariesReloadMock,
+    configsRef,
+    libraryAgentsRef,
+    queueEventHandlerRef,
+    sourceMock: {
+      getRunQueue,
+      getResult: vi.fn(),
+      subscribeRunQueue: vi.fn((callback: (event: unknown) => void) => {
+        queueEventHandlerRef.current = callback;
+        return vi.fn();
+      }),
+      subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
+      stopRun: vi.fn(),
+      removeQueuedRun: vi.fn(),
+      removeEvaluationRun: vi.fn().mockResolvedValue(undefined),
+      startRun: vi.fn(),
+      openRover: vi.fn().mockResolvedValue({ ok: true })
+    }
+  };
+});
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
