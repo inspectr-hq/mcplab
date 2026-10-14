@@ -316,6 +316,86 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exactly the asset tags.' });
   });
 
+  it('shows the final proposal after a pending write is approved, then applies its patch', async () => {
+    const onApplyPatch = vi.fn();
+    const proposal = {
+      prompt: {
+        replacement: 'Return exact asset tags.',
+        rationale: 'Makes the result deterministic.'
+      }
+    };
+    mockSource.sendScenarioAssistantMessage.mockResolvedValueOnce({
+      response: { type: 'tool_call_request', text: 'I have a proposal and need to write.' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'pending-write-message',
+            role: 'assistant',
+            text: 'I have a proposal and need to write.',
+            createdAt: new Date().toISOString(),
+            pendingToolCallId: 'write-1',
+            pendingToolCallIds: ['write-1']
+          }
+        ],
+        pendingToolCalls: [
+          {
+            id: 'write-1',
+            server: 'server',
+            tool: 'write_report',
+            publicToolName: 'server__write_report',
+            arguments: {},
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: {
+        type: 'assistant_message',
+        text: 'Here is the final proposal.',
+        suggestions: proposal
+      },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'final-proposal',
+            role: 'assistant',
+            text: 'Here is the final proposal.',
+            createdAt: new Date().toISOString(),
+            suggestions: proposal
+          }
+        ],
+        pendingToolCalls: []
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+    await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
+    fireEvent.change(
+      screen.getByPlaceholderText('Get assistance with creating or refining this scenario ...'),
+      { target: { value: 'Propose and write' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+    await screen.findByRole('button', { name: 'Approve' });
+    expect(screen.queryByText('Structured Suggestions')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exact asset tags.' });
+  });
+
   it('applies structured tool_sequence suggestions with sequence data', async () => {
     const onApplyPatch = vi.fn();
     mockSource.createScenarioAssistantSession.mockResolvedValue({
@@ -756,6 +836,100 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     await waitFor(() =>
       expect(mockSource.approveAllScenarioAssistantToolCalls).toHaveBeenCalledWith('sas-1')
     );
+  });
+
+  it('updates batch counts after one call resolves and shows final suggestions after the rest', async () => {
+    const onApplyPatch = vi.fn();
+    const toolCalls = [
+      {
+        id: 'call-1',
+        server: 'oauth-server',
+        tool: 'search_assets',
+        publicToolName: 'oauth-server__search_assets',
+        arguments: {},
+        status: 'pending' as const,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'call-2',
+        server: 'oauth-server',
+        tool: 'list_tags',
+        publicToolName: 'oauth-server__list_tags',
+        arguments: {},
+        status: 'pending' as const,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    const requestMessage = {
+      id: 'batch-message',
+      role: 'assistant' as const,
+      text: 'I need two tools.',
+      createdAt: new Date().toISOString(),
+      pendingToolCallIds: ['call-1', 'call-2']
+    };
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [requestMessage],
+        pendingToolCalls: toolCalls
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: { type: 'tool_call_resolved', text: '' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [requestMessage],
+        pendingToolCalls: [{ ...toolCalls[0], status: 'approved' }, toolCalls[1]]
+      }
+    });
+    const finalSuggestions = {
+      prompt: { replacement: 'Return exact tags.', rationale: 'Specific output.' }
+    };
+    mockSource.approveAllScenarioAssistantToolCalls.mockResolvedValueOnce({
+      response: {
+        type: 'assistant_message',
+        text: 'The proposal is ready.',
+        suggestions: finalSuggestions
+      },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          requestMessage,
+          {
+            id: 'final-message',
+            role: 'assistant',
+            text: 'The proposal is ready.',
+            createdAt: new Date().toISOString(),
+            suggestions: finalSuggestions
+          }
+        ],
+        pendingToolCalls: toolCalls.map((call) => ({ ...call, status: 'approved' }))
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+    await screen.findByRole('button', { name: 'Approve All (2)' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]);
+    expect(await screen.findByText('1 of 2 tool calls resolved')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Approve All (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve All (2)' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve All (1)' }));
+    await screen.findByText('Structured Suggestions');
+    expect(screen.queryByText(/tool calls resolved/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Approve All/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exact tags.' });
   });
 
   it('minimizes an active session without discarding it', async () => {

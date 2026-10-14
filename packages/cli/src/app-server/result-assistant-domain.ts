@@ -3,7 +3,6 @@ import type {
   LlmAgentConfig,
   AssistantRuntimeMessage,
   AssistantRuntimeDefinition,
-  AssistantRuntimeModelOutput,
   AssistantRuntimeSession,
   AssistantRuntimeToolCall,
   ResultsJson,
@@ -68,7 +67,7 @@ export function cleanupResultAssistantSessions(
   cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, (session) => {
     void Promise.resolve(session.runtime?.dispose()).catch(() => {});
     endAssistantSseClients(session);
-  }, (session) => session.runtime?.isBusy?.() === true);
+  });
 }
 
 export function touchResultAssistantSession(session: ResultAssistantSession): void {
@@ -132,7 +131,6 @@ export function createResultAssistantRuntimeDefinition(
 ): AssistantRuntimeDefinition {
   return {
     assistant: 'result',
-    outputMode: 'native',
     agent: session.agentConfig,
     context: {
       scope: session.scope,
@@ -170,10 +168,6 @@ export function createResultAssistantRuntimeDefinition(
       isResultAssistantAllowedTool(name) && isResultAssistantAutoApprovedTool(name)
         ? 'automatic'
         : 'approval_required',
-    decodeOutput: (value): AssistantRuntimeModelOutput => ({
-      type: 'assistant_message',
-      text: String(value)
-    })
   };
 }
 

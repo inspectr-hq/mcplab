@@ -5,7 +5,6 @@ import {
   type LlmAgentConfig,
   type AssistantRuntimeMessage,
   type AssistantRuntimeDefinition,
-  type AssistantRuntimeModelOutput,
   type AssistantRuntimeSession,
   type ScenarioAssistantSuggestionBundle,
   type ScenarioAssistantSuggestionRule,
@@ -14,7 +13,6 @@ import {
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
-  parseJsonFromAssistantText,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   touchSession,
@@ -30,18 +28,6 @@ export { truncateJson } from './assistant-common.js';
 type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
 
 type ScenarioAssistantEvalRuleSuggestion = ScenarioAssistantSuggestionRule;
-
-interface ParsedAssistantToolCall {
-  name: string;
-  arguments?: unknown;
-}
-
-interface ParsedAssistantModelOutput {
-  type: 'assistant_message' | 'tool_call_request';
-  text: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  toolCall?: ParsedAssistantToolCall;
-}
 
 type AssistantChatMessage = AssistantRuntimeMessage;
 
@@ -78,7 +64,7 @@ export function cleanupAssistantSessions(
   cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, (session) => {
     void Promise.resolve(session.runtime?.dispose()).catch(() => {});
     endAssistantSseClients(session);
-  }, (session) => session.runtime?.isBusy?.() === true);
+  });
 }
 
 export function touchAssistantSession(session: ScenarioAssistantSession): void {
@@ -119,15 +105,12 @@ function assistantSystemPrompt(session: PreparedScenarioAssistantSession): strin
     'If you need live MCP information, call a tool and wait for approval.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
-    'Respond ONLY as JSON with one of these envelopes:',
-    `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
-    `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
-    'For suggestions, use keys: prompt, evalRules, extractRules, notes.',
+    'Respond naturally in ordinary prose. Use the local propose_scenario_changes tool whenever you propose scenario edits.',
+    'The local proposal tool accepts these keys: prompt, evalRules, extractRules, notes.',
     'prompt: { replacement: string, rationale?: string }',
     'evalRules: { replacement: [{ type, tool?, value?, sequence?, path?, equals?, label?, prompt? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
-    'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
-    'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
+    'Use the proposal tool with a complete replacement for every field you propose to change, plus a rationale.',
     'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
@@ -548,39 +531,218 @@ export function normalizeScenarioAssistantEvalRules(
   );
 }
 
-function normalizeEvalRuleSuggestions(
-  suggestions: ScenarioAssistantSuggestionBundle | undefined
-): void {
-  if (!suggestions?.evalRules?.replacement) return;
-  suggestions.evalRules.replacement = normalizeScenarioAssistantEvalRules(
-    suggestions.evalRules.replacement
-  );
+const PROPOSE_SCENARIO_CHANGES = 'propose_scenario_changes';
+const ruleTypes = new Set<string>([
+  'required_tool',
+  'forbidden_tool',
+  'tool_sequence',
+  'tool_input_contains',
+  'tool_input_regex',
+  'tool_input_jsonpath',
+  'response_contains',
+  'response_not_contains',
+  'response_starts_with',
+  'response_ends_with',
+  'response_equals',
+  'response_regex',
+  'response_jsonpath',
+  'response_jsonpath_exists',
+  'response_jsonpath_not_exists',
+  'agent_check'
+]);
+const proposalSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    prompt: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: { replacement: { type: 'string' }, rationale: { type: 'string' } }
+    },
+    evalRules: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: {
+        replacement: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: [...ruleTypes] },
+              tool: { type: 'string' },
+              value: { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+              sequence: { type: 'array', items: { type: 'string' } },
+              path: { type: 'string' },
+              equals: { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+              label: { type: 'string' },
+              prompt: { type: 'string' }
+            }
+          }
+        },
+        rationale: { type: 'string' }
+      }
+    },
+    extractRules: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: {
+        replacement: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'pattern'],
+            properties: { name: { type: 'string' }, pattern: { type: 'string' } }
+          }
+        },
+        rationale: { type: 'string' }
+      }
+    },
+    notes: { type: 'array', items: { type: 'string' } }
+  }
+};
+function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
 }
 
-function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
-  const parsed = parseJsonFromAssistantText(text);
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Assistant response must be a JSON object');
-  }
-  const parsedObj = parsed as Partial<ParsedAssistantModelOutput>;
-  if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
-    const receivedType = typeof parsedObj.type === 'string' ? `"${parsedObj.type}"` : '(missing)';
+export function validateScenarioAssistantProposal(
+  input: unknown,
+  toolPublicMap: Map<string, { server: string; tool: string }>
+): ScenarioAssistantSuggestionBundle {
+  const invalid = (): never => {
     throw new Error(
-      `Assistant response type ${receivedType} is unsupported; expected 'assistant_message' or 'tool_call_request'`
+      'Invalid scenario proposal. Provide complete replacement fields with valid types.'
     );
+  };
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return invalid();
+  const value = input as Record<string, unknown>;
+  if (!hasOnlyKeys(value, ['prompt', 'evalRules', 'extractRules', 'notes'])) return invalid();
+  const result: ScenarioAssistantSuggestionBundle = {};
+  const validRationale = (obj: Record<string, unknown>) =>
+    obj.rationale === undefined || typeof obj.rationale === 'string';
+  if (value.prompt !== undefined) {
+    if (!value.prompt || typeof value.prompt !== 'object' || Array.isArray(value.prompt))
+      return invalid();
+    const p = value.prompt as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(p, ['replacement', 'rationale']) ||
+      typeof p.replacement !== 'string' ||
+      !validRationale(p)
+    )
+      return invalid();
+    result.prompt = {
+      replacement: p.replacement,
+      ...(p.rationale === undefined ? {} : { rationale: p.rationale as string })
+    };
   }
-  if (typeof parsedObj.text !== 'string') {
-    throw new Error('Assistant response missing text');
-  }
-  if (parsedObj.type === 'tool_call_request') {
-    if (!parsedObj.toolCall || typeof parsedObj.toolCall !== 'object') {
-      throw new Error('Assistant tool_call_request missing toolCall');
+  if (value.evalRules !== undefined) {
+    if (!value.evalRules || typeof value.evalRules !== 'object' || Array.isArray(value.evalRules))
+      return invalid();
+    const e = value.evalRules as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(e, ['replacement', 'rationale']) ||
+      !Array.isArray(e.replacement) ||
+      !validRationale(e)
+    )
+      return invalid();
+    for (const rule of e.replacement) {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return invalid();
+      const r = rule as Record<string, unknown>;
+      if (
+        !hasOnlyKeys(r, ['type', 'tool', 'value', 'sequence', 'path', 'equals', 'label', 'prompt'])
+      )
+        return invalid();
+      if (!ruleTypes.has(String(r.type))) return invalid();
+      for (const key of ['tool', 'path', 'label', 'prompt'])
+        if (r[key] !== undefined && typeof r[key] !== 'string') return invalid();
+      if (r.value !== undefined && !['string', 'number', 'boolean'].includes(typeof r.value))
+        return invalid();
+      if (r.equals !== undefined && !['string', 'number', 'boolean'].includes(typeof r.equals))
+        return invalid();
+      if (
+        r.sequence !== undefined &&
+        (!Array.isArray(r.sequence) || !r.sequence.every((x) => typeof x === 'string'))
+      )
+        return invalid();
+      const type = r.type as string;
+      if (
+        type === 'required_tool' ||
+        type === 'forbidden_tool' ||
+        (type.startsWith('response_') && !type.includes('jsonpath'))
+      ) {
+        if (typeof r.value !== 'string') return invalid();
+      }
+      if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
+        return invalid();
+      if (type.startsWith('tool_input_') && typeof r.tool !== 'string') return invalid();
+      if (
+        (type === 'tool_input_contains' || type === 'tool_input_regex') &&
+        typeof r.value !== 'string'
+      )
+        return invalid();
+      if ((type === 'tool_input_regex' || type === 'response_regex') && typeof r.value !== 'string')
+        return invalid();
+      if (
+        type.endsWith('jsonpath') ||
+        type.endsWith('jsonpath_exists') ||
+        type.endsWith('jsonpath_not_exists')
+      ) {
+        if (typeof r.path !== 'string') return invalid();
+      }
+      if (type === 'agent_check' && (typeof r.label !== 'string' || typeof r.prompt !== 'string'))
+        return invalid();
     }
-    if (typeof parsedObj.toolCall.name !== 'string' || !parsedObj.toolCall.name.trim()) {
-      throw new Error('Assistant toolCall.name must be a non-empty string');
-    }
+    const rules = structuredClone(e.replacement) as ScenarioAssistantEvalRuleSuggestion[];
+    const bundle = { evalRules: { replacement: rules } };
+    normalizeEvalRuleToolNames(bundle, toolPublicMap);
+    bundle.evalRules.replacement = normalizeScenarioAssistantEvalRules(
+      bundle.evalRules.replacement
+    );
+    result.evalRules = {
+      ...bundle.evalRules,
+      ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
+    };
   }
-  return parsedObj as ParsedAssistantModelOutput;
+  if (value.extractRules !== undefined) {
+    if (
+      !value.extractRules ||
+      typeof value.extractRules !== 'object' ||
+      Array.isArray(value.extractRules)
+    )
+      return invalid();
+    const e = value.extractRules as Record<string, unknown>;
+    if (
+      !hasOnlyKeys(e, ['replacement', 'rationale']) ||
+      !Array.isArray(e.replacement) ||
+      !validRationale(e) ||
+      !e.replacement.every((x) => {
+        if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
+        const rule = x as Record<string, unknown>;
+        return (
+          hasOnlyKeys(rule, ['name', 'pattern']) &&
+          typeof rule.name === 'string' &&
+          typeof rule.pattern === 'string'
+        );
+      })
+    )
+      return invalid();
+    result.extractRules = {
+      replacement: structuredClone(e.replacement) as Array<{ name: string; pattern: string }>,
+      ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
+    };
+  }
+  if (value.notes !== undefined) {
+    if (!Array.isArray(value.notes) || !value.notes.every((x) => typeof x === 'string'))
+      return invalid();
+    result.notes = [...value.notes] as string[];
+  }
+  if (!result.prompt && !result.evalRules && !result.extractRules) return invalid();
+  return result;
 }
 
 export function createScenarioAssistantRuntimeDefinition(
@@ -588,50 +750,46 @@ export function createScenarioAssistantRuntimeDefinition(
 ): AssistantRuntimeDefinition {
   return {
     assistant: 'scenario',
-    outputMode: 'json',
     agent: session.agentConfig,
     context: session.context,
     initialMessages: session.initialMessages,
     dispose: () => session.mcp.disconnectAll(),
     getSystemPrompt: () => assistantSystemPrompt(session),
-    tools: session.tools.map((tool) => {
-      const mapping = session.toolPublicMap.get(tool.name)!;
-      return {
-        name: tool.name,
-        server: mapping.server,
-        tool: mapping.tool,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        execute: async (arguments_, signal) =>
-          withTimeout(
-            () => session.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
-            30_000,
-            'Tool call timed out after 30000ms',
-            signal
-          )
-      };
-    }),
-    approvalPolicy: (name) =>
-      session.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
-        ? 'automatic'
-        : 'approval_required',
-    decodeOutput: (value): AssistantRuntimeModelOutput => {
-      const parsed = parseAssistantModelOutput(String(value));
-      normalizeEvalRuleToolNames(parsed.suggestions, session.toolPublicMap);
-      normalizeEvalRuleSuggestions(parsed.suggestions);
-      if (parsed.type === 'assistant_message') {
-        return { type: 'assistant_message', text: parsed.text, suggestions: parsed.suggestions };
+    tools: [
+      ...session.tools.map((tool) => {
+        const mapping = session.toolPublicMap.get(tool.name)!;
+        return {
+          name: tool.name,
+          server: mapping.server,
+          tool: mapping.tool,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          execute: async (arguments_: unknown, signal?: AbortSignal) =>
+            withTimeout(
+              () => session.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
+              30_000,
+              'Tool call timed out after 30000ms',
+              signal
+            )
+        };
+      }),
+      {
+        name: PROPOSE_SCENARIO_CHANGES,
+        server: 'local',
+        tool: PROPOSE_SCENARIO_CHANGES,
+        description: 'Submit structured scenario changes for the user to review and apply.',
+        inputSchema: proposalSchema,
+        execute: async (args: unknown, _signal?: AbortSignal) =>
+          validateScenarioAssistantProposal(args, session.toolPublicMap),
+        extractProposal: (result) => result as ScenarioAssistantSuggestionBundle
       }
-      const calls = 'toolCalls' in parsed && Array.isArray(parsed.toolCalls)
-        ? parsed.toolCalls
-        : parsed.toolCall ? [parsed.toolCall] : [];
-      return {
-        type: 'tool_call_request',
-        text: parsed.text,
-        toolCalls: calls.map((call) => ({ name: call.name, arguments: call.arguments })),
-        suggestions: parsed.suggestions
-      };
-    }
+    ],
+    approvalPolicy: (name) =>
+      name === PROPOSE_SCENARIO_CHANGES
+        ? 'local'
+        : session.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
+          ? 'automatic'
+          : 'approval_required'
   };
 }
 

@@ -46,10 +46,8 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     label: 'Generate Structured Updates',
     description: 'Return apply-ready Checks and Value Capture suggestions.',
     prompt: [
-      'Propose concrete scenario updates and include structured suggestions that can be applied directly.',
-      'Return ONLY valid JSON envelope and no markdown.',
-      'Required shape:',
-      '{"type":"assistant_message","text":"short rationale","suggestions":{"evalRules":{"replacement":[...]}, "extractRules":{"replacement":[...]}}}',
+      'Propose concrete scenario updates and submit them with the local propose_scenario_changes tool so they can be applied directly.',
+      'Then explain the proposal in ordinary prose.',
       'If tool usage is clear, include at least one required_tool check.',
       'For argument validation, use tool_input_contains with tool and value, tool_input_regex with tool and value, or tool_input_jsonpath with tool and path plus optional equals.',
       'Prefer deterministic checks and concise capture patterns.'
@@ -59,7 +57,7 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     label: 'Improve Prompt Determinism',
     description: 'Reduce ambiguity and improve reproducibility.',
     prompt:
-      "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
+      "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic, without changing the intent of what is being tested."
   },
   {
     label: 'Generate Scenario Draft',
@@ -172,7 +170,7 @@ export function ScenarioAssistantDialog({
     const activeTurn = assistantTurnRef.current;
     if (!activeTurn) return;
     activeTurn.controller.abort();
-    // Don't null assistantTurnRef here — the finally block in sendMessage
+    // Don't null assistantTurnRef here, the finally block in sendMessage
     // guards on the turn ID to perform cleanup, and nulling the ref would
     // cause that guard to fail, bypassing setLoading(false).
   }, []);
@@ -654,15 +652,12 @@ export function ScenarioAssistantDialog({
                           .map((id) =>
                             (session?.pendingToolCalls ?? []).find((call) => call.id === id)
                           )
-                          .filter((call): call is ScenarioAssistantPendingToolCall =>
-                            Boolean(call)
+                          .filter(
+                            (call): call is ScenarioAssistantPendingToolCall =>
+                              Boolean(call) && call.status === 'pending'
                           );
                         const allToolCalls = toolCallIds
-                          .map(
-                            (id) =>
-                              session.pendingToolCalls.find((c) => c.id === id) ??
-                              session.pendingToolCalls.find((c) => c.id === id)
-                          )
+                          .map((id) => session.pendingToolCalls.find((call) => call.id === id))
                           .filter(Boolean) as ScenarioAssistantPendingToolCall[];
                         const isAssistantToolRequest =
                           message.role === 'assistant' && toolCallIds.length > 0;

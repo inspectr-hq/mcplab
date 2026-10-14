@@ -18,6 +18,7 @@ import {
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
   endAssistantSseClients,
+  createAssistantRequestAbortController,
   serveAssistantSseStream,
   type AssistantSseEventType
 } from './assistant-events.js';
@@ -73,7 +74,6 @@ export async function handleResultAssistantRoutes(params: {
       })
     );
   };
-
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
     cleanupResultAssistantSessions(resultAssistantSessions);
@@ -136,7 +136,9 @@ export async function handleResultAssistantRoutes(params: {
     try {
       await preloadResultAssistantTools(prepared, localMcplabMcpUrl());
       session.toolsLoaded = prepared.tools.length;
-      session.toolServers = Array.from(new Set(prepared.tools.map((tool) => tool.name.split('__')[0])));
+      session.toolServers = Array.from(
+        new Set(prepared.tools.map((tool) => tool.name.split('__')[0]))
+      );
     } catch (error) {
       session.initialMessages.push({
         id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -146,24 +148,18 @@ export async function handleResultAssistantRoutes(params: {
       });
       publishSessionEvent(session, 'session_warning', { warning: errorMessage(error) });
     }
-    const runtimeDefinition = createResultAssistantRuntimeDefinition(
-      prepared,
-      () => listReferenceReportsForRun(session.runId)
+    const runtimeDefinition = createResultAssistantRuntimeDefinition(prepared, () =>
+      listReferenceReportsForRun(session.runId)
     );
     runtimeDefinition.onEvent = (event) => {
       touchResultAssistantSession(session);
       publishSessionEvent(session, event.type, event.payload);
     };
-    try {
-      session.runtime = createAssistantRuntimeService(
-        await assistantRuntimeFactory.create(runtimeDefinition),
-        runtimeDefinition,
-        () => touchResultAssistantSession(session)
-      );
-    } catch (error) {
-      await runtimeDefinition.dispose?.();
-      throw error;
-    }
+    session.runtime = await createAssistantRuntimeService(
+      assistantRuntimeFactory,
+      runtimeDefinition,
+      () => touchResultAssistantSession(session)
+    );
     resultAssistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');
     asJson(res, 201, { sessionId: session.id, session: resultAssistantSessionView(session) });
@@ -205,13 +201,23 @@ export async function handleResultAssistantRoutes(params: {
     cleanupResultAssistantSessions(resultAssistantSessions);
     const sessionId = pathname.replace('/api/result-assistant/sessions/', '');
     const session = resultAssistantSessions.get(sessionId);
+    let disposeError: unknown;
     if (session) {
-      await session.runtime?.dispose();
-      publishSessionEvent(session, 'session_finished');
-      endAssistantSseClients(session);
+      try {
+        await session.runtime?.dispose();
+      } catch (error) {
+        disposeError = error;
+      } finally {
+        try {
+          publishSessionEvent(session, 'session_finished');
+        } finally {
+          endAssistantSseClients(session);
+        }
+      }
     }
     resultAssistantSessions.delete(sessionId);
-    asJson(res, 200, { ok: true });
+    if (disposeError) asJson(res, 500, { error: errorMessage(disposeError) });
+    else asJson(res, 200, { ok: true });
     return true;
   }
 
@@ -230,7 +236,6 @@ export async function handleResultAssistantRoutes(params: {
     }
     const abortController = new AbortController();
     const handleClose = () => {
-      if (req.complete) return;
       if (res.writableEnded) return;
       abortController.abort();
     };
@@ -245,10 +250,19 @@ export async function handleResultAssistantRoutes(params: {
       }
       const response = await session.runtime!.sendMessage(message, abortController.signal);
       throwIfAborted(abortController.signal);
-      const normalizedResponse = response.type === 'tool_call_request'
-        ? { type: response.type, text: response.text, pendingToolCall: response.pendingToolCalls[0], pendingToolCalls: response.pendingToolCalls }
-        : response;
-      asJson(res, 200, { session: resultAssistantSessionView(session), response: normalizedResponse });
+      const normalizedResponse =
+        response.type !== 'assistant_message'
+          ? {
+              type: response.type,
+              text: response.text,
+              pendingToolCall: response.pendingToolCalls[0],
+              pendingToolCalls: response.pendingToolCalls
+            }
+          : response;
+      asJson(res, 200, {
+        session: resultAssistantSessionView(session),
+        response: normalizedResponse
+      });
       return true;
     } catch (error) {
       if (abortController.signal.aborted) {
@@ -275,7 +289,9 @@ export async function handleResultAssistantRoutes(params: {
       asJson(res, 404, { error: 'Result Assistant session not found' });
       return true;
     }
-    const pending = session.runtime!.getSnapshot().pendingToolCalls.find((call) => call.id === callId);
+    const pending = session
+      .runtime!.getSnapshot()
+      .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, { error: 'Result Assistant tool call not found' });
       return true;
@@ -284,18 +300,32 @@ export async function handleResultAssistantRoutes(params: {
       asJson(res, 409, { error: `Tool call is already ${pending.status}` });
       return true;
     }
-    const body = (await parseBody(req)) as { argumentsOverride?: unknown };
-    const response = await session.runtime!.resolveToolCalls([{
-      toolCallId: pending.id,
-      decision: 'approve',
-      ...(Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
-        ? { arguments: body.argumentsOverride }
-        : {})
-    }]);
-    const normalizedResponse = response.type === 'tool_call_request'
-      ? { type: response.type, text: response.text, pendingToolCall: response.pendingToolCalls[0], pendingToolCalls: response.pendingToolCalls }
-      : response;
-    asJson(res, 200, { session: resultAssistantSessionView(session), response: normalizedResponse });
+    const abortController = createAssistantRequestAbortController(res);
+    try {
+      const body = (await parseBody(req)) as { argumentsOverride?: unknown };
+      const response = await session.runtime!.resolveToolCalls(
+        [
+          {
+            toolCallId: pending.id,
+            decision: 'approve',
+            ...(Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
+              ? { arguments: body.argumentsOverride }
+              : {})
+          }
+        ],
+        abortController.signal
+      );
+      throwIfAborted(abortController.signal);
+      const normalizedResponse = normalizeResultAssistantResponse(response);
+      asJson(res, 200, {
+        session: resultAssistantSessionView(session),
+        response: normalizedResponse
+      });
+    } catch (error) {
+      if (!abortController.signal.aborted) throw error;
+    } finally {
+      abortController.dispose();
+    }
     return true;
   }
 
@@ -314,7 +344,9 @@ export async function handleResultAssistantRoutes(params: {
       asJson(res, 404, { error: 'Result Assistant session not found' });
       return true;
     }
-    const pending = session.runtime!.getSnapshot().pendingToolCalls.find((call) => call.id === callId);
+    const pending = session
+      .runtime!.getSnapshot()
+      .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, { error: 'Result Assistant tool call not found' });
       return true;
@@ -323,17 +355,39 @@ export async function handleResultAssistantRoutes(params: {
       asJson(res, 409, { error: `Tool call is already ${pending.status}` });
       return true;
     }
-    const response = await session.runtime!.resolveToolCalls([
-      { toolCallId: pending.id, decision: 'deny' }
-    ]);
-    const normalizedResponse = response.type === 'tool_call_request'
-      ? { type: response.type, text: response.text, pendingToolCall: response.pendingToolCalls[0], pendingToolCalls: response.pendingToolCalls }
-      : response;
-    asJson(res, 200, { session: resultAssistantSessionView(session), response: normalizedResponse });
+    const abortController = createAssistantRequestAbortController(res);
+    try {
+      const response = await session.runtime!.resolveToolCalls(
+        [{ toolCallId: pending.id, decision: 'deny' }],
+        abortController.signal
+      );
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, {
+        session: resultAssistantSessionView(session),
+        response: normalizeResultAssistantResponse(response)
+      });
+    } catch (error) {
+      if (!abortController.signal.aborted) throw error;
+    } finally {
+      abortController.dispose();
+    }
     return true;
   }
 
   return false;
+}
+
+function normalizeResultAssistantResponse(
+  response: import('@inspectr/mcplab-core').AssistantRuntimeResponse
+) {
+  return response.type === 'assistant_message'
+    ? response
+    : {
+        type: response.type,
+        text: response.text,
+        pendingToolCall: response.pendingToolCalls[0],
+        pendingToolCalls: response.pendingToolCalls
+      };
 }
 
 function localMcplabMcpUrl(): string {

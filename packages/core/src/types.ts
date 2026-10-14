@@ -32,8 +32,16 @@ export interface WorkspaceSettingsPatch {
 
 export type AssistantKind = 'scenario' | 'result';
 
+export type ScenarioAssistantSuggestionRuleType =
+  | 'required_tool'
+  | 'forbidden_tool'
+  | 'tool_sequence'
+  | `tool_input_${ToolInputAssertion['type']}`
+  | `response_${ResponseAssertion['type']}`
+  | 'agent_check';
+
 export interface ScenarioAssistantSuggestionRule {
-  type: string;
+  type: ScenarioAssistantSuggestionRuleType;
   value?: string | number | boolean;
   sequence?: string[];
   path?: string;
@@ -145,14 +153,7 @@ export interface AssistantSessionEvent<TSession = unknown> {
 }
 
 export type ScenarioAssistantTurnResponse = AssistantRuntimeResponse;
-export type ResultAssistantTurnResponse =
-  | { type: 'assistant_message'; text: string }
-  | {
-      type: 'tool_call_request' | 'tool_call_resolved';
-      text: string;
-      pendingToolCall?: ResultAssistantPendingToolCall;
-      pendingToolCalls?: ResultAssistantPendingToolCall[];
-    };
+export type ResultAssistantTurnResponse = AssistantRuntimeResponse;
 
 export interface AssistantRuntimeEvent {
   type:
@@ -174,7 +175,7 @@ export type AssistantRuntimeResponse =
   | {
       type: 'assistant_message';
       text: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
+      suggestions?: ScenarioAssistantSuggestionBundle;
     }
   | {
       type: 'tool_call_request' | 'tool_call_resolved';
@@ -184,12 +185,11 @@ export type AssistantRuntimeResponse =
     };
 
 export type AssistantRuntimeModelOutput =
-  | { type: 'assistant_message'; text: string; suggestions?: ScenarioAssistantSuggestionBundle }
+  | { type: 'assistant_message'; text: string }
   | {
       type: 'tool_call_request';
       text: string;
-      toolCalls: Array<{ name: string; arguments?: unknown }>;
-      suggestions?: ScenarioAssistantSuggestionBundle;
+      toolCalls: Array<{ id?: string; name: string; arguments?: unknown }>;
     };
 
 export interface AssistantToolCallDecision {
@@ -200,14 +200,12 @@ export interface AssistantToolCallDecision {
 
 export interface AssistantRuntimeDefinition {
   assistant: AssistantKind;
-  outputMode: 'json' | 'native';
   agent: LlmAgentConfig;
   context: ScenarioAssistantRuntimeContext | ResultAssistantRuntimeContext;
   getSystemPrompt(): string;
   tools: AssistantRuntimeTool[];
   initialMessages?: AssistantRuntimeMessage[];
   approvalPolicy(toolName: string): 'automatic' | 'approval_required' | 'local';
-  decodeOutput(value: unknown): AssistantRuntimeModelOutput;
   onEvent?(event: AssistantRuntimeEvent): void;
   dispose?(): Promise<void> | void;
 }
@@ -219,6 +217,7 @@ export interface AssistantRuntimeTool {
   description?: string;
   inputSchema?: unknown;
   execute(arguments_: unknown, signal?: AbortSignal): Promise<unknown>;
+  extractProposal?(result: unknown): ScenarioAssistantSuggestionBundle | undefined;
 }
 
 export interface AssistantRuntimeSession {

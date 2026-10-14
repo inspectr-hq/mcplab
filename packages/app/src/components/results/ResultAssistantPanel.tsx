@@ -127,6 +127,39 @@ export function ResultAssistantPanel({
               const linkedPendingToolCall = message.pendingToolCallId
                 ? pendingToolCalls.find((call) => call.id === message.pendingToolCallId)
                 : undefined;
+              const linkedPendingToolCalls = (
+                message.pendingToolCallIds ??
+                (message.pendingToolCallId ? [message.pendingToolCallId] : [])
+              )
+                .map((id) => pendingToolCalls.find((call) => call.id === id))
+                .filter((call): call is ResultAssistantPendingToolCall => Boolean(call));
+              const isAssistantToolRequest =
+                isAssistant && linkedPendingToolCallIds(message).length > 0;
+
+              if (renderMessage && isAssistantToolRequest) {
+                const calls = linkedPendingToolCalls.length ? linkedPendingToolCalls : [undefined];
+                return calls.map((call, callIndex) => {
+                  const toolMessage = call
+                    ? {
+                        ...message,
+                        id: `${message.id ?? `${message.role}-${index}`}:tool:${call.id}`,
+                        pendingToolCallId: call.id,
+                        pendingToolCallIds: [call.id],
+                        toolRequestName: call.tool,
+                        toolRequestPublicName: call.publicToolName
+                      }
+                    : message;
+                  return renderMessage({
+                    message: toolMessage,
+                    index: index + callIndex,
+                    linkedPendingToolCall: call,
+                    isUser,
+                    isAssistant,
+                    isSystem,
+                    isTool
+                  });
+                });
+              }
 
               if (renderMessage) {
                 return renderMessage({
@@ -140,7 +173,6 @@ export function ResultAssistantPanel({
                 });
               }
 
-              const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
               if (isAssistantToolRequest) {
                 return (
                   <div
@@ -148,15 +180,16 @@ export function ResultAssistantPanel({
                     className="rounded-md border bg-background p-3"
                   >
                     <MarkdownContent text={message.text} className="text-sm" />
-                    {linkedPendingToolCall && (
+                    {linkedPendingToolCalls.map((call) => (
                       <AssistantToolCallCard
-                        call={linkedPendingToolCall}
+                        key={call.id}
+                        call={call}
                         loading={loading}
                         onApprove={onApproveToolCall}
                         onDeny={onDenyToolCall}
                         className="mt-3"
                       />
-                    )}
+                    ))}
                   </div>
                 );
               }
@@ -190,5 +223,13 @@ export function ResultAssistantPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function linkedPendingToolCallIds(
+  message: ResultAssistantSessionView['messages'][number]
+): string[] {
+  return (
+    message.pendingToolCallIds ?? (message.pendingToolCallId ? [message.pendingToolCallId] : [])
   );
 }

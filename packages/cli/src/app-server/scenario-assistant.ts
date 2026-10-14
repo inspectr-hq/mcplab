@@ -22,6 +22,7 @@ import {
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
   endAssistantSseClients,
+  createAssistantRequestAbortController,
   serveAssistantSseStream,
   type AssistantSseEventType
 } from './assistant-events.js';
@@ -86,7 +87,6 @@ export async function handleScenarioAssistantRoutes(params: {
       })
     );
   };
-
 
   if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
     cleanupAssistantSessions(assistantSessions);
@@ -215,24 +215,23 @@ export async function handleScenarioAssistantRoutes(params: {
     for (const warning of warnings) {
       publishSessionEvent(session, 'session_warning', { warning });
     }
-    await preloadAssistantTools(prepared, serversByName, selectedServerNames, { serverAuthHeaders });
+    await preloadAssistantTools(prepared, serversByName, selectedServerNames, {
+      serverAuthHeaders
+    });
     session.toolsLoaded = prepared.tools.length;
-    session.toolServers = Array.from(new Set(prepared.tools.map((tool) => tool.name.split('__')[0])));
+    session.toolServers = Array.from(
+      new Set(prepared.tools.map((tool) => tool.name.split('__')[0]))
+    );
     const runtimeDefinition = createScenarioAssistantRuntimeDefinition(prepared);
     runtimeDefinition.onEvent = (event) => {
       touchAssistantSession(session);
       publishSessionEvent(session, event.type, event.payload);
     };
-    try {
-      session.runtime = createAssistantRuntimeService(
-        await assistantRuntimeFactory.create(runtimeDefinition),
-        runtimeDefinition,
-        () => touchAssistantSession(session)
-      );
-    } catch (error) {
-      await runtimeDefinition.dispose?.();
-      throw error;
-    }
+    session.runtime = await createAssistantRuntimeService(
+      assistantRuntimeFactory,
+      runtimeDefinition,
+      () => touchAssistantSession(session)
+    );
     assistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');
     asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
@@ -274,13 +273,23 @@ export async function handleScenarioAssistantRoutes(params: {
     cleanupAssistantSessions(assistantSessions);
     const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
     const session = assistantSessions.get(sessionId);
+    let disposeError: unknown;
     if (session) {
-      await session.runtime?.dispose();
-      publishSessionEvent(session, 'session_finished');
-      endAssistantSseClients(session);
+      try {
+        await session.runtime?.dispose();
+      } catch (error) {
+        disposeError = error;
+      } finally {
+        try {
+          publishSessionEvent(session, 'session_finished');
+        } finally {
+          endAssistantSseClients(session);
+        }
+      }
     }
     assistantSessions.delete(sessionId);
-    asJson(res, 200, { ok: true });
+    if (disposeError) asJson(res, 500, { error: errorMessage(disposeError) });
+    else asJson(res, 200, { ok: true });
     return true;
   }
 
@@ -299,7 +308,6 @@ export async function handleScenarioAssistantRoutes(params: {
     }
     const abortController = new AbortController();
     const handleClose = () => {
-      if (req.complete) return;
       if (res.writableEnded) return;
       abortController.abort();
     };
@@ -317,14 +325,15 @@ export async function handleScenarioAssistantRoutes(params: {
       const snapshot = assistantSessionView(session);
       asJson(res, 200, {
         session: snapshot,
-        response: response.type === 'tool_call_request'
-          ? {
-              type: response.type,
-              text: response.text,
-              pendingToolCall: response.pendingToolCalls[0],
-              pendingToolCalls: response.pendingToolCalls
-            }
-          : response
+        response:
+          response.type === 'tool_call_request'
+            ? {
+                type: response.type,
+                text: response.text,
+                pendingToolCall: response.pendingToolCalls[0],
+                pendingToolCalls: response.pendingToolCalls
+              }
+            : response
       });
       return true;
     } catch (error) {
@@ -336,7 +345,6 @@ export async function handleScenarioAssistantRoutes(params: {
       res.off('close', handleClose);
     }
   }
-
 
   if (
     pathname.startsWith('/api/scenario-assistant/sessions/') &&
@@ -353,7 +361,9 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
       return true;
     }
-    const pending = session.runtime!.getSnapshot().pendingToolCalls.find((call) => call.id === callId);
+    const pending = session
+      .runtime!.getSnapshot()
+      .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
       return true;
@@ -362,20 +372,37 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 409, { error: `Tool call is already ${pending.status}` });
       return true;
     }
-    const body = (await parseBody(req)) as { argumentsOverride?: unknown };
-    const response = await session.runtime!.resolveToolCalls([{
-      toolCallId: pending.id,
-      decision: 'approve',
-      ...(Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
-        ? { arguments: body.argumentsOverride }
-        : {})
-    }]);
-    asJson(res, 200, {
-      session: assistantSessionView(session),
-      response: response.type === 'tool_call_resolved'
-        ? { ...response, text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
-        : response
-    });
+    const abortController = createAssistantRequestAbortController(res);
+    try {
+      const body = (await parseBody(req)) as { argumentsOverride?: unknown };
+      const response = await session.runtime!.resolveToolCalls(
+        [
+          {
+            toolCallId: pending.id,
+            decision: 'approve',
+            ...(Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
+              ? { arguments: body.argumentsOverride }
+              : {})
+          }
+        ],
+        abortController.signal
+      );
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, {
+        session: assistantSessionView(session),
+        response:
+          response.type === 'tool_call_resolved'
+            ? {
+                ...response,
+                text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
+              }
+            : response
+      });
+    } catch (error) {
+      if (!abortController.signal.aborted) throw error;
+    } finally {
+      abortController.dispose();
+    }
     return true;
   }
 
@@ -394,7 +421,9 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
       return true;
     }
-    const pending = session.runtime!.getSnapshot().pendingToolCalls.find((call) => call.id === callId);
+    const pending = session
+      .runtime!.getSnapshot()
+      .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
       return true;
@@ -403,15 +432,28 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 409, { error: `Tool call is already ${pending.status}` });
       return true;
     }
-    const response = await session.runtime!.resolveToolCalls([
-      { toolCallId: pending.id, decision: 'deny' }
-    ]);
-    asJson(res, 200, {
-      session: assistantSessionView(session),
-      response: response.type === 'tool_call_resolved'
-        ? { ...response, text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
-        : response
-    });
+    const abortController = createAssistantRequestAbortController(res);
+    try {
+      const response = await session.runtime!.resolveToolCalls(
+        [{ toolCallId: pending.id, decision: 'deny' }],
+        abortController.signal
+      );
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, {
+        session: assistantSessionView(session),
+        response:
+          response.type === 'tool_call_resolved'
+            ? {
+                ...response,
+                text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
+              }
+            : response
+      });
+    } catch (error) {
+      if (!abortController.signal.aborted) throw error;
+    } finally {
+      abortController.dispose();
+    }
     return true;
   }
 
@@ -428,15 +470,26 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
       return true;
     }
-    const pendingCalls = session.runtime!.getSnapshot().pendingToolCalls.filter((call) => call.status === 'pending');
+    const pendingCalls = session
+      .runtime!.getSnapshot()
+      .pendingToolCalls.filter((call) => call.status === 'pending');
     if (pendingCalls.length === 0) {
       asJson(res, 409, { error: 'No pending tool calls to approve' });
       return true;
     }
-    const response = await session.runtime!.resolveToolCalls(
-      pendingCalls.map((call) => ({ toolCallId: call.id, decision: 'approve' as const }))
-    );
-    asJson(res, 200, { session: assistantSessionView(session), response });
+    const abortController = createAssistantRequestAbortController(res);
+    try {
+      const response = await session.runtime!.resolveToolCalls(
+        pendingCalls.map((call) => ({ toolCallId: call.id, decision: 'approve' as const })),
+        abortController.signal
+      );
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, { session: assistantSessionView(session), response });
+    } catch (error) {
+      if (!abortController.signal.aborted) throw error;
+    } finally {
+      abortController.dispose();
+    }
     return true;
   }
 

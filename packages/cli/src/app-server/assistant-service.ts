@@ -1,9 +1,11 @@
 import type {
   AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
   AssistantRuntimeResponse,
   AssistantRuntimeSession,
   AssistantToolCallDecision
 } from '@inspectr/mcplab-core';
+import { throwIfAborted } from './assistant-common.js';
 
 export class AssistantSessionBusyError extends Error {
   readonly statusCode = 409;
@@ -14,15 +16,28 @@ export class AssistantSessionBusyError extends Error {
   }
 }
 
-export function createAssistantRuntimeService(
-  runtime: AssistantRuntimeSession,
+export async function createAssistantRuntimeService(
+  factory: AssistantRuntimeFactory,
   definition: AssistantRuntimeDefinition,
   onActivity?: () => void
-): AssistantRuntimeSession {
+): Promise<AssistantRuntimeSession> {
   let busy = false;
   let disposed = false;
+  let suppressRuntimeEvents = false;
   let activeController: AbortController | undefined;
   let cleanupPromise: Promise<void> | undefined;
+  const onRuntimeEvent = definition.onEvent;
+  definition.onEvent = (event) => {
+    if (!disposed && !suppressRuntimeEvents) onRuntimeEvent?.(event);
+  };
+  let runtime: AssistantRuntimeSession;
+  try {
+    runtime = await factory.create(definition);
+  } catch (error) {
+    disposed = true;
+    await definition.dispose?.();
+    throw error;
+  }
 
   const run = async (
     operation: (signal: AbortSignal) => Promise<AssistantRuntimeResponse>,
@@ -34,21 +49,55 @@ export function createAssistantRuntimeService(
     onActivity?.();
     const controller = new AbortController();
     activeController = controller;
-    const abort = () => controller.abort();
+    let operationSettled = false;
+    const abort = () => {
+      controller.abort();
+      if (!operationSettled) suppressRuntimeEvents = true;
+    };
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
-    try {
-      return await operation(controller.signal);
-    } finally {
-      signal?.removeEventListener('abort', abort);
+    const finish = () => {
+      operationSettled = true;
+      if (activeController !== controller) return;
       busy = false;
       activeController = undefined;
-      onActivity?.();
+      suppressRuntimeEvents = false;
+      if (!disposed) onActivity?.();
+    };
+    try {
+      if (controller.signal.aborted) {
+        finish();
+        throwIfAborted(controller.signal);
+      }
+      const operationPromise = Promise.resolve().then(() => {
+        throwIfAborted(controller.signal);
+        return operation(controller.signal);
+      });
+      void operationPromise.then(finish, finish);
+      const result = await Promise.race([
+        operationPromise,
+        new Promise<never>((_, reject) =>
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              const error = new Error('Assistant operation aborted');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true }
+          )
+        )
+      ]);
+      if (disposed || controller.signal.aborted) throw new Error('Assistant operation aborted');
+      return result;
+    } finally {
+      signal?.removeEventListener('abort', abort);
     }
   };
 
   return {
-    sendMessage: (message, signal) => run((activeSignal) => runtime.sendMessage(message, activeSignal), signal),
+    sendMessage: (message, signal) =>
+      run((activeSignal) => runtime.sendMessage(message, activeSignal), signal),
     resolveToolCalls: (decisions: AssistantToolCallDecision[], signal) =>
       run((activeSignal) => runtime.resolveToolCalls(decisions, activeSignal), signal),
     getSnapshot: () => runtime.getSnapshot(),

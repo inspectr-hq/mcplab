@@ -7,7 +7,36 @@ describe('assistant session TTL', () => {
   it.each([
     ['scenario', cleanupAssistantSessions],
     ['result', cleanupResultAssistantSessions]
-  ])('keeps an active %s session alive despite a stale timestamp', (kind, cleanup) => {
+  ])('expires a stale idle %s session and closes its SSE clients', async (kind, cleanup) => {
+    const client = { end: vi.fn() };
+    const runtime: AssistantRuntimeSession = {
+      sendMessage: vi.fn(),
+      resolveToolCalls: vi.fn(),
+      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      isBusy: () => false,
+      dispose: vi.fn()
+    };
+    const session = {
+      id: 'active',
+      lastTouchedAt: 0,
+      events: [],
+      clients: new Set([client]),
+      runtime
+    };
+    const sessions = new Map([[session.id, session]]);
+
+    cleanup(sessions as never, Date.now());
+
+    expect(sessions.has('active')).toBe(false);
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(client.end).toHaveBeenCalledOnce();
+    await Promise.resolve();
+  });
+
+  it.each([
+    ['scenario', cleanupAssistantSessions],
+    ['result', cleanupResultAssistantSessions]
+  ])('also expires a stale active %s session to abort its work', (kind, cleanup) => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn(),
       resolveToolCalls: vi.fn(),
@@ -15,18 +44,10 @@ describe('assistant session TTL', () => {
       isBusy: () => true,
       dispose: vi.fn()
     };
-    const session = {
-      id: 'active',
-      lastTouchedAt: 0,
-      events: [],
-      clients: new Set(),
-      runtime
-    };
+    const session = { id: 'active', lastTouchedAt: 0, events: [], clients: new Set(), runtime };
     const sessions = new Map([[session.id, session]]);
-
     cleanup(sessions as never, Date.now());
-
-    expect(sessions.has('active')).toBe(true);
-    expect(runtime.dispose).not.toHaveBeenCalled();
+    expect(sessions.has('active')).toBe(false);
+    expect(runtime.dispose).toHaveBeenCalledOnce();
   });
 });

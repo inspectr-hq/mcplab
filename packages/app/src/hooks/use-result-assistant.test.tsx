@@ -183,4 +183,36 @@ describe('useResultAssistant SSE updates', () => {
     expect(result.current.assistantMessages).toHaveLength(1);
     expect(result.current.assistantMessages[0]?.text).toBe('Show me the summary');
   });
+
+  it('shows the terminal model-call budget error to the user', async () => {
+    const error = Object.assign(
+      new Error('Assistant reached its 25 model-call limit. Start a new message to continue.'),
+      { statusCode: 422 }
+    );
+    const source = {
+      createResultAssistantSession: vi.fn().mockResolvedValue({
+        sessionId: 'ras-1',
+        session: makeSession()
+      }),
+      sendResultAssistantMessage: vi.fn().mockRejectedValue(error),
+      closeResultAssistantSession: vi.fn().mockResolvedValue(undefined),
+      approveResultAssistantToolCall: vi.fn(),
+      denyResultAssistantToolCall: vi.fn(),
+      subscribeResultAssistantSessionEvents: vi.fn().mockReturnValue(() => undefined)
+    } as unknown as EvalDataSource;
+    const { result } = renderHook(() =>
+      useResultAssistant({ source, open: true, scope: 'run', runId: 'run-1' })
+    );
+    act(() => result.current.setAssistantInput('Continue this task'));
+    await act(async () => {
+      await result.current.askAssistant();
+    });
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'MCP Lab Assistant error',
+        description: error.message,
+        variant: 'destructive'
+      })
+    );
+  });
 });

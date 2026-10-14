@@ -63,3 +63,12 @@ export function endAssistantSseClients(session: AssistantSseSessionState): void 
   }
   session.clients.clear();
 }
+
+export function createAssistantRequestAbortController(res: ServerResponse) {
+  const controller = new AbortController();
+  const onClose = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  res.on?.('close', onClose);
+  return { signal: controller.signal, dispose: () => res.off?.('close', onClose) };
+}

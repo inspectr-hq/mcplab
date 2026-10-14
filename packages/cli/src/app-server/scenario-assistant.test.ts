@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { AssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
+import { McpClientManager } from '@inspectr/mcplab-core';
 
 function makeBody(overrides: Record<string, unknown> = {}) {
   return {
@@ -241,8 +242,56 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
 });
 
 describe('Scenario Assistant runtime factory', () => {
+  it('disposes MCP resources when runtime factory initialization fails', async () => {
+    const disconnect = vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+    try {
+      const { assistantSessions } = await callCreateSessionRoute({
+        assistantRuntimeFactory: { create: vi.fn().mockRejectedValue(new Error('factory failed')) }
+      }).catch((error) => {
+        expect(error).toMatchObject({ message: 'factory failed' });
+        return { assistantSessions: new Map() };
+      });
+      expect(assistantSessions.size).toBe(0);
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      disconnect.mockRestore();
+    }
+  });
+
+  it('approves pending calls in model order through approve-all', async () => {
+    const { assistantSessions, deps, runtime } = await callCreateSessionRoute();
+    const sessionId = Array.from(assistantSessions.keys())[0];
+    runtime.getSnapshot.mockReturnValue({
+      messages: [],
+      pendingToolCalls: [
+        { id: 'first', status: 'pending' },
+        { id: 'second', status: 'pending' }
+      ]
+    });
+    await handleScenarioAssistantRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/scenario-assistant/sessions/${sessionId}/tool-calls/approve-all`,
+      method: 'POST',
+      settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: deps as any
+    });
+    expect(runtime.resolveToolCalls).toHaveBeenCalledWith(
+      [
+        { toolCallId: 'first', decision: 'approve' },
+        { toolCallId: 'second', decision: 'approve' }
+      ],
+      expect.any(AbortSignal)
+    );
+  });
+
   it('uses an opaque runtime for route create, send, decision, view, and close', async () => {
-    const snapshot = { messages: [], pendingToolCalls: [{ id: 'opaque-1', name: 'write', arguments: {}, status: 'pending' }] };
+    const snapshot = {
+      messages: [],
+      pendingToolCalls: [{ id: 'opaque-1', name: 'write', arguments: {}, status: 'pending' }]
+    };
     const runtime = {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake response' }),
       resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
@@ -284,9 +333,10 @@ describe('Scenario Assistant runtime factory', () => {
       oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
       deps: deps as any
     });
-    expect(runtime.resolveToolCalls).toHaveBeenCalledWith([
-      { toolCallId: 'opaque-1', decision: 'approve' }
-    ], expect.any(AbortSignal));
+    expect(runtime.resolveToolCalls).toHaveBeenCalledWith(
+      [{ toolCallId: 'opaque-1', decision: 'approve' }],
+      expect.any(AbortSignal)
+    );
 
     await handleScenarioAssistantRoutes({
       req: { headers: {} } as any,
@@ -310,6 +360,44 @@ describe('Scenario Assistant runtime factory', () => {
       deps: deps as any
     });
     expect(runtime.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('DELETE /api/scenario-assistant/sessions/:id', () => {
+  it('clears the session and SSE clients when runtime disposal rejects', async () => {
+    const dispose = vi.fn().mockRejectedValue(new Error('cleanup failed'));
+    const client = { write: vi.fn(), end: vi.fn() };
+    const session = {
+      id: 'sas-delete',
+      events: [],
+      clients: new Set([client]),
+      runtime: { dispose }
+    } as any;
+    const sessions = new Map([[session.id, session]]);
+    const responses: unknown[] = [];
+    const deps = {
+      cleanupAssistantSessions: vi.fn(),
+      assistantSessionView: vi.fn().mockReturnValue({ id: session.id }),
+      asJson: vi.fn((_res, status, body) => responses.push({ status, body }))
+    } as any;
+    const params = {
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/scenario-assistant/sessions/${session.id}`,
+      method: 'DELETE',
+      settings: {} as any,
+      assistantSessions: sessions,
+      oauthSessionManager: {} as any,
+      deps
+    };
+    await handleScenarioAssistantRoutes(params);
+    expect(responses).toEqual([{ status: 500, body: { error: 'cleanup failed' } }]);
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(client.end).toHaveBeenCalledOnce();
+    expect(sessions.has(session.id)).toBe(false);
+    await handleScenarioAssistantRoutes(params);
+    expect(responses.at(-1)).toEqual({ status: 200, body: { ok: true } });
+    expect(dispose).toHaveBeenCalledOnce();
   });
 });
 
@@ -372,7 +460,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
         pickDefaultAssistantAgentName: vi.fn(),
         resolveAssistantAgentFromConfig: vi.fn(),
         resolveAssistantAgentFromLibraries: vi.fn(),
-        preloadAssistantTools: vi.fn(),
+        preloadAssistantTools: vi.fn()
       } as any
     });
 

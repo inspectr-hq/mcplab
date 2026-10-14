@@ -3,6 +3,7 @@ import type { AgentConfig } from '@inspectr/mcplab-core';
 import {
   createScenarioAssistantRuntimeDefinition,
   normalizeScenarioAssistantEvalRules,
+  validateScenarioAssistantProposal,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 
@@ -167,44 +168,71 @@ describe('Scenario Assistant runtime definition', () => {
     expect(prompt).toContain('tool_sequence');
     expect(prompt).toContain('agent_check');
     expect(prompt).toContain('tool_input_regex to match a regular expression anywhere');
+    expect(prompt).toContain('ordinary prose');
+    expect(prompt).not.toContain('Respond ONLY as JSON');
+    expect(definition.tools.some((tool) => tool.name === 'propose_scenario_changes')).toBe(true);
   });
 
-  it('normalizes tool names and redundant regex suggestions during output decoding', () => {
-    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
-    const output = definition.decodeOutput(JSON.stringify({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: { evalRules: { replacement: [
-        { type: 'required_tool', value: 'srv__refund_tool' },
-        { type: 'response_contains', value: 'refund processed' },
-        { type: 'response_regex', value: 'refund processed' }
-      ] } }
-    }));
-    expect(output).toMatchObject({ type: 'assistant_message', text: 'Updated checks' });
-    if (output.type !== 'assistant_message') throw new Error('Expected assistant message');
-    expect(output.suggestions?.evalRules?.replacement).toEqual([
+  it('normalizes tool names and redundant regex suggestions in native proposals', () => {
+    const session = baseSession();
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'required_tool', value: 'srv__refund_tool' },
+            { type: 'response_contains', value: 'refund processed' },
+            { type: 'response_regex', value: 'refund processed' }
+          ]
+        }
+      },
+      session.toolPublicMap
+    );
+    expect(output.evalRules?.replacement).toEqual([
       { type: 'required_tool', value: 'refund_tool' },
       { type: 'response_contains', value: 'refund processed' }
     ]);
   });
 
   it('normalizes sequence and tool-input names and removes contradictory rules', () => {
-    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
-    const output = definition.decodeOutput(JSON.stringify({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: { evalRules: { replacement: [
-        { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
-        { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
-        { type: 'required_tool', value: 'srv__refund_tool' },
-        { type: 'forbidden_tool', value: 'srv__refund_tool' }
-      ] } }
-    }));
-    if (output.type !== 'assistant_message') throw new Error('Expected assistant message');
-    expect(output.suggestions?.evalRules?.replacement).toEqual([
+    const session = baseSession();
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
+            { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
+            { type: 'required_tool', value: 'srv__refund_tool' },
+            { type: 'forbidden_tool', value: 'srv__refund_tool' }
+          ]
+        }
+      },
+      session.toolPublicMap
+    );
+    expect(output.evalRules?.replacement).toEqual([
       { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] },
       { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
       { type: 'required_tool', value: 'refund_tool' }
     ]);
+  });
+
+  it('returns corrective validation errors for malformed or empty proposals', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'unknown' }] } },
+        new Map()
+      )
+    ).toThrow('Invalid scenario proposal');
+    expect(() => validateScenarioAssistantProposal({}, new Map())).toThrow(
+      'Invalid scenario proposal'
+    );
+    expect(() => validateScenarioAssistantProposal({ notes: ['only a note'] }, new Map())).toThrow(
+      'Invalid scenario proposal'
+    );
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'required_tool' }] } },
+        new Map()
+      )
+    ).toThrow('Invalid scenario proposal');
   });
 });

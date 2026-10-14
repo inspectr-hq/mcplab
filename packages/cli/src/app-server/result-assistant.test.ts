@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { handleResultAssistantRoutes } from './result-assistant.js';
+import { createResultAssistantRuntimeDefinition } from './result-assistant-domain.js';
 
 describe('GET /api/result-assistant/sessions/:id/events', () => {
   it('streams existing assistant events', async () => {
@@ -56,6 +57,89 @@ describe('GET /api/result-assistant/sessions/:id/events', () => {
     expect(writes.join('')).toContain('event: turn_started');
     expect(ends).toHaveLength(0);
     expect(resultAssistantSessions.get('ras-1')?.clients.size).toBe(1);
+  });
+});
+
+describe('DELETE /api/result-assistant/sessions/:id', () => {
+  it('clears the session and SSE clients when runtime disposal rejects', async () => {
+    const dispose = vi.fn().mockRejectedValue(new Error('cleanup failed'));
+    const client = { write: vi.fn(), end: vi.fn() };
+    const session = {
+      id: 'ras-delete',
+      scope: 'all_runs',
+      runId: null,
+      createdAt: Date.now(),
+      lastTouchedAt: Date.now(),
+      selectedAssistantAgentName: 'assistant',
+      agentConfig: { provider: 'openai', model: 'fake' },
+      toolsLoaded: 0,
+      toolServers: [],
+      initialMessages: [],
+      events: [],
+      clients: new Set([client]),
+      runtime: {
+        dispose,
+        getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] })
+      }
+    } as any;
+    const sessions = new Map([[session.id, session]]);
+    const responses: unknown[] = [];
+    const params = {
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/result-assistant/sessions/${session.id}`,
+      method: 'DELETE',
+      settings: {} as any,
+      resultAssistantSessions: sessions,
+      deps: {
+        cleanupResultAssistantSessions: vi.fn(),
+        asJson: vi.fn((_res, status, body) => responses.push({ status, body }))
+      } as any
+    };
+    await handleResultAssistantRoutes(params);
+    expect(responses).toEqual([{ status: 500, body: { error: 'cleanup failed' } }]);
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(client.end).toHaveBeenCalledOnce();
+    expect(sessions.has(session.id)).toBe(false);
+    await handleResultAssistantRoutes(params);
+    expect(responses.at(-1)).toEqual({ status: 200, body: { ok: true } });
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Result Assistant report refresh', () => {
+  it('refreshes linked reports after a write tool completes', async () => {
+    const reports = [
+      {
+        path: '/reports/new.md',
+        relativePath: 'reports/new.md',
+        name: 'new.md',
+        sizeBytes: 4,
+        mtime: 'now'
+      }
+    ];
+    const callTool = vi.fn().mockResolvedValue({ ok: true });
+    const session = {
+      scope: 'run',
+      runId: 'run-1',
+      resultSummary: null,
+      referenceReportsForRun: [],
+      agentConfig: { provider: 'openai', model: 'fake' },
+      tools: [{ name: 'write_report', description: 'Write a report' }],
+      toolPublicMap: new Map([
+        ['write_report', { server: 'mcplab', tool: 'mcplab_write_markdown_report' }]
+      ]),
+      mcp: { callTool }
+    } as any;
+    const definition = createResultAssistantRuntimeDefinition(session, () => reports);
+    await definition.tools[0].execute({ title: 'Summary' });
+    expect(callTool).toHaveBeenCalledWith(
+      'mcplab',
+      'mcplab_write_markdown_report',
+      { title: 'Summary' },
+      { signal: undefined }
+    );
+    expect(definition.getSystemPrompt()).toContain('reports/new.md');
   });
 });
 
@@ -134,64 +218,134 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
 describe('Result Assistant runtime factory', () => {
   it('uses an opaque runtime for route create, send, decision, view, and close', async () => {
     const captured: Array<{ status: number; body: any }> = [];
-    const snapshot = { messages: [], pendingToolCalls: [{ id: 'opaque-1', name: 'report', arguments: {}, status: 'pending' }] };
+    const snapshot = {
+      messages: [],
+      pendingToolCalls: [{ id: 'opaque-1', name: 'report', arguments: {}, status: 'pending' }]
+    };
     const runtime = {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake result' }),
-      resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
+      resolveToolCalls: vi.fn().mockResolvedValue({
+        type: 'tool_call_resolved',
+        text: 'Approved one call.',
+        pendingToolCalls: [
+          {
+            id: 'opaque-2',
+            server: 'mcplab',
+            tool: 'report',
+            publicToolName: 'report',
+            arguments: {},
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }),
       getSnapshot: vi.fn().mockReturnValue(snapshot),
       dispose: vi.fn()
     };
     const assistantRuntimeFactory = { create: vi.fn().mockResolvedValue(runtime) };
     const resultAssistantSessions = new Map();
     const deps = {
-      parseBody: vi.fn().mockResolvedValueOnce({ scope: 'all_runs' }).mockResolvedValueOnce({ message: 'hello' }).mockResolvedValueOnce({}),
+      parseBody: vi
+        .fn()
+        .mockResolvedValueOnce({ scope: 'all_runs' })
+        .mockResolvedValueOnce({ message: 'hello' })
+        .mockResolvedValueOnce({}),
       asJson: vi.fn((_res, status, body) => captured.push({ status, body })),
       getRunResults: vi.fn(),
       readLibraries: vi.fn().mockReturnValue({ agents: { assistant: {} }, servers: {} }),
       pickDefaultAssistantAgentName: vi.fn().mockReturnValue('assistant'),
-      resolveAssistantAgentFromLibraries: vi.fn().mockReturnValue({ provider: 'openai', model: 'fake' }),
+      resolveAssistantAgentFromLibraries: vi
+        .fn()
+        .mockReturnValue({ provider: 'openai', model: 'fake' }),
       preloadResultAssistantTools: vi.fn(),
       assistantRuntimeFactory
     } as any;
-    const settings = { workspaceRoot: '/tmp', runsDir: '/tmp/runs', librariesDir: '/tmp/libs' } as any;
+    const settings = {
+      workspaceRoot: '/tmp',
+      runsDir: '/tmp/runs',
+      librariesDir: '/tmp/libs'
+    } as any;
 
     await handleResultAssistantRoutes({
-      req: { headers: {} } as any, res: {} as any,
-      pathname: '/api/result-assistant/sessions', method: 'POST', settings,
-      resultAssistantSessions, deps
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: '/api/result-assistant/sessions',
+      method: 'POST',
+      settings,
+      resultAssistantSessions,
+      deps
     });
     const sessionId = captured[0].body.sessionId;
     await handleResultAssistantRoutes({
       req: Object.assign(new EventEmitter(), { complete: true, headers: {} }) as any,
       res: Object.assign(new EventEmitter(), { writableEnded: false }) as any,
-      pathname: `/api/result-assistant/sessions/${sessionId}/messages`, method: 'POST', settings,
-      resultAssistantSessions, deps
+      pathname: `/api/result-assistant/sessions/${sessionId}/messages`,
+      method: 'POST',
+      settings,
+      resultAssistantSessions,
+      deps
     });
 
     expect(assistantRuntimeFactory.create).toHaveBeenCalledWith(
-      expect.objectContaining({ assistant: 'result', context: expect.objectContaining({ scope: 'all_runs' }) })
+      expect.objectContaining({
+        assistant: 'result',
+        context: expect.objectContaining({ scope: 'all_runs' })
+      })
     );
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('mcp');
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('llmMessages');
     expect(runtime.sendMessage).toHaveBeenCalledWith('hello', expect.any(AbortSignal));
     await handleResultAssistantRoutes({
-      req: { headers: {} } as any, res: {} as any,
-      pathname: `/api/result-assistant/sessions/${sessionId}/tool-calls/opaque-1/approve`, method: 'POST', settings,
-      resultAssistantSessions, deps
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/result-assistant/sessions/${sessionId}/tool-calls/opaque-1/approve`,
+      method: 'POST',
+      settings,
+      resultAssistantSessions,
+      deps
     });
-    expect(runtime.resolveToolCalls).toHaveBeenCalledWith([
-      { toolCallId: 'opaque-1', decision: 'approve' }
-    ], expect.any(AbortSignal));
+    expect(runtime.resolveToolCalls).toHaveBeenCalledWith(
+      [{ toolCallId: 'opaque-1', decision: 'approve' }],
+      expect.any(AbortSignal)
+    );
+    expect(captured[2].body.response).toMatchObject({
+      type: 'tool_call_resolved',
+      pendingToolCall: { id: 'opaque-2' },
+      pendingToolCalls: [{ id: 'opaque-2' }]
+    });
+    runtime.getSnapshot.mockReturnValue({
+      messages: [],
+      pendingToolCalls: [{ id: 'opaque-1', status: 'approved' }]
+    });
     await handleResultAssistantRoutes({
-      req: { headers: {} } as any, res: {} as any,
-      pathname: `/api/result-assistant/sessions/${sessionId}`, method: 'GET', settings,
-      resultAssistantSessions, deps
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/result-assistant/sessions/${sessionId}/tool-calls/opaque-1/approve`,
+      method: 'POST',
+      settings,
+      resultAssistantSessions,
+      deps
+    });
+    expect(captured.at(-1)?.status).toBe(409);
+    expect(runtime.resolveToolCalls).toHaveBeenCalledOnce();
+    await handleResultAssistantRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/result-assistant/sessions/${sessionId}`,
+      method: 'GET',
+      settings,
+      resultAssistantSessions,
+      deps
     });
     expect(runtime.getSnapshot).toHaveBeenCalled();
     await handleResultAssistantRoutes({
-      req: { headers: {} } as any, res: {} as any,
-      pathname: `/api/result-assistant/sessions/${sessionId}`, method: 'DELETE', settings,
-      resultAssistantSessions, deps
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/result-assistant/sessions/${sessionId}`,
+      method: 'DELETE',
+      settings,
+      resultAssistantSessions,
+      deps
     });
     expect(runtime.dispose).toHaveBeenCalledOnce();
   });

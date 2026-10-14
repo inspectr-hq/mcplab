@@ -580,7 +580,10 @@ const ResultDetail = () => {
   const unmatchedPendingToolCalls = assistantPendingToolCalls.filter(
     (call) =>
       call.status === 'pending' &&
-      !assistantMessages.some((message) => message.pendingToolCallId === call.id)
+      !assistantMessages.some(
+        (message) =>
+          message.pendingToolCallId === call.id || message.pendingToolCallIds?.includes(call.id)
+      )
   );
 
   const openReportsPanel = (relativePath?: string) => {
