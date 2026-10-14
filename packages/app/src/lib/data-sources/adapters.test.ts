@@ -14,6 +14,59 @@ import type { EvalConfig } from '@/types/eval';
 // (ServerListEntry, ScenarioListEntry) would require verbose type guards in tests.
 type AnyRecord = Record<string, unknown>;
 
+it('round-trips Foundry agents without converting them to OpenAI', () => {
+  const libraries = fromCoreLibraries({
+    agents: { foundry: { provider: 'azure_foundry', model: 'deployment-a', max_tokens: 512 } },
+    servers: {},
+    scenarios: []
+  });
+  expect(libraries.agents[0]).toMatchObject({ provider: 'azure_foundry', model: 'deployment-a' });
+  expect(toCoreLibraries(libraries).agents.foundry).toMatchObject({
+    provider: 'azure_foundry',
+    model: 'deployment-a',
+    max_tokens: 512
+  });
+});
+
+it('maps app LLM providers to their core provider names', () => {
+  const libraries = toCoreLibraries({
+    agents: [
+      { id: 'openai', name: 'OpenAI', provider: 'openai', model: 'gpt-test', maxTokens: 10 },
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        provider: 'anthropic',
+        model: 'claude-test',
+        maxTokens: 10
+      },
+      { id: 'azure', name: 'Azure', provider: 'azure', model: 'deployment-test', maxTokens: 10 },
+      {
+        id: 'azure-foundry',
+        name: 'Azure Foundry',
+        provider: 'azure_foundry',
+        model: 'foundry-deployment',
+        maxTokens: 10
+      },
+      { id: 'google', name: 'Google', provider: 'google', model: 'gemini-test', maxTokens: 10 },
+      { id: 'custom', name: 'Custom', provider: 'custom', model: 'custom-test', maxTokens: 10 }
+    ],
+    servers: [],
+    scenarios: [],
+    browserProviders: {}
+  });
+
+  expect(
+    Object.fromEntries(Object.entries(libraries.agents).map(([id, agent]) => [id, agent.provider]))
+  ).toEqual({
+    openai: 'openai',
+    anthropic: 'anthropic',
+    azure: 'azure_openai',
+    'azure-foundry': 'azure_foundry',
+    google: 'openai',
+    custom: 'openai'
+  });
+});
+
 function baseResults(): CoreResultsJson {
   return {
     metadata: {

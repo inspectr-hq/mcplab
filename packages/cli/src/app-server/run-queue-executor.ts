@@ -5,6 +5,7 @@ import {
   hashConfig,
   loadConfig,
   runAll,
+  resolveWorkspaceEvaluation,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -21,6 +22,7 @@ import {
 } from './oauth-session-manager.js';
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
+import type { AppSettings } from './types.js';
 
 export function getCompletedRunId(job: Pick<RunJob, 'runParams'>, executionRunId: string): string {
   return job.runParams.evaluationRunId ?? executionRunId;
@@ -57,19 +59,6 @@ export function filterScenarioOverridesToSelectedScenarios(
     Object.entries(scenarioServerOverrides).filter(([scenarioId]) => selectedIds.has(scenarioId))
   );
   return Object.keys(filtered).length > 0 ? filtered : undefined;
-}
-
-export function resolveEvaluationJudge(params: {
-  agents: EvalConfig['agents'];
-  evaluationJudgeAgentName?: string;
-}): { name: string; agent: EvalConfig['agents'][string] } | undefined {
-  const selected = params.evaluationJudgeAgentName?.trim();
-  if (!selected) return undefined;
-  const agent = params.agents[selected];
-  if (!agent) {
-    throw new Error(`Evaluation judge agent not found: ${selected}`);
-  }
-  return { name: selected, agent };
 }
 
 export type AdmissionResult =
@@ -160,13 +149,15 @@ export async function admitQueuedJob(params: {
 
 export async function executeRunJob(params: {
   job: RunJob;
-  settings: {
-    evalsDir: string;
-    runsDir: string;
-    librariesDir: string;
-    workspaceRoot: string;
-    evaluationJudgeAgentName?: string;
-  };
+  settings: Pick<
+    AppSettings,
+    | 'evalsDir'
+    | 'runsDir'
+    | 'librariesDir'
+    | 'workspaceRoot'
+    | 'evaluationJudgeAgentName'
+    | 'evaluationDecision'
+  >;
   oauthSessionManager: OAuthSessionManager;
   deps: RunsRouteDeps;
 }): Promise<ExecutionOutcome> {
@@ -336,10 +327,6 @@ export async function executeRunJob(params: {
         payload: { message: `Run note: ${runNote}` }
       });
     }
-    const evaluationJudge = resolveEvaluationJudge({
-      agents: libraryAgents,
-      evaluationJudgeAgentName: settings.evaluationJudgeAgentName
-    });
     const { runDir, results } = await runAll(expandedConfig, {
       runsPerScenario,
       scenarioId,
@@ -349,7 +336,12 @@ export async function executeRunJob(params: {
       runsDir: settings.runsDir,
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
-      evaluationJudge,
+      ...resolveWorkspaceEvaluation({
+        agents: libraryAgents,
+        scenarios: expandedConfig.scenarios,
+        scenarioId,
+        settings
+      }),
       resolveMcpServerAuthHeaders:
         oauthServers.length > 0
           ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {

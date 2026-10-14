@@ -1,13 +1,15 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { stringify as stringifyYaml } from 'yaml';
+import {
+  isDecisionEngineEnabled,
+  loadWorkspaceSettingsOverrides,
+  normalizeEvaluationDecisionConfig,
+  resolveEvaluationJudge,
+  type EvalConfig,
+  type WorkspaceSettingsOverrides
+} from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
-
-interface AppSettingsOverrides {
-  scenario_assistant_agent_name?: string;
-  evaluation_judge_agent_name?: string;
-  default_queue_workers?: unknown;
-}
 
 const DEFAULT_QUEUE_WORKERS = 1;
 const MAX_QUEUE_WORKERS = 8;
@@ -40,17 +42,6 @@ function settingsOverridesFilePath(settings: AppSettings): string {
   return join(settings.librariesDir, '.mcplab-app-settings.yaml');
 }
 
-export function loadWorkspaceSettingsOverrides(librariesDir: string): AppSettingsOverrides {
-  const filePath = join(librariesDir, '.mcplab-app-settings.yaml');
-  if (!existsSync(filePath)) return {};
-  try {
-    const parsed = parseYaml(readFileSync(filePath, 'utf8')) as AppSettingsOverrides | undefined;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 export function applySettingsOverrides(settings: AppSettings): void {
   const overrides = loadWorkspaceSettingsOverrides(settings.librariesDir);
   settings.defaultQueueWorkers = normalizeQueueWorkerCount(overrides.default_queue_workers);
@@ -59,17 +50,51 @@ export function applySettingsOverrides(settings: AppSettings): void {
   settings.scenarioAssistantAgentName =
     overrides.scenario_assistant_agent_name?.trim() || undefined;
   settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
+  settings.evaluationDecision = overrides.evaluation_decision;
+}
+
+/** Validate the combined evaluation patch before changing settings or writing files. */
+export function applyEvaluationSettingsPatch(
+  settings: AppSettings,
+  body: Record<string, unknown>,
+  agents: EvalConfig['agents'] | (() => EvalConfig['agents'])
+): AppSettings {
+  const candidate = { ...settings };
+  const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
+  const hasDecision = Object.prototype.hasOwnProperty.call(body, 'evaluationDecision');
+  if (hasJudge) {
+    candidate.evaluationJudgeAgentName =
+      String(body.evaluationJudgeAgentName ?? '').trim() || undefined;
+  }
+  if (hasDecision) {
+    candidate.evaluationDecision =
+      body.evaluationDecision === null
+        ? undefined
+        : normalizeEvaluationDecisionConfig(body.evaluationDecision);
+  }
+  const engineEnabled = isDecisionEngineEnabled(candidate.evaluationDecision);
+  if (hasJudge || (hasDecision && engineEnabled)) {
+    const judge = resolveEvaluationJudge({
+      agents: typeof agents === 'function' ? agents() : agents,
+      evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
+    });
+    if (engineEnabled && !judge) {
+      throw new Error('Decision engines require a configured LLM evaluation judge as backup.');
+    }
+  }
+  return candidate;
 }
 
 export function persistSettingsOverrides(settings: AppSettings): void {
-  const payload: AppSettingsOverrides = {
+  const payload: WorkspaceSettingsOverrides = {
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
     ...(settings.scenarioAssistantAgentName
       ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
       : {}),
     ...(settings.evaluationJudgeAgentName
       ? { evaluation_judge_agent_name: settings.evaluationJudgeAgentName }
-      : {})
+      : {}),
+    ...(settings.evaluationDecision ? { evaluation_decision: settings.evaluationDecision } : {})
   };
   writeFileSync(settingsOverridesFilePath(settings), `${stringifyYaml(payload)}\n`, 'utf8');
 }

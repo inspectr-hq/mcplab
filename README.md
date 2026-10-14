@@ -56,7 +56,7 @@ See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/
 
 ### Core Capabilities
 - **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
-- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
+- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI, Azure Foundry
 - **Browser Agents** - Run evaluations in browser chats through the MCPLab Rover extension
 - **Rich Assertions** - Validate tool usage, sequences, and response content
 - **Judge Agent Checks** - Semantic validation using an LLM judge for fuzzy, natural-language assertions
@@ -260,7 +260,7 @@ agents:
     system: "You are a helpful assistant."
 ```
 
-**Azure OpenAI:**
+**Azure OpenAI (legacy):**
 ```yaml
 agents:
   - id: azure-gpt
@@ -270,6 +270,26 @@ agents:
     max_tokens: 2048
     system: "You are a helpful assistant."
 ```
+
+The legacy Azure OpenAI provider uses `AZURE_OPENAI_DEPLOYMENT` at runtime. Existing configurations retain this behavior.
+
+**Azure Foundry:**
+
+```yaml
+agents:
+  - id: foundry-agent
+    provider: azure_foundry
+    model: my-chat-deployment
+    max_tokens: 2048
+```
+
+Each Foundry agent uses its own `model` value as the deployment name. Configure `AZURE_FOUNDRY_ENDPOINT` with the resource endpoint, such as `https://your-resource.services.ai.azure.com`, and `AZURE_FOUNDRY_API_KEY` on the backend. If the dedicated key is absent, MCPLab uses `AZURE_OPENAI_API_KEY`; that key must belong to the same resource. The endpoint remains explicit. Restart MCPLab after changing environment variables.
+
+In **Libraries → Agents**, choose **Azure Foundry**, enter the deployment name, and save. **Test Connection** sends a small inference request using the current provider and deployment, even before saving a new agent. It uses a 30-second timeout and clears or cancels the test when the draft changes. Success confirms basic inference access; it does not establish support for every tool or structured-output capability.
+
+Optional `AZURE_FOUNDRY_DEPLOYMENTS` contains comma-separated deployment suggestions. **Load configured deployments** reads this backend environment variable and does not query Azure. Manual entry works without suggestions. Foundry agents can be selected for evaluation runs, assistants, or the Evaluation Judge. Decision Engine deployment and threshold settings remain independent.
+
+V1 supports API-key authentication and deployments compatible with Foundry's `/openai/v1/chat/completions` API through the existing OpenAI SDK. Microsoft-Decision-1 uses the separate Decision Engine setting. Entra authentication, Responses API, and native Anthropic endpoints are outside this integration. See [Microsoft's v1 API documentation](https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle).
 
 **Browser agents (Rover):**
 
@@ -297,6 +317,7 @@ Use `claude` for Claude, `chatgpt-com` for ChatGPT, or the id of a learned provi
 - Anthropic: `ANTHROPIC_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Azure: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
+- Azure Foundry: `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY` (or `AZURE_OPENAI_API_KEY` for the same resource)
 
 ### Scenarios
 
@@ -389,6 +410,56 @@ run_defaults:
   - Capture values using regex named groups: `(?<value>...)`
 
 ---
+
+### Optional Decision Engine
+
+In **Settings**, configure an **Evaluation Judge**, then select a **Decision Engine** beside it. Decision engines evaluate semantic `agent_assertions` on the completed answers of API and browser agents. They do not run scenarios or replace conversational assistants.
+
+Supported providers:
+
+| Provider | Default model | Backend configuration |
+| --- | --- | --- |
+| OpenAI Decisions | `gpt-6-luna` | `OPENAI_API_KEY` |
+| Cloudflare Clef | `clef-flash` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AUTH_TOKEN` |
+| TypeSafe Jev | `jev-1.13.0` | `TYPESAFE_API_KEY` |
+| Ollama | `clef-flash` | Server URL, default `http://localhost:11434`; no API key |
+| Azure Foundry | `Microsoft-Decision-1` (deployment name) | `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY` (or `AZURE_OPENAI_API_KEY` for the same resource) |
+
+For Azure Foundry, deploy Microsoft-Decision-1 and select **Azure Foundry** in Settings. Enter your actual **Deployment name**, which can differ from the model name. Set these variables in the backend's environment or `.env`, then restart MCPLab:
+
+```env
+AZURE_FOUNDRY_ENDPOINT=https://your-resource.services.ai.azure.com
+AZURE_FOUNDRY_API_KEY=your-foundry-api-key
+```
+
+Use the Foundry **resource endpoint**. If you copy the deployment Target URI and it ends in `/models`, MCPLab removes that suffix before appending `/providers/microsoft/v1/systemone`. Requests authenticate with the `api-key` header. The dedicated key takes precedence; when absent, MCPLab uses `AZURE_OPENAI_API_KEY` for the same resource. The Foundry endpoint remains explicit, and the decision deployment is separate from conversational agents. This integration supports API keys; it does not acquire Microsoft Entra tokens. See [Microsoft's Decision API documentation](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision).
+
+For Ollama, run `ollama pull clef-flash` yourself to install the default model. MCPLab calls the server's `/v1/systemone` endpoint from its backend. The server URL must be reachable from the machine running MCPLab. Other decision models, including `clef`, `nimble`, and `tev1`, can be selected by model name. MCPLab does not download models automatically. Clef and Clef Flash require Ollama 0.35.1 or later; Tev1 decision support requires 0.35 or later. Use Ollama 0.35.1 or later for the broadest compatibility.
+
+The **Ollama model name** field is editable. Enter the exact installed model name and tag from `ollama list`, such as `tev1:4b` after running `ollama pull tev1:4b`, or `tev1:0.8b` for the smaller variant. Suggestions are examples, not a list of installed models. See the [Ollama decision documentation](https://docs.ollama.com/capabilities/decision) and [Tev1 model reference](https://ollama.com/library/tev1).
+
+Set **Pass probability threshold** and **Fail probability threshold**, then click **Save Decision Engine**. Both refer to the probability that the answer satisfies a semantic assertion. By default, probabilities at or above `0.9` pass, probabilities at or below `0.1` fail, and probabilities between them use the Evaluation Judge. The settings must satisfy `0 ≤ failThreshold < passThreshold ≤ 1`. These are routing thresholds, not guarantees of correctness; check them against reviewed examples from your own scenarios.
+
+Use **Test connection** to check the current provider, model, and Ollama URL before saving. MCPLab sends one small synthetic decision request using backend credentials and reports success or failure, including missing credentials. The test does not save settings or call the Evaluation Judge. Any valid probability counts as a successful connection; thresholds do not determine connection success. Hosted requests use a 10-second timeout, and Ollama uses 120 seconds. Changing the form clears the test result and cancels any pending test.
+
+A valid LLM Evaluation Judge remains required as backup. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
+
+Turn **Use Decision Engine** off and click **Save Decision Engine** to use the LLM judge while keeping the provider, model, URL, and thresholds. Turn it back on and save to resume decision evaluation. **Test connection** remains available while off and sends an explicit test request. Existing configurations without an `enabled` flag remain on. Choosing **None** and saving clears the configuration instead.
+
+Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory):
+
+```yaml
+evaluation_judge_agent_name: my-judge
+evaluation_decision:
+  enabled: true
+  provider: ollama
+  model: clef-flash
+  baseUrl: http://localhost:11434
+  passThreshold: 0.9
+  failThreshold: 0.1
+```
+
+In result details, checks decided by the engine show their assertion prompt alongside the decision probability, thresholds, model, and final evaluator. Checks evaluated by the judge retain the judge's explanation and fallback information where applicable. Required tools, tool sequences, and other deterministic assertions continue to use their existing checks. Browser captures still cannot establish tool use when telemetry is unavailable.
 
 ## 🔑 Environment Variables
 

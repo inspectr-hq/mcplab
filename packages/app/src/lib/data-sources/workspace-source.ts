@@ -5,7 +5,8 @@ import {
   fromCoreResultsJson,
   fromCoreScenarioRunPreview,
   toCoreConfigYaml,
-  toCoreLibraries
+  toCoreLibraries,
+  toCoreAgent
 } from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
 import type { EvalDataSource, LibraryBundle } from './types';
@@ -219,11 +220,17 @@ export const workspaceSource: EvalDataSource = {
   async listProviderModels(provider) {
     return workspaceApiClient.listProviderModels(provider);
   },
+  async testAgentConnection(agent, signal) {
+    return workspaceApiClient.testAgentConnection(toCoreAgent(agent), signal);
+  },
   async getWorkspaceSettings() {
     return workspaceApiClient.getSettings();
   },
   async updateWorkspaceSettings(patch) {
     return workspaceApiClient.updateSettings(patch);
+  },
+  async testDecisionConnection(config, signal) {
+    return workspaceApiClient.testDecisionConnection(config, signal);
   },
   async createScenarioAssistantSession(params, signal) {
     return workspaceApiClient.createScenarioAssistantSession(params, signal);

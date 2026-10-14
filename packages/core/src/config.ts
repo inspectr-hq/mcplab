@@ -688,17 +688,21 @@ function normalizeAgentDefinition(
     };
   }
   if (!raw.provider || !raw.model) throw new Error(`LLM agent ${id} requires a provider and model`);
+  if (raw.provider === 'azure_foundry' && (typeof raw.model !== 'string' || !raw.model.trim())) {
+    throw new Error(`Azure Foundry agent ${id} requires a deployment name`);
+  }
   if (
     raw.provider !== 'openai' &&
     raw.provider !== 'anthropic' &&
-    raw.provider !== 'azure_openai'
+    raw.provider !== 'azure_openai' &&
+    raw.provider !== 'azure_foundry'
   ) {
     throw new Error(`LLM agent ${id} has unsupported provider: ${String(raw.provider)}`);
   }
   return {
     name: typeof raw.name === 'string' ? raw.name : undefined,
     provider: raw.provider,
-    model: String(raw.model),
+    model: raw.provider === 'azure_foundry' ? String(raw.model).trim() : String(raw.model),
     ...(typeof raw.temperature === 'number' ? { temperature: raw.temperature } : {}),
     ...(typeof raw.max_tokens === 'number' ? { max_tokens: raw.max_tokens } : {}),
     ...(typeof raw.max_turns === 'number' ? { max_turns: raw.max_turns } : {}),

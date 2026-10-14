@@ -6,10 +6,24 @@ import type {
   RoverAgentProvider,
   RunOutcome
 } from '@/lib/data-sources/types';
-export { calculatePassRate, tallyCheckCounts } from '@/lib/data-sources/types';
+export {
+  calculatePassRate,
+  tallyCheckCounts,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
+  normalizeEvaluationDecisionConfig
+} from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
-export type { ScenarioAttachment } from '@/lib/data-sources/types';
+export type {
+  ScenarioAttachment,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
+  WorkspaceSettingsPatch
+} from '@/lib/data-sources/types';
 
 export interface ServerConfig {
   id: string;
@@ -45,7 +59,7 @@ export interface LlmAgentConfig {
   id: string;
   name: string;
   type?: 'llm';
-  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
+  provider: 'openai' | 'anthropic' | 'azure' | 'azure_foundry' | 'google' | 'custom';
   model: string;
   temperature?: number;
   maxTokens: number;

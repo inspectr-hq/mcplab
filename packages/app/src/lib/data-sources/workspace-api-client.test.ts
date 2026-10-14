@@ -221,4 +221,50 @@ describe('workspaceApiClient assistant request cancellation', () => {
       })
     );
   });
+
+  it('sends a decision connection draft to the backend and forwards cancellation', async () => {
+    const result = { ok: false, message: 'Missing OPENAI_API_KEY', failure: 'missing_credentials' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result)));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const config = {
+      provider: 'openai' as const,
+      model: 'gpt-6-luna',
+      passThreshold: 0.9,
+      failThreshold: 0.1
+    };
+    expect(await workspaceApiClient.testDecisionConnection(config, controller.signal)).toEqual(
+      result
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/settings/decision/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(config),
+        signal: controller.signal
+      })
+    );
+  });
+  it('sends a Foundry agent inference probe with cancellation', async () => {
+    const result = {
+      ok: true,
+      provider: 'azure_foundry',
+      requestedModel: 'my-deployment',
+      durationMs: 20,
+      message: 'Responded'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result)));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const agent = { provider: 'azure_foundry' as const, model: 'my-deployment' };
+    expect(await workspaceApiClient.testAgentConnection(agent, controller.signal)).toEqual(result);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(agent),
+        signal: controller.signal
+      })
+    );
+  });
 });

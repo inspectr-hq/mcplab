@@ -79,14 +79,42 @@ paths:
           required: true
           schema:
             type: string
-            enum: [anthropic, openai, azure]
+            enum: [anthropic, openai, azure, azure_foundry]
       responses:
         "200":
-          description: Provider model list
+          description: Provider model list. Azure deployment suggestions come from backend environment variables and do not establish inference connectivity.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProviderModelsResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/agents/test:
+    post:
+      tags: [Providers]
+      summary: Test inference for a draft LLM agent
+      description: Sends a bounded synthetic prompt using backend credentials and the selected model or deployment. Does not save the agent. Uses a 30-second timeout and cancels on client disconnect.
+      operationId: testAgentConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, model]
+              properties:
+                provider: { type: string, enum: [openai, anthropic, azure_openai, azure_foundry] }
+                model: { type: string, minLength: 1 }
+                type: { type: string, enum: [llm] }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Explicit inference success or provider failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentConnectionTestResult"
         "400":
           $ref: "#/components/responses/Error400"
 
@@ -120,6 +148,16 @@ paths:
                   oneOf:
                     - type: string
                     - type: "null"
+                evaluationJudgeAgentName:
+                  oneOf:
+                    - type: string
+                    - type: "null"
+                evaluationDecision:
+                  description: Optional decision engine for semantic checks. When enabled, requires an LLM evaluation judge as backup. Set enabled to false to retain configuration while using the judge. Null clears the configuration.
+                  oneOf:
+                    - $ref: "#/components/schemas/EvaluationDecisionConfig"
+                    - type: "null"
+                defaultQueueWorkers: { type: integer, minimum: 1, maximum: 8 }
       responses:
         "200":
           description: Updated settings
@@ -127,6 +165,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceSettings"
+
+  /api/settings/decision/test:
+    post:
+      tags: [Settings]
+      summary: Test a draft Decision Engine configuration
+      description: Sends one synthetic semantic check through the selected provider using backend credentials. Does not save settings or invoke an Evaluation Judge. A valid probability indicates a successful connection, regardless of thresholds. Uses the normal provider timeout without automatic retries.
+      operationId: testDecisionConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationDecisionConfig"
+      responses:
+        "200":
+          description: Connection test result; ok is false for missing credentials or an unavailable/invalid decision response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionConnectionTestResult"
+        "400":
+          $ref: "#/components/responses/Error400"
 
   /api/libraries:
     get:
@@ -1588,7 +1648,7 @@ components:
       properties:
         provider:
           type: string
-          enum: [anthropic, openai, azure]
+          enum: [anthropic, openai, azure, azure_foundry]
         items:
           type: array
           items: { type: string }
@@ -1597,6 +1657,57 @@ components:
           enum: [models, deployments]
         source:
           type: string
+    AgentConnectionTestResult:
+      type: object
+      required: [ok, message, provider, requestedModel, durationMs]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        provider: { type: string, enum: [openai, anthropic, azure_openai, azure_foundry] }
+        requestedModel: { type: string }
+        model: { type: string }
+        durationMs: { type: number, minimum: 0 }
+        failure: { type: string }
+      additionalProperties: false
+    EvaluationDecisionConfig:
+      type: object
+      required: [provider, model, passThreshold, failThreshold]
+      description: Satisfaction probabilities at or above passThreshold pass; at or below failThreshold fail. Other answers use the judge. failThreshold must be less than passThreshold.
+      properties:
+        enabled:
+          type: boolean
+          default: true
+          description: False retains the saved configuration but routes semantic checks directly to the LLM judge. Omitted means enabled for existing workspaces. Explicit connection tests still send a request.
+        provider:
+          type: string
+          enum: [openai, cloudflare, typesafe, ollama, azure_foundry]
+        model:
+          type: string
+          minLength: 1
+          description: Model ID, or the Microsoft-Decision-1 deployment name for Azure Foundry. Azure Foundry uses backend AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY, falling back to AZURE_OPENAI_API_KEY for the same resource when the dedicated key is absent.
+        passThreshold: { type: number, minimum: 0, maximum: 1, default: 0.9 }
+        failThreshold: { type: number, minimum: 0, maximum: 1, default: 0.1 }
+        baseUrl:
+          type: string
+          format: uri
+          description: Ollama-only HTTP or HTTPS server URL, reachable from the MCPLab backend.
+          default: http://localhost:11434
+      additionalProperties: false
+    DecisionConnectionTestResult:
+      type: object
+      required: [ok, message, provider, requestedModel, durationMs]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        provider: { type: string, enum: [openai, cloudflare, typesafe, ollama, azure_foundry] }
+        requestedModel: { type: string }
+        model: { type: string }
+        probability: { type: number, minimum: 0, maximum: 1 }
+        durationMs: { type: number, minimum: 0 }
+        failure:
+          type: string
+          description: Failure category, present only when the connection test fails.
+      additionalProperties: false
     WorkspaceSettings:
       type: object
       required: [workspaceRoot, evalsDir, runsDir, librariesDir]
@@ -1607,6 +1718,10 @@ components:
         librariesDir: { type: string }
         toolAnalysisResultsDir: { type: string }
         scenarioAssistantAgentName: { type: string }
+        evaluationJudgeAgentName: { type: string }
+        evaluationDecision:
+          $ref: "#/components/schemas/EvaluationDecisionConfig"
+        defaultQueueWorkers: { type: integer, minimum: 1, maximum: 8 }
       additionalProperties: true
     LibrariesPayload:
       type: object

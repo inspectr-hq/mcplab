@@ -42,6 +42,7 @@ import type {
   AgentConfig,
   AgentEntry,
   EvalConfig,
+  LlmAgentConfig,
   Scenario,
   ScenarioEntry,
   ServerConfig,
@@ -1161,12 +1162,7 @@ const ConfigEditor = () => {
                                         kind: 'inline',
                                         agent: {
                                           ...current,
-                                          provider: value as
-                                            | 'openai'
-                                            | 'anthropic'
-                                            | 'azure'
-                                            | 'google'
-                                            | 'custom'
+                                          provider: value as LlmAgentConfig['provider']
                                         }
                                       };
                                       setAgentEntries(nextEntries);
@@ -1179,6 +1175,7 @@ const ConfigEditor = () => {
                                       <SelectItem value="openai">OpenAI</SelectItem>
                                       <SelectItem value="anthropic">Anthropic</SelectItem>
                                       <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                      <SelectItem value="azure_foundry">Azure Foundry</SelectItem>
                                       <SelectItem value="google">Google</SelectItem>
                                       <SelectItem value="custom">Custom</SelectItem>
                                     </SelectContent>

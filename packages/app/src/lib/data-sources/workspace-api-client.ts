@@ -31,7 +31,13 @@ import type {
   ScenarioPreviewCoreRunResponse,
   WorkspaceHealthResponse,
   CoreLibraryBundle,
-  ScenarioAssistantSseEvent
+  CoreAgentConfig,
+  AgentConnectionTestResult,
+  ScenarioAssistantSseEvent,
+  WorkspaceSettings,
+  WorkspaceSettingsPatch,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult
 } from './types';
 
 function getBaseUrl(): string {
@@ -166,30 +172,21 @@ function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, valu
 
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
-  getSettings: () =>
-    request<{
-      workspaceRoot: string;
-      evalsDir: string;
-      runsDir: string;
-      librariesDir: string;
-      defaultQueueWorkers: number;
-      scenarioAssistantAgentName?: string;
-      evaluationJudgeAgentName?: string;
-    }>('/api/settings'),
-  updateSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string;
-  }) =>
-    request<{
-      workspaceRoot: string;
-      evalsDir: string;
-      runsDir: string;
-      librariesDir: string;
-      defaultQueueWorkers: number;
-      scenarioAssistantAgentName?: string;
-      evaluationJudgeAgentName?: string;
-    }>('/api/settings', {
+  getSettings: () => request<WorkspaceSettings>('/api/settings'),
+  testAgentConnection: (agent: CoreAgentConfig, signal?: AbortSignal) =>
+    request<AgentConnectionTestResult>('/api/agents/test', {
+      method: 'POST',
+      body: JSON.stringify(agent),
+      signal
+    }),
+  testDecisionConnection: (config: EvaluationDecisionConfig, signal?: AbortSignal) =>
+    request<DecisionConnectionTestResult>('/api/settings/decision/test', {
+      method: 'POST',
+      body: JSON.stringify(config),
+      signal
+    }),
+  updateSettings: (patch: WorkspaceSettingsPatch) =>
+    request<WorkspaceSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)
     }),
@@ -390,7 +387,7 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(params)
     }),
-  listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
+  listProviderModels: (provider: ProviderModelsResponse['provider']) =>
     request<ProviderModelsResponse>(
       `/api/providers/models?provider=${encodeURIComponent(provider)}`
     ),

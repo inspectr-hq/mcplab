@@ -14,20 +14,20 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { basename, extname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type {
-  AgentConfig,
   BrowserProviderProfile,
   EvalConfig,
   ExecutableEvalConfig,
   LlmMessage,
-  LlmAgentConfig,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
   expandConfigForAgents,
-  isLlmAgent,
   loadConfig,
+  readLibraryAgentsAndServers,
+  resolveEvaluationJudge,
+  resolveWorkspaceEvaluation,
   McpClientManager,
   validateBrowserProviderProfile,
   runAll
@@ -36,10 +36,13 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
+import { handleConnectionTestRoutes } from './connection-test-routes.js';
+import { applyRequestOriginPolicy } from './request-origin.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
 import {
   applySettingsOverrides,
+  applyEvaluationSettingsPatch,
   normalizeQueueWorkerCount,
   persistSettingsOverrides
 } from './settings-store.js';
@@ -119,7 +122,6 @@ import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
-import { resolveEvaluationJudge } from './run-queue-executor.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
 import {
@@ -172,10 +174,6 @@ export function releaseRegisteredRoverJob(
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
-
-export function isEvaluationJudgeAgent(agent: AgentConfig | undefined): agent is LlmAgentConfig {
-  return agent !== undefined && isLlmAgent(agent);
-}
 
 export async function startAppServer(options: AppServerOptions) {
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -235,11 +233,11 @@ export async function startAppServer(options: AppServerOptions) {
       return [];
     },
     persist: persistAppRunArtifacts,
-    getEvaluationJudge: () => {
-      const libraries = readLibraries(settings.librariesDir);
-      return resolveEvaluationJudge({
-        agents: libraries.agents,
-        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+    getWorkspaceEvaluation: (scenario) => {
+      return resolveWorkspaceEvaluation({
+        agents: readLibraryAgentsAndServers(settings.librariesDir).agents,
+        scenarios: [scenario],
+        settings
       });
     }
   });
@@ -399,12 +397,10 @@ export async function startAppServer(options: AppServerOptions) {
 
   const server = createServer(async (req, res) => {
     try {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Content-Type, MCP-Session-Id, Last-Event-ID, Accept'
-      );
+      if (!applyRequestOriginPolicy(req, res)) {
+        asJson(res, 403, { error: 'Cross-origin request rejected.' });
+        return;
+      }
       if (req.method === 'OPTIONS') {
         res.statusCode = 204;
         res.end();
@@ -452,7 +448,9 @@ export async function startAppServer(options: AppServerOptions) {
       if (pathname === '/api/providers/models' && method === 'GET') {
         const provider = String(url.searchParams.get('provider') ?? '').trim();
         if (!provider) {
-          asJson(res, 400, { error: 'provider is required (anthropic|openai|azure)' });
+          asJson(res, 400, {
+            error: 'provider is required (anthropic|openai|azure|azure_foundry)'
+          });
           return;
         }
         try {
@@ -507,58 +505,57 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (await handleConnectionTestRoutes({ req, res, pathname, method })) return;
+
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
-        if (body.evalsDir) {
-          settings.evalsDir = resolve(String(body.evalsDir));
-          mkdirSync(settings.evalsDir, { recursive: true });
-        }
-        if (body.runsDir) {
-          settings.runsDir = resolve(String(body.runsDir));
-          mkdirSync(settings.runsDir, { recursive: true });
-        }
+        let candidate = { ...settings };
+        if (body.evalsDir) candidate.evalsDir = resolve(String(body.evalsDir));
+        if (body.runsDir) candidate.runsDir = resolve(String(body.runsDir));
         if (body.librariesDir) {
-          settings.librariesDir = resolve(String(body.librariesDir));
-          mkdirSync(settings.librariesDir, { recursive: true });
-          mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
-          applySettingsOverrides(settings);
-          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
-            hostHeader: req.headers.host
-          });
-          oauthSessionManager.setLibrariesDir(settings.librariesDir);
+          candidate.librariesDir = resolve(String(body.librariesDir));
+          applySettingsOverrides(candidate);
         }
-        let settingsChanged = false;
+        try {
+          candidate = applyEvaluationSettingsPatch(
+            candidate,
+            body,
+            () => readLibraryAgentsAndServers(candidate.librariesDir).agents
+          );
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+          return;
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
-          const next = String(body.scenarioAssistantAgentName ?? '').trim();
-          settings.scenarioAssistantAgentName = next || undefined;
-          settingsChanged = true;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName')) {
-          const next = String(body.evaluationJudgeAgentName ?? '').trim();
-          if (next) {
-            try {
-              resolveEvaluationJudge({
-                agents: readLibraries(settings.librariesDir).agents,
-                evaluationJudgeAgentName: next
-              });
-            } catch (error: unknown) {
-              asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
-              return;
-            }
-          }
-          settings.evaluationJudgeAgentName = next || undefined;
-          settingsChanged = true;
+          candidate.scenarioAssistantAgentName =
+            String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
-          settings.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
+          candidate.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
+        }
+        if (body.evalsDir) mkdirSync(candidate.evalsDir, { recursive: true });
+        if (body.runsDir) mkdirSync(candidate.runsDir, { recursive: true });
+        if (body.librariesDir) {
+          mkdirSync(candidate.librariesDir, { recursive: true });
+          mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
+        }
+        const settingsChanged = [
+          'scenarioAssistantAgentName',
+          'evaluationJudgeAgentName',
+          'evaluationDecision',
+          'defaultQueueWorkers'
+        ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+        if (settingsChanged) persistSettingsOverrides(candidate);
+        Object.assign(settings, candidate);
+        if (
+          body.librariesDir ||
+          Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')
+        ) {
           runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
             hostHeader: req.headers.host
           });
-          settingsChanged = true;
         }
-        if (settingsChanged) {
-          persistSettingsOverrides(settings);
-        }
+        if (body.librariesDir) oauthSessionManager.setLibrariesDir(settings.librariesDir);
         asJson(res, 200, settings);
         return;
       }
@@ -656,7 +653,7 @@ export async function startAppServer(options: AppServerOptions) {
                 ? body.agentName
                 : settings.evaluationJudgeAgentName
           });
-          if (!judge || !isEvaluationJudgeAgent(judge.agent)) {
+          if (!judge) {
             asJson(res, 400, {
               error: 'Configure an LLM evaluation judge before requesting a provider proposal.'
             });

@@ -19,3 +19,16 @@ export function throwIfAborted(signal?: AbortSignal): void {
     throw createAbortError();
   }
 }
+
+export function withTimeoutSignal(
+  signal: AbortSignal | undefined,
+  timeoutMs: number
+): { signal: AbortSignal; timeoutSignal: AbortSignal; dispose: () => void } {
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+  return {
+    signal: signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal,
+    timeoutSignal: timeoutController.signal,
+    dispose: () => clearTimeout(timeout)
+  };
+}

@@ -23,6 +23,9 @@ import {
   loadConfig,
   hashConfig,
   runAll,
+  loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
+  resolveWorkspaceEvaluation,
   selectScenarios,
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
@@ -189,7 +192,7 @@ const LibraryScenarioEntrySchema = z.object({
 });
 
 const AgentEntrySchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'azure_openai']),
+  provider: z.enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry']),
   model: z.string(),
   temperature: z.number().optional(),
   max_tokens: z.number().int().positive().optional(),
@@ -1421,9 +1424,11 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().describe('Agent id key (kebab-case recommended).'),
         provider: z
-          .enum(['openai', 'anthropic', 'azure_openai'])
+          .enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry'])
           .describe('LLM provider supported by MCPLab.'),
-        model: z.string().describe('Model id or deployment name (for Azure OpenAI).'),
+        model: z
+          .string()
+          .describe('Model id or deployment name (for Azure OpenAI and Azure Foundry).'),
         temperature: z.number().optional().describe('Sampling temperature.'),
         max_tokens: z.number().int().positive().optional().describe('Maximum output tokens.'),
         system: z.string().optional().describe('Optional system prompt.')
@@ -1977,7 +1982,10 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(
+          loaded.config,
+          readLibraryAgentsAndServers(bundleRoot)
+        );
         const selected = selectScenarios(mergedConfig, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
@@ -2048,7 +2056,8 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const libraries = readLibraryAgentsAndServers(bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, libraries);
         const selected = selectScenarios(mergedConfig, scenario_id);
         const runtimeOverridden = applyRuntimeServerOverrides(selected, {
           serverOverrideAll: server_override_all,
@@ -2059,13 +2068,19 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden,
           runtimeOverridden.run_defaults?.selected_agents
         );
+        const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
           configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir(),
-          cwd: process.cwd()
+          cwd: process.cwd(),
+          ...resolveWorkspaceEvaluation({
+            agents: libraries.agents,
+            scenarios: executable.scenarios,
+            settings: toWorkspaceEvaluationSettings(workspaceSettings)
+          })
         });
 
         const reportHtml = renderReport(results);
@@ -3462,8 +3477,10 @@ function resolveBundleRoot(): string {
   return SERVER_OWNED_ROOTS.bundleRoot;
 }
 
-function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): EvalConfig {
-  const libraries = readLibraryAgentsAndServers(bundleRoot);
+function mergeLibraryServersAndAgents(
+  config: EvalConfig,
+  libraries: ReturnType<typeof readLibraryAgentsAndServers>
+): EvalConfig {
   return {
     ...config,
     agents: { ...libraries.agents, ...config.agents },

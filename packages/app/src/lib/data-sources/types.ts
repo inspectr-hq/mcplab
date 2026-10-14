@@ -1,4 +1,4 @@
-import type { EvalConfig, EvalResult, EvalRule, ScenarioRun } from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
@@ -25,7 +25,13 @@ import type {
   RoverAgentProvider,
   RunOutcome,
   ExecutionSource,
-  BrowserProviderProfile
+  BrowserProviderProfile,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
+  WorkspaceSettingsPatch,
+  WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -36,6 +42,10 @@ import type {
 export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
   calculatePassRate,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
+  normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
@@ -59,6 +69,8 @@ export type {
 };
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
+export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -154,13 +166,6 @@ export type RunQueueSseEvent =
   | RunQueueEvent
   | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
 
-export interface ProviderModelsResponse {
-  provider: 'anthropic' | 'openai' | 'azure';
-  items: string[];
-  kind: 'models' | 'deployments';
-  source: string;
-}
-
 // Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo
 export interface WorkspaceHealthResponse {
   ok: boolean;
@@ -168,14 +173,13 @@ export interface WorkspaceHealthResponse {
   mcp: HealthMcpConnectionInfo;
 }
 
-export interface WorkspaceSettings {
+export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
-  evaluationJudgeAgentName?: string;
 }
 
 export interface StartRunResponse {
@@ -822,14 +826,18 @@ export interface EvalDataSource {
   getLibraries: () => Promise<LibraryBundle>;
   saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
-    provider: 'anthropic' | 'openai' | 'azure'
+    provider: ProviderModelsResponse['provider']
   ) => Promise<ProviderModelsResponse>;
+  testAgentConnection: (
+    agent: LlmAgentConfig,
+    signal?: AbortSignal
+  ) => Promise<AgentConnectionTestResult>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
-  updateWorkspaceSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string;
-  }) => Promise<WorkspaceSettings | null>;
+  updateWorkspaceSettings: (patch: WorkspaceSettingsPatch) => Promise<WorkspaceSettings | null>;
+  testDecisionConnection: (
+    config: EvaluationDecisionConfig,
+    signal?: AbortSignal
+  ) => Promise<DecisionConnectionTestResult>;
   createScenarioAssistantSession: (
     params: {
       configId?: string;

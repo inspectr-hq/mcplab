@@ -41,6 +41,24 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('generates a Foundry agent entry accepted by input and output schemas', async () => {
+    const tool = setupTools().get('mcplab_generate_agent_entry')!;
+    const input = asSchema(tool.config.inputSchema).parse({
+      id: 'foundry-agent',
+      provider: 'azure_foundry',
+      model: 'my-deployment'
+    });
+    const result = await tool.cb(input);
+    expect(result.isError).not.toBe(true);
+    expect(asSchema(tool.config.outputSchema).safeParse(result.structuredContent).success).toBe(
+      true
+    );
+    expect(result.structuredContent.entry).toEqual({
+      provider: 'azure_foundry',
+      model: 'my-deployment'
+    });
+    expect(result.structuredContent.yaml).toContain('azure_foundry');
+  });
   it('accepts descriptions in evaluation config create and update inputs', () => {
     const tools = setupTools();
     for (const name of ['mcplab_create_evaluation_config', 'mcplab_update_evaluation_config']) {

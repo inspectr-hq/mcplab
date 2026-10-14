@@ -108,6 +108,7 @@ const RunEvaluation = () => {
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const attachedJobIdRef = useRef<string | null>(null);
+  const queueEvaluationsRef = useRef(new Map<string, EvaluationQueueItem>());
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
@@ -488,9 +489,41 @@ const RunEvaluation = () => {
     }
   };
 
-  const refreshQueue = async () => {
+  const refreshQueue = async (detectCompletedEvaluation = false) => {
     try {
       const q = await source.getRunQueue();
+      const nextEvaluations = q.evaluations ?? [];
+      const nextEvaluationIds = new Set(nextEvaluations.map((item) => item.evaluationRunId));
+      const previousEvaluations = queueEvaluationsRef.current;
+      if (detectCompletedEvaluation && !attachedJobIdRef.current) {
+        const disappearedEvaluation = Array.from(previousEvaluations.values()).find(
+          (item) =>
+            ['queued', 'running'].includes(item.status) &&
+            !nextEvaluationIds.has(item.evaluationRunId)
+        );
+        if (disappearedEvaluation) {
+          void source
+            .getResult(disappearedEvaluation.evaluationRunId)
+            .then((result) => {
+              if (!result || attachedJobIdRef.current) return;
+              const hasStoppedRuns =
+                (result.outcomes?.stopped ?? 0) > 0 || (result.outcomes?.incomplete ?? 0) > 0;
+              setRunning(false);
+              setProgress(100);
+              setRunId(disappearedEvaluation.evaluationRunId);
+              setCompletionSummary(null);
+              setCompletionHasErrors((result.outcomes?.error ?? 0) > 0);
+              setStopped(hasStoppedRuns);
+              setDone(!hasStoppedRuns);
+            })
+            .catch(() => {
+              // A missing or unavailable result does not prove the evaluation completed.
+            });
+        }
+      }
+      queueEvaluationsRef.current = new Map(
+        nextEvaluations.map((item) => [item.evaluationRunId, item])
+      );
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
@@ -544,6 +577,9 @@ const RunEvaluation = () => {
   useEffect(() => {
     refreshConfigAndLibraries();
     void refreshQueue();
+    const unsubscribeQueue = source.subscribeRunQueue((event) => {
+      if (event.type === 'queue_event') void refreshQueue(true);
+    });
     const handleFocus = () => {
       refreshConfigAndLibraries();
       void refreshQueue();
@@ -556,9 +592,10 @@ const RunEvaluation = () => {
     return () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('mcplab:run-queue-changed', handleQueueChanged);
+      unsubscribeQueue();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload, reloadLibraries]);
+  }, [reload, reloadLibraries, source]);
 
   const removeQueuedJob = async (jobId: string) => {
     try {

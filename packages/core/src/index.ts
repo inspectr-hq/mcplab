@@ -12,7 +12,21 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
-export { createRunId, judgeAgentAssertions, runAll, type RunProgressEvent } from './runner.js';
+export { createRunId, runAll, type RunProgressEvent } from './runner.js';
+export { judgeAgentAssertions } from './judge.js';
+export { evaluateSemanticAssertions, testDecisionConnection } from './decisions.js';
+export {
+  normalizeEvaluationDecisionConfig,
+  isDecisionEngineEnabled,
+  DECISION_PROVIDERS,
+  DECISION_DEFAULTS
+} from './decision-config.js';
+export {
+  loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
+  resolveEvaluationJudge,
+  resolveWorkspaceEvaluation
+} from './workspace-settings.js';
 export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';
 export { aggregateResults, renderSummaryMarkdown } from './results.js';
 export { persistEvaluationArtifacts, type PersistEvaluationArtifactsParams } from './artifacts.js';
@@ -37,6 +51,8 @@ export {
 export { McpClientManager } from './mcp.js';
 export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
+export { getAzureOpenAIDeploymentSuggestions, parseDeploymentSuggestions } from './azure-config.js';
+export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
 export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';

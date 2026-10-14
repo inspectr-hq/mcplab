@@ -5,6 +5,7 @@ const providerLabels: Record<string, string> = {
   anthropic: 'Anthropic',
   azure: 'Azure OpenAI',
   azure_openai: 'Azure OpenAI',
+  azure_foundry: 'Azure Foundry',
   google: 'Google'
 };
 
@@ -17,6 +18,7 @@ const providerColors: Record<string, string> = {
   anthropic: 'bg-orange-100 text-orange-800',
   azure: 'bg-blue-100 text-blue-800',
   azure_openai: 'bg-blue-100 text-blue-800',
+  azure_foundry: 'bg-blue-100 text-blue-800',
   google: 'bg-yellow-100 text-yellow-800',
   custom: 'bg-gray-100 text-gray-800'
 };

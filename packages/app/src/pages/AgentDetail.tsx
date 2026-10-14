@@ -49,13 +49,20 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
 import { createEmptyAgent } from '@/lib/agent-factory';
-import type { AgentConfig } from '@/types/eval';
+import type {
+  AgentConfig,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
+  LlmAgentConfig
+} from '@/types/eval';
+import { formatProvider } from '@/components/ProviderBadge';
 import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const modelSuggestions: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
   anthropic: ['claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest'],
   azure: ['gpt-4o', 'gpt-4-turbo'],
+  azure_foundry: [],
   google: ['gemini-2.0-flash', 'gemini-1.5-pro'],
   custom: []
 };
@@ -63,13 +70,15 @@ const modelSuggestions: Record<string, string[]> = {
 const providerHints: Record<string, string> = {
   anthropic: 'Check that `ANTHROPIC_API_KEY` is set in your environment',
   openai: 'Check that `OPENAI_API_KEY` is set in your environment',
-  azure: 'Check that Azure OpenAI env vars are configured in your environment'
+  azure: 'Check that Azure OpenAI env vars are configured in your environment',
+  azure_foundry:
+    'Set AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_API_KEY, or reuse AZURE_OPENAI_API_KEY for the same resource.'
 };
 
 type ConnectState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; items: string[]; source: string; kind: string; testedAt: string }
+  | { status: 'success'; result: AgentConnectionTestResult; testedAt: string }
   | { status: 'error'; message: string; testedAt: string }
   | { status: 'unsupported' };
 
@@ -95,10 +104,12 @@ const AgentDetail = () => {
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: 'idle' });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
-  const [providerModels, setProviderModels] = useState<string[]>([]);
+  const [providerModels, setProviderModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+  const connectionController = useRef<AbortController | null>(null);
+  const modelRequest = useRef({ revision: 0 });
   const hydratedRouteRef = useRef<string | null>(null);
   const browserProviderOptions = Object.values(browserProviders).map((provider) => ({
     id: provider.id,
@@ -106,7 +117,9 @@ const AgentDetail = () => {
   }));
 
   useEffect(() => {
-    const routeKey = isNew ? `new:${decodedParam || 'new'}` : `agt:${decodedParam}`;
+    const routeKey = isNew
+      ? `new:${requestedType}:${decodedParam || 'new'}`
+      : `agt:${decodedParam}`;
     if (hydratedRouteRef.current === routeKey) return;
     if (isNew) {
       setForm(createEmptyAgent(requestedType));
@@ -116,17 +129,37 @@ const AgentDetail = () => {
     if (!existingAgent) return;
     setForm(existingAgent);
     hydratedRouteRef.current = routeKey;
-  }, [isNew, decodedParam, existingAgent]);
+  }, [isNew, decodedParam, existingAgent, requestedType]);
 
+  useEffect(() => {
+    connectionController.current?.abort();
+    connectionController.current = null;
+    setConnectState({ status: 'idle' });
+    setShowConnectPanel(false);
+    return () => connectionController.current?.abort();
+  }, [form]);
+
+  useEffect(() => {
+    const requestState = modelRequest.current;
+    requestState.revision++;
+    setProviderModels(null);
+    setLoadingModels(false);
+    return () => {
+      requestState.revision++;
+    };
+  }, [form.provider]);
+
+  const isAzureDeployment = form.provider === 'azure' || form.provider === 'azure_foundry';
   const supportsDiscovery =
-    form.provider === 'anthropic' || form.provider === 'openai' || form.provider === 'azure';
+    form.provider === 'anthropic' || form.provider === 'openai' || isAzureDeployment;
 
   const modelOptions = Array.from(
-    new Set([...(modelSuggestions[form.provider] || []), ...providerModels])
+    new Set([...(modelSuggestions[form.provider] || []), ...(providerModels ?? [])])
   );
 
   const isKnownModel = modelOptions.includes(form.model);
-  const showManualField = showManualInput || (Boolean(form.model) && !isKnownModel);
+  const showManualField =
+    isAzureDeployment || showManualInput || (Boolean(form.model) && !isKnownModel);
 
   const handleConnect = async () => {
     setShowConnectPanel(true);
@@ -142,24 +175,27 @@ const AgentDetail = () => {
       setConnectState({ status: 'unsupported' });
       return;
     }
+    const controller = new AbortController();
+    connectionController.current?.abort();
+    connectionController.current = controller;
     setConnectState({ status: 'loading' });
     try {
-      const result = await source.listProviderModels(
-        form.provider as 'anthropic' | 'openai' | 'azure'
+      const result = await source.testAgentConnection(form, controller.signal);
+      if (controller.signal.aborted) return;
+      setConnectState(
+        result.ok
+          ? { status: 'success', result, testedAt: new Date().toISOString() }
+          : { status: 'error', message: result.message, testedAt: new Date().toISOString() }
       );
-      setConnectState({
-        status: 'success',
-        items: result.items,
-        source: result.source,
-        kind: result.kind,
-        testedAt: new Date().toISOString()
-      });
     } catch (err) {
-      setConnectState({
-        status: 'error',
-        message: err instanceof Error ? err.message : String(err),
-        testedAt: new Date().toISOString()
-      });
+      if (!controller.signal.aborted)
+        setConnectState({
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+          testedAt: new Date().toISOString()
+        });
+    } finally {
+      if (connectionController.current === controller) connectionController.current = null;
     }
   };
 
@@ -167,34 +203,46 @@ const AgentDetail = () => {
     if (!supportsDiscovery) {
       toast({
         title: 'Provider discovery not supported',
-        description: 'Model discovery is available for Anthropic, OpenAI, and Azure OpenAI.'
+        description:
+          'Model lists are available for Anthropic and OpenAI. Azure deployments use configured suggestions.'
       });
       return;
     }
+    const requestState = modelRequest.current;
+    const requestId = ++requestState.revision;
     setLoadingModels(true);
     try {
       const response = await source.listProviderModels(
-        form.provider as 'anthropic' | 'openai' | 'azure'
+        form.provider as ProviderModelsResponse['provider']
       );
+      if (requestId !== requestState.revision) return;
       setProviderModels(response.items);
       toast({
         title: response.kind === 'deployments' ? 'Deployments loaded' : 'Models loaded',
         description: `${response.items.length} ${response.kind} from ${response.source}`
       });
     } catch (error: unknown) {
+      if (requestId !== requestState.revision) return;
       toast({
         title: 'Could not load provider models',
         description: String(error instanceof Error ? error.message : error),
         variant: 'destructive'
       });
     } finally {
-      setLoadingModels(false);
+      if (requestId === requestState.revision) setLoadingModels(false);
     }
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) {
       toast({ title: 'Name is required', variant: 'destructive' });
+      return;
+    }
+    if (form.type !== 'browser' && !form.model.trim()) {
+      toast({
+        title: isAzureDeployment ? 'Deployment name is required' : 'Model is required',
+        variant: 'destructive'
+      });
       return;
     }
     if (form.type === 'browser' && !form.url?.trim()) {
@@ -263,7 +311,7 @@ const AgentDetail = () => {
             {isNew ? 'New Agent' : form.name}
           </h1>
         </div>
-        {!isNew && form.type === 'browser' ? (
+        {form.type === 'browser' ? (
           <div className="flex items-center gap-2">
             {roverConnected && roverStatus.pageUrl ? (
               <a
@@ -284,14 +332,23 @@ const AgentDetail = () => {
             </div>
           </div>
         ) : (
-          !isNew && (
-            <Button type="button" onClick={() => void handleConnect()}>
-              <Wifi className="mr-2 h-4 w-4" />
-              Test Connection
-            </Button>
-          )
+          <Button
+            type="button"
+            onClick={() => void handleConnect()}
+            disabled={connectState.status === 'loading'}
+          >
+            <Wifi className="mr-2 h-4 w-4" />
+            Test Connection
+          </Button>
         )}
       </div>
+
+      {form.type !== 'browser' && (
+        <p className="text-xs text-muted-foreground">
+          Test Connection sends a small inference request to the configured model or deployment
+          using backend credentials. It does not save the agent.
+        </p>
+      )}
 
       {/* Connect Panel */}
       {showConnectPanel && (
@@ -300,7 +357,12 @@ const AgentDetail = () => {
             <CardTitle className="text-base">Connection Test</CardTitle>
             <button
               type="button"
-              onClick={() => setShowConnectPanel(false)}
+              onClick={() => {
+                connectionController.current?.abort();
+                setConnectState({ status: 'idle' });
+                setShowConnectPanel(false);
+              }}
+              aria-label="Close connection test"
               className="rounded-sm opacity-70 hover:opacity-100"
             >
               <X className="h-4 w-4" />
@@ -309,12 +371,10 @@ const AgentDetail = () => {
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               <span>Provider:</span>
-              <span className="font-medium text-foreground">{form.provider}</span>
-              <span className="mx-1">·</span>
-              <span>Endpoint:</span>
-              <code className="font-mono text-xs">
-                /api/providers/models?provider={form.provider}
-              </code>
+              <span className="font-medium text-foreground">{formatProvider(form.provider)}</span>
+              <span>·</span>
+              <span>{isAzureDeployment ? 'Deployment' : 'Model'}:</span>
+              <code className="font-mono text-xs">{form.model}</code>
             </div>
 
             {connectState.status === 'loading' && (
@@ -325,34 +385,23 @@ const AgentDetail = () => {
             )}
 
             {connectState.status === 'success' && (
-              <div className="space-y-3">
-                <p className="flex items-center gap-2 text-sm text-emerald-700">
+              <div className="space-y-2">
+                <p role="status" className="flex items-center gap-2 text-sm text-emerald-700">
                   <Check className="h-4 w-4 shrink-0" />
-                  Connected — discovered {connectState.items.length} {connectState.kind} from{' '}
-                  {connectState.source}
+                  {connectState.result.message}
                 </p>
-                <div className="rounded-md bg-muted p-3">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    First 5 {connectState.kind}:
-                  </p>
-                  <ul className="space-y-0.5">
-                    {connectState.items.slice(0, 5).map((item) => (
-                      <li key={item} className="font-mono text-xs">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
                 <p className="text-xs text-muted-foreground">
-                  Tested at {new Date(connectState.testedAt).toLocaleString()}
+                  {connectState.result.model && <>Returned model: {connectState.result.model} · </>}
+                  {connectState.result.durationMs} ms · Tested at{' '}
+                  {new Date(connectState.testedAt).toLocaleString()}
                 </p>
               </div>
             )}
 
             {connectState.status === 'error' && (
               <div className="space-y-2">
-                <p className="text-sm text-destructive">
-                  <span className="font-medium">✗ Connection failed</span> — {connectState.message}
+                <p role="alert" className="text-sm text-destructive">
+                  <span className="font-medium">✗ Connection failed</span>. {connectState.message}
                 </p>
                 {providerHints[form.provider] && (
                   <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
@@ -369,7 +418,7 @@ const AgentDetail = () => {
               <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 Connection testing is not supported for the{' '}
                 <span className="font-medium">{form.provider}</span> provider. Supported providers:
-                Anthropic, OpenAI, Azure OpenAI.
+                Anthropic, OpenAI, Azure OpenAI, Azure Foundry.
               </p>
             )}
           </CardContent>
@@ -433,7 +482,7 @@ const AgentDetail = () => {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Provider</Label>
+              <Label htmlFor="agent-provider">Provider</Label>
               <Select
                 value={form.provider}
                 onValueChange={(v) =>
@@ -442,13 +491,13 @@ const AgentDetail = () => {
                       ? { ...f, provider: v }
                       : {
                           ...f,
-                          provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom',
+                          provider: v as LlmAgentConfig['provider'],
                           model: modelSuggestions[v]?.[0] || ''
                         }
                   )
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="agent-provider">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -463,6 +512,7 @@ const AgentDetail = () => {
                       <SelectItem value="openai">OpenAI</SelectItem>
                       <SelectItem value="anthropic">Anthropic</SelectItem>
                       <SelectItem value="azure">Azure OpenAI</SelectItem>
+                      <SelectItem value="azure_foundry">Azure Foundry</SelectItem>
                       <SelectItem value="google">Google</SelectItem>
                       <SelectItem value="custom">Custom</SelectItem>
                     </>
@@ -519,75 +569,93 @@ const AgentDetail = () => {
           {form.type !== 'browser' && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
+                <Label htmlFor="agent-model">
+                  {isAzureDeployment ? 'Deployment name' : 'Model'}
+                </Label>
                 <div className="flex items-center gap-2">
-                  <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openModelPicker}
-                        aria-controls="agent-model-command-list"
-                        className="h-9 flex-1 justify-between font-mono text-xs"
-                      >
-                        <span className="truncate text-left">
-                          {form.model || 'Select model...'}
-                        </span>
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[420px] p-0" align="start">
-                      <Command>
-                        <CommandInput
-                          placeholder={`Search ${
-                            form.provider === 'azure' ? 'deployments' : 'models'
-                          }...`}
-                        />
-                        <CommandList id="agent-model-command-list">
-                          <CommandEmpty>
-                            No {form.provider === 'azure' ? 'deployments' : 'models'} found.
-                          </CommandEmpty>
-                          <CommandGroup
-                            heading={form.provider === 'azure' ? 'Deployments' : 'Models'}
-                          >
-                            {modelOptions.map((modelName) => (
+                  {isAzureDeployment ? (
+                    <>
+                      <Input
+                        id="agent-model"
+                        value={form.model}
+                        onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                        placeholder="Type deployment name manually"
+                        list="agent-deployment-suggestions"
+                        className="h-9 min-w-0 flex-1 font-mono text-xs"
+                      />
+                      <datalist id="agent-deployment-suggestions">
+                        {modelOptions.map((deployment) => (
+                          <option key={deployment} value={deployment} />
+                        ))}
+                      </datalist>
+                    </>
+                  ) : (
+                    <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          id={showManualField ? undefined : 'agent-model'}
+                          aria-expanded={openModelPicker}
+                          aria-controls="agent-model-command-list"
+                          className="h-9 flex-1 justify-between font-mono text-xs"
+                        >
+                          <span className="truncate text-left">
+                            {form.model ||
+                              (isAzureDeployment ? 'Select deployment...' : 'Select model...')}
+                          </span>
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[420px] p-0" align="start">
+                        <Command>
+                          <CommandInput
+                            placeholder={`Search ${isAzureDeployment ? 'deployments' : 'models'}...`}
+                          />
+                          <CommandList id="agent-model-command-list">
+                            <CommandEmpty>
+                              No {isAzureDeployment ? 'deployments' : 'models'} found.
+                            </CommandEmpty>
+                            <CommandGroup heading={isAzureDeployment ? 'Deployments' : 'Models'}>
+                              {modelOptions.map((modelName) => (
+                                <CommandItem
+                                  key={modelName}
+                                  value={modelName}
+                                  onSelect={(value) => {
+                                    setForm((f) => ({ ...f, model: value }));
+                                    setShowManualInput(false);
+                                    setOpenModelPicker(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      'mr-2 h-4 w-4',
+                                      form.model === modelName ? 'opacity-100' : 'opacity-0'
+                                    )}
+                                  />
+                                  <span className="font-mono text-xs">{modelName}</span>
+                                </CommandItem>
+                              ))}
                               <CommandItem
-                                key={modelName}
-                                value={modelName}
-                                onSelect={(value) => {
-                                  setForm((f) => ({ ...f, model: value }));
-                                  setShowManualInput(false);
+                                value="__custom_model_id__"
+                                onSelect={() => {
+                                  setShowManualInput(true);
                                   setOpenModelPicker(false);
                                 }}
                               >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    form.model === modelName ? 'opacity-100' : 'opacity-0'
-                                  )}
-                                />
-                                <span className="font-mono text-xs">{modelName}</span>
+                                <span className="font-medium">
+                                  {isAzureDeployment
+                                    ? 'Custom deployment ID...'
+                                    : 'Custom model ID...'}
+                                </span>
                               </CommandItem>
-                            ))}
-                            <CommandItem
-                              value="__custom_model_id__"
-                              onSelect={() => {
-                                setShowManualInput(true);
-                                setOpenModelPicker(false);
-                              }}
-                            >
-                              <span className="font-medium">
-                                {form.provider === 'azure'
-                                  ? 'Custom deployment ID...'
-                                  : 'Custom model ID...'}
-                              </span>
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   {supportsDiscovery && (
                     <Button
                       type="button"
@@ -597,8 +665,8 @@ const AgentDetail = () => {
                       onClick={() => void fetchModels()}
                       disabled={loadingModels}
                       title={
-                        form.provider === 'azure'
-                          ? 'Fetch Azure OpenAI deployments'
+                        isAzureDeployment
+                          ? 'Load deployment suggestions from backend environment variables'
                           : `Fetch ${form.provider} models`
                       }
                     >
@@ -607,29 +675,53 @@ const AgentDetail = () => {
                       ) : (
                         <RefreshCw className="mr-1 h-3 w-3" />
                       )}
-                      {form.provider === 'azure' ? 'Fetch Deployments' : 'Fetch Models'}
+                      {isAzureDeployment ? 'Load configured deployments' : 'Fetch Models'}
                     </Button>
                   )}
                 </div>
-                {showManualField && (
+                {showManualField && !isAzureDeployment && (
                   <Input
+                    id="agent-model"
                     value={form.model}
                     onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
                     placeholder={
-                      form.provider === 'azure'
+                      isAzureDeployment
                         ? 'Type deployment name manually'
                         : 'Type model name manually'
                     }
                     className="font-mono text-xs"
                   />
                 )}
-                {providerModels.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Loaded {providerModels.length}{' '}
-                    {form.provider === 'azure' ? 'deployment names' : 'models'} from provider
-                    discovery.
+                {form.provider === 'azure_foundry' && (
+                  <p className="text-xs text-muted-foreground">
+                    Set AZURE_FOUNDRY_ENDPOINT on the backend and AZURE_FOUNDRY_API_KEY, or reuse
+                    AZURE_OPENAI_API_KEY for the same resource. Enter the exact deployment name.
+                    Suggestions come from AZURE_FOUNDRY_DEPLOYMENTS; they do not query Azure.
                   </p>
                 )}
+                {form.provider === 'azure' && (
+                  <p className="text-xs text-muted-foreground">
+                    Uses the selected deployment when it matches configured deployment suggestions;
+                    otherwise falls back to AZURE_OPENAI_DEPLOYMENT. Azure Foundry uses the
+                    deployment selected for each agent.
+                  </p>
+                )}
+                {providerModels !== null &&
+                  (providerModels.length > 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Loaded {providerModels.length}{' '}
+                      {isAzureDeployment
+                        ? 'deployment names from configuration'
+                        : 'models from provider discovery'}
+                      .
+                    </p>
+                  ) : form.provider === 'azure' ? (
+                    <p className="text-xs text-muted-foreground">
+                      Set AZURE_OPENAI_DEPLOYMENT on the MCPLab backend as the fallback.
+                      AZURE_OPENAI_DEPLOYMENTS and AZURE_OPENAI_DEPLOYMENT_NAME add selectable
+                      deployment suggestions.
+                    </p>
+                  ) : null)}
               </div>
               <div className="space-y-1.5">
                 <Label>Max Tokens</Label>

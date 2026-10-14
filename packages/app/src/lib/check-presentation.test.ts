@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCheckItems,
   formatCheckStatusLabel,
+  formatEvaluatorDetails,
   formatEvalRuleLabel,
   matchFailureReasonForRule
 } from './check-presentation';
@@ -69,6 +70,74 @@ describe('matchFailureReasonForRule', () => {
 });
 
 describe('buildCheckItems', () => {
+  it.each(['passed', 'failed'] as const)(
+    'provides the saved assertion prompt for a decided %s check',
+    (status) => {
+      const reason = 'Satisfaction probability 0.95 met the pass threshold 0.9.';
+      const result = buildCheckItems({
+        evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Current edited assertion' }],
+        failureReasons: status === 'failed' ? [reason] : [],
+        checkResults: [
+          {
+            type: 'agent_check',
+            label: 'Test',
+            status,
+            reason,
+            metadata: {
+              evaluator: 'decision',
+              decision_provider: 'ollama',
+              decision_prompt: 'Original assertion sent to the engine',
+              decision_probability: 0.95
+            }
+          }
+        ]
+      });
+      expect(result[0].decisionInput).toBe('Original assertion sent to the engine');
+      expect(result[0].failureReason).toBe(reason);
+      expect(result[0].decisionDetails).toContain('probability 0.950');
+    }
+  );
+  it('uses the assertion from the scenario for older decision results without a saved prompt', () => {
+    const result = buildCheckItems({
+      evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Original assertion' }],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Test',
+          status: 'passed',
+          reason: 'Satisfaction probability 0.95 met the pass threshold 0.9.',
+          metadata: { evaluator: 'decision', decision_provider: 'ollama' }
+        }
+      ]
+    });
+    expect(result[0].decisionInput).toBe('Original assertion');
+    expect(result[0].failureReason).toBe(
+      'Satisfaction probability 0.95 met the pass threshold 0.9.'
+    );
+  });
+  it('keeps the judge explanation for fallback results', () => {
+    const result = buildCheckItems({
+      evalRules: [{ type: 'agent_check', label: 'Test', prompt: 'Original assertion' }],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Test',
+          status: 'passed',
+          reason: 'Judge explanation',
+          metadata: {
+            evaluator: 'judge',
+            decision_provider: 'ollama',
+            decision_prompt: 'Original assertion',
+            decision_fallback: 'uncertain'
+          }
+        }
+      ]
+    });
+    expect(result[0].decisionInput).toBeUndefined();
+    expect(result[0].failureReason).toBe('Judge explanation');
+  });
   const evalRules: EvalRule[] = [
     {
       type: 'agent_check',
@@ -77,6 +146,35 @@ describe('buildCheckItems', () => {
     },
     { type: 'response_contains', value: 'ready' }
   ];
+
+  it('retains probability and judge fallback details for semantic checks', () => {
+    const result = buildCheckItems({
+      evalRules,
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'agent_check',
+          label: 'Logical range',
+          status: 'passed',
+          metadata: {
+            check_id: 'range',
+            decision_provider: 'openai',
+            decision_requested_model: 'gpt-6-luna',
+            decision_model: 'gpt-6-luna-2026',
+            decision_probability: 0.5,
+            decision_pass_threshold: 0.9,
+            decision_fail_threshold: 0.1,
+            decision_duration_ms: 15,
+            evaluator: 'judge',
+            decision_fallback: 'uncertain',
+            judge_provider: 'openai',
+            judge_model: 'gpt-4o-mini'
+          }
+        }
+      ]
+    });
+    expect(result[0].decisionDetails).toBe('Evaluated by LLM judge · OpenAI · gpt-4o-mini');
+  });
 
   it('prefers structured check results when present', () => {
     const result = buildCheckItems({
@@ -211,5 +309,50 @@ describe('buildCheckItems', () => {
     });
 
     expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
+  });
+});
+
+describe('formatEvaluatorDetails', () => {
+  it('preserves historical checks without decision metadata', () => {
+    expect(formatEvaluatorDetails(undefined)).toBeUndefined();
+    expect(formatEvaluatorDetails({ check_id: 'old' })).toBeUndefined();
+  });
+
+  it('includes zero probability without rendering malformed probabilities', () => {
+    expect(
+      formatEvaluatorDetails({
+        evaluator: 'decision',
+        decision_provider: 'ollama',
+        decision_probability: 0
+      })
+    ).toContain('probability 0.000');
+    expect(
+      formatEvaluatorDetails({
+        evaluator: 'decision',
+        decision_provider: 'ollama',
+        decision_probability: NaN
+      })
+    ).not.toContain('NaN');
+  });
+
+  it('shows the configured deployment name without a redundant requested model label', () => {
+    expect(
+      formatEvaluatorDetails({
+        evaluator: 'decision',
+        decision_provider: 'azure_foundry',
+        decision_model: 'microsoft-decision-1',
+        decision_requested_model: 'Jev-Decision-1'
+      })
+    ).toBe('Decision Engine · azure_foundry · Jev-Decision-1');
+  });
+
+  it('shows the Evaluation Judge provider and model for direct judge results', () => {
+    expect(
+      formatEvaluatorDetails({
+        judge_agent: 'quality-judge',
+        judge_provider: 'openai',
+        judge_model: 'gpt-4o-mini'
+      })
+    ).toBe('Evaluation Judge · OpenAI · gpt-4o-mini');
   });
 });

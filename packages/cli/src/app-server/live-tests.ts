@@ -4,9 +4,10 @@ import {
   createRunId,
   evaluateScenarioObservation,
   hashConfig,
-  judgeAgentAssertions,
+  evaluateSemanticAssertions,
+  throwIfAborted,
+  type WorkspaceEvaluation,
   tallyCheckCounts,
-  type AgentConfig,
   type EvalConfig,
   type RunOutcome,
   type Scenario,
@@ -108,7 +109,7 @@ export interface LiveTestServiceOptions {
   cliVersion: string;
   readScenarios: (input?: LiveTestStartInput) => Scenario[];
   persist: (params: PersistEvaluationArtifactsParams) => void;
-  getEvaluationJudge?: () => { name: string; agent: AgentConfig } | undefined;
+  getWorkspaceEvaluation?: (scenario: Scenario) => WorkspaceEvaluation;
   ttlMs?: number;
   now?: () => Date;
   appendJournalEvent?: typeof appendExecutionEvent;
@@ -127,7 +128,7 @@ export class LiveTestService {
   private readonly sessions = new Map<string, LiveTestSession>();
   private readonly completionsInFlight = new Map<
     string,
-    { inputKey: string; promise: Promise<LiveTestCompletion> }
+    { inputKey: string; promise: Promise<LiveTestCompletion>; controller: AbortController }
   >();
 
   constructor(private readonly options: LiveTestServiceOptions) {}
@@ -175,6 +176,7 @@ export class LiveTestService {
     if (session.status === 'completed')
       throw new LiveTestError('Completed Live Tests cannot be cancelled.', 409);
     session.status = 'cancelled';
+    this.completionsInFlight.get(id)?.controller.abort();
     return structuredClone(session);
   }
 
@@ -191,17 +193,25 @@ export class LiveTestService {
         new LiveTestError('Live Test session is completing with different data.', 409)
       );
     }
-    const promise = this.completeInternal(id, input).finally(() => {
-      if (this.completionsInFlight.get(id)?.promise === promise)
-        this.completionsInFlight.delete(id);
-    });
-    this.completionsInFlight.set(id, { inputKey, promise });
+    const controller = new AbortController();
+    const promise = this.completeInternal(id, input, controller.signal)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted)
+          throw new LiveTestError('Live Test session was cancelled or expired.', 409);
+        throw error;
+      })
+      .finally(() => {
+        if (this.completionsInFlight.get(id)?.promise === promise)
+          this.completionsInFlight.delete(id);
+      });
+    this.completionsInFlight.set(id, { inputKey, promise, controller });
     return promise;
   }
 
   private async completeInternal(
     id: string,
-    input: CompleteLiveTestInput
+    input: CompleteLiveTestInput,
+    signal: AbortSignal
   ): Promise<LiveTestCompletion> {
     const session = this.requireSession(id);
     const normalized: CompleteLiveTestInput = {
@@ -228,7 +238,8 @@ export class LiveTestService {
       throw new LiveTestError('Live Test session was already completed with different data.', 409);
     }
 
-    const judge = this.options.getEvaluationJudge?.();
+    const { evaluationJudge: judge, evaluationDecision } =
+      this.options.getWorkspaceEvaluation?.(session.testCase) ?? {};
     if (session.testCase.eval?.agent_assertions?.length && !judge) {
       throw new LiveTestError('Agent checks require a configured evaluation judge.', 400);
     }
@@ -245,14 +256,17 @@ export class LiveTestService {
       },
       judgeAgentAssertions: judge
         ? async (judgeInput) =>
-            judgeAgentAssertions({
+            evaluateSemanticAssertions({
               assertions: judgeInput.assertions,
               context: judgeInput.context,
               finalText: normalized.finalText,
-              judge
+              judge,
+              evaluationDecision,
+              signal
             })
         : undefined
     });
+    throwIfAborted(signal);
     const now = this.now();
     const runId = `${createRunId(now)}-rover-${session.id.slice(0, 8)}`;
     const config: EvalConfig = {
@@ -356,8 +370,10 @@ export class LiveTestService {
   private cleanup(): void {
     const now = this.now().getTime();
     for (const [id, session] of this.sessions) {
-      if (Date.parse(session.expiresAt) <= now && session.status === 'ready')
+      if (Date.parse(session.expiresAt) <= now && session.status === 'ready') {
+        this.completionsInFlight.get(id)?.controller.abort();
         this.sessions.delete(id);
+      }
     }
   }
 }

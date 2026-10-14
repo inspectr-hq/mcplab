@@ -12,7 +12,8 @@ import type {
   ScenarioEntry,
   ScenarioRun,
   TokenUsage,
-  ToolCall
+  ToolCall,
+  LlmAgentConfig
 } from '@/types/eval';
 import type { CoreToolInputAssertion } from './types';
 import {
@@ -46,6 +47,15 @@ import type {
 import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import { toComparableString } from '../value-normalization';
 
+const coreLlmProvider = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  azure: 'azure_openai',
+  azure_foundry: 'azure_foundry',
+  google: 'openai',
+  custom: 'openai'
+} satisfies Record<LlmAgentConfig['provider'], CoreAgentConfig['provider']>;
+
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
 }
@@ -76,7 +86,7 @@ function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
   };
 }
 
-function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
+export function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
   if (agent.type === 'browser')
     return {
       id: agent.id,
@@ -91,12 +101,7 @@ function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
   return {
     id: agent.id,
     name: agent.name,
-    provider:
-      agent.provider === 'azure'
-        ? 'azure_openai'
-        : agent.provider === 'anthropic'
-          ? 'anthropic'
-          : 'openai',
+    provider: coreLlmProvider[agent.provider],
     model: agent.model,
     ...withOptionalTemperature(agent.temperature),
     max_tokens: agent.maxTokens,

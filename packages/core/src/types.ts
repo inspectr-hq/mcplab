@@ -1,3 +1,128 @@
+export interface EvaluationDecisionConfig {
+  /** Omitted means enabled for compatibility with existing saved configurations. */
+  enabled?: boolean;
+  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama' | 'azure_foundry';
+  model: string;
+  passThreshold: number;
+  failThreshold: number;
+  baseUrl?: string;
+}
+
+export interface WorkspaceEvaluationSettings {
+  evaluationJudgeAgentName?: string;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsOverrides {
+  scenario_assistant_agent_name?: string;
+  evaluation_judge_agent_name?: string;
+  default_queue_workers?: unknown;
+  evaluation_decision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsPatch {
+  defaultQueueWorkers?: number;
+  scenarioAssistantAgentName?: string | null;
+  evaluationJudgeAgentName?: string | null;
+  evaluationDecision?: EvaluationDecisionConfig | null;
+  evalsDir?: string;
+  runsDir?: string;
+  librariesDir?: string;
+}
+
+export interface EvaluationJudge {
+  name: string;
+  agent: LlmAgentConfig;
+}
+
+export interface WorkspaceEvaluation {
+  evaluationJudge?: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface ResolveWorkspaceEvaluationParams {
+  agents: EvalConfig['agents'];
+  scenarios: ReadonlyArray<Pick<Scenario, 'id' | 'eval'>>;
+  scenarioId?: string;
+  settings: WorkspaceEvaluationSettings;
+}
+
+export interface AgentAssertionJudgeResult {
+  label: string;
+  pass: boolean;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticEvaluationParams {
+  assertions: AgentAssertion[];
+  finalText: string;
+  context?: AgentJudgeContext;
+  judge: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+  signal?: AbortSignal;
+}
+
+export interface DecisionCheck {
+  id: string;
+  prompt: string;
+}
+
+export type DecisionFallback =
+  | 'missing_credentials'
+  | 'http_error'
+  | 'connection_error'
+  | 'timeout'
+  | 'invalid_response'
+  | 'missing_answer'
+  | 'duplicate_answer'
+  | 'refusal'
+  | 'invalid_answer'
+  | 'invalid_configuration'
+  | 'uncertain';
+
+export interface DecisionAnswer {
+  id: string;
+  probability?: number;
+  model?: string;
+  durationMs: number;
+  fallback?: DecisionFallback;
+}
+
+export interface DecisionConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: EvaluationDecisionConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  probability?: number;
+  durationMs: number;
+  failure?: DecisionFallback;
+}
+
+export interface DecisionRequest {
+  config: EvaluationDecisionConfig;
+  evidence: unknown;
+  checks: DecisionCheck[];
+  signal?: AbortSignal;
+}
+
+export interface DecisionAdapter {
+  requiredEnv: readonly (string | readonly string[])[];
+  authEnv?: string | readonly string[];
+  authHeader?: string;
+  authPrefix?: string;
+  url(config: EvaluationDecisionConfig): string;
+  timeoutMs: number;
+  maxBatchSize: number;
+  sequential: boolean;
+  body(params: DecisionRequest): unknown;
+  extract(raw: unknown): Record<string, unknown> | undefined;
+  entries(raw: unknown): Array<[string, unknown]>;
+  answerType: string;
+  probabilityField: string;
+}
+
 export type TransportType = 'http';
 
 export interface ServerAuthBearer {
@@ -62,12 +187,38 @@ export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 export interface LlmAgentConfig {
   type?: 'llm';
   name?: string;
-  provider: 'openai' | 'anthropic' | 'azure_openai';
+  provider: 'openai' | 'anthropic' | 'azure_openai' | 'azure_foundry';
   model: string;
   temperature?: number;
   max_tokens?: number;
   max_turns?: number;
   system?: string;
+}
+
+export interface AgentConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: LlmAgentConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  durationMs: number;
+  failure?: AgentConnectionFailure;
+}
+
+export type AgentConnectionFailure =
+  | 'missing_credentials'
+  | 'authentication'
+  | 'deployment'
+  | 'capability'
+  | 'rate_limit'
+  | 'connection_error'
+  | 'timeout';
+
+export interface ProviderModelsResponse {
+  provider: 'anthropic' | 'openai' | 'azure' | 'azure_foundry';
+  items: string[];
+  kind: 'models' | 'deployments';
+  source: string;
 }
 
 export interface BrowserAgentConfig {
