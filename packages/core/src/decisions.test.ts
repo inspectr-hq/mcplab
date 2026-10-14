@@ -666,6 +666,9 @@ describe('semantic decision routing', () => {
       decision_prompt: checks[0].prompt
     });
     expect(result[1].metadata).toMatchObject({ evaluator: 'decision', decision_probability: 0.1 });
+    expect(result[1].reason).toBe(
+      'Agent check · Check 2: satisfaction probability 0.1 is at or below the fail threshold 0.1.'
+    );
     expect(result[2].metadata).toMatchObject({
       evaluator: 'judge',
       check_id: checks[2].id,
