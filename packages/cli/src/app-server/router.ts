@@ -69,6 +69,7 @@ import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { formatCliStartupLine } from '../cli-branding.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
+import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
@@ -86,16 +87,10 @@ import {
   resolveAssistantAgentFromLibraries,
   pickDefaultAssistantAgentName,
   type ScenarioAssistantSession,
-  preloadAssistantTools,
-  continueAssistantTurn,
-  executeAssistantToolCall,
-  summarizeToolResultForAssistant
+  preloadAssistantTools
 } from './scenario-assistant-domain.js';
 import {
   preloadResultAssistantTools,
-  continueResultAssistantTurn,
-  executeResultAssistantToolCall,
-  summarizeToolResultForResultAssistant,
   type ResultAssistantSession
 } from './result-assistant-domain.js';
 import {
@@ -243,6 +238,7 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
   const routeDeps: AppRouteDeps = {
+    assistantRuntimeFactory: createNativeAssistantRuntimeFactory(),
     parseBody,
     asHtml,
     asJson,
@@ -269,13 +265,7 @@ export async function startAppServer(options: AppServerOptions) {
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
     preloadResultAssistantTools,
-    continueResultAssistantTurn,
-    executeResultAssistantToolCall,
-    summarizeToolResultForResultAssistant,
     preloadAssistantTools,
-    continueAssistantTurn,
-    executeAssistantToolCall,
-    summarizeToolResultForAssistant,
     getRunResults,
     decodeEvalId,
     readConfigRecord,

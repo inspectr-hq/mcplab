@@ -45,6 +45,7 @@ import type {
   ResultsJson,
   EvalConfig,
   ExecutableEvalConfig,
+  AssistantRuntimeFactory,
   chatWithAgent
 } from '@inspectr/mcplab-core';
 
@@ -83,6 +84,7 @@ export interface ToolAnalysisDeps extends LibraryDeps {
 }
 
 export interface AssistantDeps extends LibraryDeps {
+  assistantRuntimeFactory: AssistantRuntimeFactory;
   cleanupAssistantSessions: typeof cleanupAssistantSessions;
   touchAssistantSession: typeof touchAssistantSession;
   assistantSessionView: typeof assistantSessionView;
@@ -93,15 +95,14 @@ export interface AssistantDeps extends LibraryDeps {
 }
 
 export interface ResultAssistantDeps extends LibraryDeps {
+  assistantRuntimeFactory: AssistantRuntimeFactory;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
   preloadResultAssistantTools: typeof import('./result-assistant-domain.js').preloadResultAssistantTools;
-  continueResultAssistantTurn: typeof import('./result-assistant-domain.js').continueResultAssistantTurn;
-  executeResultAssistantToolCall: typeof import('./result-assistant-domain.js').executeResultAssistantToolCall;
-  summarizeToolResultForResultAssistant: typeof import('./result-assistant-domain.js').summarizeToolResultForResultAssistant;
 }
 
 export interface ScenarioAssistantDeps extends LibraryDeps {
+  assistantRuntimeFactory: AssistantRuntimeFactory;
   cleanupAssistantSessions: typeof cleanupAssistantSessions;
   touchAssistantSession: typeof touchAssistantSession;
   assistantSessionView: typeof assistantSessionView;
@@ -110,9 +111,6 @@ export interface ScenarioAssistantDeps extends LibraryDeps {
   resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
   preloadAssistantTools: typeof import('./scenario-assistant-domain.js').preloadAssistantTools;
-  continueAssistantTurn: typeof import('./scenario-assistant-domain.js').continueAssistantTurn;
-  executeAssistantToolCall: typeof import('./scenario-assistant-domain.js').executeAssistantToolCall;
-  summarizeToolResultForAssistant: typeof import('./scenario-assistant-domain.js').summarizeToolResultForAssistant;
 }
 
 export interface OAuthDebuggerDeps extends LibraryDeps {

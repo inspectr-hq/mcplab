@@ -1,21 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AssistantRuntimeEvent } from '@inspectr/mcplab-core';
 import { sendSseEvent, type SseEvent } from './jobs.js';
 
-export type AssistantSseEventType =
-  | 'session_started'
-  | 'turn_started'
-  | 'tool_call_requested'
-  | 'tool_call_approved'
-  | 'tool_call_denied'
-  | 'tool_call_resolved'
-  | 'assistant_message_completed'
-  | 'session_warning'
-  | 'session_error'
-  | 'session_finished';
-
-export type AssistantSseEvent = SseEvent & {
-  type: AssistantSseEventType;
-};
+export type AssistantSseEventType = AssistantRuntimeEvent['type'];
+export type AssistantSseEvent = AssistantRuntimeEvent & SseEvent;
 
 export interface AssistantSseSessionState {
   events: AssistantSseEvent[];

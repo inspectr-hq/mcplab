@@ -26,12 +26,22 @@ function makeDeps(options?: {
   body?: unknown;
   servers?: Record<string, any>;
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
+  assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
 }) {
   const captured: Array<{ status: number; body: unknown }> = [];
   const preloadAssistantTools =
     options?.preloadAssistantTools ?? vi.fn().mockResolvedValue(undefined);
   const servers = options?.servers ?? {
     'server-1': { transport: 'http', url: 'https://example.com/mcp' }
+  };
+  const runtime = {
+    sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake response' }),
+    resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
+    getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+    dispose: vi.fn()
+  };
+  const assistantRuntimeFactory = options?.assistantRuntimeFactory ?? {
+    create: vi.fn().mockResolvedValue(runtime)
   };
 
   return {
@@ -60,12 +70,12 @@ function makeDeps(options?: {
         .fn()
         .mockReturnValue({ id: 'assistant-1', provider: 'openai', model: 'gpt-4o-mini' }),
       preloadAssistantTools,
-      continueAssistantTurn: vi.fn(),
-      executeAssistantToolCall: vi.fn(),
-      summarizeToolResultForAssistant: vi.fn()
+      assistantRuntimeFactory
     },
     captured,
-    preloadAssistantTools
+    preloadAssistantTools,
+    assistantRuntimeFactory,
+    runtime
   };
 }
 
@@ -73,12 +83,14 @@ async function callCreateSessionRoute(params?: {
   body?: unknown;
   servers?: Record<string, any>;
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
+  assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
   oauthSessionManager?: { getAuthHeadersForServers: ReturnType<typeof vi.fn> };
 }) {
-  const { deps, captured, preloadAssistantTools } = makeDeps({
+  const { deps, captured, preloadAssistantTools, runtime } = makeDeps({
     body: params?.body,
     servers: params?.servers,
-    preloadAssistantTools: params?.preloadAssistantTools
+    preloadAssistantTools: params?.preloadAssistantTools,
+    assistantRuntimeFactory: params?.assistantRuntimeFactory
   });
   const assistantSessions: AssistantSessionsMap = new Map();
   const oauthSessionManager =
@@ -105,7 +117,10 @@ async function callCreateSessionRoute(params?: {
     response: captured[0],
     preloadAssistantTools,
     assistantSessions,
-    oauthSessionManager
+    oauthSessionManager,
+    deps,
+    assistantRuntimeFactory: deps.assistantRuntimeFactory,
+    runtime
   };
 }
 
@@ -225,6 +240,79 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
   });
 });
 
+describe('Scenario Assistant runtime factory', () => {
+  it('uses an opaque runtime for route create, send, decision, view, and close', async () => {
+    const snapshot = { messages: [], pendingToolCalls: [{ id: 'opaque-1', name: 'write', arguments: {}, status: 'pending' }] };
+    const runtime = {
+      sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake response' }),
+      resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
+      getSnapshot: vi.fn(() => snapshot),
+      dispose: vi.fn()
+    };
+    const assistantRuntimeFactory = { create: vi.fn().mockResolvedValue(runtime) };
+    const { deps, assistantSessions } = await callCreateSessionRoute({ assistantRuntimeFactory });
+    const sessionId = Array.from(assistantSessions.keys())[0];
+    deps.parseBody.mockResolvedValueOnce({ message: 'hello runtime' });
+    const res = new EventEmitter() as any;
+
+    await handleScenarioAssistantRoutes({
+      req: Object.assign(new EventEmitter(), { complete: true, headers: {} }) as any,
+      res,
+      pathname: `/api/scenario-assistant/sessions/${sessionId}/messages`,
+      method: 'POST',
+      settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: deps as any
+    });
+
+    expect(assistantRuntimeFactory.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assistant: 'scenario', context: expect.any(Object) })
+    );
+    expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('mcp');
+    expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('llmMessages');
+    expect(runtime.sendMessage).toHaveBeenCalledWith('hello runtime', expect.any(AbortSignal));
+
+    deps.parseBody.mockResolvedValueOnce({});
+    await handleScenarioAssistantRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/scenario-assistant/sessions/${sessionId}/tool-calls/opaque-1/approve`,
+      method: 'POST',
+      settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: deps as any
+    });
+    expect(runtime.resolveToolCalls).toHaveBeenCalledWith([
+      { toolCallId: 'opaque-1', decision: 'approve' }
+    ], expect.any(AbortSignal));
+
+    await handleScenarioAssistantRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/scenario-assistant/sessions/${sessionId}`,
+      method: 'GET',
+      settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: deps as any
+    });
+    expect(runtime.getSnapshot).toHaveBeenCalled();
+    await handleScenarioAssistantRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: `/api/scenario-assistant/sessions/${sessionId}`,
+      method: 'DELETE',
+      settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: deps as any
+    });
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+  });
+});
+
 describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () => {
   it('does not return a canceled turn response after the request closes', async () => {
     let resolveTurn!: (value: unknown) => void;
@@ -233,6 +321,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
     });
     const req = new EventEmitter() as any;
     req.headers = { host: 'localhost:8787' };
+    const res = Object.assign(new EventEmitter(), { writableEnded: false }) as any;
     const asJson = vi.fn();
     const assistantSessions: AssistantSessionsMap = new Map([
       [
@@ -244,12 +333,15 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
           selectedAssistantAgentName: 'assistant-1',
           context: makeBody().context,
           agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
-          mcp: {},
-          tools: [],
-          toolPublicMap: new Map(),
-          pendingToolCalls: [],
-          chatMessages: [],
-          llmMessages: [],
+          toolsLoaded: 0,
+          toolServers: [],
+          initialMessages: [],
+          runtime: {
+            sendMessage: vi.fn().mockReturnValue(turnPromise),
+            resolveToolCalls: vi.fn(),
+            getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+            dispose: vi.fn()
+          },
           warnings: [],
           events: [],
           clients: new Set()
@@ -259,7 +351,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
 
     const handled = handleScenarioAssistantRoutes({
       req,
-      res: {} as any,
+      res,
       pathname: '/api/scenario-assistant/sessions/sas-1/messages',
       method: 'POST',
       settings: {
@@ -281,14 +373,11 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
         resolveAssistantAgentFromConfig: vi.fn(),
         resolveAssistantAgentFromLibraries: vi.fn(),
         preloadAssistantTools: vi.fn(),
-        continueAssistantTurn: vi.fn().mockReturnValue(turnPromise),
-        executeAssistantToolCall: vi.fn(),
-        summarizeToolResultForAssistant: vi.fn()
       } as any
     });
 
     const handlerPromise = Promise.resolve(handled);
-    req.emit('close');
+    res.emit('close');
     resolveTurn({
       response: {
         type: 'assistant_message',
@@ -300,8 +389,6 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
     await expect(handlerPromise).resolves.toBe(true);
     expect(asJson).not.toHaveBeenCalled();
     const session = assistantSessions.get('sas-1');
-    expect(session?.chatMessages).toHaveLength(0);
-    expect(session?.llmMessages).toHaveLength(0);
-    expect(session?.pendingToolCalls).toHaveLength(0);
+    expect(session?.runtime?.getSnapshot()).toMatchObject({ messages: [], pendingToolCalls: [] });
   });
 });

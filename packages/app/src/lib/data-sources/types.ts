@@ -26,6 +26,31 @@ import type {
   RunOutcome,
   ExecutionSource,
   BrowserProviderProfile,
+  AssistantKind,
+  AssistantSessionEvent,
+  AssistantRuntimeDefinition,
+  AssistantRuntimeEvent,
+  AssistantRuntimeFactory,
+  AssistantRuntimeMessage,
+  AssistantRuntimeModelOutput,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSession,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantRuntimeTool,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule,
   EvaluationDecisionConfig,
   DecisionConnectionTestResult,
   AgentConnectionTestResult,
@@ -33,6 +58,34 @@ import type {
   WorkspaceSettingsPatch,
   WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
+
+export type {
+  AssistantKind,
+  AssistantSessionEvent,
+  AssistantRuntimeDefinition,
+  AssistantRuntimeEvent,
+  AssistantRuntimeFactory,
+  AssistantRuntimeMessage,
+  AssistantRuntimeModelOutput,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSession,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantRuntimeTool,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule
+};
 
 import type {
   CheckCounts as CoreCheckCounts,
@@ -202,75 +255,6 @@ export interface CoreLibraryBundle {
   browserProviders?: Record<string, BrowserProviderProfile>;
 }
 
-export interface ScenarioAssistantSuggestionBundle {
-  prompt?: { replacement: string; rationale?: string };
-  evalRules?: {
-    replacement: Array<{
-      type: EvalRule['type'];
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    rationale?: string;
-  };
-  extractRules?: {
-    replacement: Array<{ name: string; pattern: string }>;
-    rationale?: string;
-  };
-  notes?: string[];
-}
-
-export interface ScenarioAssistantMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCallId?: string;
-  pendingToolCallIds?: string[];
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
-
-export interface ScenarioAssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-export interface ScenarioAssistantSessionView {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  selectedAssistantAgentName: string;
-  model: string;
-  provider: string;
-  warnings: string[];
-  toolsLoaded: number;
-  toolServers: string[];
-  messages: ScenarioAssistantMessage[];
-  pendingToolCalls: ScenarioAssistantPendingToolCall[];
-}
-
-export interface ScenarioAssistantTurnResponse {
-  type: 'assistant_message' | 'tool_call_request' | 'tool_call_resolved';
-  text: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCall?: ScenarioAssistantPendingToolCall;
-  pendingToolCalls?: ScenarioAssistantPendingToolCall[];
-}
-
 export interface ResultAssistantApplyReportResponse {
   ok: boolean;
   runId: string;
@@ -280,68 +264,8 @@ export interface ResultAssistantApplyReportResponse {
   result: unknown;
 }
 
-export interface ResultAssistantSessionMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  pendingToolCallId?: string;
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
-
-export interface ResultAssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-export interface ResultAssistantSessionView {
-  id: string;
-  scope: 'run' | 'all_runs';
-  runId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  selectedAssistantAgentName: string;
-  model: string;
-  provider: string;
-  messages: ResultAssistantSessionMessage[];
-  pendingToolCalls: ResultAssistantPendingToolCall[];
-}
-
-export interface ResultAssistantTurnResponse {
-  type: 'assistant_message' | 'tool_call_request';
-  text: string;
-  pendingToolCall?: ResultAssistantPendingToolCall;
-}
-
-export type AssistantSseEventType =
-  | 'session_started'
-  | 'turn_started'
-  | 'tool_call_requested'
-  | 'tool_call_approved'
-  | 'tool_call_denied'
-  | 'tool_call_resolved'
-  | 'assistant_message_completed'
-  | 'session_warning'
-  | 'session_error'
-  | 'session_finished';
-
-export interface AssistantSseEvent<TSession> {
-  type: AssistantSseEventType;
-  ts: string;
-  payload: Record<string, unknown> & {
-    sessionId: string;
-    session: TSession;
-  };
-}
+export type AssistantSseEventType = AssistantRuntimeEvent['type'];
+export type AssistantSseEvent<TSession> = AssistantSessionEvent<TSession>;
 
 export type ResultAssistantSseEvent = AssistantSseEvent<ResultAssistantSessionView>;
 export type ScenarioAssistantSseEvent = AssistantSseEvent<ScenarioAssistantSessionView>;

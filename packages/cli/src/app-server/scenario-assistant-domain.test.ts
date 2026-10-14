@@ -1,23 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { AgentConfig } from '@inspectr/mcplab-core';
 import {
-  continueAssistantTurn,
+  createScenarioAssistantRuntimeDefinition,
   normalizeScenarioAssistantEvalRules,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
-
-const { chatWithJsonRetryMock } = vi.hoisted(() => ({
-  chatWithJsonRetryMock: vi.fn()
-}));
-
-vi.mock('./assistant-common.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('./assistant-common.js')>('./assistant-common.js');
-  return {
-    ...actual,
-    chatWithJsonRetry: chatWithJsonRetryMock
-  };
-});
 
 function baseSession(): ScenarioAssistantSession {
   return {
@@ -39,9 +26,7 @@ function baseSession(): ScenarioAssistantSession {
     mcp: {} as any,
     tools: [],
     toolPublicMap: new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]]),
-    pendingToolCalls: [],
-    chatMessages: [],
-    llmMessages: [],
+    initialMessages: [],
     warnings: []
   };
 }
@@ -174,184 +159,52 @@ describe('normalizeScenarioAssistantEvalRules', () => {
   });
 });
 
-describe('continueAssistantTurn normalization integration', () => {
-  beforeEach(() => {
-    chatWithJsonRetryMock.mockReset();
+describe('Scenario Assistant runtime definition', () => {
+  it('keeps scenario authoring guidance in the dynamic system prompt', () => {
+    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+    const prompt = definition.getSystemPrompt();
+    expect(prompt).toContain('Optional checks you may suggest when useful');
+    expect(prompt).toContain('tool_sequence');
+    expect(prompt).toContain('agent_check');
+    expect(prompt).toContain('tool_input_regex to match a regular expression anywhere');
   });
 
-  it('includes optional tool_sequence and agent_check guidance in the system prompt', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks'
-    });
-
-    const session = baseSession();
-    await continueAssistantTurn(session);
-
-    const options = chatWithJsonRetryMock.mock.calls[0]?.[0] as {
-      system?: string;
-    };
-    expect(options.system).toContain('Optional checks you may suggest when useful');
-    expect(options.system).toContain('tool_sequence');
-    expect(options.system).toContain('agent_check');
-    expect(options.system).toContain(
-      'tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.'
-    );
-  });
-
-  it('applies tool-name normalization and regex preference cleanup before returning suggestions', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
+  it('normalizes tool names and redundant regex suggestions during output decoding', () => {
+    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+    const output = definition.decodeOutput(JSON.stringify({
       type: 'assistant_message',
       text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [
-            { type: 'required_tool', value: 'srv__refund_tool' },
-            { type: 'response_contains', value: 'refund processed' },
-            { type: 'response_regex', value: 'refund processed' }
-          ]
-        }
-      }
-    });
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-    expect(output.response.type).toBe('assistant_message');
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
+      suggestions: { evalRules: { replacement: [
+        { type: 'required_tool', value: 'srv__refund_tool' },
+        { type: 'response_contains', value: 'refund processed' },
+        { type: 'response_regex', value: 'refund processed' }
+      ] } }
+    }));
+    expect(output).toMatchObject({ type: 'assistant_message', text: 'Updated checks' });
+    if (output.type !== 'assistant_message') throw new Error('Expected assistant message');
+    expect(output.suggestions?.evalRules?.replacement).toEqual([
       { type: 'required_tool', value: 'refund_tool' },
       { type: 'response_contains', value: 'refund processed' }
     ]);
   });
 
-  it('normalizes public tool names inside tool_sequence suggestions', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
+  it('normalizes sequence and tool-input names and removes contradictory rules', () => {
+    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+    const output = definition.decodeOutput(JSON.stringify({
       type: 'assistant_message',
       text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [{ type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] }]
-        }
-      }
-    });
-
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
-      { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] }
-    ]);
-  });
-
-  it('normalizes public tool names in tool-input suggestions', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [
-            { type: 'tool_input_contains', tool: 'srv__refund_tool', value: 'Paris' },
-            { type: 'tool_input_regex', tool: 'srv__refund_tool', value: 'Par.s' },
-            {
-              type: 'tool_input_jsonpath',
-              tool: 'srv__refund_tool',
-              path: '$.city',
-              equals: 'Paris'
-            }
-          ]
-        }
-      }
-    });
-
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
+      suggestions: { evalRules: { replacement: [
+        { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
+        { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
+        { type: 'required_tool', value: 'srv__refund_tool' },
+        { type: 'forbidden_tool', value: 'srv__refund_tool' }
+      ] } }
+    }));
+    if (output.type !== 'assistant_message') throw new Error('Expected assistant message');
+    expect(output.suggestions?.evalRules?.replacement).toEqual([
+      { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] },
       { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
-      { type: 'tool_input_regex', tool: 'refund_tool', value: 'Par.s' },
-      { type: 'tool_input_jsonpath', tool: 'refund_tool', path: '$.city', equals: 'Paris' }
-    ]);
-  });
-
-  it('trims tool names before normalizing tool-input suggestions', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [{ type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' }]
-        }
-      }
-    });
-
-    const output = await continueAssistantTurn(baseSession());
-
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
-      { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' }
-    ]);
-  });
-
-  it('keeps complex regex suggestions when no literal equivalent exists', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [{ type: 'response_regex', value: 'refund\\s+(processed|completed)' }]
-        }
-      }
-    });
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
-      { type: 'response_regex', value: 'refund\\s+(processed|completed)' }
-    ]);
-  });
-
-  it('removes brittle off-by-one negatives when a count check exists', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [
-            { type: 'response_contains', value: 'TM5-BP2' },
-            { type: 'response_contains', value: '9' },
-            { type: 'response_not_contains', value: '10 tags' },
-            { type: 'response_not_contains', value: '8 tags' }
-          ]
-        }
-      }
-    });
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
-      { type: 'response_contains', value: 'TM5-BP2' },
-      { type: 'response_contains', value: '9 tags' }
-    ]);
-  });
-
-  it('removes contradictions before returning assistant suggestions', async () => {
-    chatWithJsonRetryMock.mockResolvedValue({
-      type: 'assistant_message',
-      text: 'Updated checks',
-      suggestions: {
-        evalRules: {
-          replacement: [
-            { type: 'required_tool', value: 'srv__refund_tool' },
-            { type: 'forbidden_tool', value: 'srv__refund_tool' },
-            { type: 'response_contains', value: 'refund processed' },
-            { type: 'response_not_contains', value: 'Refund Processed' },
-            { type: 'response_jsonpath_exists', path: '$.count' },
-            { type: 'response_jsonpath_not_exists', path: '$.count' }
-          ]
-        }
-      }
-    });
-    const session = baseSession();
-    const output = await continueAssistantTurn(session);
-    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
-      { type: 'required_tool', value: 'refund_tool' },
-      { type: 'response_contains', value: 'refund processed' },
-      { type: 'response_jsonpath_exists', path: '$.count' }
+      { type: 'required_tool', value: 'refund_tool' }
     ]);
   });
 });

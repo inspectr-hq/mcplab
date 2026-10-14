@@ -53,9 +53,7 @@ describe('GET /api/scenario-assistant/sessions/:id/events', () => {
         resolveAssistantAgentFromConfig: vi.fn(),
         resolveAssistantAgentFromLibraries: vi.fn(),
         preloadAssistantTools: vi.fn(),
-        continueAssistantTurn: vi.fn(),
-        executeAssistantToolCall: vi.fn(),
-        summarizeToolResultForAssistant: vi.fn()
+        assistantRuntimeFactory: { create: vi.fn() }
       } as any
     });
 

@@ -1,20 +1,22 @@
 import type { ServerResponse } from 'node:http';
 import {
   isLlmAgent,
-  type AgentConfig,
   type EvalConfig,
   type LlmAgentConfig,
-  type LlmMessage,
+  type AssistantRuntimeMessage,
+  type AssistantRuntimeDefinition,
+  type AssistantRuntimeModelOutput,
+  type AssistantRuntimeSession,
+  type ScenarioAssistantSuggestionBundle,
+  type ScenarioAssistantSuggestionRule,
+  type ScenarioAssistantRuntimeContext,
   type ToolDef
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
-  chatWithJsonRetry,
   parseJsonFromAssistantText,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
-  newAssistantEntityId,
-  throwIfAborted,
   touchSession,
   truncateJson,
   withTimeout
@@ -25,60 +27,9 @@ import { readLibraries } from './libraries-store.js';
 
 export { truncateJson } from './assistant-common.js';
 
-interface ScenarioAssistantContextInput {
-  scenario: {
-    id: string;
-    name?: string;
-    prompt: string;
-    serverNames: string[];
-    evalRules: Array<{
-      type: string;
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    extractRules: Array<{ name: string; pattern: string }>;
-  };
-  availableServers?: Array<{ name: string; url?: string }>;
-  availableAgents?: Array<{ name: string; provider: string; model: string }>;
-}
+type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
 
-interface ScenarioAssistantSuggestionBundle {
-  prompt?: { replacement: string; rationale?: string };
-  evalRules?: {
-    replacement: Array<{
-      type: string;
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    rationale?: string;
-  };
-  extractRules?: {
-    replacement: Array<{ name: string; pattern: string }>;
-    rationale?: string;
-  };
-  notes?: string[];
-}
-
-interface ScenarioAssistantEvalRuleSuggestion {
-  type: string;
-  value?: string | number | boolean;
-  sequence?: string[];
-  path?: string;
-  equals?: string | number | boolean;
-  tool?: string;
-  label?: string;
-  prompt?: string;
-}
+type ScenarioAssistantEvalRuleSuggestion = ScenarioAssistantSuggestionRule;
 
 interface ParsedAssistantToolCall {
   name: string;
@@ -92,30 +43,7 @@ interface ParsedAssistantModelOutput {
   toolCall?: ParsedAssistantToolCall;
 }
 
-interface AssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-interface AssistantChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCallId?: string;
-  pendingToolCallIds?: string[];
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
+type AssistantChatMessage = AssistantRuntimeMessage;
 
 export interface ScenarioAssistantSession {
   id: string;
@@ -125,27 +53,32 @@ export interface ScenarioAssistantSession {
   selectedAssistantAgentName: string;
   context: ScenarioAssistantContextInput;
   agentConfig: LlmAgentConfig;
+  toolsLoaded: number;
+  toolServers: string[];
+  initialMessages: AssistantChatMessage[];
+  warnings: string[];
+  events: AssistantSseEvent[];
+  clients: Set<ServerResponse>;
+  runtime?: AssistantRuntimeSession;
+}
+
+export interface PreparedScenarioAssistantSession extends ScenarioAssistantSession {
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
-  pendingToolCalls: AssistantPendingToolCall[];
-  chatMessages: AssistantChatMessage[];
-  llmMessages: LlmMessage[];
-  warnings: string[];
   systemPromptCache?: string;
-  events: AssistantSseEvent[];
-  clients: Set<ServerResponse>;
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
-const SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN = 3;
-const SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
 
 export function cleanupAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
+  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, (session) => {
+    void Promise.resolve(session.runtime?.dispose()).catch(() => {});
+    endAssistantSseClients(session);
+  }, (session) => session.runtime?.isBusy?.() === true);
 }
 
 export function touchAssistantSession(session: ScenarioAssistantSession): void {
@@ -153,6 +86,7 @@ export function touchAssistantSession(session: ScenarioAssistantSession): void {
 }
 
 export function assistantSessionView(session: ScenarioAssistantSession) {
+  const runtimeSnapshot = session.runtime?.getSnapshot();
   return {
     id: session.id,
     createdAt: new Date(session.createdAt).toISOString(),
@@ -161,14 +95,14 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
     model: session.agentConfig.model,
     provider: session.agentConfig.provider,
     warnings: session.warnings,
-    toolsLoaded: session.tools.length,
-    toolServers: Array.from(new Set(session.tools.map((tool) => tool.name.split('__')[0]))),
-    messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls
+    toolsLoaded: session.toolsLoaded,
+    toolServers: session.toolServers,
+    messages: runtimeSnapshot?.messages ?? session.initialMessages,
+    pendingToolCalls: runtimeSnapshot?.pendingToolCalls ?? []
   };
 }
 
-function assistantSystemPrompt(session: ScenarioAssistantSession): string {
+function assistantSystemPrompt(session: PreparedScenarioAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
   const { scenario } = session.context;
   const toolLines = session.tools.map((tool) => {
@@ -242,7 +176,7 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
 }
 
 export async function preloadAssistantTools(
-  session: ScenarioAssistantSession,
+  session: PreparedScenarioAssistantSession,
   serversByName: Record<string, EvalConfig['servers'][string]>,
   selectedServerNames: string[],
   options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
@@ -649,159 +583,56 @@ function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   return parsedObj as ParsedAssistantModelOutput;
 }
 
-function safeAssistantTextFromResponse(rawText: string): string {
-  try {
-    return parseAssistantModelOutput(rawText).text;
-  } catch {
-    return rawText.trim();
-  }
-}
-
-async function assistantChatModel(
-  session: ScenarioAssistantSession,
-  signal?: AbortSignal
-): Promise<ReturnType<typeof parseAssistantModelOutput>> {
-  return chatWithJsonRetry({
+export function createScenarioAssistantRuntimeDefinition(
+  session: PreparedScenarioAssistantSession
+): AssistantRuntimeDefinition {
+  return {
+    assistant: 'scenario',
+    outputMode: 'json',
     agent: session.agentConfig,
-    messages: session.llmMessages,
-    tools: session.tools,
-    system: assistantSystemPrompt(session),
-    parse: parseAssistantModelOutput,
-    toolCallFallbackText: (toolName) => `I need to call '${toolName}' to help answer.`,
-    signal
-  });
-}
-
-export async function continueAssistantTurn(
-  session: ScenarioAssistantSession,
-  signal?: AbortSignal
-): Promise<{
-  session: ReturnType<typeof assistantSessionView>;
-  response: {
-    type: 'assistant_message' | 'tool_call_request';
-    text: string;
-    suggestions?: ScenarioAssistantSuggestionBundle;
-    pendingToolCall?: AssistantPendingToolCall;
-    pendingToolCalls?: AssistantPendingToolCall[];
-  };
-}> {
-  const pendingCountForTurn = session.pendingToolCalls.filter((c) => c.status === 'pending').length;
-  if (pendingCountForTurn > SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
-    throw new Error('Scenario Assistant exceeded maximum pending tool calls for this turn');
-  }
-  const modelOutput = await assistantChatModel(session, signal);
-  throwIfAborted(signal);
-  normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
-  normalizeEvalRuleSuggestions(modelOutput.suggestions);
-  if (modelOutput.type === 'tool_call_request') {
-    const requestedCalls =
-      'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
-        ? modelOutput.toolCalls
-        : [modelOutput.toolCall!];
-
-    const pendingCalls: AssistantPendingToolCall[] = [];
-    const llmToolCalls: Array<{ id: string; name: string; arguments: unknown }> = [];
-
-    for (const requested of requestedCalls) {
-      const mapping = session.toolPublicMap.get(requested.name);
-      if (!mapping) {
-        throw new Error(
-          `Scenario Assistant requested unknown tool '${
-            requested.name
-          }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
-        );
-      }
-      const pending: AssistantPendingToolCall = {
-        id: newAssistantEntityId('satc'),
+    context: session.context,
+    initialMessages: session.initialMessages,
+    dispose: () => session.mcp.disconnectAll(),
+    getSystemPrompt: () => assistantSystemPrompt(session),
+    tools: session.tools.map((tool) => {
+      const mapping = session.toolPublicMap.get(tool.name)!;
+      return {
+        name: tool.name,
         server: mapping.server,
         tool: mapping.tool,
-        publicToolName: requested.name,
-        arguments: requested.arguments ?? {},
-        status: 'pending',
-        createdAt: new Date().toISOString()
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        execute: async (arguments_, signal) =>
+          withTimeout(
+            () => session.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
+            30_000,
+            'Tool call timed out after 30000ms',
+            signal
+          )
       };
-      throwIfAborted(signal);
-      session.pendingToolCalls.push(pending);
-      pendingCalls.push(pending);
-      llmToolCalls.push({
-        id: pending.id,
-        name: pending.publicToolName,
-        arguments: pending.arguments
-      });
-    }
-
-    const firstPending = pendingCalls[0];
-    session.chatMessages.push({
-      id: newAssistantEntityId('msg'),
-      role: 'assistant',
-      text: modelOutput.text,
-      createdAt: new Date().toISOString(),
-      suggestions: modelOutput.suggestions,
-      pendingToolCallId: firstPending.id,
-      pendingToolCallIds: pendingCalls.map((p) => p.id),
-      toolRequestServer: firstPending.server,
-      toolRequestName: firstPending.tool,
-      toolRequestPublicName: firstPending.publicToolName
-    });
-    session.llmMessages.push({
-      role: 'assistant',
-      content: modelOutput.text,
-      tool_calls: llmToolCalls
-    });
-    touchAssistantSession(session);
-    return {
-      session: assistantSessionView(session),
-      response: {
-        type: 'tool_call_request',
-        text: modelOutput.text,
-        suggestions: modelOutput.suggestions,
-        pendingToolCall: firstPending,
-        pendingToolCalls: pendingCalls
+    }),
+    approvalPolicy: (name) =>
+      session.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
+        ? 'automatic'
+        : 'approval_required',
+    decodeOutput: (value): AssistantRuntimeModelOutput => {
+      const parsed = parseAssistantModelOutput(String(value));
+      normalizeEvalRuleToolNames(parsed.suggestions, session.toolPublicMap);
+      normalizeEvalRuleSuggestions(parsed.suggestions);
+      if (parsed.type === 'assistant_message') {
+        return { type: 'assistant_message', text: parsed.text, suggestions: parsed.suggestions };
       }
-    };
-  }
-
-  session.chatMessages.push({
-    id: newAssistantEntityId('msg'),
-    role: 'assistant',
-    text: modelOutput.text,
-    createdAt: new Date().toISOString(),
-    suggestions: modelOutput.suggestions
-  });
-  session.llmMessages.push({
-    role: 'assistant',
-    content: JSON.stringify(modelOutput)
-  });
-  touchAssistantSession(session);
-  return {
-    session: assistantSessionView(session),
-    response: {
-      type: 'assistant_message',
-      text: modelOutput.text,
-      suggestions: modelOutput.suggestions
+      const calls = 'toolCalls' in parsed && Array.isArray(parsed.toolCalls)
+        ? parsed.toolCalls
+        : parsed.toolCall ? [parsed.toolCall] : [];
+      return {
+        type: 'tool_call_request',
+        text: parsed.text,
+        toolCalls: calls.map((call) => ({ name: call.name, arguments: call.arguments })),
+        suggestions: parsed.suggestions
+      };
     }
   };
-}
-
-export async function executeAssistantToolCall(
-  session: ScenarioAssistantSession,
-  pending: AssistantPendingToolCall,
-  signal?: AbortSignal
-): Promise<unknown> {
-  const timeoutMs = 30_000;
-  return withTimeout(
-    () =>
-      session.mcp.callTool(pending.server, pending.tool, pending.arguments, {
-        signal
-      }),
-    timeoutMs,
-    `Tool call timed out after ${timeoutMs}ms`,
-    signal
-  );
-}
-
-export function summarizeToolResultForAssistant(result: unknown): string {
-  return truncateJson(result, SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
 }
 
 export function resolveAssistantAgentFromConfig(

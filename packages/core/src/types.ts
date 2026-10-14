@@ -30,6 +30,212 @@ export interface WorkspaceSettingsPatch {
   librariesDir?: string;
 }
 
+export type AssistantKind = 'scenario' | 'result';
+
+export interface ScenarioAssistantSuggestionRule {
+  type: string;
+  value?: string | number | boolean;
+  sequence?: string[];
+  path?: string;
+  equals?: string | number | boolean;
+  tool?: string;
+  label?: string;
+  prompt?: string;
+}
+
+export interface ScenarioAssistantSuggestionBundle {
+  prompt?: { replacement: string; rationale?: string };
+  evalRules?: { replacement: ScenarioAssistantSuggestionRule[]; rationale?: string };
+  extractRules?: { replacement: Array<{ name: string; pattern: string }>; rationale?: string };
+  notes?: string[];
+}
+
+export interface ScenarioAssistantRuntimeContext {
+  scenario: {
+    id: string;
+    name?: string;
+    prompt: string;
+    serverNames: string[];
+    evalRules: ScenarioAssistantSuggestionRule[];
+    extractRules: Array<{ name: string; pattern: string }>;
+  };
+  availableServers?: Array<{ name: string; url?: string }>;
+  availableAgents?: Array<{ name: string; provider: string; model: string }>;
+}
+
+export interface ResultAssistantRuntimeContext {
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  resultSummary: ResultsJson | null;
+  referenceReportsForRun: Array<{
+    path: string;
+    relativePath: string;
+    name: string;
+    sizeBytes: number;
+    mtime: string;
+  }>;
+}
+
+export interface AssistantRuntimeMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCallId?: string;
+  pendingToolCallIds?: string[];
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
+}
+
+export interface AssistantRuntimeToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+}
+
+export interface AssistantRuntimeSnapshot {
+  messages: AssistantRuntimeMessage[];
+  pendingToolCalls: AssistantRuntimeToolCall[];
+}
+
+export type ScenarioAssistantMessage = AssistantRuntimeMessage;
+export type ScenarioAssistantPendingToolCall = AssistantRuntimeToolCall;
+export type ResultAssistantSessionMessage = AssistantRuntimeMessage;
+export type ResultAssistantPendingToolCall = AssistantRuntimeToolCall;
+
+export interface ScenarioAssistantSessionView {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  warnings: string[];
+  toolsLoaded: number;
+  toolServers: string[];
+  messages: ScenarioAssistantMessage[];
+  pendingToolCalls: ScenarioAssistantPendingToolCall[];
+}
+
+export interface ResultAssistantSessionView {
+  id: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  messages: ResultAssistantSessionMessage[];
+  pendingToolCalls: ResultAssistantPendingToolCall[];
+}
+
+export interface AssistantSessionEvent<TSession = unknown> {
+  type: AssistantRuntimeEvent['type'];
+  ts: string;
+  payload: Record<string, unknown> & { sessionId: string; session: TSession };
+}
+
+export type ScenarioAssistantTurnResponse = AssistantRuntimeResponse;
+export type ResultAssistantTurnResponse =
+  | { type: 'assistant_message'; text: string }
+  | {
+      type: 'tool_call_request' | 'tool_call_resolved';
+      text: string;
+      pendingToolCall?: ResultAssistantPendingToolCall;
+      pendingToolCalls?: ResultAssistantPendingToolCall[];
+    };
+
+export interface AssistantRuntimeEvent {
+  type:
+    | 'session_started'
+    | 'turn_started'
+    | 'tool_call_requested'
+    | 'tool_call_approved'
+    | 'tool_call_denied'
+    | 'tool_call_resolved'
+    | 'assistant_message_completed'
+    | 'session_warning'
+    | 'session_error'
+    | 'session_finished';
+  ts: string;
+  payload: Record<string, unknown>;
+}
+
+export type AssistantRuntimeResponse =
+  | {
+      type: 'assistant_message';
+      text: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+    }
+  | {
+      type: 'tool_call_request' | 'tool_call_resolved';
+      text: string;
+      pendingToolCalls: AssistantRuntimeToolCall[];
+      pendingToolCall?: AssistantRuntimeToolCall;
+    };
+
+export type AssistantRuntimeModelOutput =
+  | { type: 'assistant_message'; text: string; suggestions?: ScenarioAssistantSuggestionBundle }
+  | {
+      type: 'tool_call_request';
+      text: string;
+      toolCalls: Array<{ name: string; arguments?: unknown }>;
+      suggestions?: ScenarioAssistantSuggestionBundle;
+    };
+
+export interface AssistantToolCallDecision {
+  toolCallId: string;
+  decision: 'approve' | 'deny';
+  arguments?: unknown;
+}
+
+export interface AssistantRuntimeDefinition {
+  assistant: AssistantKind;
+  outputMode: 'json' | 'native';
+  agent: LlmAgentConfig;
+  context: ScenarioAssistantRuntimeContext | ResultAssistantRuntimeContext;
+  getSystemPrompt(): string;
+  tools: AssistantRuntimeTool[];
+  initialMessages?: AssistantRuntimeMessage[];
+  approvalPolicy(toolName: string): 'automatic' | 'approval_required' | 'local';
+  decodeOutput(value: unknown): AssistantRuntimeModelOutput;
+  onEvent?(event: AssistantRuntimeEvent): void;
+  dispose?(): Promise<void> | void;
+}
+
+export interface AssistantRuntimeTool {
+  name: string;
+  server: string;
+  tool: string;
+  description?: string;
+  inputSchema?: unknown;
+  execute(arguments_: unknown, signal?: AbortSignal): Promise<unknown>;
+}
+
+export interface AssistantRuntimeSession {
+  sendMessage(message: string, signal?: AbortSignal): Promise<AssistantRuntimeResponse>;
+  resolveToolCalls(
+    decisions: AssistantToolCallDecision[],
+    signal?: AbortSignal
+  ): Promise<AssistantRuntimeResponse>;
+  getSnapshot(): AssistantRuntimeSnapshot;
+  isBusy?(): boolean;
+  dispose(): Promise<void> | void;
+}
+
+export interface AssistantRuntimeFactory {
+  create(definition: AssistantRuntimeDefinition): Promise<AssistantRuntimeSession>;
+}
+
 export interface EvaluationJudge {
   name: string;
   agent: LlmAgentConfig;
