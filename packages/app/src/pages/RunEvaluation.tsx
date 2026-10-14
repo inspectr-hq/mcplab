@@ -544,6 +544,9 @@ const RunEvaluation = () => {
   useEffect(() => {
     refreshConfigAndLibraries();
     void refreshQueue();
+    const unsubscribeQueue = source.subscribeRunQueue((event) => {
+      if (event.type === 'queue_event') void refreshQueue();
+    });
     const handleFocus = () => {
       refreshConfigAndLibraries();
       void refreshQueue();
@@ -556,9 +559,10 @@ const RunEvaluation = () => {
     return () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('mcplab:run-queue-changed', handleQueueChanged);
+      unsubscribeQueue();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload, reloadLibraries]);
+  }, [reload, reloadLibraries, source]);
 
   const removeQueuedJob = async (jobId: string) => {
     try {

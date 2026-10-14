@@ -8,20 +8,33 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
 const activeJobStorageKey = 'mcplab.runEvaluation.activeJobId';
 
-const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAgentsRef } =
+const {
+  configReloadMock,
+  librariesReloadMock,
+  sourceMock,
+  configsRef,
+  libraryAgentsRef,
+  queueEventHandlerRef
+} =
   vi.hoisted(() => {
     const getRunQueue = vi.fn().mockResolvedValue({ active: null, queued: [] });
     const configReloadMock = vi.fn();
     const librariesReloadMock = vi.fn();
     const configsRef = { value: [] as EvalConfig[] };
     const libraryAgentsRef = { value: [] as AgentConfig[] };
+    const queueEventHandlerRef: { current: ((event: unknown) => void) | null } = { current: null };
     return {
       configReloadMock,
       librariesReloadMock,
       configsRef,
       libraryAgentsRef,
+      queueEventHandlerRef,
       sourceMock: {
         getRunQueue,
+        subscribeRunQueue: vi.fn((callback: (event: unknown) => void) => {
+          queueEventHandlerRef.current = callback;
+          return vi.fn();
+        }),
         subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
@@ -77,6 +90,8 @@ beforeEach(() => {
   sourceMock.startRun.mockResolvedValue({ jobId: 'job-1' });
   sourceMock.subscribeRunJob.mockReset();
   sourceMock.subscribeRunJob.mockImplementation(() => () => {});
+  sourceMock.subscribeRunQueue.mockClear();
+  queueEventHandlerRef.current = null;
   sourceMock.stopRun.mockReset();
   sourceMock.openRover.mockClear();
   sourceMock.removeQueuedRun.mockReset();
@@ -102,6 +117,51 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it('refreshes the visible queue when the server sends a queue event', async () => {
+    sourceMock.getRunQueue.mockResolvedValueOnce({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: []
+    });
+    render(
+      <MemoryRouter>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(sourceMock.subscribeRunQueue).toHaveBeenCalledOnce());
+
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'live-evaluation',
+          evaluationName: 'Live evaluation',
+          status: 'running',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [{ jobId: 'live-job', status: 'running', runParams: {} }]
+        }
+      ]
+    });
+    await act(async () => {
+      queueEventHandlerRef.current?.({
+        type: 'queue_event',
+        payload: { event: {} }
+      });
+    });
+
+    expect(await screen.findByText('Live evaluation')).toBeInTheDocument();
+  });
+
   it.each(['queued', 'waiting_for_rover', 'running', 'paused_rover'] as const)(
     'keeps Open browser agent available for a %s browser job',
     async (status) => {
