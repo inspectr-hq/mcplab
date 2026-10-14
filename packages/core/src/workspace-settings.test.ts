@@ -22,19 +22,6 @@ const decision = {
 };
 
 describe('toWorkspaceEvaluationSettings', () => {
-  it('preserves an explicitly disabled judge while retaining its selected agent and engine', () => {
-    expect(
-      toWorkspaceEvaluationSettings({
-        evaluation_judge_enabled: false,
-        evaluation_judge_agent_name: 'judge',
-        evaluation_decision: decision
-      })
-    ).toMatchObject({
-      evaluationJudgeEnabled: false,
-      evaluationJudgeAgentName: 'judge',
-      evaluationDecision: decision
-    });
-  });
   it('converts persisted evaluation settings to the shared camelCase contract', () => {
     expect(
       toWorkspaceEvaluationSettings({
@@ -63,22 +50,6 @@ describe('toWorkspaceEvaluationSettings', () => {
 });
 
 describe('resolveWorkspaceEvaluation', () => {
-  it.each(['deleted', 'browser', undefined])(
-    'skips lookup and decision setup when semantic evaluation is off with judge %s',
-    (name) => {
-      expect(
-        resolveWorkspaceEvaluation({
-          agents,
-          scenarios: [semantic],
-          settings: {
-            evaluationJudgeEnabled: false,
-            evaluationJudgeAgentName: name,
-            evaluationDecision: decision
-          }
-        })
-      ).toEqual({ evaluationJudgeEnabled: false });
-    }
-  );
   it('accepts the shared camelCase evaluation settings contract', () => {
     expectTypeOf<
       ResolveWorkspaceEvaluationParams['settings']

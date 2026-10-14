@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import {
   isDecisionEngineEnabled,
-  isSemanticEvaluationEnabled,
   loadWorkspaceSettingsOverrides,
   normalizeEvaluationDecisionConfig,
   resolveEvaluationJudge,
@@ -51,7 +50,6 @@ export function applySettingsOverrides(settings: AppSettings): void {
   settings.scenarioAssistantAgentName =
     overrides.scenario_assistant_agent_name?.trim() || undefined;
   settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
-  settings.evaluationJudgeEnabled = overrides.evaluation_judge_enabled !== false;
   settings.evaluationDecision = overrides.evaluation_decision;
 }
 
@@ -63,13 +61,7 @@ export function applyEvaluationSettingsPatch(
 ): AppSettings {
   const candidate = { ...settings };
   const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
-  const hasJudgeEnabled = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeEnabled');
   const hasDecision = Object.prototype.hasOwnProperty.call(body, 'evaluationDecision');
-  if (hasJudgeEnabled) {
-    if (typeof body.evaluationJudgeEnabled !== 'boolean')
-      throw new Error('Evaluation judge enabled must be a boolean.');
-    candidate.evaluationJudgeEnabled = body.evaluationJudgeEnabled;
-  }
   if (hasJudge) {
     candidate.evaluationJudgeAgentName =
       String(body.evaluationJudgeAgentName ?? '').trim() || undefined;
@@ -81,16 +73,11 @@ export function applyEvaluationSettingsPatch(
         : normalizeEvaluationDecisionConfig(body.evaluationDecision);
   }
   const engineEnabled = isDecisionEngineEnabled(candidate.evaluationDecision);
-  if (
-    isSemanticEvaluationEnabled(candidate) &&
-    (hasJudge || hasJudgeEnabled || (hasDecision && engineEnabled))
-  ) {
+  if (hasJudge || (hasDecision && engineEnabled)) {
     const judge = resolveEvaluationJudge({
       agents: typeof agents === 'function' ? agents() : agents,
       evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
     });
-    if (hasJudgeEnabled && !judge)
-      throw new Error('Configure an LLM evaluation judge before turning semantic evaluation on.');
     if (engineEnabled && !judge) {
       throw new Error('Decision engines require a configured LLM evaluation judge as backup.');
     }
@@ -100,7 +87,6 @@ export function applyEvaluationSettingsPatch(
 
 export function persistSettingsOverrides(settings: AppSettings): void {
   const payload: WorkspaceSettingsOverrides = {
-    ...(settings.evaluationJudgeEnabled === false ? { evaluation_judge_enabled: false } : {}),
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
     ...(settings.scenarioAssistantAgentName
       ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }

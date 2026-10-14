@@ -413,10 +413,6 @@ run_defaults:
 
 ### Optional Decision Engine
 
-The **Evaluation Judge** section has an on/off switch at its top right. Changes save automatically. Turn it off to mark semantic agent checks **Not evaluated**, retaining the selected judge and Decision Engine configuration. Both semantic evaluators are skipped; deterministic tool and response checks still run. Skipped checks are counted as not evaluated, rather than passed or failed. Turning evaluation back on requires a valid LLM judge. The setting applies to subsequent evaluations and does not change historical results. Existing workspaces default to on.
-
-In workspace YAML, use `evaluation_judge_enabled: false` to disable semantic evaluation. The settings API uses the boolean `evaluationJudgeEnabled`. The judge name remains in `evaluation_judge_agent_name`.
-
 In **Settings**, configure an **Evaluation Judge**, then select a **Decision Engine** beside it. Decision engines evaluate semantic `agent_assertions` on the completed answers of API and browser agents. They do not run scenarios or replace conversational assistants.
 
 Supported providers:
@@ -446,7 +442,7 @@ Set **Pass probability threshold** and **Fail probability threshold**, then clic
 
 Use **Test connection** to check the current provider, model, and Ollama URL before saving. MCPLab sends one small synthetic decision request using backend credentials and reports success or failure, including missing credentials. The test does not save settings or call the Evaluation Judge. Any valid probability counts as a successful connection; thresholds do not determine connection success. Hosted requests use a 10-second timeout, and Ollama uses 120 seconds. Changing the form clears the test result and cancels any pending test.
 
-A valid LLM Evaluation Judge remains required as backup while semantic evaluation is on. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
+A valid LLM Evaluation Judge remains required as backup. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
 
 Turn **Use Decision Engine** off and click **Save Decision Engine** to use the LLM judge while keeping the provider, model, URL, and thresholds. Turn it back on and save to resume decision evaluation. **Test connection** remains available while off and sends an explicit test request. Existing configurations without an `enabled` flag remain on. Choosing **None** and saving clears the configuration instead.
 

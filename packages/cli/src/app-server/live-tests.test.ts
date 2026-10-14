@@ -42,39 +42,6 @@ describe('Live Test catalog', () => {
 });
 
 describe('LiveTestService', () => {
-  it('marks Rover semantic checks not evaluated when the workspace judge is off', async () => {
-    semanticEvaluator.mockClear();
-    const persist = vi.fn();
-    const service = new LiveTestService({
-      runsDir: '/tmp',
-      cliVersion: 'test',
-      persist,
-      appendJournalEvent: () => undefined,
-      readScenarios: () => [
-        {
-          id: 'semantic-off',
-          servers: [],
-          prompt: 'Find Antwerp',
-          eval: {
-            response_assertions: [{ type: 'contains', value: 'Antwerp' }],
-            agent_assertions: [{ label: 'City', prompt: 'Correct?' }]
-          }
-        }
-      ],
-      getWorkspaceEvaluation: () => ({ evaluationJudgeEnabled: false })
-    });
-    const session = service.start({ testCaseId: 'semantic-off', client: 'polo' });
-    await service.complete(session.id, {
-      finalText: 'Antwerp',
-      startedAt: '2026-10-14T00:00:00Z',
-      completedAt: '2026-10-14T00:00:01Z'
-    });
-    expect(semanticEvaluator).not.toHaveBeenCalled();
-    expect(persist.mock.calls[0][0].results.scenarios[0].runs[0].check_results).toEqual([
-      expect.objectContaining({ status: 'passed' }),
-      expect.objectContaining({ type: 'agent_check', status: 'not_evaluated' })
-    ]);
-  });
   it('aborts an in-flight decision evaluation and never persists a cancelled completion', async () => {
     let finish!: (results: unknown) => void;
     semanticEvaluator.mockImplementationOnce(

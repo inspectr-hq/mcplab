@@ -12,7 +12,6 @@ export {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
-  isSemanticEvaluationEnabled,
   normalizeEvaluationDecisionConfig
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;

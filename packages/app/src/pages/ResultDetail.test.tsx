@@ -323,50 +323,6 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getAllByText('1 not executed').length).toBeGreaterThan(0);
   });
 
-  it('renders intentionally disabled semantic checks as Not evaluated without counting a pass', async () => {
-    const result = makeResult();
-    result.scenarios[0].runs[0].checkResults = [
-      {
-        type: 'agent_check',
-        label: 'Accuracy',
-        status: 'not_evaluated',
-        reason: 'Evaluation Judge is turned off in workspace settings.'
-      }
-    ];
-    mockConfigs.push({
-      id: 'cfg-1',
-      name: 'Config',
-      agents: [],
-      scenarios: [
-        {
-          id: 'scn-1',
-          name: 'Scenario 1',
-          prompt: 'Prompt',
-          serverIds: [],
-          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
-          extractRules: []
-        }
-      ],
-      createdAt: '2026-02-08T10:00:00Z',
-      updatedAt: '2026-02-08T10:00:00Z'
-    });
-    getResultMock.mockResolvedValue(result);
-    render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
-        <Routes>
-          <Route path="/results/:id" element={<ResultDetail />} />
-        </Routes>
-      </MemoryRouter>
-    );
-    await screen.findByText('run-1');
-    expect(screen.getByTitle('0 passed · 0 failed · 1 not evaluated')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText('Not evaluated', { exact: true })).toBeInTheDocument();
-    expect(
-      screen.getByText('Evaluation Judge is turned off in workspace settings.')
-    ).toBeInTheDocument();
-  });
-
   it('shows decision probability and fallback alongside the semantic check reason', async () => {
     const result = makeResult();
     result.scenarios[0].runs[0].checkResults = [

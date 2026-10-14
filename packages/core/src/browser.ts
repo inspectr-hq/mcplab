@@ -5,7 +5,6 @@ export {
   DECISION_PROVIDERS,
   DECISION_DEFAULTS
 } from './decision-config.js';
-export { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 export type { EvaluationDecisionConfig, WorkspaceSettingsPatch } from './types.js';
 export {
   formatToolInputAssertionFailureReason,

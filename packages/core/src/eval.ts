@@ -1,6 +1,5 @@
 import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
-import { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 import type {
   AgentAssertion,
   AgentAssertionJudgeResult,
@@ -10,8 +9,7 @@ import type {
   ResponseAssertion,
   ToolConstraints,
   ToolCall,
-  ToolInputAssertion,
-  WorkspaceEvaluation
+  ToolInputAssertion
 } from './types.js';
 
 export interface EvalResult {
@@ -34,30 +32,14 @@ export interface JudgeAgentAssertionsInput {
   context?: AgentJudgeContext;
 }
 
-export interface EvaluateScenarioWithAgentChecksOptions extends Pick<
-  WorkspaceEvaluation,
-  'evaluationJudgeEnabled'
-> {
+export interface EvaluateScenarioWithAgentChecksOptions {
   toolCalls?: ToolCall[];
   availableToolNames?: string[];
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
   scenarioPrompt?: string;
 }
 
-function buildDisabledAgentCheckResults(assertions: AgentAssertion[]): CheckResult[] {
-  return assertions.map(({ label }) => ({
-    type: 'agent_check',
-    label,
-    status: 'not_evaluated',
-    reason: 'Evaluation Judge is turned off in workspace settings.',
-    metadata: { semantic_evaluation_disabled: true }
-  }));
-}
-
-export function buildNotExecutedCheckResults(
-  evalRules?: EvalRules,
-  options?: Pick<WorkspaceEvaluation, 'evaluationJudgeEnabled'>
-): CheckResult[] {
+export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
@@ -93,12 +75,8 @@ export function buildNotExecutedCheckResults(
       }
     });
   }
-  if (!isSemanticEvaluationEnabled(options)) {
-    results.push(...buildDisabledAgentCheckResults(evalRules.agent_assertions ?? []));
-  } else {
-    for (const assertion of evalRules.agent_assertions ?? []) {
-      results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
-    }
+  for (const assertion of evalRules.agent_assertions ?? []) {
+    results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
   }
   return results;
 }
@@ -180,14 +158,6 @@ export async function evaluateScenarioWithAgentChecks(
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
     return { pass: failures.length === 0, failures, check_results };
-  }
-
-  if (!isSemanticEvaluationEnabled(options)) {
-    return {
-      pass: false,
-      failures,
-      check_results: [...check_results, ...buildDisabledAgentCheckResults(agentAssertions)]
-    };
   }
 
   if (!options?.judgeAgentAssertions) {

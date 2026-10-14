@@ -152,11 +152,8 @@ paths:
                   oneOf:
                     - type: string
                     - type: "null"
-                evaluationJudgeEnabled:
-                  type: boolean
-                  description: False retains judge and decision configuration but marks semantic agent checks not_evaluated without calling either evaluator. Tool and response checks still run. Turning on requires a valid LLM judge.
                 evaluationDecision:
-                  description: Optional decision engine for semantic checks. When semantic evaluation and the engine are enabled, requires an LLM evaluation judge as backup. Set engine enabled to false to retain configuration while using the judge. Null clears the configuration.
+                  description: Optional decision engine for semantic checks. When enabled, requires an LLM evaluation judge as backup. Set enabled to false to retain configuration while using the judge. Null clears the configuration.
                   oneOf:
                     - $ref: "#/components/schemas/EvaluationDecisionConfig"
                     - type: "null"
@@ -1722,10 +1719,6 @@ components:
         toolAnalysisResultsDir: { type: string }
         scenarioAssistantAgentName: { type: string }
         evaluationJudgeAgentName: { type: string }
-        evaluationJudgeEnabled:
-          type: boolean
-          default: true
-          description: Controls semantic agent checks. False marks them not_evaluated and skips both judge and Decision Engine requests while retaining their configuration. Omitted means enabled for legacy workspaces.
         evaluationDecision:
           $ref: "#/components/schemas/EvaluationDecisionConfig"
         defaultQueueWorkers: { type: integer, minimum: 1, maximum: 8 }

@@ -15,7 +15,6 @@ import {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
-  isSemanticEvaluationEnabled,
   normalizeEvaluationDecisionConfig,
   type EvaluationDecisionConfig,
   type DecisionConnectionTestResult
@@ -32,7 +31,6 @@ const SettingsPage = () => {
   const [savingSettings, setSavingSettings] = useState(false);
   const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
-  const [evaluationJudgeEnabled, setEvaluationJudgeEnabled] = useState(true);
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
   const [decisionProvider, setDecisionProvider] = useState<
     EvaluationDecisionConfig['provider'] | ''
@@ -94,13 +92,11 @@ const SettingsPage = () => {
       const settings = await source.getWorkspaceSettings();
       setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
-      setEvaluationJudgeEnabled(isSemanticEvaluationEnabled(settings));
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       applyDecisionSettings(settings?.evaluationDecision);
     } catch (error: unknown) {
       setScenarioAssistantAgentName('');
       setEvaluationJudgeAgentName('');
-      setEvaluationJudgeEnabled(true);
       setDefaultQueueWorkers('1');
       applyDecisionSettings();
       toast({
@@ -168,12 +164,7 @@ const SettingsPage = () => {
   };
 
   const saveEvaluationJudgeSetting = async (nextAgentName: string) => {
-    if (
-      evaluationJudgeEnabled &&
-      !nextAgentName &&
-      savedDecision &&
-      isDecisionEngineEnabled(savedDecision)
-    ) {
+    if (!nextAgentName && savedDecision && isDecisionEngineEnabled(savedDecision)) {
       setDecisionError(
         'Turn off and save, or clear, the Decision Engine before removing its backup LLM evaluation judge.'
       );
@@ -194,31 +185,6 @@ const SettingsPage = () => {
       });
     } catch (error: unknown) {
       setEvaluationJudgeAgentName(previousAgentName);
-      toast({
-        title: 'Could not save settings',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingSettings(false);
-    }
-  };
-
-  const saveEvaluationJudgeEnabled = async (enabled: boolean) => {
-    const previous = evaluationJudgeEnabled;
-    setEvaluationJudgeEnabled(enabled);
-    setSavingSettings(true);
-    try {
-      await source.updateWorkspaceSettings({ evaluationJudgeEnabled: enabled });
-      setDecisionError('');
-      toast({
-        title: 'Settings updated',
-        description: enabled
-          ? 'Semantic evaluation is on.'
-          : 'Semantic agent checks will be marked Not evaluated.'
-      });
-    } catch (error: unknown) {
-      setEvaluationJudgeEnabled(previous);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
@@ -277,7 +243,7 @@ const SettingsPage = () => {
     let decision: EvaluationDecisionConfig | null = null;
     try {
       decision = readDecisionDraft();
-      if (evaluationJudgeEnabled && isDecisionEngineEnabled(decision)) {
+      if (isDecisionEngineEnabled(decision)) {
         if (
           !llmAgents.some(
             (agent) =>
@@ -381,20 +347,9 @@ const SettingsPage = () => {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle className="text-base">Evaluation Judge</CardTitle>
-            <Switch
-              id="evaluation-judge-enabled"
-              checked={evaluationJudgeEnabled}
-              onCheckedChange={(enabled) => void saveEvaluationJudgeEnabled(enabled)}
-              disabled={savingSettings || loadingSettings}
-              aria-label="Use Evaluation Judge"
-              aria-describedby="evaluation-judge-enabled-help"
-              className="shrink-0"
-            />
-          </div>
+          <CardTitle className="text-base">Evaluation Judge</CardTitle>
           <CardDescription>
-            Controls semantic agent checks. Tool and response checks run independently.
+            Default judge agent used by semantic agent checks during scenario evaluation runs.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
@@ -423,13 +378,7 @@ const SettingsPage = () => {
             </Select>
             <p className="text-xs text-muted-foreground">
               Used by agent checks that semantically evaluate the final answer. If unset, runs with
-              enabled agent checks will fail before execution.
-            </p>
-            <p id="evaluation-judge-enabled-help" className="text-xs text-muted-foreground">
-              {evaluationJudgeEnabled
-                ? 'On: semantic agent checks use the Decision Engine when configured, with the Evaluation Judge as backup.'
-                : 'Off: semantic agent checks are marked Not evaluated. Your judge and decision configuration is kept.'}{' '}
-              Changes are saved automatically.
+              agent checks will fail before execution.
             </p>
           </div>
           <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
@@ -457,11 +406,9 @@ const SettingsPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <p id="decision-enabled-help" className="text-xs text-muted-foreground">
-            {!evaluationJudgeEnabled
-              ? 'Semantic evaluation is off. This configuration is kept for when Evaluation Judge is turned on.'
-              : decisionEnabled
-                ? 'On: semantic checks use the Decision Engine with judge fallback.'
-                : 'Off: semantic checks use the Evaluation Judge. Your decision configuration is kept.'}{' '}
+            {decisionEnabled
+              ? 'On: semantic checks use the Decision Engine with judge fallback.'
+              : 'Off: semantic checks use the Evaluation Judge. Your decision configuration is kept.'}{' '}
             Click Save Decision Engine to apply changes.
           </p>
           <div className="space-y-1.5">

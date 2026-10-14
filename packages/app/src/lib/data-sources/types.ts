@@ -45,7 +45,6 @@ export {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
-  isSemanticEvaluationEnabled,
   normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,

@@ -156,7 +156,6 @@ export async function executeRunJob(params: {
     | 'librariesDir'
     | 'workspaceRoot'
     | 'evaluationJudgeAgentName'
-    | 'evaluationJudgeEnabled'
     | 'evaluationDecision'
   >;
   oauthSessionManager: OAuthSessionManager;

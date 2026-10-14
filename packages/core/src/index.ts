@@ -21,7 +21,6 @@ export {
   DECISION_PROVIDERS,
   DECISION_DEFAULTS
 } from './decision-config.js';
-export { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 export {
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,

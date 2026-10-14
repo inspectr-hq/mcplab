@@ -215,13 +215,9 @@ describe('run request validation', () => {
     );
   });
 
-  it.each([
-    [true, true],
-    [false, true],
-    [true, false]
-  ] as const)(
-    'only validates the preview judge when semantic checks are present=%s and enabled=%s',
-    async (hasSemanticChecks, evaluationJudgeEnabled) => {
+  it.each([true, false])(
+    'only validates the preview judge when semantic checks are present=%s',
+    async (hasSemanticChecks) => {
       const responses: Array<{ status: number; payload: unknown }> = [];
       const handled = await handleRunsRoutes({
         req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
@@ -234,8 +230,7 @@ describe('run request validation', () => {
           librariesDir: '/tmp',
           workspaceRoot: '/tmp',
           toolAnalysisResultsDir: '/tmp',
-          evaluationJudgeAgentName: 'missing-judge',
-          evaluationJudgeEnabled
+          evaluationJudgeAgentName: 'missing-judge'
         } as any,
         runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
         oauthSessionManager: {} as any,
@@ -269,15 +264,13 @@ describe('run request validation', () => {
       });
 
       expect(handled).toBe(true);
-      expect(responses[0]?.status).toBe(hasSemanticChecks && evaluationJudgeEnabled ? 400 : 200);
-      if (hasSemanticChecks && evaluationJudgeEnabled) {
+      expect(responses[0]?.status).toBe(hasSemanticChecks ? 400 : 200);
+      if (hasSemanticChecks) {
         expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
           'Evaluation judge agent not found: missing-judge'
         );
       } else {
         expect(vi.mocked(runAll).mock.lastCall?.[1].evaluationJudge).toBeUndefined();
-        if (!evaluationJudgeEnabled)
-          expect(vi.mocked(runAll).mock.lastCall?.[1].evaluationJudgeEnabled).toBe(false);
       }
     }
   );

@@ -14,21 +14,6 @@ vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
 import { registerTools } from './runtime.js';
 
 describe('immediate MCP decision evaluation', () => {
-  it('forwards disabled semantic evaluation without resolving a missing judge', async () => {
-    mocks.loadWorkspaceSettingsOverrides.mockReturnValue({
-      evaluation_judge_enabled: false,
-      evaluation_judge_agent_name: 'deleted',
-      evaluation_decision: decision
-    });
-    const result = await runTool({ config_path: '/tmp/eval.yaml' });
-    expect(result.isError).not.toBe(true);
-    expect(mocks.runAll).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ evaluationJudgeEnabled: false })
-    );
-    expect(mocks.runAll.mock.calls[0][1].evaluationJudge).toBeUndefined();
-    expect(mocks.runAll.mock.calls[0][1].evaluationDecision).toBeUndefined();
-  });
   const agent = { provider: 'openai' as const, model: 'gpt-5-mini' };
   const decision = {
     provider: 'ollama' as const,

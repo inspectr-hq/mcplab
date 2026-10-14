@@ -11,7 +11,6 @@ import type {
   WorkspaceEvaluation
 } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
-import { isSemanticEvaluationEnabled } from './evaluation-settings.js';
 import { isLlmAgent } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -111,11 +110,7 @@ export async function runAll(
   const scenariosWithAgentChecks = scenariosToRun.filter(
     (scenario) => (scenario.eval?.agent_assertions?.length ?? 0) > 0
   );
-  if (
-    scenariosWithAgentChecks.length > 0 &&
-    isSemanticEvaluationEnabled(options) &&
-    !options.evaluationJudge
-  ) {
+  if (scenariosWithAgentChecks.length > 0 && !options.evaluationJudge) {
     throw new Error(
       `Agent checks require a default evaluation judge agent. Configure one in workspace settings before running scenarios: ${scenariosWithAgentChecks
         .map((scenario) => scenario.id)
@@ -294,7 +289,6 @@ export async function runAll(
           const scenarioRun = await evaluateScenarioObservation({
             scenario: { ...scenario, eval: effectiveScenarioEval },
             runIndex,
-            evaluationJudgeEnabled: options.evaluationJudgeEnabled,
             observation: {
               finalText: runResult.finalText,
               toolCalls: runResult.toolCalls,
@@ -416,7 +410,7 @@ export async function runAll(
             outcome,
             ...(stopped ? { stop_reason: errorMessage } : { error: errorMessage }),
             failures: stopped ? [] : [`Scenario error: ${errorMessage}`],
-            check_results: buildNotExecutedCheckResults(scenario.eval, options),
+            check_results: buildNotExecutedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],

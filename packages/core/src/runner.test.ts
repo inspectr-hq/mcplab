@@ -20,60 +20,10 @@ import { buildJudgeBatchPayload, mapJudgeBatchResults, extractJudgeJson } from '
 
 const temporaryRunDirs: string[] = [];
 afterEach(() => {
-  runAgentScenarioMock.mockReset();
   for (const dir of temporaryRunDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe('runAll agent dispatch', () => {
-  it('runs semantic scenarios without a judge when evaluation is disabled and leaves checks not evaluated', async () => {
-    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-judge-disabled-'));
-    temporaryRunDirs.push(runsDir);
-    runAgentScenarioMock.mockResolvedValueOnce({
-      finalText: 'done',
-      toolCalls: [],
-      toolDurationsMs: [],
-      availableToolNames: [],
-      toolSequence: [],
-      traceMessages: [],
-      traceModel: 'test',
-      traceProvider: 'openai',
-      traceStartedAt: '2026-10-14T12:00:00Z',
-      traceEndedAt: '2026-10-14T12:00:01Z'
-    });
-    const result = await runAll(
-      {
-        servers: {},
-        agents: { agent: { provider: 'openai', model: 'test' } },
-        scenarios: [
-          {
-            id: 's1',
-            prompt: 'test',
-            agent: 'agent',
-            servers: [],
-            eval: {
-              response_assertions: [{ type: 'contains', value: 'done' }],
-              agent_assertions: [{ label: 'Check', prompt: 'Correct?' }]
-            }
-          }
-        ]
-      },
-      {
-        runsPerScenario: 1,
-        configHash: 'test',
-        cliVersion: 'test',
-        runsDir,
-        evaluationJudgeEnabled: false,
-        traceExporter: {
-          startScenario: () => ({ end: async () => undefined }),
-          flush: async () => ({ traceUrls: {} })
-        }
-      }
-    );
-    expect(result.results.scenarios[0].runs[0].check_results).toEqual([
-      expect.objectContaining({ status: 'passed' }),
-      expect.objectContaining({ type: 'agent_check', status: 'not_evaluated' })
-    ]);
-  });
   it('keeps an evaluated run when trace cleanup fails after a late child stop', async () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-recorded-stop-'));
     temporaryRunDirs.push(runsDir);
