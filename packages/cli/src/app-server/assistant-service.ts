@@ -50,6 +50,7 @@ export async function createAssistantRuntimeService(
     const controller = new AbortController();
     activeController = controller;
     let operationSettled = false;
+    let operationStarted = false;
     const abort = () => {
       controller.abort();
       if (!operationSettled) suppressRuntimeEvents = true;
@@ -57,8 +58,20 @@ export async function createAssistantRuntimeService(
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
     const finish = () => {
+      if (operationSettled) return;
       operationSettled = true;
       if (activeController !== controller) return;
+      if (suppressRuntimeEvents && operationStarted && !disposed) {
+        try {
+          onRuntimeEvent?.({
+            type: 'session_error',
+            ts: new Date().toISOString(),
+            payload: { error: 'Assistant operation cancelled' }
+          });
+        } catch {
+          // An observer must not prevent the operation lock from being released.
+        }
+      }
       busy = false;
       activeController = undefined;
       suppressRuntimeEvents = false;
@@ -71,9 +84,10 @@ export async function createAssistantRuntimeService(
       }
       const operationPromise = Promise.resolve().then(() => {
         throwIfAborted(controller.signal);
+        operationStarted = true;
         return operation(controller.signal);
       });
-      void operationPromise.then(finish, finish);
+      void operationPromise.then(finish, finish).catch(() => {});
       const result = await Promise.race([
         operationPromise,
         new Promise<never>((_, reject) =>

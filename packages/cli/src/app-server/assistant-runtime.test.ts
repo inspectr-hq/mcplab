@@ -4,6 +4,7 @@ import type {
   AssistantRuntimeModelOutput
 } from '@inspectr/mcplab-core';
 import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
+import { validateScenarioAssistantProposal } from './scenario-assistant-domain.js';
 
 describe('native assistant runtime', () => {
   it('keeps validated local proposals private until the final assistant message', async () => {
@@ -172,7 +173,9 @@ describe('native assistant runtime', () => {
               {
                 id: 'bad-proposal',
                 name: 'propose',
-                arguments: { evalRules: { replacement: [{ type: 'made_up' }] } }
+                arguments: {
+                  evalRules: { replacement: [{ type: 'agent_check', prompt: 'Check intent' }] }
+                }
               }
             ]
           }
@@ -184,11 +187,7 @@ describe('native assistant runtime', () => {
             name: 'propose',
             server: 'local',
             tool: 'propose',
-            execute: async (args) => {
-              if ((args as any)?.evalRules?.replacement?.[0]?.type !== 'response_contains')
-                throw new Error('Invalid scenario proposal');
-              return args;
-            },
+            execute: async (args) => validateScenarioAssistantProposal(args, new Map()),
             extractProposal: (value) => value as any
           }
         ],
@@ -198,7 +197,7 @@ describe('native assistant runtime', () => {
     const result = await session.sendMessage('Suggest a check');
     expect(result).toMatchObject({ type: 'assistant_message', text: 'I will correct that.' });
     expect(JSON.parse(histories[1].at(-1).content)).toMatchObject({
-      error: 'Invalid scenario proposal'
+      error: expect.stringContaining('evalRules.replacement[0].label')
     });
     expect(result).not.toHaveProperty('suggestions');
   });
@@ -931,6 +930,47 @@ describe('native assistant runtime', () => {
     expect(histories[1].at(-1)).toMatchObject({ role: 'tool' });
     expect(histories[1].at(-1)?.content).toContain('ok');
     expect(session.getSnapshot().pendingToolCalls[0].status).toBe('approved');
+  });
+
+  it('sends the stored truncated preview to later model rounds', async () => {
+    const histories: Array<Array<{ role: string; content: string; tool_call_id?: string }>> = [];
+    const longValue = 'x'.repeat(10_000);
+    const outputs: AssistantRuntimeModelOutput[] = [
+      { type: 'tool_call_request', text: 'Reading', toolCalls: [{ id: 'large', name: 'read' }] },
+      { type: 'assistant_message', text: 'Done' },
+      { type: 'assistant_message', text: 'Still done' }
+    ];
+    const session = await createNativeAssistantRuntimeFactory(async (_definition, messages) => {
+      histories.push(
+        messages.map(({ role, content, tool_call_id }) => ({
+          role,
+          content: String(content),
+          tool_call_id
+        }))
+      );
+      return outputs.shift()!;
+    }).create(
+      makeDefinition({
+        tools: [{ name: 'read', server: 's', tool: 'read', execute: async () => longValue }],
+        approvalPolicy: () => 'approval_required'
+      })
+    );
+    const pending = await session.sendMessage('Read');
+    if (pending.type !== 'tool_call_request') throw new Error('Expected tool request');
+    await session.resolveToolCalls([{ toolCallId: 'large', decision: 'approve' }]);
+
+    const expectedPreview = (await import('./assistant-common.js')).truncateJson(longValue, 4000);
+    expect(histories[1].at(-1)).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'large',
+      content: expectedPreview
+    });
+    expect(histories[1].at(-1)?.content.length).toBeLessThan(longValue.length);
+    await session.sendMessage('Continue');
+    expect(histories[2].find(({ tool_call_id }) => tool_call_id === 'large')).toMatchObject({
+      role: 'tool',
+      content: expectedPreview
+    });
   });
 });
 

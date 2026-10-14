@@ -57,6 +57,7 @@ export interface PreparedScenarioAssistantSession extends ScenarioAssistantSessi
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 
+// The hard TTL also aborts work in abandoned sessions; active operations refresh lastTouchedAt.
 export function cleanupAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
@@ -102,7 +103,7 @@ function assistantSystemPrompt(session: PreparedScenarioAssistantSession): strin
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), and Value Capture Rules.',
     'Use the available MCP tools and schemas to ground suggestions.',
-    'If you need live MCP information, call a tool and wait for approval.',
+    'Use up to three external tool calls per batch. Read-only batches can continue automatically. If any call in a batch requires approval, wait for a decision on every call in that batch, including read calls; each call is approved or denied separately.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
     'Respond naturally in ordinary prose. Use the local propose_scenario_changes tool whenever you propose scenario edits.',
@@ -606,35 +607,32 @@ const proposalSchema = {
     notes: { type: 'array', items: { type: 'string' } }
   }
 };
-function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).every((key) => keys.includes(key));
-}
-
 export function validateScenarioAssistantProposal(
   input: unknown,
   toolPublicMap: Map<string, { server: string; tool: string }>
 ): ScenarioAssistantSuggestionBundle {
-  const invalid = (): never => {
-    throw new Error(
-      'Invalid scenario proposal. Provide complete replacement fields with valid types.'
-    );
+  const invalid = (path: string, issue: string): never => {
+    throw new Error(`Invalid scenario proposal at ${path}: ${issue}`);
   };
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return invalid();
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return invalid('proposal', 'expected an object');
   const value = input as Record<string, unknown>;
-  if (!hasOnlyKeys(value, ['prompt', 'evalRules', 'extractRules', 'notes'])) return invalid();
+  const checkKeys = (object: Record<string, unknown>, allowed: string[], path: string) => {
+    const unknown = Object.keys(object).find((key) => !allowed.includes(key));
+    if (unknown !== undefined) invalid(`${path}.${unknown}`, 'unknown key');
+  };
+  checkKeys(value, ['prompt', 'evalRules', 'extractRules', 'notes'], 'proposal');
   const result: ScenarioAssistantSuggestionBundle = {};
   const validRationale = (obj: Record<string, unknown>) =>
     obj.rationale === undefined || typeof obj.rationale === 'string';
   if (value.prompt !== undefined) {
     if (!value.prompt || typeof value.prompt !== 'object' || Array.isArray(value.prompt))
-      return invalid();
+      return invalid('prompt', 'expected an object');
     const p = value.prompt as Record<string, unknown>;
-    if (
-      !hasOnlyKeys(p, ['replacement', 'rationale']) ||
-      typeof p.replacement !== 'string' ||
-      !validRationale(p)
-    )
-      return invalid();
+    checkKeys(p, ['replacement', 'rationale'], 'prompt');
+    if (typeof p.replacement !== 'string')
+      return invalid('prompt.replacement', 'expected a string');
+    if (!validRationale(p)) return invalid('prompt.rationale', 'expected a string');
     result.prompt = {
       replacement: p.replacement,
       ...(p.rationale === undefined ? {} : { rationale: p.rationale as string })
@@ -642,60 +640,68 @@ export function validateScenarioAssistantProposal(
   }
   if (value.evalRules !== undefined) {
     if (!value.evalRules || typeof value.evalRules !== 'object' || Array.isArray(value.evalRules))
-      return invalid();
+      return invalid('evalRules', 'expected an object');
     const e = value.evalRules as Record<string, unknown>;
-    if (
-      !hasOnlyKeys(e, ['replacement', 'rationale']) ||
-      !Array.isArray(e.replacement) ||
-      !validRationale(e)
-    )
-      return invalid();
-    for (const rule of e.replacement) {
-      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return invalid();
+    checkKeys(e, ['replacement', 'rationale'], 'evalRules');
+    if (!Array.isArray(e.replacement)) return invalid('evalRules.replacement', 'expected an array');
+    if (!validRationale(e)) return invalid('evalRules.rationale', 'expected a string');
+    for (const [index, rule] of e.replacement.entries()) {
+      const path = `evalRules.replacement[${index}]`;
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule))
+        return invalid(path, 'expected an object');
       const r = rule as Record<string, unknown>;
-      if (
-        !hasOnlyKeys(r, ['type', 'tool', 'value', 'sequence', 'path', 'equals', 'label', 'prompt'])
-      )
-        return invalid();
-      if (!ruleTypes.has(String(r.type))) return invalid();
+      checkKeys(
+        r,
+        ['type', 'tool', 'value', 'sequence', 'path', 'equals', 'label', 'prompt'],
+        path
+      );
+      if (typeof r.type !== 'string') return invalid(`${path}.type`, 'expected a rule type');
+      if (!ruleTypes.has(r.type))
+        return invalid(`${path}.type`, `unsupported rule type '${r.type}'`);
       for (const key of ['tool', 'path', 'label', 'prompt'])
-        if (r[key] !== undefined && typeof r[key] !== 'string') return invalid();
+        if (r[key] !== undefined && typeof r[key] !== 'string')
+          return invalid(`${path}.${key}`, 'expected a string');
       if (r.value !== undefined && !['string', 'number', 'boolean'].includes(typeof r.value))
-        return invalid();
+        return invalid(`${path}.value`, 'expected a string, number, or boolean');
       if (r.equals !== undefined && !['string', 'number', 'boolean'].includes(typeof r.equals))
-        return invalid();
+        return invalid(`${path}.equals`, 'expected a string, number, or boolean');
       if (
         r.sequence !== undefined &&
         (!Array.isArray(r.sequence) || !r.sequence.every((x) => typeof x === 'string'))
       )
-        return invalid();
+        return invalid(`${path}.sequence`, 'expected an array of strings');
       const type = r.type as string;
       if (
         type === 'required_tool' ||
         type === 'forbidden_tool' ||
         (type.startsWith('response_') && !type.includes('jsonpath'))
       ) {
-        if (typeof r.value !== 'string') return invalid();
+        if (typeof r.value !== 'string')
+          return invalid(`${path}.value`, 'required and must be a string');
       }
       if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
-        return invalid();
-      if (type.startsWith('tool_input_') && typeof r.tool !== 'string') return invalid();
+        return invalid(`${path}.sequence`, 'required and must be a non-empty array');
+      if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
+        return invalid(`${path}.tool`, 'required and must be a string');
       if (
         (type === 'tool_input_contains' || type === 'tool_input_regex') &&
         typeof r.value !== 'string'
       )
-        return invalid();
+        return invalid(`${path}.value`, 'required and must be a string');
       if ((type === 'tool_input_regex' || type === 'response_regex') && typeof r.value !== 'string')
-        return invalid();
+        return invalid(`${path}.value`, 'required and must be a string');
       if (
         type.endsWith('jsonpath') ||
         type.endsWith('jsonpath_exists') ||
         type.endsWith('jsonpath_not_exists')
       ) {
-        if (typeof r.path !== 'string') return invalid();
+        if (typeof r.path !== 'string')
+          return invalid(`${path}.path`, 'required and must be a string');
       }
-      if (type === 'agent_check' && (typeof r.label !== 'string' || typeof r.prompt !== 'string'))
-        return invalid();
+      if (type === 'agent_check' && typeof r.label !== 'string')
+        return invalid(`${path}.label`, 'required and must be a string');
+      if (type === 'agent_check' && typeof r.prompt !== 'string')
+        return invalid(`${path}.prompt`, 'required and must be a string');
     }
     const rules = structuredClone(e.replacement) as ScenarioAssistantEvalRuleSuggestion[];
     const bundle = { evalRules: { replacement: rules } };
@@ -714,34 +720,36 @@ export function validateScenarioAssistantProposal(
       typeof value.extractRules !== 'object' ||
       Array.isArray(value.extractRules)
     )
-      return invalid();
+      return invalid('extractRules', 'expected an object');
     const e = value.extractRules as Record<string, unknown>;
-    if (
-      !hasOnlyKeys(e, ['replacement', 'rationale']) ||
-      !Array.isArray(e.replacement) ||
-      !validRationale(e) ||
-      !e.replacement.every((x) => {
-        if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
-        const rule = x as Record<string, unknown>;
-        return (
-          hasOnlyKeys(rule, ['name', 'pattern']) &&
-          typeof rule.name === 'string' &&
-          typeof rule.pattern === 'string'
-        );
-      })
-    )
-      return invalid();
+    checkKeys(e, ['replacement', 'rationale'], 'extractRules');
+    if (!Array.isArray(e.replacement))
+      return invalid('extractRules.replacement', 'expected an array');
+    if (!validRationale(e)) return invalid('extractRules.rationale', 'expected a string');
+    for (const [index, item] of e.replacement.entries()) {
+      const path = `extractRules.replacement[${index}]`;
+      if (!item || typeof item !== 'object' || Array.isArray(item))
+        return invalid(path, 'expected an object');
+      const rule = item as Record<string, unknown>;
+      checkKeys(rule, ['name', 'pattern'], path);
+      if (typeof rule.name !== 'string')
+        return invalid(`${path}.name`, 'required and must be a string');
+      if (typeof rule.pattern !== 'string')
+        return invalid(`${path}.pattern`, 'required and must be a string');
+    }
     result.extractRules = {
       replacement: structuredClone(e.replacement) as Array<{ name: string; pattern: string }>,
       ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
     };
   }
   if (value.notes !== undefined) {
-    if (!Array.isArray(value.notes) || !value.notes.every((x) => typeof x === 'string'))
-      return invalid();
+    if (!Array.isArray(value.notes)) return invalid('notes', 'expected an array');
+    for (const [index, note] of value.notes.entries())
+      if (typeof note !== 'string') return invalid(`notes[${index}]`, 'expected a string');
     result.notes = [...value.notes] as string[];
   }
-  if (!result.prompt && !result.evalRules && !result.extractRules) return invalid();
+  if (!result.prompt && !result.evalRules && !result.extractRules)
+    return invalid('proposal', 'must include at least one change');
   return result;
 }
 

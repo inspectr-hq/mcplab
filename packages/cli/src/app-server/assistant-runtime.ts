@@ -109,7 +109,12 @@ export function createNativeAssistantRuntimeFactory(
           return false;
         for (const call of owner.calls) {
           const content = owner.results.get(call.id)!;
-          history.push({ role: 'tool', content, tool_call_id: call.id, name: call.publicToolName });
+          history.push({
+            role: 'tool',
+            content: call.resultPreview ?? content,
+            tool_call_id: call.id,
+            name: call.publicToolName
+          });
           messages.push({
             id: `msg-${randomUUID()}`,
             role: 'tool',

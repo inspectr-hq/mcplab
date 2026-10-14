@@ -101,6 +101,82 @@ describe('assistant runtime service', () => {
     expect(await service.sendMessage('new')).toMatchObject({ text: 'new' });
     await service.dispose();
   });
+  it('publishes one settled native cancellation snapshot after partial tool execution', async () => {
+    let finishSlow!: (value: unknown) => void;
+    const slowResult = new Promise((resolve) => {
+      finishSlow = resolve;
+    });
+    let slowStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      slowStarted = resolve;
+    });
+    let runtime!: AssistantRuntimeSession;
+    const events: AssistantRuntimeEvent[] = [];
+    let snapshotAtCancellation!: ReturnType<AssistantRuntimeSession['getSnapshot']>;
+    const definition: AssistantRuntimeDefinition = {
+      assistant: 'result',
+      agent: { provider: 'openai', model: 'test' },
+      context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+      getSystemPrompt: () => 'prompt',
+      tools: [
+        { name: 'first', server: 's', tool: 'first', execute: async () => ({ value: 'kept' }) },
+        {
+          name: 'slow',
+          server: 's',
+          tool: 'slow',
+          execute: async () => {
+            slowStarted();
+            return slowResult;
+          }
+        }
+      ],
+      approvalPolicy: () => 'automatic',
+      onEvent: (event) => {
+        events.push(event);
+        if (event.type === 'session_error') snapshotAtCancellation = runtime.getSnapshot();
+      }
+    };
+    runtime = await createNativeAssistantRuntimeFactory(async () => ({
+      type: 'tool_call_request',
+      text: 'Reading',
+      toolCalls: [
+        { id: 'first-id', name: 'first' },
+        { id: 'slow-id', name: 'slow' },
+        { id: 'third-id', name: 'first' }
+      ]
+    })).create(definition);
+    const service = await createAssistantRuntimeService(
+      { create: async () => runtime },
+      definition
+    );
+    const controller = new AbortController();
+    const operation = service.sendMessage('read', controller.signal);
+    await started;
+    controller.abort();
+    await expect(operation).rejects.toThrow('aborted');
+    await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
+
+    const settledSnapshot = runtime.getSnapshot();
+    expect(snapshotAtCancellation).toEqual(settledSnapshot);
+    const cancellationEvents = events.filter((event) => event.type === 'session_error');
+    expect(cancellationEvents).toHaveLength(1);
+    expect(cancellationEvents[0]?.payload).toMatchObject({
+      error: 'Assistant operation cancelled'
+    });
+    expect(settledSnapshot.pendingToolCalls.map(({ id, status }) => [id, status])).toEqual([
+      ['first-id', 'approved'],
+      ['slow-id', 'error'],
+      ['third-id', 'error']
+    ]);
+    expect(settledSnapshot.pendingToolCalls[1]?.error).toContain('outcome unknown');
+    expect(settledSnapshot.pendingToolCalls[2]?.error).toContain('before execution');
+
+    finishSlow({ value: 'late' });
+    await Promise.resolve();
+    expect(runtime.getSnapshot()).toEqual(settledSnapshot);
+    expect(events.filter((event) => event.type === 'session_error')).toHaveLength(1);
+    await service.dispose();
+  });
   it('releases the lock when a request is already aborted before runtime work starts', async () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'ok' }),

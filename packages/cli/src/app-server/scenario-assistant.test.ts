@@ -4,6 +4,8 @@ import type { AssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import { McpClientManager } from '@inspectr/mcplab-core';
+import { assistantSessionView } from './scenario-assistant-domain.js';
+import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
 
 function makeBody(overrides: Record<string, unknown> = {}) {
   return {
@@ -28,6 +30,7 @@ function makeDeps(options?: {
   servers?: Record<string, any>;
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
+  assistantSessionView?: (session: any) => unknown;
 }) {
   const captured: Array<{ status: number; body: unknown }> = [];
   const preloadAssistantTools =
@@ -53,10 +56,12 @@ function makeDeps(options?: {
       }),
       cleanupAssistantSessions: vi.fn(),
       touchAssistantSession: vi.fn(),
-      assistantSessionView: vi.fn((session: any) => ({
-        id: session.id,
-        warnings: session.warnings ?? []
-      })),
+      assistantSessionView:
+        options?.assistantSessionView ??
+        vi.fn((session: any) => ({
+          id: session.id,
+          warnings: session.warnings ?? []
+        })),
       ensureInsideRoot: vi.fn((_root: string, p: string) => p),
       readLibraries: vi.fn().mockReturnValue({
         servers,
@@ -85,13 +90,15 @@ async function callCreateSessionRoute(params?: {
   servers?: Record<string, any>;
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
+  assistantSessionView?: (session: any) => unknown;
   oauthSessionManager?: { getAuthHeadersForServers: ReturnType<typeof vi.fn> };
 }) {
   const { deps, captured, preloadAssistantTools, runtime } = makeDeps({
     body: params?.body,
     servers: params?.servers,
     preloadAssistantTools: params?.preloadAssistantTools,
-    assistantRuntimeFactory: params?.assistantRuntimeFactory
+    assistantRuntimeFactory: params?.assistantRuntimeFactory,
+    assistantSessionView: params?.assistantSessionView
   });
   const assistantSessions: AssistantSessionsMap = new Map();
   const oauthSessionManager =
@@ -238,6 +245,117 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect((response.body as any).error).toMatch(/OAuth login required/i);
     expect((response.body as any).oauth.required[0].serverName).toBe('oauth-server');
     expect(preloadAssistantTools).not.toHaveBeenCalled();
+  });
+});
+
+describe('Scenario Assistant stateful alternative runtime acceptance', () => {
+  it('keeps edits, partial decisions, final denial, memory, SSE snapshots, and cleanup coherent', async () => {
+    const runtimeHarness = createStatefulAssistantRuntimeHarness();
+    const assistantRuntimeFactory = {
+      create: vi.fn((definition: any) => runtimeHarness.factory.create(definition))
+    };
+    const { deps, assistantSessions } = await callCreateSessionRoute({
+      assistantRuntimeFactory,
+      assistantSessionView
+    });
+    const sessionId = Array.from(assistantSessions.keys())[0]!;
+    const responses: Array<{ status: number; body: any }> = [];
+    deps.asJson = vi.fn((_res: any, status: number, body: any) => responses.push({ status, body }));
+    const session = assistantSessions.get(sessionId)!;
+    const route = async (pathname: string, method: string, body?: unknown, res: any = {}) => {
+      deps.parseBody = vi.fn().mockResolvedValue(body ?? {});
+      return handleScenarioAssistantRoutes({
+        req: { headers: {} } as any,
+        res,
+        pathname,
+        method,
+        settings: { evalsDir: '/tmp/evals', librariesDir: '/tmp/libraries' } as any,
+        assistantSessions,
+        oauthSessionManager: { getAuthHeadersForServers: vi.fn().mockResolvedValue({}) } as any,
+        deps: deps as any
+      });
+    };
+    const eventsRes = Object.assign(new EventEmitter(), {
+      statusCode: 0,
+      setHeader: vi.fn(),
+      flushHeaders: vi.fn(),
+      write: vi.fn(),
+      end: vi.fn()
+    });
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/events`,
+      'GET',
+      undefined,
+      eventsRes
+    );
+
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/messages`,
+      'POST',
+      { message: 'Plan' },
+      Object.assign(new EventEmitter(), { writableEnded: false })
+    );
+    const first = session.runtime!.getSnapshot().pendingToolCalls[0]!;
+    const second = session.runtime!.getSnapshot().pendingToolCalls[1]!;
+    expect([first.id, second.id]).toEqual(['fake-call-1', 'fake-call-2']);
+    expect(session.runtime!.getSnapshot().messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      pendingToolCallId: first.id,
+      pendingToolCallIds: [first.id, second.id]
+    });
+
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${first.id}/approve`,
+      'POST',
+      {
+        argumentsOverride: { value: 'edited-value' }
+      }
+    );
+    expect(responses.at(-1)?.body.response.type).toBe('tool_call_resolved');
+    await route(`/api/scenario-assistant/sessions/${sessionId}`, 'GET');
+    expect(responses.at(-1)?.body.session.pendingToolCalls).toMatchObject([
+      { id: first.id, status: 'approved', arguments: { value: 'edited-value' } },
+      { id: second.id, status: 'pending' }
+    ]);
+    const emittedEvents = eventsRes.write.mock.calls
+      .flat()
+      .join('')
+      .match(/data: (.+)\n/g)
+      ?.map((line: string) => JSON.parse(line.slice('data: '.length)));
+    expect(
+      emittedEvents?.find((event: any) => event.type === 'tool_call_resolved')?.payload.session
+    ).toMatchObject({
+      pendingToolCalls: [
+        { id: first.id, status: 'approved', arguments: { value: 'edited-value' } },
+        { id: second.id, status: 'pending' }
+      ],
+      messages: expect.arrayContaining([
+        expect.objectContaining({ pendingToolCallIds: [first.id, second.id] })
+      ])
+    });
+
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${first.id}/approve`,
+      'POST'
+    );
+    expect(responses.at(-1)?.status).toBe(409);
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${second.id}/deny`,
+      'POST'
+    );
+    expect(responses.at(-1)?.body.response.text).toContain('second call denied');
+    await route(
+      `/api/scenario-assistant/sessions/${sessionId}/messages`,
+      'POST',
+      { message: 'Continue' },
+      Object.assign(new EventEmitter(), { writableEnded: false })
+    );
+    expect(responses.at(-1)?.body.response.text).toContain('Remembered edited-value');
+    await route(`/api/scenario-assistant/sessions/${sessionId}`, 'DELETE');
+    await route(`/api/scenario-assistant/sessions/${sessionId}`, 'DELETE');
+    expect(eventsRes.end).toHaveBeenCalledOnce();
+    expect(assistantSessions.has(sessionId)).toBe(false);
+    expect(runtimeHarness.disposedSessions).toEqual(['scenario']);
   });
 });
 

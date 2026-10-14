@@ -60,6 +60,7 @@ export interface PreparedResultAssistantSession extends ResultAssistantSession {
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
 
+// The hard TTL also aborts work in abandoned sessions; active operations refresh lastTouchedAt.
 export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
   now = Date.now()
@@ -164,10 +165,13 @@ export function createResultAssistantRuntimeDefinition(
         }
       };
     }),
-    approvalPolicy: (name) =>
-      isResultAssistantAllowedTool(name) && isResultAssistantAutoApprovedTool(name)
+    approvalPolicy: (name) => {
+      const rawName = session.toolPublicMap.get(name)?.tool;
+      if (!rawName) return 'approval_required';
+      return isResultAssistantAllowedTool(rawName) && isResultAssistantAutoApprovedTool(rawName)
         ? 'automatic'
-        : 'approval_required',
+        : 'approval_required';
+    }
   };
 }
 
@@ -197,7 +201,7 @@ function resultAssistantSystemPrompt(session: PreparedResultAssistantSession): s
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
-    'If you need a tool, request exactly one tool call and wait for approval.',
+    'Use up to three external tool calls per batch. Read-only batches can continue automatically. If any call in a batch requires approval, wait for a decision on every call in that batch, including read calls; each call is approved or denied separately.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
       ? 'Scope: all historical runs. Use mcplab_results_search for broad retrieval, mcplab_results_context for focused excerpts, and mcplab_read_run_artifact only for raw fallback reads.'

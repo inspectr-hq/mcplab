@@ -6,6 +6,7 @@ import {
   validateScenarioAssistantProposal,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
+import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
 
 function baseSession(): ScenarioAssistantSession {
   return {
@@ -169,6 +170,10 @@ describe('Scenario Assistant runtime definition', () => {
     expect(prompt).toContain('agent_check');
     expect(prompt).toContain('tool_input_regex to match a regular expression anywhere');
     expect(prompt).toContain('ordinary prose');
+    expect(prompt).toContain('up to three external tool calls');
+    expect(prompt).toContain('per batch');
+    expect(prompt).toContain('including read calls');
+    expect(prompt).not.toContain('call a tool and wait for approval');
     expect(prompt).not.toContain('Respond ONLY as JSON');
     expect(definition.tools.some((tool) => tool.name === 'propose_scenario_changes')).toBe(true);
   });
@@ -234,5 +239,56 @@ describe('Scenario Assistant runtime definition', () => {
         new Map()
       )
     ).toThrow('Invalid scenario proposal');
+  });
+
+  it.each([
+    [{ surprise: true }, 'proposal.surprise'],
+    [{ '': true }, 'proposal.'],
+    [
+      { evalRules: { replacement: [{ type: 'agent_check', prompt: 'Check' }] } },
+      'evalRules.replacement[0].label'
+    ],
+    [
+      { evalRules: { replacement: [{ type: 'response_contains', value: 4 }] } },
+      'evalRules.replacement[0].value'
+    ],
+    [{ extractRules: { replacement: [{ name: 'tag' }] } }, 'extractRules.replacement[0].pattern'],
+    [{ notes: ['ok', 1] }, 'notes[1]']
+  ])('reports the JSON path for invalid proposal fields', (proposal, path) => {
+    expect(() => validateScenarioAssistantProposal(proposal, new Map())).toThrow(path);
+  });
+
+  it('returns detailed proposal paths to the model as native tool feedback', async () => {
+    const histories: Array<Array<{ role: string; content: string }>> = [];
+    let round = 0;
+    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+    const runtime = await createNativeAssistantRuntimeFactory(async (_definition, messages) => {
+      histories.push(messages.map(({ role, content }) => ({ role, content: String(content) })));
+      round += 1;
+      return round === 1
+        ? {
+            type: 'tool_call_request',
+            text: '',
+            toolCalls: [
+              {
+                id: 'invalid-proposal',
+                name: 'propose_scenario_changes',
+                arguments: {
+                  evalRules: { replacement: [{ type: 'agent_check', prompt: 'Check' }] }
+                }
+              }
+            ]
+          }
+        : { type: 'assistant_message', text: 'I will add the missing label.' };
+    }).create(definition);
+
+    const result = await runtime.sendMessage('Add a semantic check');
+    expect(result).toMatchObject({
+      type: 'assistant_message',
+      text: 'I will add the missing label.'
+    });
+    expect(JSON.parse(histories[1]!.at(-1)!.content)).toMatchObject({
+      error: expect.stringContaining('evalRules.replacement[0].label')
+    });
   });
 });
