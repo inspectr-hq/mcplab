@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import type { AssistantSessionsMap } from './app-context.js';
+import type { ScenarioAssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import { McpClientManager } from '@inspectr/mcplab-core';
-import { assistantSessionView } from './scenario-assistant-domain.js';
+import { scenarioAssistantSessionView } from './scenario-assistant-domain.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
 
 function makeBody(overrides: Record<string, unknown> = {}) {
@@ -28,13 +28,13 @@ function makeBody(overrides: Record<string, unknown> = {}) {
 function makeDeps(options?: {
   body?: unknown;
   servers?: Record<string, any>;
-  preloadAssistantTools?: ReturnType<typeof vi.fn>;
+  preloadScenarioAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
-  assistantSessionView?: (session: any) => unknown;
+  scenarioAssistantSessionView?: (session: any) => unknown;
 }) {
   const captured: Array<{ status: number; body: unknown }> = [];
-  const preloadAssistantTools =
-    options?.preloadAssistantTools ?? vi.fn().mockResolvedValue(undefined);
+  const preloadScenarioAssistantTools =
+    options?.preloadScenarioAssistantTools ?? vi.fn().mockResolvedValue(undefined);
   const servers = options?.servers ?? {
     'server-1': { transport: 'http', url: 'https://example.com/mcp' }
   };
@@ -54,10 +54,10 @@ function makeDeps(options?: {
       asJson: vi.fn((_res: any, status: number, body: unknown) => {
         captured.push({ status, body });
       }),
-      cleanupAssistantSessions: vi.fn(),
-      touchAssistantSession: vi.fn(),
-      assistantSessionView:
-        options?.assistantSessionView ??
+      cleanupScenarioAssistantSessions: vi.fn(),
+      touchScenarioAssistantSession: vi.fn(),
+      scenarioAssistantSessionView:
+        options?.scenarioAssistantSessionView ??
         vi.fn((session: any) => ({
           id: session.id,
           warnings: session.warnings ?? []
@@ -75,11 +75,11 @@ function makeDeps(options?: {
       resolveAssistantAgentFromLibraries: vi
         .fn()
         .mockReturnValue({ id: 'assistant-1', provider: 'openai', model: 'gpt-4o-mini' }),
-      preloadAssistantTools,
+      preloadScenarioAssistantTools,
       assistantRuntimeFactory
     },
     captured,
-    preloadAssistantTools,
+    preloadScenarioAssistantTools,
     assistantRuntimeFactory,
     runtime
   };
@@ -88,19 +88,19 @@ function makeDeps(options?: {
 async function callCreateSessionRoute(params?: {
   body?: unknown;
   servers?: Record<string, any>;
-  preloadAssistantTools?: ReturnType<typeof vi.fn>;
+  preloadScenarioAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
-  assistantSessionView?: (session: any) => unknown;
+  scenarioAssistantSessionView?: (session: any) => unknown;
   oauthSessionManager?: { getAuthHeadersForServers: ReturnType<typeof vi.fn> };
 }) {
-  const { deps, captured, preloadAssistantTools, runtime } = makeDeps({
+  const { deps, captured, preloadScenarioAssistantTools, runtime } = makeDeps({
     body: params?.body,
     servers: params?.servers,
-    preloadAssistantTools: params?.preloadAssistantTools,
+    preloadScenarioAssistantTools: params?.preloadScenarioAssistantTools,
     assistantRuntimeFactory: params?.assistantRuntimeFactory,
-    assistantSessionView: params?.assistantSessionView
+    scenarioAssistantSessionView: params?.scenarioAssistantSessionView
   });
-  const assistantSessions: AssistantSessionsMap = new Map();
+  const assistantSessions: ScenarioAssistantSessionsMap = new Map();
   const oauthSessionManager =
     params?.oauthSessionManager ??
     ({ getAuthHeadersForServers: vi.fn().mockResolvedValue({}) } as any);
@@ -123,7 +123,7 @@ async function callCreateSessionRoute(params?: {
   return {
     handled,
     response: captured[0],
-    preloadAssistantTools,
+    preloadScenarioAssistantTools,
     assistantSessions,
     oauthSessionManager,
     deps,
@@ -134,7 +134,13 @@ async function callCreateSessionRoute(params?: {
 
 describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
   it('creates session for non-OAuth servers without auth headers', async () => {
-    const { handled, response, preloadAssistantTools, oauthSessionManager } =
+    const {
+      handled,
+      response,
+      preloadScenarioAssistantTools,
+      oauthSessionManager,
+      assistantSessions
+    } =
       await callCreateSessionRoute({
         body: makeBody({
           context: {
@@ -156,7 +162,10 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect(handled).toBe(true);
     expect(response.status).toBe(201);
     expect(oauthSessionManager.getAuthHeadersForServers).not.toHaveBeenCalled();
-    expect(preloadAssistantTools).toHaveBeenCalledWith(
+    expect(preloadScenarioAssistantTools.mock.calls[0]![0]).toBe(
+      assistantSessions.get((response.body as any).sessionId)
+    );
+    expect(preloadScenarioAssistantTools).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       ['server-1'],
@@ -171,7 +180,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
         .mockResolvedValue({ 'oauth-server': { authorization: 'Bearer tok-123' } })
     };
 
-    const { response, preloadAssistantTools } = await callCreateSessionRoute({
+    const { response, preloadScenarioAssistantTools } = await callCreateSessionRoute({
       body: makeBody({
         context: {
           scenario: {
@@ -195,7 +204,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     });
 
     expect(response.status).toBe(201);
-    expect(preloadAssistantTools).toHaveBeenCalledWith(
+    expect(preloadScenarioAssistantTools).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       ['oauth-server'],
@@ -218,7 +227,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
       )
     };
 
-    const { response, preloadAssistantTools } = await callCreateSessionRoute({
+    const { response, preloadScenarioAssistantTools } = await callCreateSessionRoute({
       body: makeBody({
         context: {
           scenario: {
@@ -244,7 +253,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect(response.status).toBe(401);
     expect((response.body as any).error).toMatch(/OAuth login required/i);
     expect((response.body as any).oauth.required[0].serverName).toBe('oauth-server');
-    expect(preloadAssistantTools).not.toHaveBeenCalled();
+    expect(preloadScenarioAssistantTools).not.toHaveBeenCalled();
   });
 });
 
@@ -256,11 +265,13 @@ describe('Scenario Assistant stateful alternative runtime acceptance', () => {
     };
     const { deps, assistantSessions } = await callCreateSessionRoute({
       assistantRuntimeFactory,
-      assistantSessionView
+      scenarioAssistantSessionView
     });
     const sessionId = Array.from(assistantSessions.keys())[0]!;
     const responses: Array<{ status: number; body: any }> = [];
-    deps.asJson = vi.fn((_res: any, status: number, body: any) => responses.push({ status, body }));
+    deps.asJson = vi.fn((_res: any, status: number, body: any) => {
+      responses.push({ status, body });
+    });
     const session = assistantSessions.get(sessionId)!;
     const route = async (pathname: string, method: string, body?: unknown, res: any = {}) => {
       deps.parseBody = vi.fn().mockResolvedValue(body ?? {});
@@ -494,8 +505,8 @@ describe('DELETE /api/scenario-assistant/sessions/:id', () => {
     const sessions = new Map([[session.id, session]]);
     const responses: unknown[] = [];
     const deps = {
-      cleanupAssistantSessions: vi.fn(),
-      assistantSessionView: vi.fn().mockReturnValue({ id: session.id }),
+      cleanupScenarioAssistantSessions: vi.fn(),
+      scenarioAssistantSessionView: vi.fn().mockReturnValue({ id: session.id }),
       asJson: vi.fn((_res, status, body) => responses.push({ status, body }))
     } as any;
     const params = {
@@ -529,7 +540,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
     req.headers = { host: 'localhost:8787' };
     const res = Object.assign(new EventEmitter(), { writableEnded: false }) as any;
     const asJson = vi.fn();
-    const assistantSessions: AssistantSessionsMap = new Map([
+    const assistantSessions: ScenarioAssistantSessionsMap = new Map([
       [
         'sas-1',
         {
@@ -570,15 +581,15 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
       deps: {
         parseBody: vi.fn().mockResolvedValue({ message: 'hello' }),
         asJson,
-        cleanupAssistantSessions: vi.fn(),
-        touchAssistantSession: vi.fn(),
-        assistantSessionView: vi.fn((session: any) => ({ id: session.id })),
+        cleanupScenarioAssistantSessions: vi.fn(),
+        touchScenarioAssistantSession: vi.fn(),
+        scenarioAssistantSessionView: vi.fn((session: any) => ({ id: session.id })),
         ensureInsideRoot: vi.fn((_root: string, p: string) => p),
         readLibraries: vi.fn(),
         pickDefaultAssistantAgentName: vi.fn(),
         resolveAssistantAgentFromConfig: vi.fn(),
         resolveAssistantAgentFromLibraries: vi.fn(),
-        preloadAssistantTools: vi.fn()
+        preloadScenarioAssistantTools: vi.fn()
       } as any
     });
 

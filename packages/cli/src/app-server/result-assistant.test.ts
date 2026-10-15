@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import { handleResultAssistantRoutes } from './result-assistant.js';
@@ -130,6 +133,7 @@ describe('Result Assistant report refresh', () => {
       runId: 'run-1',
       resultSummary: null,
       referenceReportsForRun: [],
+      systemPromptCache: undefined,
       agentConfig: { provider: 'openai', model: 'fake' },
       tools: [{ name: 'write_report', description: 'Write a report' }],
       toolPublicMap: new Map([
@@ -137,7 +141,9 @@ describe('Result Assistant report refresh', () => {
       ]),
       mcp: { callTool }
     } as any;
+    const sessions = new Map([['ras-1', session]]);
     const definition = createResultAssistantRuntimeDefinition(session, () => reports);
+    expect(definition.getSystemPrompt()).not.toContain('reports/new.md');
     await definition.tools[0].execute({ title: 'Summary' });
     expect(callTool).toHaveBeenCalledWith(
       'mcplab',
@@ -146,6 +152,78 @@ describe('Result Assistant report refresh', () => {
       { signal: undefined }
     );
     expect(definition.getSystemPrompt()).toContain('reports/new.md');
+    expect(sessions.get('ras-1')?.referenceReportsForRun).toEqual(reports);
+  });
+
+  it('refreshes the report list on the route stored session and its next prompt', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'mcplab-result-assistant-'));
+    const reportPath = join(workspaceRoot, 'mcplab/reports/run-1-summary.md');
+    const callTool = vi.spyOn(McpClientManager.prototype, 'callTool').mockImplementation(async () => {
+      mkdirSync(join(workspaceRoot, 'mcplab/reports'), { recursive: true });
+      writeFileSync(reportPath, '# Summary');
+      return { ok: true };
+    });
+    const sessions = new Map();
+    const captured: Array<{ status: number; body: any }> = [];
+    let definition: any;
+    try {
+      await handleResultAssistantRoutes({
+        req: { headers: {} } as any,
+        res: {} as any,
+        pathname: '/api/result-assistant/sessions',
+        method: 'POST',
+        settings: {
+          workspaceRoot,
+          runsDir: join(workspaceRoot, 'runs'),
+          librariesDir: join(workspaceRoot, 'libraries')
+        } as any,
+        resultAssistantSessions: sessions,
+        deps: {
+          parseBody: vi.fn().mockResolvedValue({ scope: 'run', runId: 'run-1' }),
+          asJson: vi.fn((_res, status, body) => {
+            captured.push({ status, body });
+          }),
+          getRunResults: vi.fn().mockReturnValue(null),
+          readLibraries: vi.fn().mockReturnValue({ agents: { assistant: {} }, servers: {} }),
+          pickDefaultAssistantAgentName: vi.fn().mockReturnValue('assistant'),
+          resolveAssistantAgentFromLibraries: vi
+            .fn()
+            .mockReturnValue({ provider: 'openai', model: 'test' }),
+          preloadResultAssistantTools: async (session: any) => {
+            session.tools.push({ name: 'write_report', description: 'Write a report' });
+            session.toolPublicMap.set('write_report', {
+              server: 'mcplab',
+              tool: 'mcplab_write_markdown_report'
+            });
+          },
+          assistantRuntimeFactory: {
+            create: async (runtimeDefinition: any) => {
+              definition = runtimeDefinition;
+              return {
+                sendMessage: vi.fn(),
+                resolveToolCalls: vi.fn(),
+                getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+                dispose: vi.fn()
+              };
+            }
+          }
+        } as any
+      });
+
+      const sessionId = captured[0]!.body.sessionId;
+      const session = sessions.get(sessionId)!;
+      expect(definition.getSystemPrompt()).not.toContain('run-1-summary.md');
+      await definition.tools[0].execute({ title: 'Summary' });
+      expect(sessions.get(sessionId)?.referenceReportsForRun).toEqual([
+        expect.objectContaining({ relativePath: 'run-1-summary.md' })
+      ]);
+      expect(definition.getSystemPrompt()).toContain('run-1-summary.md');
+      expect(session.referenceReportsForRun).toBe(sessions.get(sessionId)?.referenceReportsForRun);
+      expect(callTool).toHaveBeenCalledOnce();
+    } finally {
+      callTool.mockRestore();
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -284,6 +362,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
   const captured: Array<{ status: number; body: any }> = [];
   const sessions = new Map();
   let body: any;
+  let preloadedSession: any;
   const deps = {
     parseBody: vi.fn(async () => body ?? {}),
     asJson: vi.fn((_res, status, value) => captured.push({ status, body: value })),
@@ -294,6 +373,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       .fn()
       .mockReturnValue({ provider: 'openai', model: 'test' }),
     preloadResultAssistantTools: async (prepared: any) => {
+      preloadedSession = prepared;
       for (const [name, tool] of [
         [publicRead, 'mcplab_read_run_artifact'],
         [publicWrite, 'mcplab_write_markdown_report']
@@ -344,6 +424,8 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
     await route('/api/result-assistant/sessions', 'POST', { scope: 'all_runs' });
     const sessionId = captured.at(-1)!.body.sessionId;
     const session = sessions.get(sessionId)!;
+    expect(preloadedSession).toBe(session);
+    expect(session.mcp).toBeInstanceOf(McpClientManager);
     const sseChunks: string[] = [];
     const sse = Object.assign(new EventEmitter(), {
       statusCode: 0,

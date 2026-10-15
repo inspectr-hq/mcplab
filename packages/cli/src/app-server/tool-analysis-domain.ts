@@ -8,8 +8,9 @@ import {
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
-import { parseJsonFromAssistantText, truncateJson } from './assistant-common.js';
-export { parseJsonFromAssistantText } from './assistant-common.js';
+import { parseJsonFromAssistantText } from './one-shot-json.js';
+import { truncateJson } from './assistant-common.js';
+export { parseJsonFromAssistantText } from './one-shot-json.js';
 import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager

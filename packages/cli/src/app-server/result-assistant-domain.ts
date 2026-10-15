@@ -48,9 +48,6 @@ export interface ResultAssistantSession {
   events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
   runtime?: AssistantRuntimeSession;
-}
-
-export interface PreparedResultAssistantSession extends ResultAssistantSession {
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
@@ -94,7 +91,7 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
 }
 
 export async function preloadResultAssistantTools(
-  session: PreparedResultAssistantSession,
+  session: ResultAssistantSession,
   mcpServerUrl: string
 ): Promise<void> {
   await session.mcp.connectAll({
@@ -127,7 +124,7 @@ export async function preloadResultAssistantTools(
 }
 
 export function createResultAssistantRuntimeDefinition(
-  session: PreparedResultAssistantSession,
+  session: ResultAssistantSession,
   refreshReports: () => ResultAssistantSession['referenceReportsForRun']
 ): AssistantRuntimeDefinition {
   return {
@@ -175,7 +172,7 @@ export function createResultAssistantRuntimeDefinition(
   };
 }
 
-function resultAssistantSystemPrompt(session: PreparedResultAssistantSession): string {
+function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
   const scenarioLimit = 30;
   const totalScenarioCount = session.resultSummary?.scenarios.length ?? 0;

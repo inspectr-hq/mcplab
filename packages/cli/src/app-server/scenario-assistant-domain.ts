@@ -46,9 +46,6 @@ export interface ScenarioAssistantSession {
   events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
   runtime?: AssistantRuntimeSession;
-}
-
-export interface PreparedScenarioAssistantSession extends ScenarioAssistantSession {
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
@@ -58,7 +55,7 @@ export interface PreparedScenarioAssistantSession extends ScenarioAssistantSessi
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 
 // The hard TTL also aborts work in abandoned sessions; active operations refresh lastTouchedAt.
-export function cleanupAssistantSessions(
+export function cleanupScenarioAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
@@ -68,11 +65,11 @@ export function cleanupAssistantSessions(
   });
 }
 
-export function touchAssistantSession(session: ScenarioAssistantSession): void {
+export function touchScenarioAssistantSession(session: ScenarioAssistantSession): void {
   touchSession(session);
 }
 
-export function assistantSessionView(session: ScenarioAssistantSession) {
+export function scenarioAssistantSessionView(session: ScenarioAssistantSession) {
   const runtimeSnapshot = session.runtime?.getSnapshot();
   return {
     id: session.id,
@@ -89,7 +86,7 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
   };
 }
 
-function assistantSystemPrompt(session: PreparedScenarioAssistantSession): string {
+function assistantSystemPrompt(session: ScenarioAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
   const { scenario } = session.context;
   const toolLines = session.tools.map((tool) => {
@@ -159,8 +156,8 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
   return `Scenario Assistant MCP preload failed for server '${serverName}': ${raw}`;
 }
 
-export async function preloadAssistantTools(
-  session: PreparedScenarioAssistantSession,
+export async function preloadScenarioAssistantTools(
+  session: ScenarioAssistantSession,
   serversByName: Record<string, EvalConfig['servers'][string]>,
   selectedServerNames: string[],
   options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
@@ -754,7 +751,7 @@ export function validateScenarioAssistantProposal(
 }
 
 export function createScenarioAssistantRuntimeDefinition(
-  session: PreparedScenarioAssistantSession
+  session: ScenarioAssistantSession
 ): AssistantRuntimeDefinition {
   return {
     assistant: 'scenario',

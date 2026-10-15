@@ -6,7 +6,6 @@ import { throwIfAborted } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   createResultAssistantRuntimeDefinition,
-  type PreparedResultAssistantSession,
   type ResultAssistantSession
 } from './result-assistant-domain.js';
 import {
@@ -116,10 +115,7 @@ export async function handleResultAssistantRoutes(params: {
       toolServers: [],
       initialMessages: [],
       events: [],
-      clients: new Set()
-    };
-    const prepared: PreparedResultAssistantSession = {
-      ...session,
+      clients: new Set(),
       mcp,
       tools: [],
       toolPublicMap: new Map()
@@ -134,10 +130,10 @@ export async function handleResultAssistantRoutes(params: {
       createdAt: new Date().toISOString()
     });
     try {
-      await preloadResultAssistantTools(prepared, localMcplabMcpUrl());
-      session.toolsLoaded = prepared.tools.length;
+      await preloadResultAssistantTools(session, localMcplabMcpUrl());
+      session.toolsLoaded = session.tools.length;
       session.toolServers = Array.from(
-        new Set(prepared.tools.map((tool) => tool.name.split('__')[0]))
+        new Set(session.tools.map((tool) => tool.name.split('__')[0]))
       );
     } catch (error) {
       session.initialMessages.push({
@@ -148,7 +144,7 @@ export async function handleResultAssistantRoutes(params: {
       });
       publishSessionEvent(session, 'session_warning', { warning: errorMessage(error) });
     }
-    const runtimeDefinition = createResultAssistantRuntimeDefinition(prepared, () =>
+    const runtimeDefinition = createResultAssistantRuntimeDefinition(session, () =>
       listReferenceReportsForRun(session.runId)
     );
     runtimeDefinition.onEvent = (event) => {

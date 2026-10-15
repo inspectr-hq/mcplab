@@ -8,10 +8,9 @@ import {
   type EvalConfig,
   throwIfAborted
 } from '@inspectr/mcplab-core';
-import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
+import type { AppRouteDeps, AppRouteRequestContext, ScenarioAssistantSessionsMap } from './app-context.js';
 import {
   createScenarioAssistantRuntimeDefinition,
-  type PreparedScenarioAssistantSession,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 import {
@@ -32,15 +31,15 @@ export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
   | 'parseBody'
   | 'asJson'
-  | 'cleanupAssistantSessions'
-  | 'touchAssistantSession'
-  | 'assistantSessionView'
+  | 'cleanupScenarioAssistantSessions'
+  | 'touchScenarioAssistantSession'
+  | 'scenarioAssistantSessionView'
   | 'ensureInsideRoot'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'resolveAssistantAgentFromConfig'
   | 'resolveAssistantAgentFromLibraries'
-  | 'preloadAssistantTools'
+  | 'preloadScenarioAssistantTools'
   | 'assistantRuntimeFactory'
 >;
 
@@ -50,7 +49,7 @@ export async function handleScenarioAssistantRoutes(params: {
   pathname: string;
   method: string;
   settings: AppRouteRequestContext['settings'];
-  assistantSessions: AssistantSessionsMap;
+  assistantSessions: ScenarioAssistantSessionsMap;
   oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
@@ -59,15 +58,15 @@ export async function handleScenarioAssistantRoutes(params: {
   const {
     parseBody,
     asJson,
-    cleanupAssistantSessions,
-    touchAssistantSession,
-    assistantSessionView,
+    cleanupScenarioAssistantSessions,
+    touchScenarioAssistantSession,
+    scenarioAssistantSessionView,
     ensureInsideRoot,
     readLibraries,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
-    preloadAssistantTools,
+    preloadScenarioAssistantTools,
     assistantRuntimeFactory
   } = deps;
 
@@ -82,14 +81,14 @@ export async function handleScenarioAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        session: assistantSessionView(session),
+        session: scenarioAssistantSessionView(session),
         ...payload
       })
     );
   };
 
   if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const body = (await parseBody(req)) as {
       configPath?: unknown;
       scenarioId?: unknown;
@@ -172,10 +171,7 @@ export async function handleScenarioAssistantRoutes(params: {
       initialMessages: [],
       warnings,
       events: [],
-      clients: new Set()
-    };
-    const prepared: PreparedScenarioAssistantSession = {
-      ...session,
+      clients: new Set(),
       mcp,
       tools: [],
       toolPublicMap: new Map()
@@ -215,26 +211,26 @@ export async function handleScenarioAssistantRoutes(params: {
     for (const warning of warnings) {
       publishSessionEvent(session, 'session_warning', { warning });
     }
-    await preloadAssistantTools(prepared, serversByName, selectedServerNames, {
+    await preloadScenarioAssistantTools(session, serversByName, selectedServerNames, {
       serverAuthHeaders
     });
-    session.toolsLoaded = prepared.tools.length;
+    session.toolsLoaded = session.tools.length;
     session.toolServers = Array.from(
-      new Set(prepared.tools.map((tool) => tool.name.split('__')[0]))
+      new Set(session.tools.map((tool) => tool.name.split('__')[0]))
     );
-    const runtimeDefinition = createScenarioAssistantRuntimeDefinition(prepared);
+    const runtimeDefinition = createScenarioAssistantRuntimeDefinition(session);
     runtimeDefinition.onEvent = (event) => {
-      touchAssistantSession(session);
+      touchScenarioAssistantSession(session);
       publishSessionEvent(session, event.type, event.payload);
     };
     session.runtime = await createAssistantRuntimeService(
       assistantRuntimeFactory,
       runtimeDefinition,
-      () => touchAssistantSession(session)
+      () => touchScenarioAssistantSession(session)
     );
     assistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');
-    asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
+    asJson(res, 201, { sessionId: session.id, session: scenarioAssistantSessionView(session) });
     return true;
   }
 
@@ -243,7 +239,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname.endsWith('/events') &&
     method === 'GET'
   ) {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const sessionId = pathname
       .replace('/api/scenario-assistant/sessions/', '')
       .replace('/events', '');
@@ -257,20 +253,20 @@ export async function handleScenarioAssistantRoutes(params: {
   }
 
   if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'GET') {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
     const session = assistantSessions.get(sessionId);
     if (!session) {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
       return true;
     }
-    touchAssistantSession(session);
-    asJson(res, 200, { session: assistantSessionView(session) });
+    touchScenarioAssistantSession(session);
+    asJson(res, 200, { session: scenarioAssistantSessionView(session) });
     return true;
   }
 
   if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'DELETE') {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
     const session = assistantSessions.get(sessionId);
     let disposeError: unknown;
@@ -298,7 +294,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname.endsWith('/messages') &&
     method === 'POST'
   ) {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const parts = pathname.split('/');
     const sessionId = parts[4];
     const session = assistantSessions.get(sessionId);
@@ -322,7 +318,7 @@ export async function handleScenarioAssistantRoutes(params: {
       }
       const response = await session.runtime!.sendMessage(message, abortController.signal);
       throwIfAborted(abortController.signal);
-      const snapshot = assistantSessionView(session);
+      const snapshot = scenarioAssistantSessionView(session);
       asJson(res, 200, {
         session: snapshot,
         response:
@@ -352,7 +348,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname.endsWith('/approve') &&
     method === 'POST'
   ) {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const parts = pathname.split('/');
     const sessionId = parts[4];
     const callId = parts[6];
@@ -389,7 +385,7 @@ export async function handleScenarioAssistantRoutes(params: {
       );
       throwIfAborted(abortController.signal);
       asJson(res, 200, {
-        session: assistantSessionView(session),
+        session: scenarioAssistantSessionView(session),
         response:
           response.type === 'tool_call_resolved'
             ? {
@@ -412,7 +408,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname.endsWith('/deny') &&
     method === 'POST'
   ) {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const parts = pathname.split('/');
     const sessionId = parts[4];
     const callId = parts[6];
@@ -440,7 +436,7 @@ export async function handleScenarioAssistantRoutes(params: {
       );
       throwIfAborted(abortController.signal);
       asJson(res, 200, {
-        session: assistantSessionView(session),
+        session: scenarioAssistantSessionView(session),
         response:
           response.type === 'tool_call_resolved'
             ? {
@@ -462,7 +458,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname.includes('/tool-calls/approve-all') &&
     method === 'POST'
   ) {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const parts = pathname.split('/');
     const sessionId = parts[4];
     const session = assistantSessions.get(sessionId);
@@ -484,7 +480,7 @@ export async function handleScenarioAssistantRoutes(params: {
         abortController.signal
       );
       throwIfAborted(abortController.signal);
-      asJson(res, 200, { session: assistantSessionView(session), response });
+      asJson(res, 200, { session: scenarioAssistantSessionView(session), response });
     } catch (error) {
       if (!abortController.signal.aborted) throw error;
     } finally {

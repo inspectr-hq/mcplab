@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AssistantRuntimeSession } from '@inspectr/mcplab-core';
-import { cleanupAssistantSessions } from './scenario-assistant-domain.js';
+import { cleanupScenarioAssistantSessions } from './scenario-assistant-domain.js';
 import { cleanupResultAssistantSessions } from './result-assistant-domain.js';
 
 describe('assistant session TTL', () => {
   it.each([
-    ['scenario', cleanupAssistantSessions],
+    ['scenario', cleanupScenarioAssistantSessions],
     ['result', cleanupResultAssistantSessions]
   ])('expires a stale idle %s session and closes its SSE clients', async (kind, cleanup) => {
     const client = { end: vi.fn() };
@@ -34,7 +34,7 @@ describe('assistant session TTL', () => {
   });
 
   it.each([
-    ['scenario', cleanupAssistantSessions],
+    ['scenario', cleanupScenarioAssistantSessions],
     ['result', cleanupResultAssistantSessions]
   ])('also expires a stale active %s session to abort its work', (kind, cleanup) => {
     const runtime: AssistantRuntimeSession = {

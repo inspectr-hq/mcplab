@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
-import { assistantSessionView } from './scenario-assistant-domain.js';
+import { scenarioAssistantSessionView } from './scenario-assistant-domain.js';
 
 function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFactory>[0]) {
   const captured: Array<{ status: number; body: any }> = [];
@@ -27,9 +27,9 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
     asJson: vi.fn((_res: any, status: number, result: unknown) =>
       captured.push({ status, body: result })
     ),
-    cleanupAssistantSessions: vi.fn(),
-    touchAssistantSession: vi.fn(),
-    assistantSessionView,
+    cleanupScenarioAssistantSessions: vi.fn(),
+    touchScenarioAssistantSession: vi.fn(),
+    scenarioAssistantSessionView,
     ensureInsideRoot: (_root: string, path: string) => path,
     readLibraries: () => ({
       servers: { 'server-1': { transport: 'http', url: 'https://example.invalid' } },
@@ -43,7 +43,7 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
       provider: 'openai',
       model: 'test'
     }),
-    preloadAssistantTools: vi.fn(),
+    preloadScenarioAssistantTools: vi.fn(),
     assistantRuntimeFactory: factory
   };
   const invoke = async (method: string, pathname: string, requestBody?: unknown) => {
@@ -108,7 +108,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
       const originalScenario = structuredClone(scenario);
       const mcpCall = vi.fn().mockResolvedValue('read result');
       if (withReadOnlyTool)
-        deps.preloadAssistantTools.mockImplementation(async (prepared: any) => {
+        deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
           prepared.mcp.callTool = mcpCall;
           prepared.tools.push({
             name: 'server-1__lookup',
@@ -140,7 +140,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
             event.payload.suggestions?.prompt?.replacement === 'Revised prompt'
         )
       ).toBe(true);
-      expect(deps.preloadAssistantTools).toHaveBeenCalledOnce();
+      expect(deps.preloadScenarioAssistantTools).toHaveBeenCalledOnce();
       await invoke('DELETE', `/api/scenario-assistant/sessions/${id}`);
       await invoke('DELETE', `/api/scenario-assistant/sessions/${id}`);
       expect(sessions.has(id)).toBe(false);
@@ -183,7 +183,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     });
     const originalScenario = structuredClone(scenario);
     let calls: any;
-    deps.preloadAssistantTools.mockImplementation(async (prepared: any) => {
+    deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
       calls = vi.fn(
         async (_server: string, tool: string, args: unknown) => `${tool}:${JSON.stringify(args)}`
       );
@@ -341,7 +341,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
       releaseFirst = resolve;
     });
     let calls: ReturnType<typeof vi.fn>;
-    deps.preloadAssistantTools.mockImplementation(async (prepared: any) => {
+    deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
       calls = vi.fn(async (_server: string, tool: string, args: any) => {
         executionOrder.push(tool);
         if (tool === 'lookup') {

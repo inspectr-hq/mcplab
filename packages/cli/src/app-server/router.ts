@@ -79,14 +79,14 @@ import {
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
-  cleanupAssistantSessions,
-  touchAssistantSession,
-  assistantSessionView,
+  cleanupScenarioAssistantSessions,
+  touchScenarioAssistantSession,
+  scenarioAssistantSessionView,
   resolveAssistantAgentFromConfig,
   resolveAssistantAgentFromLibraries,
   pickDefaultAssistantAgentName,
   type ScenarioAssistantSession,
-  preloadAssistantTools
+  preloadScenarioAssistantTools
 } from './scenario-assistant-domain.js';
 import {
   preloadResultAssistantTools,
@@ -259,15 +259,15 @@ export async function startAppServer(options: AppServerOptions) {
     stopOAuthDebuggerSession,
     oauthDebuggerExportMarkdown,
     oauthDebuggerExportRawTrace,
-    cleanupAssistantSessions,
-    touchAssistantSession,
-    assistantSessionView,
+    cleanupScenarioAssistantSessions,
+    touchScenarioAssistantSession,
+    scenarioAssistantSessionView,
     ensureInsideRoot,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
     preloadResultAssistantTools,
-    preloadAssistantTools,
+    preloadScenarioAssistantTools,
     getRunResults,
     decodeEvalId,
     readConfigRecord,

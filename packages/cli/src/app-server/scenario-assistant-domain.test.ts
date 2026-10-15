@@ -4,11 +4,11 @@ import {
   createScenarioAssistantRuntimeDefinition,
   normalizeScenarioAssistantEvalRules,
   validateScenarioAssistantProposal,
-  type PreparedScenarioAssistantSession
+  type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
-function baseSession(): PreparedScenarioAssistantSession {
+function baseSession(): ScenarioAssistantSession {
   return {
     id: 'sas-1',
     createdAt: Date.now(),
