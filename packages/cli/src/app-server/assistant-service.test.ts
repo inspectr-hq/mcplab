@@ -6,7 +6,6 @@ import type {
   AssistantRuntimeSession
 } from '@inspectr/mcplab-core';
 import { createAssistantRuntimeService } from './assistant-service.js';
-import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
 describe('assistant runtime service', () => {
@@ -71,7 +70,7 @@ describe('assistant runtime service', () => {
           markStarted();
           return oldResult;
         }
-        return Promise.resolve({ type: 'assistant_message', text: 'new' });
+        return Promise.resolve({ type: 'assistant_message' as const, text: 'new' });
       }),
       resolveToolCalls: vi.fn(),
       getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
@@ -102,10 +101,7 @@ describe('assistant runtime service', () => {
     expect(await service.sendMessage('new')).toMatchObject({ text: 'new' });
     await service.dispose();
   });
-  it.each([
-    ['native', createNativeAssistantRuntimeFactory],
-    ['LangGraph', createLangChainAssistantRuntimeFactory]
-  ])('%s publishes one settled cancellation snapshot after partial tool execution', async (_name, createFactory) => {
+  it('publishes one settled cancellation snapshot after partial tool execution', async () => {
     let finishSlow!: (value: unknown) => void;
     const slowResult = new Promise((resolve) => {
       finishSlow = resolve;
@@ -140,7 +136,7 @@ describe('assistant runtime service', () => {
         if (event.type === 'session_error') snapshotAtCancellation = runtime.getSnapshot();
       }
     };
-    runtime = await createFactory(async () => ({
+    runtime = await createLangChainAssistantRuntimeFactory(async () => ({
       type: 'tool_call_request',
       text: 'Reading',
       toolCalls: [
@@ -243,7 +239,7 @@ describe('assistant runtime service', () => {
     await expect(service.sendMessage('after disposal')).rejects.toThrow('disposed');
   });
 
-  it('keeps a late abort-ignoring model response from cancelling a newer native batch', async () => {
+  it('keeps a late abort-ignoring model response from cancelling a newer LangGraph batch', async () => {
     let finishOldModel!: (value: AssistantRuntimeModelOutput) => void;
     let oldModelStarted!: () => void;
     const oldStarted = new Promise<void>((resolve) => {
@@ -264,8 +260,8 @@ describe('assistant runtime service', () => {
       approvalPolicy: () => 'approval_required',
       onEvent: (event: { type: string }) => events.push(event.type)
     } as unknown as AssistantRuntimeDefinition;
-    const runtime = await createNativeAssistantRuntimeFactory(async (_definition, messages) => {
-      modelHistories.push(structuredClone(messages));
+    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+      modelHistories.push([...messages]);
       modelCalls += 1;
       if (modelCalls === 1) {
         oldModelStarted();
@@ -289,6 +285,7 @@ describe('assistant runtime service', () => {
     await oldStarted;
     controller.abort();
     await expect(oldTurn).rejects.toThrow('aborted');
+    await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
 
     const newTurn = await service.sendMessage('new turn');
     expect(newTurn).toMatchObject({
@@ -313,7 +310,7 @@ describe('assistant runtime service', () => {
     ).toEqual(['new-call']);
     expect(
       finalHistory
-        .filter((message) => message.role === 'tool')
+        .filter((message) => message.getType() === 'tool')
         .map((message) => message.tool_call_id)
     ).toEqual(['new-call']);
     expect(service.getSnapshot().pendingToolCalls.map((call) => call.id)).toEqual(['new-call']);

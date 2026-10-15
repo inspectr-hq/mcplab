@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentConfig } from '@inspectr/mcplab-core';
+import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   createScenarioAssistantRuntimeDefinition,
   normalizeScenarioAssistantEvalRules,
   validateScenarioAssistantProposal,
-  type ScenarioAssistantSession
+  type PreparedScenarioAssistantSession
 } from './scenario-assistant-domain.js';
-import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
+import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
-function baseSession(): ScenarioAssistantSession {
+function baseSession(): PreparedScenarioAssistantSession {
   return {
     id: 'sas-1',
     createdAt: Date.now(),
@@ -24,8 +24,12 @@ function baseSession(): ScenarioAssistantSession {
         extractRules: []
       }
     },
-    agentConfig: { provider: 'openai', model: 'gpt-4o-mini' } as AgentConfig,
-    mcp: {} as any,
+    agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+    toolsLoaded: 0,
+    toolServers: [],
+    events: [],
+    clients: new Set(),
+    mcp: new McpClientManager(),
     tools: [],
     toolPublicMap: new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]]),
     initialMessages: [],
@@ -258,12 +262,14 @@ describe('Scenario Assistant runtime definition', () => {
     expect(() => validateScenarioAssistantProposal(proposal, new Map())).toThrow(path);
   });
 
-  it('returns detailed proposal paths to the model as native tool feedback', async () => {
+  it('returns detailed proposal paths to the model as LangGraph tool feedback', async () => {
     const histories: Array<Array<{ role: string; content: string }>> = [];
     let round = 0;
     const definition = createScenarioAssistantRuntimeDefinition(baseSession());
-    const runtime = await createNativeAssistantRuntimeFactory(async (_definition, messages) => {
-      histories.push(messages.map(({ role, content }) => ({ role, content: String(content) })));
+    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+      histories.push(
+        messages.map((message) => ({ role: message.getType(), content: String(message.content) }))
+      );
       round += 1;
       return round === 1
         ? {

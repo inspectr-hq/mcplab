@@ -527,7 +527,7 @@ These features are available through the web app (`mcplab app`).
 
 ### Scenario Assistant
 
-An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns — and can call your MCP server's tools directly to demonstrate expected behavior.
+An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns, and can call your MCP server's tools directly to demonstrate expected behavior.
 
 Open the app, navigate to an eval, and open the **Scenario Assistant** panel on any scenario.
 
@@ -537,14 +537,14 @@ An AI chat that analyzes completed evaluation runs. Ask it to explain failures, 
 
 Open a run in the app and click **Result Assistant**.
 
-Both assistants use the native runtime by default. You can opt into LangGraph independently with `MCPLAB_RESULT_ASSISTANT_RUNTIME=langgraph` for Result Assistant and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langgraph` for Scenario Assistant. Set both variables to enable LangGraph for both, then restart the app. Each assistant opted into LangGraph logs that choice at startup. Roll either one back by unsetting its variable or setting it to `native`, then restart.
+Both assistants use one shared LangGraph runtime automatically, with separate assistant definitions and in-memory sessions. No runtime flags are needed. Existing `MCPLAB_RESULT_ASSISTANT_RUNTIME` and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME` entries can be removed from `.env`; they are unused, including values such as `native`, `langchain`, or `langgraph`.
 
-These per-assistant flags are temporary rollout and rollback controls. After both assistants validate successfully, the intended end state is one shared LangGraph runtime by default, with the native fallback and flags removable. The framework-neutral assistant interface remains in place after that rollout.
+The framework-neutral assistant interface remains in place. Both assistants use native LangChain chat models for OpenAI, Anthropic, and Azure. MCPLab retains provider configuration and credentials, MCP connections and execution, OAuth, tool allowlists, and approval policies. Sessions stay in process; durable state and streaming are not enabled.
 
-Existing experimental setups using `langchain` must change the value to `langgraph`. LangGraph reuses the configured provider and credentials, preserves existing MCP tool ownership and approval rules, keeps session memory in process, and does not enable durable state or streaming.
+Assistant conversations are never sent to LangSmith. This remains true when evaluation tracing is enabled, which continues to trace evaluation scenarios independently.
 
 ```sh
-MCPLAB_RESULT_ASSISTANT_RUNTIME=langgraph MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langgraph npm run app:dev
+npm run app:dev
 ```
 
 ### MCP Tool Analysis
@@ -554,7 +554,7 @@ Automated quality review of your MCP server's tools. Connects to your server, di
 - Name and description quality
 - Schema completeness
 - Safety classification (read-like vs. potentially destructive)
-- Sample call behavior (optional — runs real calls against your server)
+- Sample call behavior (optional, runs real calls against your server)
 
 Reports are saved to `mcplab/results/tool-analysis/` and viewable in the app.
 

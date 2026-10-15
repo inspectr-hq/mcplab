@@ -1,3 +1,4 @@
+import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   AssistantRuntimeDefinition,
@@ -29,7 +30,9 @@ export function assistantRuntimeContract(
         return { type: 'assistant_message', text: 'Done' };
       }).create(definition);
       await session.sendMessage('Hello');
-      expect(observed[0]).toEqual([{ role: 'user', content: 'Hello' }]);
+      expect(observed[0]).toHaveLength(1);
+      expect(observed[0][0]).toBeInstanceOf(HumanMessage);
+      expect(observed[0][0]?.content).toBe('Hello');
       expect(session.getSnapshot().messages[0]).toMatchObject({
         id: 'system-note',
         role: 'system'
@@ -39,12 +42,12 @@ export function assistantRuntimeContract(
     it('retains one canonical history across repeated graph invocations', async () => {
       const seen: string[][] = [];
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        seen.push(messages.map(({ role, content }) => `${role}:${content}`));
+        seen.push(messages.map((message) => `${message.getType()}:${String(message.content)}`));
         return { type: 'assistant_message', text: `answer-${seen.length}` };
       }).create(makeDefinition());
       await session.sendMessage('first');
       await session.sendMessage('second');
-      expect(seen[1]).toEqual(['user:first', 'assistant:answer-1', 'user:second']);
+      expect(seen[1]).toEqual(['human:first', 'ai:answer-1', 'human:second']);
       expect(seen[1]).toHaveLength(3);
     });
 
@@ -78,16 +81,21 @@ export function assistantRuntimeContract(
       );
       await session.sendMessage('Read both');
       const calls = session.getSnapshot().pendingToolCalls;
-      const request = modelHistories[1].find((message) => message.tool_calls)?.tool_calls;
-      const results = modelHistories[1].filter((message) => message.role === 'tool');
+      const request = modelHistories[1].find((message) =>
+        AIMessage.isInstance(message) ? message.tool_calls : undefined
+      )?.tool_calls;
+      const results = modelHistories[1].filter((message) => ToolMessage.isInstance(message));
       expect(calls).toHaveLength(3);
       expect(calls.map((call) => call.id).every(Boolean)).toBe(true);
       expect(new Set(calls.map((call) => call.id)).size).toBe(3);
       expect(request.map((call: any) => call.id)).toEqual(calls.map((call) => call.id));
-      expect(results.map((message) => [message.tool_call_id, message.name])).toEqual(
-        calls.map((call) => [call.id, call.publicToolName])
-      );
-      expect(results.map((message) => JSON.parse(message.content))).toEqual([
+      expect(
+        results.map((message) => [
+          ToolMessage.isInstance(message) ? message.tool_call_id : undefined,
+          message.name
+        ])
+      ).toEqual(calls.map((call) => [call.id, call.publicToolName]));
+      expect(results.map((message) => JSON.parse(String(message.content)))).toEqual([
         { name: 'first' },
         { name: 'second' },
         { name: 'third' }
@@ -106,15 +114,17 @@ export function assistantRuntimeContract(
       })).create(
         makeDefinition({
           onEvent: (event) => events.push(event),
-          tools: [{
-            name: 'slow',
-            server: 's',
-            tool: 'slow',
-            execute: async () => {
-              started();
-              return new Promise((resolve) => (resolveTool = resolve));
+          tools: [
+            {
+              name: 'slow',
+              server: 's',
+              tool: 'slow',
+              execute: async () => {
+                started();
+                return new Promise((resolve) => (resolveTool = resolve));
+              }
             }
-          }],
+          ],
           approvalPolicy: () => 'local'
         })
       );
@@ -140,7 +150,7 @@ export function assistantRuntimeContract(
       let round = 0;
       const proposal = { prompt: { replacement: 'Revised', rationale: 'Clearer' } };
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         round += 1;
         return round === 1
           ? {
@@ -167,8 +177,9 @@ export function assistantRuntimeContract(
       const result = await session.sendMessage('Improve this scenario');
       expect(result).toMatchObject({ type: 'assistant_message', suggestions: proposal });
       expect(histories).toHaveLength(2);
-      expect(histories[1].at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'proposal-1' });
-      expect(histories[1].at(-1).content).not.toContain('assistant_message');
+      expect(histories[1].at(-1)).toBeInstanceOf(ToolMessage);
+      expect(histories[1].at(-1)).toMatchObject({ tool_call_id: 'proposal-1' });
+      expect(String(histories[1].at(-1).content)).not.toContain('assistant_message');
     });
 
     it('buffers a local proposal while a write waits for approval', async () => {
@@ -291,7 +302,7 @@ export function assistantRuntimeContract(
       const histories: any[][] = [];
       let round = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         round += 1;
         return round === 1
           ? {
@@ -324,14 +335,14 @@ export function assistantRuntimeContract(
       );
       const result = await session.sendMessage('Suggest a check');
       expect(result).toMatchObject({ type: 'assistant_message', text: 'I will correct that.' });
-      expect(JSON.parse(histories[1].at(-1).content)).toMatchObject({
+      expect(JSON.parse(String(histories[1].at(-1).content))).toMatchObject({
         error: expect.stringContaining('evalRules.replacement[0].label')
       });
       expect(result).not.toHaveProperty('suggestions');
     });
 
     it('holds tool results until the full batch resolves and appends them in request order', async () => {
-      const histories: Array<Array<{ role: string; content: string }>> = [];
+      const histories: BaseMessage[][] = [];
       const outputs: AssistantRuntimeModelOutput[] = [
         {
           type: 'tool_call_request',
@@ -341,7 +352,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Done' }
       ];
       const factory = createRuntimeFactory(async (_definition, messages) => {
-        histories.push(messages.map(({ role, content }) => ({ role, content: String(content) })));
+        histories.push(messages);
         return outputs.shift()!;
       });
       const definition = makeDefinition({
@@ -364,14 +375,14 @@ export function assistantRuntimeContract(
 
       await session.resolveToolCalls([{ toolCallId: first.id, decision: 'approve' }]);
       expect(histories[1].slice(-2)).toEqual([
-        expect.objectContaining({ role: 'tool', content: expect.stringContaining('"n":1') }),
-        expect.objectContaining({ role: 'tool', content: expect.stringContaining('"n":2') })
+        expect.objectContaining({ content: expect.stringContaining('"n":1') }),
+        expect.objectContaining({ content: expect.stringContaining('"n":2') })
       ]);
     });
 
     it('rejects four-call batches before executing any tool and gives each call corrective feedback', async () => {
       const executions = vi.fn(async () => ({}));
-      const histories: Array<Array<{ role: string; content: string }>> = [];
+      const histories: BaseMessage[][] = [];
       const outputs: AssistantRuntimeModelOutput[] = [
         {
           type: 'tool_call_request',
@@ -381,7 +392,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Corrected' }
       ];
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(messages.map(({ role, content }) => ({ role, content: String(content) })));
+        histories.push(messages);
         return outputs.shift()!;
       }).create(
         makeDefinition({
@@ -397,10 +408,10 @@ export function assistantRuntimeContract(
       const result = await session.sendMessage('Do four things');
       expect(result).toMatchObject({ type: 'assistant_message', text: 'Corrected' });
       expect(executions).not.toHaveBeenCalled();
-      expect(histories[1].filter((message) => message.role === 'tool')).toHaveLength(4);
-      expect(histories[1].slice(-4).map((message) => JSON.parse(message.content))).toEqual(
-        Array(4).fill({ error: 'Tool batch exceeds the maximum of 3 external calls' })
-      );
+      expect(histories[1].filter((message) => ToolMessage.isInstance(message))).toHaveLength(4);
+      expect(
+        histories[1].slice(-4).map((message) => JSON.parse(String(message.content)))
+      ).toEqual(Array(4).fill({ error: 'Tool batch exceeds the maximum of 3 external calls' }));
     });
 
     it('executes the maximum three external calls and pairs all results before the next model request', async () => {
@@ -408,7 +419,7 @@ export function assistantRuntimeContract(
       const execute = vi.fn(async (args) => ({ args }));
       let round = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        observed.push(structuredClone(messages));
+        observed.push([...messages]);
         round += 1;
         return round === 1
           ? {
@@ -435,11 +446,15 @@ export function assistantRuntimeContract(
       await session.sendMessage('Read');
       expect(execute).toHaveBeenCalledTimes(3);
       const nextModelMessages = observed[1];
-      const calls = nextModelMessages.flatMap((message) => message.tool_calls ?? []);
-      const results = nextModelMessages.filter((message) => message.role === 'tool');
-      expect(results.map((message) => message.tool_call_id)).toEqual(
-        calls.map((call: any) => call.id)
+      const calls = nextModelMessages.flatMap(
+        (message) => (AIMessage.isInstance(message) ? message.tool_calls : undefined) ?? []
       );
+      const results = nextModelMessages.filter((message) => ToolMessage.isInstance(message));
+      expect(
+        results.map((message) =>
+          ToolMessage.isInstance(message) ? message.tool_call_id : undefined
+        )
+      ).toEqual(calls.map((call: any) => call.id));
       expect(results).toHaveLength(3);
     });
 
@@ -509,7 +524,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Done' }
       ];
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         return outputs.shift()!;
       }).create(
         makeDefinition({
@@ -548,7 +563,9 @@ export function assistantRuntimeContract(
       });
       const history = histories[1];
       expect(
-        history.filter((message) => message.role === 'tool').map((message) => message.tool_call_id)
+        history
+          .filter((message) => ToolMessage.isInstance(message))
+          .map((message) => (ToolMessage.isInstance(message) ? message.tool_call_id : undefined))
       ).toEqual(['local-1', 'read-1', 'write-1']);
     });
 
@@ -556,7 +573,7 @@ export function assistantRuntimeContract(
       const observed: Array<Array<any>> = [];
       const execute = vi.fn(async (args) => ({ args }));
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        observed.push(structuredClone(messages));
+        observed.push([...messages]);
         return observed.length === 1
           ? {
               type: 'tool_call_request',
@@ -587,9 +604,13 @@ export function assistantRuntimeContract(
         ['edit-me', 'approved'],
         ['deny-me', 'denied']
       ]);
-      const results = observed[1].filter((message) => message.role === 'tool');
-      expect(results.map((message) => message.tool_call_id)).toEqual(['edit-me', 'deny-me']);
-      expect(JSON.parse(results[1].content)).toMatchObject({ denied: true });
+      const results = observed[1].filter((message) => ToolMessage.isInstance(message));
+      expect(
+        results.map((message) =>
+          ToolMessage.isInstance(message) ? message.tool_call_id : undefined
+        )
+      ).toEqual(['edit-me', 'deny-me']);
+      expect(JSON.parse(String(results[1].content))).toMatchObject({ denied: true });
     });
 
     it('validates an entire decision batch before executing any call', async () => {
@@ -605,7 +626,7 @@ export function assistantRuntimeContract(
       ] as const) {
         const execute = vi.fn(async () => ({ ok: true }));
         const session = await createRuntimeFactory(async (_definition, messages) =>
-          messages.some((message) => message.role === 'assistant')
+          messages.some((message) => AIMessage.isInstance(message))
             ? { type: 'assistant_message', text: 'Done' }
             : {
                 type: 'tool_call_request',
@@ -662,7 +683,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Recovered' }
       ];
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         return outputs.shift()!;
       }).create(
         makeDefinition({
@@ -671,9 +692,13 @@ export function assistantRuntimeContract(
         })
       );
       await session.sendMessage('Read');
-      const toolResults = histories[1].filter((message) => message.role === 'tool');
-      expect(toolResults.map((message) => message.tool_call_id)).toEqual(['unknown-1', 'read-1']);
-      expect(JSON.parse(toolResults[0].content)).toMatchObject({
+      const toolResults = histories[1].filter((message) => ToolMessage.isInstance(message));
+      expect(
+        toolResults.map((message) =>
+          ToolMessage.isInstance(message) ? message.tool_call_id : undefined
+        )
+      ).toEqual(['unknown-1', 'read-1']);
+      expect(JSON.parse(String(toolResults[0].content))).toMatchObject({
         error: "Unknown assistant tool 'missing'"
       });
       expect(execute).toHaveBeenCalledOnce();
@@ -684,7 +709,7 @@ export function assistantRuntimeContract(
       let round = 0;
       const execute = vi.fn(async () => ({ ok: true }));
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        observed.push(structuredClone(messages));
+        observed.push([...messages]);
         round += 1;
         return round <= 25
           ? {
@@ -729,15 +754,19 @@ export function assistantRuntimeContract(
         status: 'error'
       });
       await session.sendMessage('Start again');
-      expect(observed[25].at(-1)).toMatchObject({ role: 'user', content: 'Start again' });
+      expect(observed[25].at(-1)).toBeInstanceOf(HumanMessage);
+      expect(observed[25].at(-1)?.content).toBe('Start again');
       expect(session.getSnapshot().messages.at(-1)?.suggestions).toBeUndefined();
       const messages = observed[25];
       const requestedIds = messages.flatMap(
-        (message) => message.tool_calls?.map((call: any) => call.id) ?? []
+        (message) =>
+          (AIMessage.isInstance(message) ? message.tool_calls : undefined)?.map(
+            (call: any) => call.id
+          ) ?? []
       );
       const returnedIds = messages
-        .filter((message) => message.role === 'tool')
-        .map((message) => message.tool_call_id);
+        .filter((message) => ToolMessage.isInstance(message))
+        .map((message) => (ToolMessage.isInstance(message) ? message.tool_call_id : undefined));
       expect(returnedIds).toEqual(requestedIds);
     });
 
@@ -797,7 +826,7 @@ export function assistantRuntimeContract(
       });
       let modelCalls = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        observed.push(structuredClone(messages));
+        observed.push([...messages]);
         modelCalls += 1;
         return modelCalls === 1
           ? {
@@ -850,13 +879,19 @@ export function assistantRuntimeContract(
       const pairedHistory = observed.at(-1)!;
       expect(
         pairedHistory
-          .filter((message) => message.role === 'tool')
-          .map((message) => message.tool_call_id)
+          .filter((message) => ToolMessage.isInstance(message))
+          .map((message) => (ToolMessage.isInstance(message) ? message.tool_call_id : undefined))
       ).toEqual(['one', 'two', 'three']);
       expect(
         pairedHistory
-          .filter((message) => message.role === 'assistant' && message.tool_calls)
-          .flatMap((message) => message.tool_calls.map((call: any) => call.id))
+          .filter(
+            (message) =>
+              AIMessage.isInstance(message) &&
+              (AIMessage.isInstance(message) ? message.tool_calls : undefined)
+          )
+          .flatMap((message) =>
+            AIMessage.isInstance(message) ? (message.tool_calls ?? []).map((call) => call.id) : []
+          )
       ).toEqual(['one', 'two', 'three']);
     });
 
@@ -912,7 +947,7 @@ export function assistantRuntimeContract(
       controller.abort();
       await expect(turn).rejects.toThrow();
       expect(
-        session.getSnapshot().messages.find((message) => message.role === 'assistant')?.suggestions
+        session.getSnapshot().messages.find((message) => AIMessage.isInstance(message))?.suggestions
       ).toBeUndefined();
       finishTool({ ok: true });
       await session.sendMessage('New turn');
@@ -927,7 +962,7 @@ export function assistantRuntimeContract(
       const histories: Array<Array<any>> = [];
       let round = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         round += 1;
         return round === 1
           ? {
@@ -961,8 +996,8 @@ export function assistantRuntimeContract(
       await session.sendMessage('Old turn');
       await session.sendMessage('New turn');
       expect(histories[1].slice(-2)).toEqual([
-        expect.objectContaining({ role: 'tool', tool_call_id: 'old-call' }),
-        expect.objectContaining({ role: 'user', content: 'New turn' })
+        expect.objectContaining({ tool_call_id: 'old-call' }),
+        expect.objectContaining({ content: 'New turn' })
       ]);
       expect(session.getSnapshot().pendingToolCalls[0]).toMatchObject({
         id: 'old-proposal',
@@ -987,7 +1022,7 @@ export function assistantRuntimeContract(
       const events: unknown[] = [];
       let round = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         round++;
         return round === 1
           ? {
@@ -1019,19 +1054,25 @@ export function assistantRuntimeContract(
       );
       const oldTurn = session.sendMessage('Old turn');
       await toolStarted;
-      await expect(session.sendMessage('New turn')).resolves.toMatchObject({ text: 'New turn finished' });
+      await expect(session.sendMessage('New turn')).resolves.toMatchObject({
+        text: 'New turn finished'
+      });
       const snapshotBeforeLateTool = session.getSnapshot();
       expect(snapshotBeforeLateTool.pendingToolCalls).toMatchObject([
-        { id: 'executing-call', status: 'error', error: expect.stringContaining('outcome unknown') },
+        {
+          id: 'executing-call',
+          status: 'error',
+          error: expect.stringContaining('outcome unknown')
+        },
         { id: 'sibling-call', status: 'denied', error: expect.stringContaining('skipped') }
       ]);
       expect(histories[1].slice(-3)).toMatchObject([
-        { role: 'tool', tool_call_id: 'executing-call', name: 'slow' },
-        { role: 'tool', tool_call_id: 'sibling-call', name: 'sibling' },
-        { role: 'user', content: 'New turn' }
+        { tool_call_id: 'executing-call', name: 'slow' },
+        { tool_call_id: 'sibling-call', name: 'sibling' },
+        { content: 'New turn' }
       ]);
-      expect(histories[1][histories[1].length - 3]?.content).toContain('outcome unknown');
-      expect(histories[1][histories[1].length - 2]?.content).toContain('skipped');
+      expect(String(histories[1][histories[1].length - 3]?.content)).toContain('outcome unknown');
+      expect(String(histories[1][histories[1].length - 2]?.content)).toContain('skipped');
       expect(slowExecute).toHaveBeenCalledOnce();
       expect(siblingExecute).not.toHaveBeenCalled();
       const eventCount = events.length;
@@ -1040,14 +1081,14 @@ export function assistantRuntimeContract(
       await Promise.resolve();
       expect(session.getSnapshot()).toEqual(snapshotBeforeLateTool);
       expect(events).toHaveLength(eventCount);
-      expect(histories[1].filter((message) => message.role === 'tool')).toHaveLength(2);
+      expect(histories[1].filter((message) => ToolMessage.isInstance(message))).toHaveLength(2);
     });
 
     it('cleans paired calls and discards proposals after an unrecoverable model failure', async () => {
       const histories: Array<Array<any>> = [];
       let round = 0;
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(structuredClone(messages));
+        histories.push([...messages]);
         round += 1;
         if (round === 1)
           return {
@@ -1085,14 +1126,14 @@ export function assistantRuntimeContract(
         session.resolveToolCalls([{ toolCallId: 'failed-turn-call', decision: 'approve' }])
       ).rejects.toThrow('provider unavailable');
       expect(histories[1].slice(-1)).toEqual([
-        expect.objectContaining({ role: 'tool', tool_call_id: 'failed-turn-call' })
+        expect.objectContaining({ tool_call_id: 'failed-turn-call' })
       ]);
       expect(session.getSnapshot().messages.at(-1)?.suggestions).toBeUndefined();
       expect(session.getSnapshot().pendingToolCalls[0].status).toBe('approved');
     });
 
     it('pairs an approved tool result before asking the model to continue', async () => {
-      const histories: Array<Array<{ role: string; content: string }>> = [];
+      const histories: BaseMessage[][] = [];
       const execute = vi.fn(async () => ({ ok: true }));
       const outputs: AssistantRuntimeModelOutput[] = [
         {
@@ -1103,7 +1144,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Done' }
       ];
       const factory = createRuntimeFactory(async (_definition, messages) => {
-        histories.push(messages.map(({ role, content }) => ({ role, content: String(content) })));
+        histories.push(messages);
         return outputs.shift()!;
       });
       const definition: AssistantRuntimeDefinition = {
@@ -1130,13 +1171,13 @@ export function assistantRuntimeContract(
 
       expect(resolved).toMatchObject({ type: 'assistant_message', text: 'Done' });
       expect(execute).toHaveBeenCalledWith({ q: 1 }, undefined);
-      expect(histories[1].at(-1)).toMatchObject({ role: 'tool' });
-      expect(histories[1].at(-1)?.content).toContain('ok');
+      expect(histories[1].at(-1)).toBeInstanceOf(ToolMessage);
+      expect(String(histories[1].at(-1)?.content)).toContain('ok');
       expect(session.getSnapshot().pendingToolCalls[0].status).toBe('approved');
     });
 
     it('sends the stored truncated preview to later model rounds', async () => {
-      const histories: Array<Array<{ role: string; content: string; tool_call_id?: string }>> = [];
+      const histories: BaseMessage[][] = [];
       const longValue = 'x'.repeat(10_000);
       const outputs: AssistantRuntimeModelOutput[] = [
         { type: 'tool_call_request', text: 'Reading', toolCalls: [{ id: 'large', name: 'read' }] },
@@ -1144,13 +1185,7 @@ export function assistantRuntimeContract(
         { type: 'assistant_message', text: 'Still done' }
       ];
       const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(
-          messages.map(({ role, content, tool_call_id }) => ({
-            role,
-            content: String(content),
-            tool_call_id
-          }))
-        );
+        histories.push(messages);
         return outputs.shift()!;
       }).create(
         makeDefinition({
@@ -1167,16 +1202,16 @@ export function assistantRuntimeContract(
         4000
       );
       expect(histories[1].at(-1)).toMatchObject({
-        role: 'tool',
         tool_call_id: 'large',
         content: expectedPreview
       });
-      expect(histories[1].at(-1)?.content.length).toBeLessThan(longValue.length);
+      expect(String(histories[1].at(-1)?.content).length).toBeLessThan(longValue.length);
       await session.sendMessage('Continue');
-      expect(histories[2].find(({ tool_call_id }) => tool_call_id === 'large')).toMatchObject({
-        role: 'tool',
-        content: expectedPreview
-      });
+      const largeResult = histories[2].find(
+        (message) => ToolMessage.isInstance(message) && message.tool_call_id === 'large'
+      );
+      expect(largeResult).toBeInstanceOf(ToolMessage);
+      expect(String(largeResult?.content)).toBe(expectedPreview);
     });
   });
 }

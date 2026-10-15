@@ -241,7 +241,11 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     );
     expect(partialEvent?.payload.session.pendingToolCalls).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'read-1', status: 'approved', arguments: { query: 'edited' } }),
+        expect.objectContaining({
+          id: 'read-1',
+          status: 'approved',
+          arguments: { query: 'edited' }
+        }),
         expect.objectContaining({ id: 'write-1', status: 'pending' })
       ])
     );
@@ -272,7 +276,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     expect(calls).toHaveBeenCalledOnce();
     expect(scenario).toEqual(originalScenario);
     const finalMessages = modelMessages.at(-1)!;
-    const toolMessages = finalMessages.filter((message) => message.role === 'tool');
+    const toolMessages = finalMessages.filter((message) => message.getType() === 'tool');
     expect(toolMessages.map((message) => (message as any).tool_call_id)).toEqual([
       'proposal-2',
       'read-1',
@@ -325,7 +329,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
         };
       return {
         type: 'assistant_message',
-        text: `Completed ${messages.filter((message) => message.role === 'tool').length} calls.`
+        text: `Completed ${messages.filter((message) => message.getType() === 'tool').length} calls.`
       };
     });
     let releaseFirst!: () => void;

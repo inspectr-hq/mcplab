@@ -11,10 +11,10 @@ import type {
   AssistantRuntimeSnapshot,
   AssistantRuntimeToolCall,
   AssistantToolCallDecision,
-  LlmMessage,
   ScenarioAssistantSuggestionBundle
 } from '@inspectr/mcplab-core';
 import { callAssistantModel, type AssistantModelCall } from './assistant-model.js';
+import { withAssistantTraceExportDisabled } from './assistant-tracing.js';
 import { throwIfAborted } from './assistant-common.js';
 import {
   classifyToolCalls,
@@ -103,7 +103,7 @@ export function createLangChainAssistantRuntimeFactory(
           const rounds = state.rounds + 1;
           latest = { ...state, rounds };
           const output = await raceAssistantAbort(
-            modelCall(definition, structuredClone(state.messages.map(toLlmMessage)), config.signal),
+            modelCall(definition, [...state.messages], config.signal),
             config.signal
           );
           if (!isCurrent(g)) return { route: 'end', generation: state.generation };
@@ -128,7 +128,10 @@ export function createLangChainAssistantRuntimeFactory(
               ...(suggestions ? { suggestions } : {})
             });
             return publish(latest, {
-              messages: [...state.messages, new AIMessage({ content: output.text })],
+              messages: [
+                ...state.messages,
+                output.nativeMessage ?? new AIMessage({ content: output.text })
+              ],
               rounds,
               output: response,
               route: 'end'
@@ -138,9 +141,34 @@ export function createLangChainAssistantRuntimeFactory(
           const calls = output.toolCalls.map((call) =>
             createPendingToolCall(definition, call, usedIds)
           );
+          const native = output.nativeMessage;
+          const additionalKwargs = { ...(native?.additional_kwargs ?? {}) };
+          delete additionalKwargs.tool_calls;
+          let nativeToolIndex = 0;
+          const content = Array.isArray(native?.content)
+            ? native.content.map((block) => {
+                if (
+                  !block ||
+                  typeof block !== 'object' ||
+                  (block as { type?: unknown }).type !== 'tool_use'
+                )
+                  return block;
+                const call = calls[nativeToolIndex++];
+                return call
+                  ? ({
+                      ...(block as Record<string, unknown>),
+                      id: call.id,
+                      input: call.arguments
+                    } as unknown as typeof block)
+                  : block;
+              })
+            : (native?.content ?? output.text);
           const aiMessage = new AIMessage({
-            content: output.text,
-            id: `msg-${randomUUID()}`,
+            content,
+            id: native?.id ?? `msg-${randomUUID()}`,
+            additional_kwargs: additionalKwargs,
+            response_metadata: native?.response_metadata,
+            usage_metadata: native?.usage_metadata,
             tool_calls: calls.map((call) => ({
               id: call.id,
               name: call.publicToolName,
@@ -150,7 +178,7 @@ export function createLangChainAssistantRuntimeFactory(
           });
           snapshot.pendingToolCalls.push(...calls);
           snapshot.messages.push({
-            id: aiMessage.id!,
+            id: `msg-${randomUUID()}`,
             role: 'assistant',
             text: output.text,
             createdAt: new Date().toISOString(),
@@ -187,10 +215,8 @@ export function createLangChainAssistantRuntimeFactory(
               budgetExceeded: true
             });
           }
-          const { oversized, unknown, local, validExternal, needsApproval } = classifyToolCalls(
-            definition,
-            owner.calls
-          );
+          const { oversized, unknown, invalid, local, validExternal, needsApproval } =
+            classifyToolCalls(definition, owner.calls);
           if (oversized) {
             owner.calls.forEach((call) => fail(owner, call, OVERSIZED_ASSISTANT_TOOL_BATCH_ERROR));
             finish(owner);
@@ -199,6 +225,7 @@ export function createLangChainAssistantRuntimeFactory(
           unknown.forEach((call) =>
             fail(owner, call, `Unknown assistant tool '${call.publicToolName}'`)
           );
+          invalid.forEach((call) => fail(owner, call, call.validationError!));
           for (const call of local) {
             await execute(owner, call, config.signal);
             if (!isCurrent(state.generation, owner))
@@ -355,66 +382,70 @@ export function createLangChainAssistantRuntimeFactory(
       }
       return {
         async sendMessage(message: string, signal?: AbortSignal) {
-          if (disposed) throw new Error('Assistant session is disposed');
-          if (batch) cleanup(batch, 'superseded');
-          const nextGeneration = ++generation;
-          proposals.length = 0;
-          latest = {
-            ...latest,
-            messages: [...latest.messages, new HumanMessage({ content: message })],
-            route: 'model',
-            output: undefined,
-            calls: [],
-            rounds: 0,
-            generation: nextGeneration,
-            budgetExceeded: false
-          };
-          snapshot.messages.push({
-            id: `msg-${randomUUID()}`,
-            role: 'user',
-            text: message,
-            createdAt: new Date().toISOString()
+          return withAssistantTraceExportDisabled(async () => {
+            if (disposed) throw new Error('Assistant session is disposed');
+            if (batch) cleanup(batch, 'superseded');
+            const nextGeneration = ++generation;
+            proposals.length = 0;
+            latest = {
+              ...latest,
+              messages: [...latest.messages, new HumanMessage({ content: message })],
+              route: 'model',
+              output: undefined,
+              calls: [],
+              rounds: 0,
+              generation: nextGeneration,
+              budgetExceeded: false
+            };
+            snapshot.messages.push({
+              id: `msg-${randomUUID()}`,
+              role: 'user',
+              text: message,
+              createdAt: new Date().toISOString()
+            });
+            emit('turn_started');
+            return invoke(signal);
           });
-          emit('turn_started');
-          return invoke(signal);
         },
         async resolveToolCalls(decisions: AssistantToolCallDecision[], signal?: AbortSignal) {
-          if (disposed) throw new Error('Assistant session is disposed');
-          const owner = batch;
-          if (!owner) throw new Error('Tool batch is not pending');
-          const validated = validateToolCallDecisions(
-            decisions,
-            snapshot.pendingToolCalls,
-            owner.calls,
-            (id) => owner.results.has(id)
-          );
-          try {
-            for (const { decision, call } of validated) {
-              if (!isCurrent(owner.generation, owner))
-                throw new Error('Assistant turn was superseded');
-              if (decision.decision === 'deny') {
-                call.status = 'denied';
-                call.error = 'User denied tool call';
-                emit('tool_call_denied', { pendingToolCallId: call.id });
-                record(owner, call, JSON.stringify({ denied: true, reason: call.error }));
-              } else {
-                if (decision.arguments !== undefined) call.arguments = decision.arguments;
-                call.status = 'approved';
-                emit('tool_call_approved', { pendingToolCallId: call.id });
-                await execute(owner, call, signal);
+          return withAssistantTraceExportDisabled(async () => {
+            if (disposed) throw new Error('Assistant session is disposed');
+            const owner = batch;
+            if (!owner) throw new Error('Tool batch is not pending');
+            const validated = validateToolCallDecisions(
+              decisions,
+              snapshot.pendingToolCalls,
+              owner.calls,
+              (id) => owner.results.has(id)
+            );
+            try {
+              for (const { decision, call } of validated) {
+                if (!isCurrent(owner.generation, owner))
+                  throw new Error('Assistant turn was superseded');
+                if (decision.decision === 'deny') {
+                  call.status = 'denied';
+                  call.error = 'User denied tool call';
+                  emit('tool_call_denied', { pendingToolCallId: call.id });
+                  record(owner, call, JSON.stringify({ denied: true, reason: call.error }));
+                } else {
+                  if (decision.arguments !== undefined) call.arguments = decision.arguments;
+                  call.status = 'approved';
+                  emit('tool_call_approved', { pendingToolCallId: call.id });
+                  await execute(owner, call, signal);
+                }
               }
+              throwIfAborted(signal);
+              const unresolved = owner.calls.filter((call) => !owner.results.has(call.id));
+              if (unresolved.length)
+                return { type: 'tool_call_resolved', text: '', pendingToolCalls: unresolved };
+              finish(owner);
+              latest = { ...latest, route: 'model', output: undefined };
+              return await invoke(signal);
+            } catch (error) {
+              cleanup(owner, signal?.aborted ? 'cancelled' : 'failure', error);
+              throw error;
             }
-            throwIfAborted(signal);
-            const unresolved = owner.calls.filter((call) => !owner.results.has(call.id));
-            if (unresolved.length)
-              return { type: 'tool_call_resolved', text: '', pendingToolCalls: unresolved };
-            finish(owner);
-            latest = { ...latest, route: 'model', output: undefined };
-            return await invoke(signal);
-          } catch (error) {
-            cleanup(owner, signal?.aborted ? 'cancelled' : 'failure', error);
-            throw error;
-          }
+          });
         },
         getSnapshot: () => structuredClone(snapshot),
         async dispose() {
@@ -426,23 +457,4 @@ export function createLangChainAssistantRuntimeFactory(
       } satisfies AssistantRuntimeSession;
     }
   };
-}
-
-function toLlmMessage(message: BaseMessage): LlmMessage {
-  const role =
-    message.getType() === 'human' ? 'user' : message.getType() === 'tool' ? 'tool' : 'assistant';
-  const content =
-    typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-  const result: LlmMessage = { role, content };
-  if (ToolMessage.isInstance(message)) {
-    result.tool_call_id = message.tool_call_id;
-    if (message.name) result.name = message.name;
-  }
-  if (AIMessage.isInstance(message) && message.tool_calls?.length)
-    result.tool_calls = message.tool_calls.map((call) => ({
-      id: call.id ?? '',
-      name: call.name,
-      arguments: call.args
-    }));
-  return result;
 }

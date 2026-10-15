@@ -69,7 +69,6 @@ import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { formatCliStartupLine } from '../cli-branding.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
-import { selectAssistantRuntime } from './assistant-runtime-selection.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
@@ -171,6 +170,7 @@ const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
 
 export async function startAppServer(options: AppServerOptions) {
+  const { createLangChainAssistantRuntimeFactory } = await import('./langchain-assistant-runtime.js');
   // Re-read .env before each connection so new/changed vars are picked up,
   // but do NOT override vars already set by the environment (CI, runtime, etc.)
   McpClientManager.onBeforeConnect = () => dotenv.config();
@@ -237,16 +237,10 @@ export async function startAppServer(options: AppServerOptions) {
     }
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
-  const assistantRuntimeSelection = await selectAssistantRuntime({
-    result: process.env.MCPLAB_RESULT_ASSISTANT_RUNTIME,
-    scenario: process.env.MCPLAB_SCENARIO_ASSISTANT_RUNTIME
-  });
-  if (assistantRuntimeSelection.modes.result === 'langgraph')
-    console.info('[mcplab-app] Result Assistant runtime: LangGraph (experimental)');
-  if (assistantRuntimeSelection.modes.scenario === 'langgraph')
-    console.info('[mcplab-app] Scenario Assistant runtime: LangGraph (experimental)');
+  const assistantRuntimeFactory = createLangChainAssistantRuntimeFactory();
+  console.info('[mcplab-app] Assistants runtime: LangGraph');
   const routeDeps: AppRouteDeps = {
-    assistantRuntimeFactory: assistantRuntimeSelection.factory,
+    assistantRuntimeFactory,
     parseBody,
     asHtml,
     asJson,

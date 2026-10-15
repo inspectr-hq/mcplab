@@ -1,4 +1,5 @@
 export * from './types.js';
+export * from './server-constants.js';
 export { tallyCheckCounts } from './check-counts.js';
 export { readBrowserProviderProfiles } from './browser-provider-store.js';
 export {
@@ -51,7 +52,14 @@ export {
 export { McpClientManager } from './mcp.js';
 export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
-export { getAzureOpenAIDeploymentSuggestions, parseDeploymentSuggestions } from './azure-config.js';
+export { AgentConnectionError } from './agent-errors.js';
+export {
+  getAzureOpenAIDeploymentSuggestions,
+  parseDeploymentSuggestions,
+  resolveAzureFoundryConnection,
+  resolveAzureOpenAIDeployment
+} from './azure-config.js';
+export { anthropicModelCandidates, isModelNotFound } from './agent.js';
 export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
 export { createAbortError, isAbortError, throwIfAborted } from './abort.js';

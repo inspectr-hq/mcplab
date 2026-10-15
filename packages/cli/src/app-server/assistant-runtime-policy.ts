@@ -57,7 +57,7 @@ export function uniqueToolCallId(requestedId: string | undefined, usedIds: Set<s
 
 export function createPendingToolCall(
   definition: AssistantRuntimeDefinition,
-  requested: { id?: string; name: string; arguments?: unknown },
+  requested: { id?: string; name: string; arguments?: unknown; validationError?: string },
   usedIds: Set<string>
 ): AssistantRuntimeToolCall {
   const tool = definition.tools.find((candidate) => candidate.name === requested.name);
@@ -67,6 +67,7 @@ export function createPendingToolCall(
     tool: tool?.tool ?? requested.name,
     publicToolName: requested.name,
     arguments: requested.arguments ?? {},
+    ...(requested.validationError ? { validationError: requested.validationError } : {}),
     status: 'pending',
     createdAt: new Date().toISOString()
   };
@@ -76,8 +77,10 @@ export function classifyToolCalls(
   definition: AssistantRuntimeDefinition,
   calls: AssistantRuntimeToolCall[]
 ) {
+  const invalid = calls.filter((call) => call.validationError);
   const unknown = calls.filter(
-    (call) => !definition.tools.some((tool) => tool.name === call.publicToolName)
+    (call) =>
+      !invalid.includes(call) && !definition.tools.some((tool) => tool.name === call.publicToolName)
   );
   const external = calls.filter(
     (call) =>
@@ -85,11 +88,17 @@ export function classifyToolCalls(
       definition.approvalPolicy(call.publicToolName) !== 'local'
   );
   const local = calls.filter(
-    (call) => definition.approvalPolicy(call.publicToolName) === 'local' && !unknown.includes(call)
+    (call) =>
+      definition.approvalPolicy(call.publicToolName) === 'local' &&
+      !unknown.includes(call) &&
+      !invalid.includes(call)
   );
-  const validExternal = external.filter((call) => !unknown.includes(call));
+  const validExternal = external.filter(
+    (call) => !unknown.includes(call) && !invalid.includes(call)
+  );
   return {
     unknown,
+    invalid,
     external,
     oversized: external.length > MAX_EXTERNAL_ASSISTANT_TOOL_CALLS,
     local,

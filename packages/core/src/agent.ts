@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { DEFAULT_ANTHROPIC_MAX_TOKENS, DEFAULT_AZURE_OPENAI_API_VERSION } from './server-constants.js';
 import { resolveAzureFoundryConnection, resolveAzureOpenAIDeployment } from './azure-config.js';
 import { AgentConnectionError } from './agent-errors.js';
 import type {
@@ -621,7 +622,7 @@ class AzureChatAdapter implements LlmAdapter {
     if (!deployment)
       throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
     this.deployment = deployment;
-    this.apiVersion = apiVersion ?? '2024-02-15-preview';
+    this.apiVersion = apiVersion ?? DEFAULT_AZURE_OPENAI_API_VERSION;
     this.client = new OpenAI({
       apiKey,
       baseURL: v1 ? `${endpoint}/openai/v1` : `${endpoint}/openai/deployments/${deployment}`,
@@ -726,7 +727,7 @@ class AnthropicAdapter implements LlmAdapter {
       options.model,
       {
         temperature: options.temperature,
-        max_tokens: options.max_tokens ?? 1024,
+        max_tokens: options.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
         system,
         messages: anthroMessages,
         tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
@@ -841,6 +842,8 @@ function isModelNotFound(error: unknown): boolean {
     statusNotFound || typeNotFound || (msg.includes('not_found_error') && msg.includes('model'))
   );
 }
+
+export { anthropicModelCandidates, isModelNotFound };
 
 function toOpenAiTool(tool: ToolDef) {
   return {

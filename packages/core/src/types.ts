@@ -103,6 +103,7 @@ export interface AssistantRuntimeToolCall {
   tool: string;
   publicToolName: string;
   arguments: unknown;
+  validationError?: string;
   status: 'pending' | 'approved' | 'denied' | 'error';
   createdAt: string;
   resultPreview?: string;
@@ -189,7 +190,7 @@ export type AssistantRuntimeModelOutput =
   | {
       type: 'tool_call_request';
       text: string;
-      toolCalls: Array<{ id?: string; name: string; arguments?: unknown }>;
+      toolCalls: Array<{ id?: string; name: string; arguments?: unknown; validationError?: string }>;
     };
 
 export interface AssistantToolCallDecision {
