@@ -1,6 +1,9 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { DEFAULT_ANTHROPIC_MAX_TOKENS, DEFAULT_AZURE_OPENAI_API_VERSION } from './server-constants.js';
+import {
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_OPENAI_API_VERSION
+} from './server-constants.js';
 import { resolveAzureFoundryConnection, resolveAzureOpenAIDeployment } from './azure-config.js';
 import { AgentConnectionError } from './agent-errors.js';
 import type {

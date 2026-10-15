@@ -8,7 +8,11 @@ import {
   type EvalConfig,
   throwIfAborted
 } from '@inspectr/mcplab-core';
-import type { AppRouteDeps, AppRouteRequestContext, ScenarioAssistantSessionsMap } from './app-context.js';
+import type {
+  AppRouteDeps,
+  AppRouteRequestContext,
+  ScenarioAssistantSessionsMap
+} from './app-context.js';
 import {
   createScenarioAssistantRuntimeDefinition,
   type ScenarioAssistantSession

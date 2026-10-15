@@ -140,24 +140,23 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
       preloadScenarioAssistantTools,
       oauthSessionManager,
       assistantSessions
-    } =
-      await callCreateSessionRoute({
-        body: makeBody({
-          context: {
-            scenario: {
-              id: 'scenario-1',
-              name: 'Scenario',
-              prompt: 'Prompt',
-              serverNames: ['server-1'],
-              evalRules: [],
-              extractRules: []
-            }
+    } = await callCreateSessionRoute({
+      body: makeBody({
+        context: {
+          scenario: {
+            id: 'scenario-1',
+            name: 'Scenario',
+            prompt: 'Prompt',
+            serverNames: ['server-1'],
+            evalRules: [],
+            extractRules: []
           }
-        }),
-        servers: {
-          'server-1': { transport: 'http', url: 'https://example.com/mcp' }
         }
-      });
+      }),
+      servers: {
+        'server-1': { transport: 'http', url: 'https://example.com/mcp' }
+      }
+    });
 
     expect(handled).toBe(true);
     expect(response.status).toBe(201);

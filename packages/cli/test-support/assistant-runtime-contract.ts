@@ -409,9 +409,9 @@ export function assistantRuntimeContract(
       expect(result).toMatchObject({ type: 'assistant_message', text: 'Corrected' });
       expect(executions).not.toHaveBeenCalled();
       expect(histories[1].filter((message) => ToolMessage.isInstance(message))).toHaveLength(4);
-      expect(
-        histories[1].slice(-4).map((message) => JSON.parse(String(message.content)))
-      ).toEqual(Array(4).fill({ error: 'Tool batch exceeds the maximum of 3 external calls' }));
+      expect(histories[1].slice(-4).map((message) => JSON.parse(String(message.content)))).toEqual(
+        Array(4).fill({ error: 'Tool batch exceeds the maximum of 3 external calls' })
+      );
     });
 
     it('executes the maximum three external calls and pairs all results before the next model request', async () => {

@@ -190,7 +190,12 @@ export type AssistantRuntimeModelOutput =
   | {
       type: 'tool_call_request';
       text: string;
-      toolCalls: Array<{ id?: string; name: string; arguments?: unknown; validationError?: string }>;
+      toolCalls: Array<{
+        id?: string;
+        name: string;
+        arguments?: unknown;
+        validationError?: string;
+      }>;
     };
 
 export interface AssistantToolCallDecision {

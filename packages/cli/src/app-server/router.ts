@@ -170,7 +170,8 @@ const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
 
 export async function startAppServer(options: AppServerOptions) {
-  const { createLangChainAssistantRuntimeFactory } = await import('./langchain-assistant-runtime.js');
+  const { createLangChainAssistantRuntimeFactory } =
+    await import('./langchain-assistant-runtime.js');
   // Re-read .env before each connection so new/changed vars are picked up,
   // but do NOT override vars already set by the environment (CI, runtime, etc.)
   McpClientManager.onBeforeConnect = () => dotenv.config();

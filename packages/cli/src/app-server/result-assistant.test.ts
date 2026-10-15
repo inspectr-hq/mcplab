@@ -158,11 +158,13 @@ describe('Result Assistant report refresh', () => {
   it('refreshes the report list on the route stored session and its next prompt', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'mcplab-result-assistant-'));
     const reportPath = join(workspaceRoot, 'mcplab/reports/run-1-summary.md');
-    const callTool = vi.spyOn(McpClientManager.prototype, 'callTool').mockImplementation(async () => {
-      mkdirSync(join(workspaceRoot, 'mcplab/reports'), { recursive: true });
-      writeFileSync(reportPath, '# Summary');
-      return { ok: true };
-    });
+    const callTool = vi
+      .spyOn(McpClientManager.prototype, 'callTool')
+      .mockImplementation(async () => {
+        mkdirSync(join(workspaceRoot, 'mcplab/reports'), { recursive: true });
+        writeFileSync(reportPath, '# Summary');
+        return { ok: true };
+      });
     const sessions = new Map();
     const captured: Array<{ status: number; body: any }> = [];
     let definition: any;
