@@ -1,26 +1,33 @@
-import { randomUUID } from 'node:crypto';
 import type {
   AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
   AssistantRuntimeFactory,
-  AssistantRuntimeModelOutput,
   AssistantRuntimeResponse,
   AssistantRuntimeSession,
   AssistantRuntimeSnapshot,
   AssistantRuntimeToolCall,
   AssistantToolCallDecision,
-  LlmMessage,
-  ScenarioAssistantSuggestionBundle,
-  ToolDef
+  ScenarioAssistantSuggestionBundle
 } from '@inspectr/mcplab-core';
-import { throwIfAborted, truncateJson } from './assistant-common.js';
-import { chatWithAgent } from '@inspectr/mcplab-core';
+import { randomUUID } from 'node:crypto';
+import type { LlmMessage } from '@inspectr/mcplab-core';
+import { throwIfAborted } from './assistant-common.js';
+import { callAssistantModel, type AssistantModelCall } from './assistant-model.js';
+import {
+  classifyToolCalls,
+  createPendingToolCall,
+  AssistantTurnBudgetExceededError,
+  MAX_ASSISTANT_MODEL_CALLS,
+  mergeAssistantSuggestions,
+  OVERSIZED_ASSISTANT_TOOL_BATCH_ERROR,
+  orderedBatchResults,
+  raceAssistantAbort,
+  resultPreview,
+  terminalToolFeedback,
+  terminalToolStatus,
+  validateToolCallDecisions
+} from './assistant-runtime-policy.js';
 
-type ModelCall = (
-  definition: AssistantRuntimeDefinition,
-  messages: LlmMessage[],
-  signal?: AbortSignal
-) => Promise<AssistantRuntimeModelOutput>;
 type Batch = {
   calls: AssistantRuntimeToolCall[];
   results: Map<string, string>;
@@ -28,50 +35,10 @@ type Batch = {
   generation: number;
 };
 
-export class AssistantTurnBudgetExceededError extends Error {
-  readonly statusCode = 422;
-
-  constructor() {
-    super('Assistant reached its 25 model-call limit. Start a new message to continue.');
-    this.name = 'AssistantTurnBudgetExceededError';
-  }
-}
-
-class AssistantToolDecisionConflictError extends Error {
-  readonly statusCode = 409;
-
-  constructor() {
-    super('One or more tool calls are no longer pending');
-    this.name = 'AssistantToolDecisionConflictError';
-  }
-}
+export { AssistantTurnBudgetExceededError } from './assistant-runtime-policy.js';
 
 export function createNativeAssistantRuntimeFactory(
-  modelCall: ModelCall = async (definition, messages, signal) => {
-    const tools = definition.tools.map((tool): ToolDef => ({
-      name: tool.name,
-      description: tool.description ?? '',
-      inputSchema: tool.inputSchema
-    }));
-    const response = await chatWithAgent({
-      agent: definition.agent,
-      messages,
-      tools,
-      system: definition.getSystemPrompt(),
-      signal
-    });
-    if (response.tool_calls?.length)
-      return {
-        type: 'tool_call_request',
-        text: response.content?.trim() || 'I need a tool to help answer.',
-        toolCalls: response.tool_calls.map(({ id, name, arguments: args }) => ({
-          id,
-          name,
-          arguments: args
-        }))
-      };
-    return { type: 'assistant_message', text: response.content?.trim() ?? '' };
-  }
+  modelCall: AssistantModelCall = callAssistantModel
 ): AssistantRuntimeFactory {
   return {
     async create(definition) {
@@ -101,14 +68,13 @@ export function createNativeAssistantRuntimeFactory(
       const record = (owner: Batch, call: AssistantRuntimeToolCall, content: string) => {
         if (disposed || batch !== owner || owner.results.has(call.id)) return;
         owner.results.set(call.id, content);
-        call.resultPreview = truncateJson(safeParseJson(content), 4000);
+        call.resultPreview = resultPreview(content);
         emit('tool_call_resolved', { pendingToolCallId: call.id, pendingToolCall: call });
       };
       const finishBatch = (owner: Batch) => {
-        if (batch !== owner || owner.calls.some((call) => !owner.results.has(call.id)))
-          return false;
-        for (const call of owner.calls) {
-          const content = owner.results.get(call.id)!;
+        const results = orderedBatchResults(owner.calls, (id) => owner.results.get(id));
+        if (batch !== owner || !results) return false;
+        for (const { call, content } of results) {
           history.push({
             role: 'tool',
             content: call.resultPreview ?? content,
@@ -145,20 +111,10 @@ export function createNativeAssistantRuntimeFactory(
       ) => {
         if (turnGeneration !== generation) return;
         if (owner && batch === owner) {
-          const detail = error instanceof Error ? error.message : String(error ?? '');
           for (const call of owner.calls) {
             if (owner.results.has(call.id)) continue;
-            const message =
-              reason === 'budget'
-                ? 'Assistant turn model-call budget exhausted'
-                : reason === 'superseded'
-                  ? 'Tool call skipped because a new user message superseded the turn'
-                  : reason === 'cancelled' || reason === 'disposed'
-                    ? call.id === owner.executing
-                      ? 'Tool execution outcome unknown because cancellation interrupted the response'
-                      : 'Tool call cancelled before execution'
-                    : detail || 'Assistant turn failed before the tool call completed';
-            failure(owner, call, message, reason === 'superseded' ? 'denied' : 'error');
+            const message = terminalToolFeedback(reason, call, owner.executing, error);
+            failure(owner, call, message, terminalToolStatus(reason, call, owner.executing));
           }
           finishBatch(owner);
         }
@@ -181,7 +137,7 @@ export function createNativeAssistantRuntimeFactory(
         }
         owner.executing = call.id;
         try {
-          const result = await raceAbort(tool.execute(call.arguments, signal), signal);
+          const result = await raceAssistantAbort(tool.execute(call.arguments, signal), signal);
           if (!isCurrent(owner.generation) || batch !== owner) return;
           call.status = 'approved';
           const proposal = tool.extractProposal?.(result);
@@ -204,18 +160,18 @@ export function createNativeAssistantRuntimeFactory(
         generation: number,
         signal?: AbortSignal
       ): Promise<AssistantRuntimeResponse> => {
-        while (turnRounds < 25) {
+        while (turnRounds < MAX_ASSISTANT_MODEL_CALLS) {
           ensureCurrent(generation);
           throwIfAborted(signal);
           turnRounds += 1;
-          const output = await raceAbort(
+          const output = await raceAssistantAbort(
             modelCall(definition, structuredClone(history), signal),
             signal
           );
           ensureCurrent(generation);
           throwIfAborted(signal);
           if (output.type === 'assistant_message') {
-            const suggestions = mergeSuggestions(proposals);
+            const suggestions = mergeAssistantSuggestions(proposals);
             messages.push({
               id: `msg-${randomUUID()}`,
               role: 'assistant',
@@ -236,27 +192,10 @@ export function createNativeAssistantRuntimeFactory(
             };
           }
           const usedIds = new Set(pending.map((call) => call.id));
-          const calls = output.toolCalls.map((requested) => {
-            const tool = definition.tools.find((candidate) => candidate.name === requested.name);
-            let id = requested.id?.trim();
-            if (!id || usedIds.has(id)) {
-              do {
-                id = `tool-${randomUUID()}`;
-              } while (usedIds.has(id));
-            }
-            usedIds.add(id);
-            const call: AssistantRuntimeToolCall = {
-              id,
-              server: tool?.server ?? 'unknown',
-              tool: tool?.tool ?? requested.name,
-              publicToolName: requested.name,
-              arguments: requested.arguments ?? {},
-              status: 'pending',
-              createdAt: new Date().toISOString()
-            };
-            pending.push(call);
-            return call;
-          });
+          const calls = output.toolCalls.map((requested) =>
+            createPendingToolCall(definition, requested, usedIds)
+          );
+          pending.push(...calls);
           messages.push({
             id: `msg-${randomUUID()}`,
             role: 'assistant',
@@ -279,34 +218,21 @@ export function createNativeAssistantRuntimeFactory(
           });
           const owner: Batch = { calls, results: new Map(), generation };
           batch = owner;
-          if (turnRounds === 25) {
+          if (turnRounds === MAX_ASSISTANT_MODEL_CALLS) {
             terminalCleanup(generation, 'budget', owner);
             break;
           }
-          const external = calls.filter((call) => {
-            const registered = definition.tools.some((tool) => tool.name === call.publicToolName);
-            return !registered || definition.approvalPolicy(call.publicToolName) !== 'local';
-          });
-          if (external.length > 3) {
-            calls.forEach((call) =>
-              failure(owner, call, 'Tool batch exceeds the maximum of 3 external calls')
-            );
+          const { oversized, unknown, local, validExternal, needsApproval } = classifyToolCalls(
+            definition,
+            calls
+          );
+          if (oversized) {
+            calls.forEach((call) => failure(owner, call, OVERSIZED_ASSISTANT_TOOL_BATCH_ERROR));
             finishBatch(owner);
             continue;
           }
-          const unknown = calls.filter(
-            (call) => !definition.tools.some((tool) => tool.name === call.publicToolName)
-          );
           for (const call of unknown)
             failure(owner, call, `Unknown assistant tool '${call.publicToolName}'`);
-          const local = calls.filter(
-            (call) =>
-              definition.approvalPolicy(call.publicToolName) === 'local' && !unknown.includes(call)
-          );
-          const validExternal = external.filter((call) => !unknown.includes(call));
-          const needsApproval = validExternal.some(
-            (call) => definition.approvalPolicy(call.publicToolName) === 'approval_required'
-          );
           for (const call of local) {
             await execute(owner, call, signal);
             ensureCurrent(generation);
@@ -368,21 +294,9 @@ export function createNativeAssistantRuntimeFactory(
           if (!batch) throw new Error('Tool batch is not pending');
           const owner = batch;
           const generation = owner.generation;
-          const seen = new Set<string>();
-          const validated = decisions.map((decision) => {
-            const call = pending.find((candidate) => candidate.id === decision.toolCallId);
-            if (
-              (decision.decision !== 'approve' && decision.decision !== 'deny') ||
-              seen.has(decision.toolCallId) ||
-              !call ||
-              !owner.calls.includes(call) ||
-              call.status !== 'pending' ||
-              owner.results.has(call.id)
-            )
-              throw new AssistantToolDecisionConflictError();
-            seen.add(decision.toolCallId);
-            return { decision, call };
-          });
+          const validated = validateToolCallDecisions(decisions, pending, owner.calls, (id) =>
+            owner.results.has(id)
+          );
           try {
             for (const { decision, call } of validated) {
               ensureCurrent(generation);
@@ -421,53 +335,4 @@ export function createNativeAssistantRuntimeFactory(
       return session;
     }
   };
-}
-
-function safeParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-function mergeSuggestions(
-  bundles: ScenarioAssistantSuggestionBundle[]
-): ScenarioAssistantSuggestionBundle | undefined {
-  if (!bundles.length) return undefined;
-  const merged: ScenarioAssistantSuggestionBundle = {};
-  for (const bundle of bundles) {
-    if (bundle.prompt) merged.prompt = bundle.prompt;
-    if (bundle.evalRules) merged.evalRules = bundle.evalRules;
-    if (bundle.extractRules) merged.extractRules = bundle.extractRules;
-    if (bundle.notes?.length) merged.notes = [...(merged.notes ?? []), ...bundle.notes];
-  }
-  return merged;
-}
-function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(new Error('Request aborted'));
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const onAbort = () =>
-      queueMicrotask(() => {
-        if (settled) return;
-        settled = true;
-        reject(new Error('Request aborted'));
-      });
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      (error) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      }
-    );
-  });
 }

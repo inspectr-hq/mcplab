@@ -69,7 +69,7 @@ import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { formatCliStartupLine } from '../cli-branding.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
-import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
+import { selectAssistantRuntime } from './assistant-runtime-selection.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
@@ -237,8 +237,16 @@ export async function startAppServer(options: AppServerOptions) {
     }
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
+  const assistantRuntimeFactory = await selectAssistantRuntime({
+    result: process.env.MCPLAB_RESULT_ASSISTANT_RUNTIME,
+    scenario: process.env.MCPLAB_SCENARIO_ASSISTANT_RUNTIME
+  });
+  if (process.env.MCPLAB_RESULT_ASSISTANT_RUNTIME?.trim() === 'langchain')
+    console.info('[mcplab-app] Result Assistant runtime: LangGraph (experimental)');
+  if (process.env.MCPLAB_SCENARIO_ASSISTANT_RUNTIME?.trim() === 'langchain')
+    console.info('[mcplab-app] Scenario Assistant runtime: LangGraph (experimental)');
   const routeDeps: AppRouteDeps = {
-    assistantRuntimeFactory: createNativeAssistantRuntimeFactory(),
+    assistantRuntimeFactory,
     parseBody,
     asHtml,
     asJson,

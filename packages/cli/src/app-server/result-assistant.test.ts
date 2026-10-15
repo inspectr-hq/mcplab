@@ -7,6 +7,7 @@ import {
   preloadResultAssistantTools
 } from './result-assistant-domain.js';
 import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
+import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
 
 describe('GET /api/result-assistant/sessions/:id/events', () => {
@@ -150,7 +151,10 @@ describe('Result Assistant report refresh', () => {
 });
 
 describe('Result Assistant discovered tool approvals', () => {
-  it('automatically runs discovered reads and pauses every call in a mixed batch', async () => {
+  it.each([
+    ['native', createNativeAssistantRuntimeFactory],
+    ['LangGraph', createLangChainAssistantRuntimeFactory]
+  ])('%s automatically runs discovered reads and pauses every call in a mixed batch', async (_name, createFactory) => {
     const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([
       { name: 'mcplab_read_run_artifact', inputSchema: { type: 'object' } },
       { name: 'mcplab_trace_stats', inputSchema: { type: 'object' } },
@@ -211,7 +215,7 @@ describe('Result Assistant discovered tool approvals', () => {
       expect(definition.approvalPolicy('unknown_tool')).toBe('approval_required');
       expect(definition.approvalPolicy('mcplab_trace_stats')).toBe('approval_required');
 
-      const runtime = await createNativeAssistantRuntimeFactory(async (_definition, messages) => {
+      const runtime = await createFactory(async (_definition, messages) => {
         histories.push(structuredClone(messages));
         modelRound += 1;
         if (modelRound === 1) {
@@ -270,6 +274,114 @@ describe('Result Assistant discovered tool approvals', () => {
       callTool.mockRestore();
     }
   });
+});
+
+it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP callbacks', async () => {
+  const callTool = vi.spyOn(McpClientManager.prototype, 'callTool').mockImplementation(
+    async (_server, tool, args) => ({ tool, args })
+  );
+  const publicRead = 'mcplab__mcplab_read_run_artifact';
+  const publicWrite = 'mcplab__mcplab_write_markdown_report';
+  let modelRound = 0;
+  const captured: Array<{ status: number; body: any }> = [];
+  const sessions = new Map();
+  let body: any;
+  const deps = {
+    parseBody: vi.fn(async () => body ?? {}),
+    asJson: vi.fn((_res, status, value) => captured.push({ status, body: value })),
+    getRunResults: vi.fn(),
+    readLibraries: vi.fn().mockReturnValue({ agents: { assistant: {} }, servers: {} }),
+    pickDefaultAssistantAgentName: vi.fn().mockReturnValue('assistant'),
+    resolveAssistantAgentFromLibraries: vi.fn().mockReturnValue({ provider: 'openai', model: 'test' }),
+    preloadResultAssistantTools: async (prepared: any) => {
+      for (const [name, tool] of [
+        [publicRead, 'mcplab_read_run_artifact'],
+        [publicWrite, 'mcplab_write_markdown_report']
+      ]) {
+        prepared.tools.push({ name, inputSchema: { type: 'object' } });
+        prepared.toolPublicMap.set(name, { server: 'mcplab', tool });
+      }
+    },
+    assistantRuntimeFactory: {
+      create: (definition: any) =>
+        createLangChainAssistantRuntimeFactory(async (_def, messages) => {
+          modelRound++;
+          if (modelRound === 1)
+            return {
+              type: 'tool_call_request',
+              text: 'Read the artifact and prepare a report',
+              toolCalls: [
+                { id: 'read-id', name: publicRead, arguments: { path: 'original' } },
+                { id: 'write-id', name: publicWrite, arguments: { title: 'Draft' } }
+              ]
+            };
+          expect(messages.slice(-2).map((message) => message.role)).toEqual(['tool', 'tool']);
+          return { type: 'assistant_message', text: 'The read succeeded, and I did not write the report.' };
+        }).create(definition)
+    }
+  } as any;
+  const settings = { workspaceRoot: '/tmp', runsDir: '/tmp/runs', librariesDir: '/tmp/libs' } as any;
+  const route = (pathname: string, method: string, value?: unknown, res: any = {}) => {
+    body = value;
+    return handleResultAssistantRoutes({
+      req: { headers: {} } as any,
+      res,
+      pathname,
+      method,
+      settings,
+      resultAssistantSessions: sessions,
+      deps
+    });
+  };
+  try {
+    await route('/api/result-assistant/sessions', 'POST', { scope: 'all_runs' });
+    const sessionId = captured.at(-1)!.body.sessionId;
+    const session = sessions.get(sessionId)!;
+    const sseChunks: string[] = [];
+    const sse = Object.assign(new EventEmitter(), {
+      statusCode: 0,
+      setHeader: vi.fn(),
+      flushHeaders: vi.fn(),
+      write: (chunk: string) => sseChunks.push(chunk),
+      end: vi.fn()
+    });
+    await route(`/api/result-assistant/sessions/${sessionId}/events`, 'GET', undefined, sse);
+
+    await route(`/api/result-assistant/sessions/${sessionId}/messages`, 'POST', { message: 'Read it' }, new EventEmitter());
+    expect(captured.at(-1)).toMatchObject({ status: 200, body: { response: { type: 'tool_call_request' } } });
+    const [read, write] = session.runtime!.getSnapshot().pendingToolCalls;
+    expect([read!.id, write!.id]).toEqual(['read-id', 'write-id']);
+
+    await route(`/api/result-assistant/sessions/${sessionId}/tool-calls/${read!.id}/approve`, 'POST', {
+      argumentsOverride: { path: 'edited' }
+    });
+    expect(captured.at(-1)).toMatchObject({
+      status: 200,
+      body: { response: { type: 'tool_call_resolved', pendingToolCalls: [{ id: 'write-id' }] } }
+    });
+    expect(callTool).toHaveBeenCalledWith('mcplab', 'mcplab_read_run_artifact', { path: 'edited' }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+
+    await route(`/api/result-assistant/sessions/${sessionId}`, 'GET');
+    expect(captured.at(-1)).toMatchObject({
+      status: 200,
+      body: { session: { pendingToolCalls: [{ id: 'read-id', status: 'approved', arguments: { path: 'edited' } }, { id: 'write-id', status: 'pending' }] } }
+    });
+    await route(`/api/result-assistant/sessions/${sessionId}/tool-calls/${write!.id}/deny`, 'POST');
+    expect(captured.at(-1)).toMatchObject({
+      status: 200,
+      body: { response: { type: 'assistant_message', text: 'The read succeeded, and I did not write the report.' } }
+    });
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(session.runtime!.getSnapshot().pendingToolCalls).toMatchObject([
+      { id: 'read-id', status: 'approved', arguments: { path: 'edited' } },
+      { id: 'write-id', status: 'denied' }
+    ]);
+    expect(sseChunks.join('')).toContain('event: tool_call_resolved');
+    expect(sseChunks.join('')).toContain('event: tool_call_denied');
+    expect(sseChunks.join('')).toContain('The read succeeded, and I did not write the report.');
+  } finally {
+    callTool.mockRestore();
+  }
 });
 
 describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => {

@@ -636,6 +636,12 @@ An AI chat that analyzes completed evaluation runs. Ask it to explain failures, 
 
 Open a run in the app and click **Result Assistant**.
 
+Both assistants use the native runtime by default. Opt into the experimental LangGraph runtime independently with `MCPLAB_RESULT_ASSISTANT_RUNTIME=langchain` for Result Assistant and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langchain` for Scenario Assistant. Set both variables to enable LangGraph for both, then restart the app. Each assistant logs its selected LangGraph runtime at startup. Roll either one back by unsetting its variable or setting it to `native`, then restart. LangGraph reuses the configured provider and credentials, preserves existing MCP tool ownership and approval rules, keeps session memory in process, and does not enable durable state or streaming.
+
+```sh
+MCPLAB_RESULT_ASSISTANT_RUNTIME=langchain MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langchain npm run app:dev
+```
+
 ### MCP Tool Analysis
 
 Automated quality review of your MCP server's tools. Connects to your server, discovers all tools, and produces a report covering:

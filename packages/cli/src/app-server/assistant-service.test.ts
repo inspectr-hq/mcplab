@@ -7,6 +7,7 @@ import type {
 } from '@inspectr/mcplab-core';
 import { createAssistantRuntimeService } from './assistant-service.js';
 import { createNativeAssistantRuntimeFactory } from './assistant-runtime.js';
+import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
 describe('assistant runtime service', () => {
   it('guards callbacks cached by a factory after service disposal', async () => {
@@ -101,7 +102,10 @@ describe('assistant runtime service', () => {
     expect(await service.sendMessage('new')).toMatchObject({ text: 'new' });
     await service.dispose();
   });
-  it('publishes one settled native cancellation snapshot after partial tool execution', async () => {
+  it.each([
+    ['native', createNativeAssistantRuntimeFactory],
+    ['LangGraph', createLangChainAssistantRuntimeFactory]
+  ])('%s publishes one settled cancellation snapshot after partial tool execution', async (_name, createFactory) => {
     let finishSlow!: (value: unknown) => void;
     const slowResult = new Promise((resolve) => {
       finishSlow = resolve;
@@ -136,7 +140,7 @@ describe('assistant runtime service', () => {
         if (event.type === 'session_error') snapshotAtCancellation = runtime.getSnapshot();
       }
     };
-    runtime = await createNativeAssistantRuntimeFactory(async () => ({
+    runtime = await createFactory(async () => ({
       type: 'tool_call_request',
       text: 'Reading',
       toolCalls: [
