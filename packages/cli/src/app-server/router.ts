@@ -237,16 +237,16 @@ export async function startAppServer(options: AppServerOptions) {
     }
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
-  const assistantRuntimeFactory = await selectAssistantRuntime({
+  const assistantRuntimeSelection = await selectAssistantRuntime({
     result: process.env.MCPLAB_RESULT_ASSISTANT_RUNTIME,
     scenario: process.env.MCPLAB_SCENARIO_ASSISTANT_RUNTIME
   });
-  if (process.env.MCPLAB_RESULT_ASSISTANT_RUNTIME?.trim() === 'langchain')
+  if (assistantRuntimeSelection.modes.result === 'langgraph')
     console.info('[mcplab-app] Result Assistant runtime: LangGraph (experimental)');
-  if (process.env.MCPLAB_SCENARIO_ASSISTANT_RUNTIME?.trim() === 'langchain')
+  if (assistantRuntimeSelection.modes.scenario === 'langgraph')
     console.info('[mcplab-app] Scenario Assistant runtime: LangGraph (experimental)');
   const routeDeps: AppRouteDeps = {
-    assistantRuntimeFactory,
+    assistantRuntimeFactory: assistantRuntimeSelection.factory,
     parseBody,
     asHtml,
     asJson,

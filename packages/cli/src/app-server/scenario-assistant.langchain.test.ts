@@ -77,9 +77,12 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
 }
 
 describe('Scenario Assistant LangGraph HTTP runtime', () => {
-  it.each([false, true])(
-    'accepts a proposal%s through the real route and preserves the scenario input',
-    async (withReadOnlyTool) => {
+  it.each([
+    ['alone', false],
+    ['with a read-only tool', true]
+  ])(
+    'accepts a proposal %s through the real route and preserves the scenario input',
+    async (_label, withReadOnlyTool) => {
       let turn = 0;
       const { invoke, sessions, scenario, deps } = harness(async (definition) => {
         expect(definition.assistant).toBe('scenario');

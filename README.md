@@ -636,10 +636,14 @@ An AI chat that analyzes completed evaluation runs. Ask it to explain failures, 
 
 Open a run in the app and click **Result Assistant**.
 
-Both assistants use the native runtime by default. Opt into the experimental LangGraph runtime independently with `MCPLAB_RESULT_ASSISTANT_RUNTIME=langchain` for Result Assistant and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langchain` for Scenario Assistant. Set both variables to enable LangGraph for both, then restart the app. Each assistant logs its selected LangGraph runtime at startup. Roll either one back by unsetting its variable or setting it to `native`, then restart. LangGraph reuses the configured provider and credentials, preserves existing MCP tool ownership and approval rules, keeps session memory in process, and does not enable durable state or streaming.
+Both assistants use the native runtime by default. You can opt into LangGraph independently with `MCPLAB_RESULT_ASSISTANT_RUNTIME=langgraph` for Result Assistant and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langgraph` for Scenario Assistant. Set both variables to enable LangGraph for both, then restart the app. Each assistant opted into LangGraph logs that choice at startup. Roll either one back by unsetting its variable or setting it to `native`, then restart.
+
+These per-assistant flags are temporary rollout and rollback controls. After both assistants validate successfully, the intended end state is one shared LangGraph runtime by default, with the native fallback and flags removable. The framework-neutral assistant interface remains in place after that rollout.
+
+Existing experimental setups using `langchain` must change the value to `langgraph`. LangGraph reuses the configured provider and credentials, preserves existing MCP tool ownership and approval rules, keeps session memory in process, and does not enable durable state or streaming.
 
 ```sh
-MCPLAB_RESULT_ASSISTANT_RUNTIME=langchain MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langchain npm run app:dev
+MCPLAB_RESULT_ASSISTANT_RUNTIME=langgraph MCPLAB_SCENARIO_ASSISTANT_RUNTIME=langgraph npm run app:dev
 ```
 
 ### MCP Tool Analysis

@@ -28,7 +28,7 @@ describe('assistant runtime selection', () => {
 
   it('defaults both assistants to native without evaluating LangGraph', async () => {
     const selected = await select({});
-    expect(selected).toBe(native);
+    expect(selected).toEqual({ factory: native, modes: { result: 'native', scenario: 'native' } });
     expect(mocked.graphModuleEvaluated).not.toHaveBeenCalled();
     expect(mocked.graphFactory).not.toHaveBeenCalled();
   });
@@ -39,18 +39,28 @@ describe('assistant runtime selection', () => {
     ['explicit native', 'native'],
     ['trimmed native', ' native ']
   ])('treats %s selection as native', async (_label, mode) => {
-    expect(await select({ result: mode, scenario: mode })).toBe(native);
+    expect(await select({ result: mode, scenario: mode })).toEqual({
+      factory: native,
+      modes: { result: 'native', scenario: 'native' }
+    });
     expect(mocked.graphModuleEvaluated).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['Result only', { result: ' langchain ', scenario: 'native' }, 'result'],
-    ['Scenario only', { result: 'native', scenario: 'langchain' }, 'scenario'],
-    ['both', { result: 'langchain', scenario: 'langchain' }, 'both']
+    ['Result only', { result: ' langgraph ', scenario: 'native' }, 'result'],
+    ['Scenario only', { result: 'native', scenario: 'langgraph' }, 'scenario'],
+    ['both', { result: 'langgraph', scenario: 'langgraph' }, 'both']
   ] as const)(
     'loads one graph factory and dispatches %s independently',
     async (_label, options, selection) => {
-      const dispatcher = await select(options);
+      const selected = await select(options);
+      const dispatcher = selected.factory;
+      expect(selected.modes.result).toBe(
+        selection === 'result' || selection === 'both' ? 'langgraph' : 'native'
+      );
+      expect(selected.modes.scenario).toBe(
+        selection === 'scenario' || selection === 'both' ? 'langgraph' : 'native'
+      );
       const scenario = { assistant: 'scenario' } as AssistantRuntimeDefinition;
       const result = { assistant: 'result' } as AssistantRuntimeDefinition;
       await dispatcher.create(scenario);
@@ -79,10 +89,19 @@ describe('assistant runtime selection', () => {
   );
 
   it('allows independent rollback to native', async () => {
-    const dispatcher = await select({ result: 'langchain', scenario: 'native' });
+    const { factory: dispatcher } = await select({ result: 'langgraph', scenario: 'native' });
     await dispatcher.create({ assistant: 'scenario' } as AssistantRuntimeDefinition);
     await dispatcher.create({ assistant: 'result' } as AssistantRuntimeDefinition);
     expect(native.create).toHaveBeenCalledOnce();
+    expect(graph.create).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the reported modes and dispatch stable after the input options change', async () => {
+    const options = { result: 'langgraph', scenario: 'native' };
+    const selected = await select(options);
+    options.result = 'native';
+    await selected.factory.create({ assistant: 'result' } as AssistantRuntimeDefinition);
+    expect(selected.modes).toEqual({ result: 'langgraph', scenario: 'native' });
     expect(graph.create).toHaveBeenCalledOnce();
   });
 
@@ -91,16 +110,23 @@ describe('assistant runtime selection', () => {
     ['scenario', { scenario: 'other' }, 'MCPLAB_SCENARIO_ASSISTANT_RUNTIME'],
     [
       'invalid result paired with graph',
-      { result: 'bad', scenario: 'langchain' },
+      { result: 'bad', scenario: 'langgraph' },
       'MCPLAB_RESULT_ASSISTANT_RUNTIME'
     ],
     [
       'invalid scenario paired with graph',
-      { result: 'langchain', scenario: 'bad' },
+      { result: 'langgraph', scenario: 'bad' },
       'MCPLAB_SCENARIO_ASSISTANT_RUNTIME'
     ]
   ] as const)('rejects %s before loading LangGraph', async (_label, options, variable) => {
     await expect(select(options)).rejects.toThrow(variable);
+    expect(mocked.graphModuleEvaluated).not.toHaveBeenCalled();
+  });
+
+  it('rejects the former langchain value and names the supported values', async () => {
+    await expect(select({ result: 'langchain' })).rejects.toThrow(
+      "MCPLAB_RESULT_ASSISTANT_RUNTIME 'langchain', expected 'native' or 'langgraph'"
+    );
     expect(mocked.graphModuleEvaluated).not.toHaveBeenCalled();
   });
 });
