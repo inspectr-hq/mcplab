@@ -122,7 +122,7 @@ export function validateToolCallDecisions(
       (decision.decision !== 'approve' && decision.decision !== 'deny') ||
       seen.has(decision.toolCallId) ||
       !call ||
-      !ownerCalls.includes(call) ||
+      !ownerCalls.some((ownerCall) => ownerCall.id === call.id) ||
       call.status !== 'pending' ||
       hasResult(call.id)
     )

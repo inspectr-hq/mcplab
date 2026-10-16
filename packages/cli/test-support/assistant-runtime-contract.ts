@@ -599,7 +599,7 @@ export function assistantRuntimeContract(
         { toolCallId: 'deny-me', decision: 'deny' }
       ]);
       expect(execute).toHaveBeenCalledOnce();
-      expect(execute).toHaveBeenCalledWith({ path: 'edited.md' }, undefined);
+      expect(execute).toHaveBeenCalledWith({ path: 'edited.md' }, expect.any(AbortSignal));
       expect(session.getSnapshot().pendingToolCalls.map(({ id, status }) => [id, status])).toEqual([
         ['edit-me', 'approved'],
         ['deny-me', 'denied']
@@ -1170,7 +1170,7 @@ export function assistantRuntimeContract(
       ]);
 
       expect(resolved).toMatchObject({ type: 'assistant_message', text: 'Done' });
-      expect(execute).toHaveBeenCalledWith({ q: 1 }, undefined);
+      expect(execute).toHaveBeenCalledWith({ q: 1 }, expect.any(AbortSignal));
       expect(histories[1].at(-1)).toBeInstanceOf(ToolMessage);
       expect(String(histories[1].at(-1)?.content)).toContain('ok');
       expect(session.getSnapshot().pendingToolCalls[0].status).toBe('approved');
