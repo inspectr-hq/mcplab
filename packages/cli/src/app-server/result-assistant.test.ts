@@ -3,14 +3,72 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { McpClientManager } from '@inspectr/mcplab-core';
+import { McpClientManager, type AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import {
-  createResultAssistantRuntimeDefinition,
-  preloadResultAssistantTools
+  setupResultAssistantSession,
+  type ResultAssistantSession
 } from './result-assistant-domain.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
+
+async function createResultDefinition(params: {
+  tools: Array<{ name: string; inputSchema?: unknown }>;
+  scope?: 'run' | 'all_runs';
+  runId?: string | null;
+  resultSummary?: any;
+  referenceReportsForRun?: any[];
+  refreshReports?: () => any[];
+}) {
+  let definition: any;
+  const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  const listTools = vi
+    .spyOn(McpClientManager.prototype, 'listTools')
+    .mockResolvedValue(params.tools as any);
+  const session: ResultAssistantSession = {
+    id: 'ras-test',
+    scope: params.scope ?? 'all_runs',
+    runId: params.runId ?? null,
+    createdAt: Date.now(),
+    lastTouchedAt: Date.now(),
+    selectedAssistantAgentName: 'assistant',
+    model: 'test',
+    provider: 'openai',
+    toolsLoaded: 0,
+    toolServers: [],
+    initialMessages: [],
+    events: [],
+    clients: new Set()
+  };
+  try {
+    await setupResultAssistantSession({
+      session,
+      agentConfig: { provider: 'openai', model: 'test' },
+      resultSummary: params.resultSummary ?? null,
+      referenceReportsForRun: params.referenceReportsForRun ?? [],
+      mcpServerUrl: 'http://mcplab.test/mcp',
+      refreshReports: params.refreshReports ?? (() => []),
+      assistantRuntimeFactory: {
+        create: async (value) => {
+          definition = value;
+          return {
+            sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+            resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            isBusy: () => false,
+            dispose: async () => {}
+          };
+        }
+      },
+      onEvent: () => {},
+      onActivity: () => {}
+    });
+    return { definition, session, connectAll, listTools };
+  } finally {
+    connectAll.mockRestore();
+    listTools.mockRestore();
+  }
+}
 
 describe('GET /api/result-assistant/sessions/:id/events', () => {
   it('streams existing assistant events', async () => {
@@ -101,7 +159,6 @@ describe('DELETE /api/result-assistant/sessions/:id', () => {
       settings: {} as any,
       resultAssistantSessions: sessions,
       deps: {
-        cleanupResultAssistantSessions: vi.fn(),
         asJson: vi.fn((_res, status, body) => responses.push({ status, body }))
       } as any
     };
@@ -128,34 +185,31 @@ describe('Result Assistant report refresh', () => {
       }
     ];
     const callTool = vi.fn().mockResolvedValue({ ok: true });
-    const session = {
-      scope: 'run',
-      runId: 'run-1',
-      resultSummary: null,
-      referenceReportsForRun: [],
-      systemPromptCache: undefined,
-      agentConfig: { provider: 'openai', model: 'fake' },
-      tools: [{ name: 'write_report', description: 'Write a report' }],
-      toolPublicMap: new Map([
-        ['write_report', { server: 'mcplab', tool: 'mcplab_write_markdown_report' }]
-      ]),
-      mcp: { callTool }
-    } as any;
-    const sessions = new Map([['ras-1', session]]);
-    const definition = createResultAssistantRuntimeDefinition(session, () => reports);
-    expect(definition.getSystemPrompt()).not.toContain('reports/new.md');
-    await definition.tools[0].execute({ title: 'Summary' });
-    expect(callTool).toHaveBeenCalledWith(
-      'mcplab',
-      'mcplab_write_markdown_report',
-      { title: 'Summary' },
-      { signal: undefined }
-    );
-    expect(definition.getSystemPrompt()).toContain('reports/new.md');
-    expect(sessions.get('ras-1')?.referenceReportsForRun).toEqual(reports);
+    const callToolSpy = vi
+      .spyOn(McpClientManager.prototype, 'callTool')
+      .mockImplementation(async (...args: any[]) => callTool(...args));
+    try {
+      const { definition } = await createResultDefinition({
+        scope: 'run',
+        runId: 'run-1',
+        tools: [{ name: 'mcplab_write_markdown_report' }],
+        refreshReports: () => reports
+      });
+      expect(definition.getSystemPrompt()).not.toContain('reports/new.md');
+      await definition.tools[0].execute({ title: 'Summary' });
+      expect(callTool).toHaveBeenCalledWith(
+        'mcplab',
+        'mcplab_write_markdown_report',
+        { title: 'Summary' },
+        { signal: undefined }
+      );
+      expect(definition.getSystemPrompt()).toContain('reports/new.md');
+    } finally {
+      callToolSpy.mockRestore();
+    }
   });
 
-  it('refreshes the report list on the route stored session and its next prompt', async () => {
+  it('keeps refreshed reports private and exposes them to the next prompt', async () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'mcplab-result-assistant-'));
     const reportPath = join(workspaceRoot, 'mcplab/reports/run-1-summary.md');
     const callTool = vi
@@ -165,6 +219,10 @@ describe('Result Assistant report refresh', () => {
         writeFileSync(reportPath, '# Summary');
         return { ok: true };
       });
+    const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    const listTools = vi
+      .spyOn(McpClientManager.prototype, 'listTools')
+      .mockResolvedValue([{ name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }] as any);
     const sessions = new Map();
     const captured: Array<{ status: number; body: any }> = [];
     let definition: any;
@@ -191,13 +249,6 @@ describe('Result Assistant report refresh', () => {
           resolveAssistantAgentFromLibraries: vi
             .fn()
             .mockReturnValue({ provider: 'openai', model: 'test' }),
-          preloadResultAssistantTools: async (session: any) => {
-            session.tools.push({ name: 'write_report', description: 'Write a report' });
-            session.toolPublicMap.set('write_report', {
-              server: 'mcplab',
-              tool: 'mcplab_write_markdown_report'
-            });
-          },
           assistantRuntimeFactory: {
             create: async (runtimeDefinition: any) => {
               definition = runtimeDefinition;
@@ -214,15 +265,24 @@ describe('Result Assistant report refresh', () => {
 
       const sessionId = captured[0]!.body.sessionId;
       const session = sessions.get(sessionId)!;
+      for (const key of [
+        'mcp',
+        'tools',
+        'toolPublicMap',
+        'systemPromptCache',
+        'agentConfig',
+        'resultSummary',
+        'referenceReportsForRun'
+      ]) {
+        expect(session).not.toHaveProperty(key);
+      }
       expect(definition.getSystemPrompt()).not.toContain('run-1-summary.md');
       await definition.tools[0].execute({ title: 'Summary' });
-      expect(sessions.get(sessionId)?.referenceReportsForRun).toEqual([
-        expect.objectContaining({ relativePath: 'run-1-summary.md' })
-      ]);
       expect(definition.getSystemPrompt()).toContain('run-1-summary.md');
-      expect(session.referenceReportsForRun).toBe(sessions.get(sessionId)?.referenceReportsForRun);
       expect(callTool).toHaveBeenCalledOnce();
     } finally {
+      connectAll.mockRestore();
+      listTools.mockRestore();
       callTool.mockRestore();
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
@@ -250,29 +310,47 @@ describe('Result Assistant discovered tool approvals', () => {
     let modelRound = 0;
     const histories: any[][] = [];
     try {
-      const session = {
+      const session: ResultAssistantSession = {
+        id: 'ras-test',
         scope: 'all_runs',
         runId: null,
         createdAt: Date.now(),
         lastTouchedAt: Date.now(),
         selectedAssistantAgentName: 'assistant',
-        agentConfig: { provider: 'openai', model: 'fake' },
-        resultSummary: null,
-        referenceReportsForRun: [],
+        model: 'test',
+        provider: 'openai',
         toolsLoaded: 0,
         toolServers: [],
         initialMessages: [],
         events: [],
-        clients: new Set(),
-        mcp: new McpClientManager(),
-        tools: [],
-        toolPublicMap: new Map()
-      } as any;
-      await preloadResultAssistantTools(session, 'http://mcplab.test/mcp');
+        clients: new Set()
+      };
+      let definition!: AssistantRuntimeDefinition;
+      await setupResultAssistantSession({
+        session,
+        agentConfig: { provider: 'openai', model: 'fake' },
+        resultSummary: null,
+        referenceReportsForRun: [],
+        mcpServerUrl: 'http://mcplab.test/mcp',
+        refreshReports: () => [],
+        assistantRuntimeFactory: {
+          create: async (value) => {
+            definition = value;
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              isBusy: () => false,
+              dispose: async () => {}
+            };
+          }
+        },
+        onEvent: () => {},
+        onActivity: () => {}
+      });
       expect(connectAll).toHaveBeenCalledOnce();
       expect(listTools).toHaveBeenCalledWith('mcplab');
 
-      const definition = createResultAssistantRuntimeDefinition(session, () => []);
       const publicReadNames = definition.tools
         .filter((tool) => tool.tool !== 'mcplab_write_markdown_report')
         .map((tool) => tool.name);
@@ -364,7 +442,13 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
   const captured: Array<{ status: number; body: any }> = [];
   const sessions = new Map();
   let body: any;
-  let preloadedSession: any;
+  const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  const listTools = vi
+    .spyOn(McpClientManager.prototype, 'listTools')
+    .mockResolvedValue([
+      { name: 'mcplab_read_run_artifact', inputSchema: { type: 'object' } },
+      { name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }
+    ] as any);
   const deps = {
     parseBody: vi.fn(async () => body ?? {}),
     asJson: vi.fn((_res, status, value) => captured.push({ status, body: value })),
@@ -374,16 +458,6 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
     resolveAssistantAgentFromLibraries: vi
       .fn()
       .mockReturnValue({ provider: 'openai', model: 'test' }),
-    preloadResultAssistantTools: async (prepared: any) => {
-      preloadedSession = prepared;
-      for (const [name, tool] of [
-        [publicRead, 'mcplab_read_run_artifact'],
-        [publicWrite, 'mcplab_write_markdown_report']
-      ]) {
-        prepared.tools.push({ name, inputSchema: { type: 'object' } });
-        prepared.toolPublicMap.set(name, { server: 'mcplab', tool });
-      }
-    },
     assistantRuntimeFactory: {
       create: (definition: any) =>
         createLangChainAssistantRuntimeFactory(async (_def, messages) => {
@@ -426,8 +500,17 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
     await route('/api/result-assistant/sessions', 'POST', { scope: 'all_runs' });
     const sessionId = captured.at(-1)!.body.sessionId;
     const session = sessions.get(sessionId)!;
-    expect(preloadedSession).toBe(session);
-    expect(session.mcp).toBeInstanceOf(McpClientManager);
+    for (const key of [
+      'mcp',
+      'tools',
+      'toolPublicMap',
+      'systemPromptCache',
+      'agentConfig',
+      'resultSummary',
+      'referenceReportsForRun'
+    ]) {
+      expect(session).not.toHaveProperty(key);
+    }
     const sseChunks: string[] = [];
     const sse = Object.assign(new EventEmitter(), {
       statusCode: 0,
@@ -500,6 +583,8 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
     expect(sseChunks.join('')).toContain('event: tool_call_denied');
     expect(sseChunks.join('')).toContain('The read succeeded, and I did not write the report.');
   } finally {
+    connectAll.mockRestore();
+    listTools.mockRestore();
     callTool.mockRestore();
   }
 });
@@ -524,9 +609,6 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
           createdAt: Date.now(),
           lastTouchedAt: Date.now(),
           selectedAssistantAgentName: 'assistant-1',
-          agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
-          resultSummary: null,
-          referenceReportsForRun: [],
           toolsLoaded: 0,
           toolServers: [],
           initialMessages: [],
@@ -555,8 +637,7 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
         getRunResults: vi.fn(),
         readLibraries: vi.fn(),
         pickDefaultAssistantAgentName: vi.fn(),
-        resolveAssistantAgentFromLibraries: vi.fn(),
-        preloadResultAssistantTools: vi.fn()
+        resolveAssistantAgentFromLibraries: vi.fn()
       } as any
     });
 
@@ -591,7 +672,6 @@ describe('Result Assistant runtime factory', () => {
       resolveAssistantAgentFromLibraries: vi
         .fn()
         .mockReturnValue({ provider: 'openai', model: 'fake' }),
-      preloadResultAssistantTools: vi.fn(),
       assistantRuntimeFactory: {
         create: (definition: any) => {
           runtimeDefinition = definition;
@@ -745,7 +825,6 @@ describe('Result Assistant runtime factory', () => {
       resolveAssistantAgentFromLibraries: vi
         .fn()
         .mockReturnValue({ provider: 'openai', model: 'fake' }),
-      preloadResultAssistantTools: vi.fn(),
       assistantRuntimeFactory
     } as any;
     const settings = {

@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { scenarioAssistantSessionView } from './scenario-assistant-domain.js';
 
-function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFactory>[0]) {
+function harness(
+  modelCall: Parameters<typeof createLangChainAssistantRuntimeFactory>[0],
+  tools: Array<Record<string, unknown>> = []
+) {
   const captured: Array<{ status: number; body: any }> = [];
   const sessions = new Map<string, any>();
   const scenario = {
@@ -27,8 +30,6 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
     asJson: vi.fn((_res: any, status: number, result: unknown) =>
       captured.push({ status, body: result })
     ),
-    cleanupScenarioAssistantSessions: vi.fn(),
-    touchScenarioAssistantSession: vi.fn(),
     scenarioAssistantSessionView,
     ensureInsideRoot: (_root: string, path: string) => path,
     readLibraries: () => ({
@@ -43,9 +44,11 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
       provider: 'openai',
       model: 'test'
     }),
-    preloadScenarioAssistantTools: vi.fn(),
     assistantRuntimeFactory: factory
   };
+  const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue(tools as any);
+  const mcpCall = vi.spyOn(McpClientManager.prototype, 'callTool');
   const invoke = async (method: string, pathname: string, requestBody?: unknown) => {
     const req = Object.assign(new EventEmitter(), {
       headers: { host: 'localhost' },
@@ -73,8 +76,10 @@ function harness(modelCall: Parameters<typeof createLangChainAssistantRuntimeFac
     });
     return { req, res, result: captured.at(-1) };
   };
-  return { invoke, sessions, scenario, captured, deps };
+  return { invoke, sessions, scenario, captured, deps, connectAll, listTools, mcpCall };
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Scenario Assistant LangGraph HTTP runtime', () => {
   it.each([
@@ -84,7 +89,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     'accepts a proposal %s through the real route and preserves the scenario input',
     async (_label, withReadOnlyTool) => {
       let turn = 0;
-      const { invoke, sessions, scenario, deps } = harness(async (definition) => {
+      const { invoke, sessions, scenario, connectAll, listTools, mcpCall } = harness(async (definition) => {
         expect(definition.assistant).toBe('scenario');
         expect('scenario' in definition.context ? definition.context.scenario.prompt : '').toBe(
           'Original prompt'
@@ -104,19 +109,9 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
               : [])
           ]
         };
-      });
+      }, withReadOnlyTool ? [{ name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }] : []);
       const originalScenario = structuredClone(scenario);
-      const mcpCall = vi.fn().mockResolvedValue('read result');
-      if (withReadOnlyTool)
-        deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
-          prepared.mcp.callTool = mcpCall;
-          prepared.tools.push({
-            name: 'server-1__lookup',
-            inputSchema: { type: 'object' },
-            annotations: { readOnlyHint: true }
-          });
-          prepared.toolPublicMap.set('server-1__lookup', { server: 'server-1', tool: 'lookup' });
-        });
+      mcpCall.mockResolvedValue('read result');
       await invoke('POST', '/api/scenario-assistant/sessions');
       const id = [...sessions.keys()][0]!;
       const stream = await invoke('GET', `/api/scenario-assistant/sessions/${id}/events`);
@@ -140,7 +135,8 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
             event.payload.suggestions?.prompt?.replacement === 'Revised prompt'
         )
       ).toBe(true);
-      expect(deps.preloadScenarioAssistantTools).toHaveBeenCalledOnce();
+      expect(connectAll).toHaveBeenCalledOnce();
+      expect(listTools).toHaveBeenCalledWith('server-1');
       await invoke('DELETE', `/api/scenario-assistant/sessions/${id}`);
       await invoke('DELETE', `/api/scenario-assistant/sessions/${id}`);
       expect(sessions.has(id)).toBe(false);
@@ -150,7 +146,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
   it('buffers a proposal while individually approved calls resolve, then returns ordered results and suggestions', async () => {
     const modelMessages: any[][] = [];
     let turn = 0;
-    const { invoke, sessions, deps, scenario } = harness(async (_definition, messages) => {
+    const { invoke, sessions, mcpCall, scenario } = harness(async (_definition, messages) => {
       modelMessages.push(messages);
       if (turn++ === 0)
         return {
@@ -180,31 +176,14 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
           ]
         };
       return { type: 'assistant_message', text: 'The checks are complete.' };
-    });
+    }, [
+      { name: 'lookup', description: 'Read', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+      { name: 'update', description: 'Write', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }
+    ]);
     const originalScenario = structuredClone(scenario);
-    let calls: any;
-    deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
-      calls = vi.fn(
-        async (_server: string, tool: string, args: unknown) => `${tool}:${JSON.stringify(args)}`
-      );
-      prepared.mcp.callTool = calls;
-      prepared.tools.push(
-        {
-          name: 'server-1__lookup',
-          description: 'Read',
-          inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: true }
-        },
-        {
-          name: 'server-1__update',
-          description: 'Write',
-          inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: false }
-        }
-      );
-      prepared.toolPublicMap.set('server-1__lookup', { server: 'server-1', tool: 'lookup' });
-      prepared.toolPublicMap.set('server-1__update', { server: 'server-1', tool: 'update' });
-    });
+    const calls = mcpCall.mockImplementation(
+      async (_server: string, tool: string, args: unknown) => `${tool}:${JSON.stringify(args)}`
+    );
     await invoke('POST', '/api/scenario-assistant/sessions');
     const id = [...sessions.keys()][0]!;
     const stream = await invoke('GET', `/api/scenario-assistant/sessions/${id}/events`);
@@ -309,7 +288,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
   it('approves all calls sequentially and rejects a repeated approval without replaying MCP calls', async () => {
     let turn = 0;
     const executionOrder: string[] = [];
-    const { invoke, sessions, deps } = harness(async (_definition, messages) => {
+    const { invoke, sessions, mcpCall } = harness(async (_definition, messages) => {
       if (turn++ === 0)
         return {
           type: 'tool_call_request',
@@ -331,7 +310,10 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
         type: 'assistant_message',
         text: `Completed ${messages.filter((message) => message.getType() === 'tool').length} calls.`
       };
-    });
+    }, [
+      { name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } },
+      { name: 'update', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }
+    ]);
     let releaseFirst!: () => void;
     let markFirstStarted!: () => void;
     const firstStarted = new Promise<void>((resolve) => {
@@ -340,31 +322,13 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     const firstGate = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
-    let calls: ReturnType<typeof vi.fn>;
-    deps.preloadScenarioAssistantTools.mockImplementation(async (prepared: any) => {
-      calls = vi.fn(async (_server: string, tool: string, args: any) => {
-        executionOrder.push(tool);
-        if (tool === 'lookup') {
-          markFirstStarted();
-          await firstGate;
-        }
-        return `done-${args.n}`;
-      });
-      prepared.mcp.callTool = calls;
-      prepared.tools.push(
-        {
-          name: 'server-1__lookup',
-          inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: false }
-        },
-        {
-          name: 'server-1__update',
-          inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: false }
-        }
-      );
-      prepared.toolPublicMap.set('server-1__lookup', { server: 'server-1', tool: 'lookup' });
-      prepared.toolPublicMap.set('server-1__update', { server: 'server-1', tool: 'update' });
+    const calls = mcpCall.mockImplementation(async (_server: string, tool: string, args: any) => {
+      executionOrder.push(tool);
+      if (tool === 'lookup') {
+        markFirstStarted();
+        await firstGate;
+      }
+      return `done-${args.n}`;
     });
     await invoke('POST', '/api/scenario-assistant/sessions');
     const id = [...sessions.keys()][0]!;

@@ -44,15 +44,11 @@ describe('GET /api/scenario-assistant/sessions/:id/events', () => {
       deps: {
         parseBody: vi.fn(),
         asJson: vi.fn(),
-        cleanupScenarioAssistantSessions: vi.fn(),
-        touchScenarioAssistantSession: vi.fn(),
-        scenarioAssistantSessionView: vi.fn(),
         ensureInsideRoot: vi.fn(),
         readLibraries: vi.fn(),
         pickDefaultAssistantAgentName: vi.fn(),
         resolveAssistantAgentFromConfig: vi.fn(),
         resolveAssistantAgentFromLibraries: vi.fn(),
-        preloadScenarioAssistantTools: vi.fn(),
         assistantRuntimeFactory: { create: vi.fn() }
       } as any
     });

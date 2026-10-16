@@ -1,8 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import {
-  isLlmAgent,
-  type EvalConfig,
   type LlmAgentConfig,
+  type EvalConfig,
   type AssistantRuntimeMessage,
   type AssistantRuntimeDefinition,
   type AssistantRuntimeSession,
@@ -21,11 +20,10 @@ import {
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
-import { readLibraries } from './libraries-store.js';
+import { createAssistantRuntimeService } from './assistant-service.js';
+import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
 
-export { truncateJson } from './assistant-common.js';
-
-type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
+export type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
 
 type ScenarioAssistantEvalRuleSuggestion = ScenarioAssistantSuggestionRule;
 
@@ -37,8 +35,8 @@ export interface ScenarioAssistantSession {
   lastTouchedAt: number;
   configPath?: string;
   selectedAssistantAgentName: string;
-  context: ScenarioAssistantContextInput;
-  agentConfig: LlmAgentConfig;
+  model: string;
+  provider: string;
   toolsLoaded: number;
   toolServers: string[];
   initialMessages: AssistantChatMessage[];
@@ -46,10 +44,28 @@ export interface ScenarioAssistantSession {
   events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
   runtime?: AssistantRuntimeSession;
+}
+
+interface ScenarioAssistantResources {
+  agentConfig: LlmAgentConfig;
+  context: ScenarioAssistantContextInput;
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
   systemPromptCache?: string;
+}
+
+function createScenarioAssistantResources(
+  agentConfig: LlmAgentConfig,
+  context: ScenarioAssistantContextInput
+): ScenarioAssistantResources {
+  return {
+    agentConfig,
+    mcp: new McpClientManager(),
+    tools: [],
+    toolPublicMap: new Map(),
+    context
+  };
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -70,14 +86,14 @@ export function touchScenarioAssistantSession(session: ScenarioAssistantSession)
 }
 
 export function scenarioAssistantSessionView(session: ScenarioAssistantSession) {
-  const runtimeSnapshot = session.runtime?.getSnapshot();
+  const runtimeSnapshot = session.runtime?.getSnapshot?.();
   return {
     id: session.id,
     createdAt: new Date(session.createdAt).toISOString(),
     updatedAt: new Date(session.lastTouchedAt).toISOString(),
     selectedAssistantAgentName: session.selectedAssistantAgentName,
-    model: session.agentConfig.model,
-    provider: session.agentConfig.provider,
+    model: session.model,
+    provider: session.provider,
     warnings: session.warnings,
     toolsLoaded: session.toolsLoaded,
     toolServers: session.toolServers,
@@ -86,11 +102,14 @@ export function scenarioAssistantSessionView(session: ScenarioAssistantSession) 
   };
 }
 
-function assistantSystemPrompt(session: ScenarioAssistantSession): string {
-  if (session.systemPromptCache) return session.systemPromptCache;
-  const { scenario } = session.context;
-  const toolLines = session.tools.map((tool) => {
-    const mapping = session.toolPublicMap.get(tool.name);
+function assistantSystemPrompt(
+  session: ScenarioAssistantSession,
+  state: ScenarioAssistantResources
+): string {
+  if (state.systemPromptCache) return state.systemPromptCache;
+  const { scenario } = state.context;
+  const toolLines = state.tools.map((tool) => {
+    const mapping = state.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
     return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${
       mapping?.tool ?? tool.name
@@ -135,7 +154,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
       ? `Available MCP tools:\n${toolLines.join('\n')}`
       : 'No MCP tools available.'
   ].join('\n');
-  session.systemPromptCache = prompt;
+  state.systemPromptCache = prompt;
   return prompt;
 }
 
@@ -156,36 +175,130 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
   return `Scenario Assistant MCP preload failed for server '${serverName}': ${raw}`;
 }
 
-export async function preloadScenarioAssistantTools(
+function createScenarioAssistantSetup(
   session: ScenarioAssistantSession,
-  serversByName: Record<string, EvalConfig['servers'][string]>,
-  selectedServerNames: string[],
-  options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
-): Promise<void> {
-  const usedNames = new Set<string>();
-  for (const serverName of selectedServerNames) {
-    const server = serversByName[serverName];
-    if (!server) {
-      session.warnings.push(`Scenario Assistant: server '${serverName}' not found in config.`);
-      continue;
-    }
-    try {
-      await session.mcp.connectAll({ [serverName]: server }, undefined, {
-        serverAuthHeaders: options?.serverAuthHeaders
-      });
-      const tools = await session.mcp.listTools(serverName);
-      for (const tool of tools) {
-        const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
-        session.toolPublicMap.set(publicName, { server: serverName, tool: tool.name });
-        session.tools.push({
-          ...tool,
-          name: publicName,
-          description: `${tool.description ?? ''}\n[server=${serverName} tool=${tool.name}]`.trim()
-        });
+  agentConfig: LlmAgentConfig,
+  context: ScenarioAssistantContextInput
+) {
+  const state = createScenarioAssistantResources(agentConfig, context);
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () => {
+    disposePromise ??= Promise.resolve().then(() => state.mcp.disconnectAll());
+    return disposePromise;
+  };
+  return {
+    dispose,
+    async preload(
+      serversByName: Record<string, EvalConfig['servers'][string]>,
+      selectedServerNames: string[],
+      options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
+    ): Promise<void> {
+      const usedNames = new Set<string>();
+      for (const serverName of selectedServerNames) {
+        const server = serversByName[serverName];
+        if (!server) {
+          session.warnings.push(`Scenario Assistant: server '${serverName}' not found in config.`);
+          continue;
+        }
+        try {
+          await state.mcp.connectAll({ [serverName]: server }, undefined, {
+            serverAuthHeaders: options?.serverAuthHeaders
+          });
+          const tools = await state.mcp.listTools(serverName);
+          for (const tool of tools) {
+            const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
+            state.toolPublicMap.set(publicName, { server: serverName, tool: tool.name });
+            state.tools.push({
+              ...tool,
+              name: publicName,
+              description:
+                `${tool.description ?? ''}\n[server=${serverName} tool=${tool.name}]`.trim()
+            });
+          }
+        } catch (error: unknown) {
+          session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+        }
       }
-    } catch (error: unknown) {
-      session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+      session.toolsLoaded = state.tools.length;
+      session.toolServers = Array.from(
+        new Set(state.tools.map((tool) => tool.name.split('__')[0]))
+      );
+    },
+    createRuntimeDefinition(): AssistantRuntimeDefinition {
+      return {
+        assistant: 'scenario',
+        agent: state.agentConfig,
+        context: state.context,
+        initialMessages: session.initialMessages,
+        dispose,
+        getSystemPrompt: () => assistantSystemPrompt(session, state),
+        tools: [
+          ...state.tools.map((tool) => {
+            const mapping = state.toolPublicMap.get(tool.name)!;
+            return {
+              name: tool.name,
+              server: mapping.server,
+              tool: mapping.tool,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+              execute: async (arguments_: unknown, signal?: AbortSignal) =>
+                withTimeout(
+                  () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
+                  30_000,
+                  'Tool call timed out after 30000ms',
+                  signal
+                )
+            };
+          }),
+          {
+            name: PROPOSE_SCENARIO_CHANGES,
+            server: 'local',
+            tool: PROPOSE_SCENARIO_CHANGES,
+            description: 'Submit structured scenario changes for the user to review and apply.',
+            inputSchema: proposalSchema,
+            execute: async (args: unknown, _signal?: AbortSignal) =>
+              validateScenarioAssistantProposal(args, state.toolPublicMap),
+            extractProposal: (result) => result as ScenarioAssistantSuggestionBundle
+          }
+        ],
+        approvalPolicy: (name) =>
+          name === PROPOSE_SCENARIO_CHANGES
+            ? 'local'
+            : state.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
+              ? 'automatic'
+              : 'approval_required'
+      };
     }
+  };
+}
+
+export async function setupScenarioAssistantSession(params: {
+  session: ScenarioAssistantSession;
+  agentConfig: LlmAgentConfig;
+  context: ScenarioAssistantContextInput;
+  serversByName: Record<string, EvalConfig['servers'][string]>;
+  selectedServerNames: string[];
+  serverAuthHeaders?: Record<string, Record<string, string>>;
+  assistantRuntimeFactory: AssistantRuntimeFactory;
+  onEvent(event: import('@inspectr/mcplab-core').AssistantRuntimeEvent): void;
+  onActivity(): void;
+}): Promise<ScenarioAssistantSession> {
+  const setup = createScenarioAssistantSetup(params.session, params.agentConfig, params.context);
+  try {
+    await setup.preload(params.serversByName, params.selectedServerNames, {
+      serverAuthHeaders: params.serverAuthHeaders
+    });
+    const definition = setup.createRuntimeDefinition();
+    definition.onEvent = params.onEvent;
+    params.session.runtime = await createAssistantRuntimeService(
+      params.assistantRuntimeFactory,
+      definition,
+      params.onActivity
+    );
+    return params.session;
+  } catch (error) {
+    await setup.dispose().catch(() => {});
+    throw error;
   }
 }
 
@@ -748,98 +861,4 @@ export function validateScenarioAssistantProposal(
   if (!result.prompt && !result.evalRules && !result.extractRules)
     return invalid('proposal', 'must include at least one change');
   return result;
-}
-
-export function createScenarioAssistantRuntimeDefinition(
-  session: ScenarioAssistantSession
-): AssistantRuntimeDefinition {
-  return {
-    assistant: 'scenario',
-    agent: session.agentConfig,
-    context: session.context,
-    initialMessages: session.initialMessages,
-    dispose: () => session.mcp.disconnectAll(),
-    getSystemPrompt: () => assistantSystemPrompt(session),
-    tools: [
-      ...session.tools.map((tool) => {
-        const mapping = session.toolPublicMap.get(tool.name)!;
-        return {
-          name: tool.name,
-          server: mapping.server,
-          tool: mapping.tool,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          execute: async (arguments_: unknown, signal?: AbortSignal) =>
-            withTimeout(
-              () => session.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
-              30_000,
-              'Tool call timed out after 30000ms',
-              signal
-            )
-        };
-      }),
-      {
-        name: PROPOSE_SCENARIO_CHANGES,
-        server: 'local',
-        tool: PROPOSE_SCENARIO_CHANGES,
-        description: 'Submit structured scenario changes for the user to review and apply.',
-        inputSchema: proposalSchema,
-        execute: async (args: unknown, _signal?: AbortSignal) =>
-          validateScenarioAssistantProposal(args, session.toolPublicMap),
-        extractProposal: (result) => result as ScenarioAssistantSuggestionBundle
-      }
-    ],
-    approvalPolicy: (name) =>
-      name === PROPOSE_SCENARIO_CHANGES
-        ? 'local'
-        : session.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
-          ? 'automatic'
-          : 'approval_required'
-  };
-}
-
-export function resolveAssistantAgentFromConfig(
-  config: EvalConfig,
-  selectedAssistantAgentName: string
-): LlmAgentConfig {
-  const agent = config.agents[selectedAssistantAgentName];
-  if (!agent) {
-    throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
-    );
-  }
-  if (!isLlmAgent(agent))
-    throw new Error(
-      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
-    );
-  return agent;
-}
-
-export function resolveAssistantAgentFromLibraries(
-  libraries: ReturnType<typeof readLibraries>,
-  selectedAssistantAgentName: string
-): LlmAgentConfig {
-  const agent = libraries.agents[selectedAssistantAgentName];
-  if (!agent) {
-    throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
-    );
-  }
-  if (!isLlmAgent(agent))
-    throw new Error(
-      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
-    );
-  return agent;
-}
-
-export function pickDefaultAssistantAgentName(params: {
-  requested?: string;
-  settingsDefault?: string;
-  agentNames: string[];
-}): string {
-  const requested = params.requested?.trim();
-  if (requested) return requested;
-  const settingsDefault = params.settingsDefault?.trim();
-  if (settingsDefault) return settingsDefault;
-  return params.agentNames[0] ?? '';
 }

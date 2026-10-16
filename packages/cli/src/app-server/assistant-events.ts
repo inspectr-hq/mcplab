@@ -69,6 +69,9 @@ export function createAssistantRequestAbortController(res: ServerResponse) {
   const onClose = () => {
     if (!res.writableEnded) controller.abort();
   };
+  // A response can close before the handler starts, for example when a client
+  // disconnects while the request body is still being received.
+  if (res.destroyed && !res.writableEnded) controller.abort();
   res.on?.('close', onClose);
   return { signal: controller.signal, dispose: () => res.off?.('close', onClose) };
 }

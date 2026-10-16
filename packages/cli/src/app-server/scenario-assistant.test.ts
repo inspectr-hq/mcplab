@@ -4,7 +4,6 @@ import type { ScenarioAssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import { McpClientManager } from '@inspectr/mcplab-core';
-import { scenarioAssistantSessionView } from './scenario-assistant-domain.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
 
 function makeBody(overrides: Record<string, unknown> = {}) {
@@ -28,13 +27,9 @@ function makeBody(overrides: Record<string, unknown> = {}) {
 function makeDeps(options?: {
   body?: unknown;
   servers?: Record<string, any>;
-  preloadScenarioAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
-  scenarioAssistantSessionView?: (session: any) => unknown;
 }) {
   const captured: Array<{ status: number; body: unknown }> = [];
-  const preloadScenarioAssistantTools =
-    options?.preloadScenarioAssistantTools ?? vi.fn().mockResolvedValue(undefined);
   const servers = options?.servers ?? {
     'server-1': { transport: 'http', url: 'https://example.com/mcp' }
   };
@@ -54,14 +49,6 @@ function makeDeps(options?: {
       asJson: vi.fn((_res: any, status: number, body: unknown) => {
         captured.push({ status, body });
       }),
-      cleanupScenarioAssistantSessions: vi.fn(),
-      touchScenarioAssistantSession: vi.fn(),
-      scenarioAssistantSessionView:
-        options?.scenarioAssistantSessionView ??
-        vi.fn((session: any) => ({
-          id: session.id,
-          warnings: session.warnings ?? []
-        })),
       ensureInsideRoot: vi.fn((_root: string, p: string) => p),
       readLibraries: vi.fn().mockReturnValue({
         servers,
@@ -75,11 +62,9 @@ function makeDeps(options?: {
       resolveAssistantAgentFromLibraries: vi
         .fn()
         .mockReturnValue({ id: 'assistant-1', provider: 'openai', model: 'gpt-4o-mini' }),
-      preloadScenarioAssistantTools,
       assistantRuntimeFactory
     },
     captured,
-    preloadScenarioAssistantTools,
     assistantRuntimeFactory,
     runtime
   };
@@ -88,23 +73,21 @@ function makeDeps(options?: {
 async function callCreateSessionRoute(params?: {
   body?: unknown;
   servers?: Record<string, any>;
-  preloadScenarioAssistantTools?: ReturnType<typeof vi.fn>;
   assistantRuntimeFactory?: { create: ReturnType<typeof vi.fn> };
-  scenarioAssistantSessionView?: (session: any) => unknown;
   oauthSessionManager?: { getAuthHeadersForServers: ReturnType<typeof vi.fn> };
 }) {
-  const { deps, captured, preloadScenarioAssistantTools, runtime } = makeDeps({
+  const { deps, captured, runtime } = makeDeps({
     body: params?.body,
     servers: params?.servers,
-    preloadScenarioAssistantTools: params?.preloadScenarioAssistantTools,
-    assistantRuntimeFactory: params?.assistantRuntimeFactory,
-    scenarioAssistantSessionView: params?.scenarioAssistantSessionView
+    assistantRuntimeFactory: params?.assistantRuntimeFactory
   });
   const assistantSessions: ScenarioAssistantSessionsMap = new Map();
   const oauthSessionManager =
     params?.oauthSessionManager ??
     ({ getAuthHeadersForServers: vi.fn().mockResolvedValue({}) } as any);
 
+  const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
   const handled = await handleScenarioAssistantRoutes({
     req: { headers: { host: 'localhost:8787' } } as any,
     res: {} as any,
@@ -119,11 +102,16 @@ async function callCreateSessionRoute(params?: {
     oauthSessionManager: oauthSessionManager as any,
     deps: deps as any
   });
+  const connectAllCalls = [...connectAll.mock.calls];
+  const listToolsCalls = [...listTools.mock.calls];
+  connectAll.mockRestore();
+  listTools.mockRestore();
 
   return {
     handled,
     response: captured[0],
-    preloadScenarioAssistantTools,
+    connectAllCalls,
+    listToolsCalls,
     assistantSessions,
     oauthSessionManager,
     deps,
@@ -137,7 +125,8 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     const {
       handled,
       response,
-      preloadScenarioAssistantTools,
+      connectAllCalls,
+      listToolsCalls,
       oauthSessionManager,
       assistantSessions
     } = await callCreateSessionRoute({
@@ -161,15 +150,23 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect(handled).toBe(true);
     expect(response.status).toBe(201);
     expect(oauthSessionManager.getAuthHeadersForServers).not.toHaveBeenCalled();
-    expect(preloadScenarioAssistantTools.mock.calls[0]![0]).toBe(
-      assistantSessions.get((response.body as any).sessionId)
-    );
-    expect(preloadScenarioAssistantTools).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      ['server-1'],
+    expect(connectAllCalls).toContainEqual([
+      { 'server-1': { transport: 'http', url: 'https://example.com/mcp' } },
+      undefined,
       { serverAuthHeaders: undefined }
-    );
+    ]);
+    expect(listToolsCalls).toContainEqual(['server-1']);
+    const session = assistantSessions.get((response.body as any).sessionId)!;
+    for (const key of [
+      'mcp',
+      'tools',
+      'toolPublicMap',
+      'systemPromptCache',
+      'agentConfig',
+      'context'
+    ]) {
+      expect(session).not.toHaveProperty(key);
+    }
   });
 
   it('injects OAuth headers for oauth_authorization_code server', async () => {
@@ -179,7 +176,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
         .mockResolvedValue({ 'oauth-server': { authorization: 'Bearer tok-123' } })
     };
 
-    const { response, preloadScenarioAssistantTools } = await callCreateSessionRoute({
+    const { response, connectAllCalls } = await callCreateSessionRoute({
       body: makeBody({
         context: {
           scenario: {
@@ -203,12 +200,11 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     });
 
     expect(response.status).toBe(201);
-    expect(preloadScenarioAssistantTools).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      ['oauth-server'],
+    expect(connectAllCalls).toContainEqual([
+      { 'oauth-server': expect.objectContaining({ auth: { type: 'oauth_authorization_code' } }) },
+      undefined,
       { serverAuthHeaders: { 'oauth-server': { authorization: 'Bearer tok-123' } } }
-    );
+    ]);
   });
 
   it('returns 401 when OAuth authorization is required', async () => {
@@ -226,7 +222,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
       )
     };
 
-    const { response, preloadScenarioAssistantTools } = await callCreateSessionRoute({
+    const { response, connectAllCalls } = await callCreateSessionRoute({
       body: makeBody({
         context: {
           scenario: {
@@ -252,7 +248,7 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect(response.status).toBe(401);
     expect((response.body as any).error).toMatch(/OAuth login required/i);
     expect((response.body as any).oauth.required[0].serverName).toBe('oauth-server');
-    expect(preloadScenarioAssistantTools).not.toHaveBeenCalled();
+    expect(connectAllCalls).toEqual([]);
   });
 });
 
@@ -262,10 +258,7 @@ describe('Scenario Assistant stateful alternative runtime acceptance', () => {
     const assistantRuntimeFactory = {
       create: vi.fn((definition: any) => runtimeHarness.factory.create(definition))
     };
-    const { deps, assistantSessions } = await callCreateSessionRoute({
-      assistantRuntimeFactory,
-      scenarioAssistantSessionView
-    });
+    const { deps, assistantSessions } = await callCreateSessionRoute({ assistantRuntimeFactory });
     const sessionId = Array.from(assistantSessions.keys())[0]!;
     const responses: Array<{ status: number; body: any }> = [];
     deps.asJson = vi.fn((_res: any, status: number, body: any) => {
@@ -497,6 +490,15 @@ describe('DELETE /api/scenario-assistant/sessions/:id', () => {
     const client = { write: vi.fn(), end: vi.fn() };
     const session = {
       id: 'sas-delete',
+      createdAt: Date.now(),
+      lastTouchedAt: Date.now(),
+      selectedAssistantAgentName: 'assistant',
+      model: 'test',
+      provider: 'openai',
+      warnings: [],
+      toolsLoaded: 0,
+      toolServers: [],
+      initialMessages: [],
       events: [],
       clients: new Set([client]),
       runtime: { dispose }
@@ -504,8 +506,6 @@ describe('DELETE /api/scenario-assistant/sessions/:id', () => {
     const sessions = new Map([[session.id, session]]);
     const responses: unknown[] = [];
     const deps = {
-      cleanupScenarioAssistantSessions: vi.fn(),
-      scenarioAssistantSessionView: vi.fn().mockReturnValue({ id: session.id }),
       asJson: vi.fn((_res, status, body) => responses.push({ status, body }))
     } as any;
     const params = {
@@ -547,8 +547,6 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
           createdAt: Date.now(),
           lastTouchedAt: Date.now(),
           selectedAssistantAgentName: 'assistant-1',
-          context: makeBody().context,
-          agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
           toolsLoaded: 0,
           toolServers: [],
           initialMessages: [],
@@ -580,15 +578,11 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
       deps: {
         parseBody: vi.fn().mockResolvedValue({ message: 'hello' }),
         asJson,
-        cleanupScenarioAssistantSessions: vi.fn(),
-        touchScenarioAssistantSession: vi.fn(),
-        scenarioAssistantSessionView: vi.fn((session: any) => ({ id: session.id })),
         ensureInsideRoot: vi.fn((_root: string, p: string) => p),
         readLibraries: vi.fn(),
         pickDefaultAssistantAgentName: vi.fn(),
         resolveAssistantAgentFromConfig: vi.fn(),
-        resolveAssistantAgentFromLibraries: vi.fn(),
-        preloadScenarioAssistantTools: vi.fn()
+        resolveAssistantAgentFromLibraries: vi.fn()
       } as any
     });
 

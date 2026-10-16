@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { McpClientManager } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import {
-  createScenarioAssistantRuntimeDefinition,
+  setupScenarioAssistantSession,
   normalizeScenarioAssistantEvalRules,
   validateScenarioAssistantProposal,
   type ScenarioAssistantSession
@@ -14,6 +14,22 @@ function baseSession(): ScenarioAssistantSession {
     createdAt: Date.now(),
     lastTouchedAt: Date.now(),
     selectedAssistantAgentName: 'assistant-1',
+    model: 'gpt-4o-mini',
+    provider: 'openai',
+    toolsLoaded: 0,
+    toolServers: [],
+    events: [],
+    clients: new Set(),
+    initialMessages: [],
+    warnings: []
+  };
+}
+
+async function createDefinition(): Promise<AssistantRuntimeDefinition> {
+  let definition: AssistantRuntimeDefinition | undefined;
+  await setupScenarioAssistantSession({
+    session: baseSession(),
+    agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
     context: {
       scenario: {
         id: 'scn-1',
@@ -24,17 +40,24 @@ function baseSession(): ScenarioAssistantSession {
         extractRules: []
       }
     },
-    agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
-    toolsLoaded: 0,
-    toolServers: [],
-    events: [],
-    clients: new Set(),
-    mcp: new McpClientManager(),
-    tools: [],
-    toolPublicMap: new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]]),
-    initialMessages: [],
-    warnings: []
-  };
+    serversByName: {},
+    selectedServerNames: [],
+    assistantRuntimeFactory: {
+      create: async (runtimeDefinition) => {
+        definition = runtimeDefinition;
+        return {
+          sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+          resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+          getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+          isBusy: () => false,
+          dispose: async () => {}
+        };
+      }
+    },
+    onEvent: () => {},
+    onActivity: () => {}
+  });
+  return definition!;
 }
 
 describe('normalizeScenarioAssistantEvalRules', () => {
@@ -166,8 +189,8 @@ describe('normalizeScenarioAssistantEvalRules', () => {
 });
 
 describe('Scenario Assistant runtime definition', () => {
-  it('keeps scenario authoring guidance in the dynamic system prompt', () => {
-    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+  it('keeps scenario authoring guidance in the dynamic system prompt', async () => {
+    const definition = await createDefinition();
     const prompt = definition.getSystemPrompt();
     expect(prompt).toContain('Optional checks you may suggest when useful');
     expect(prompt).toContain('tool_sequence');
@@ -183,7 +206,6 @@ describe('Scenario Assistant runtime definition', () => {
   });
 
   it('normalizes tool names and redundant regex suggestions in native proposals', () => {
-    const session = baseSession();
     const output = validateScenarioAssistantProposal(
       {
         evalRules: {
@@ -194,7 +216,7 @@ describe('Scenario Assistant runtime definition', () => {
           ]
         }
       },
-      session.toolPublicMap
+      new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
     );
     expect(output.evalRules?.replacement).toEqual([
       { type: 'required_tool', value: 'refund_tool' },
@@ -203,7 +225,6 @@ describe('Scenario Assistant runtime definition', () => {
   });
 
   it('normalizes sequence and tool-input names and removes contradictory rules', () => {
-    const session = baseSession();
     const output = validateScenarioAssistantProposal(
       {
         evalRules: {
@@ -215,7 +236,7 @@ describe('Scenario Assistant runtime definition', () => {
           ]
         }
       },
-      session.toolPublicMap
+      new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
     );
     expect(output.evalRules?.replacement).toEqual([
       { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] },
@@ -265,7 +286,7 @@ describe('Scenario Assistant runtime definition', () => {
   it('returns detailed proposal paths to the model as LangGraph tool feedback', async () => {
     const histories: Array<Array<{ role: string; content: string }>> = [];
     let round = 0;
-    const definition = createScenarioAssistantRuntimeDefinition(baseSession());
+    const definition = await createDefinition();
     const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
       histories.push(
         messages.map((message) => ({ role: message.getType(), content: String(message.content) }))

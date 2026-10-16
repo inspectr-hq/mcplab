@@ -22,15 +22,12 @@ import type {
   OAuthDebuggerSession
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
+import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import type {
-  cleanupScenarioAssistantSessions,
-  touchScenarioAssistantSession,
-  scenarioAssistantSessionView,
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromConfig,
-  resolveAssistantAgentFromLibraries,
-  ScenarioAssistantSession
-} from './scenario-assistant-domain.js';
+  resolveAssistantAgentFromLibraries
+} from './assistant-agent.js';
 import type {
   getRunResults,
   listRuns,
@@ -87,19 +84,14 @@ export interface ResultAssistantDeps extends LibraryDeps {
   assistantRuntimeFactory: AssistantRuntimeFactory;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-  preloadResultAssistantTools: typeof import('./result-assistant-domain.js').preloadResultAssistantTools;
 }
 
 export interface ScenarioAssistantDeps extends LibraryDeps {
   assistantRuntimeFactory: AssistantRuntimeFactory;
-  cleanupScenarioAssistantSessions: typeof cleanupScenarioAssistantSessions;
-  touchScenarioAssistantSession: typeof touchScenarioAssistantSession;
-  scenarioAssistantSessionView: typeof scenarioAssistantSessionView;
   ensureInsideRoot: typeof ensureInsideRoot;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-  preloadScenarioAssistantTools: typeof import('./scenario-assistant-domain.js').preloadScenarioAssistantTools;
 }
 
 export interface OAuthDebuggerDeps extends LibraryDeps {

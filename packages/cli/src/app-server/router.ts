@@ -78,20 +78,13 @@ import {
 } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
+import { type ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import {
-  cleanupScenarioAssistantSessions,
-  touchScenarioAssistantSession,
-  scenarioAssistantSessionView,
   resolveAssistantAgentFromConfig,
   resolveAssistantAgentFromLibraries,
-  pickDefaultAssistantAgentName,
-  type ScenarioAssistantSession,
-  preloadScenarioAssistantTools
-} from './scenario-assistant-domain.js';
-import {
-  preloadResultAssistantTools,
-  type ResultAssistantSession
-} from './result-assistant-domain.js';
+  pickDefaultAssistantAgentName
+} from './assistant-agent.js';
+import { type ResultAssistantSession } from './result-assistant-domain.js';
 import {
   discoverMcpToolsForServers,
   runToolAnalysisJob,
@@ -170,6 +163,7 @@ const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
 
 export async function startAppServer(options: AppServerOptions) {
+  // The CLI statically loads this router, so defer framework imports until app startup.
   const { createLangChainAssistantRuntimeFactory } =
     await import('./langchain-assistant-runtime.js');
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -260,15 +254,10 @@ export async function startAppServer(options: AppServerOptions) {
     stopOAuthDebuggerSession,
     oauthDebuggerExportMarkdown,
     oauthDebuggerExportRawTrace,
-    cleanupScenarioAssistantSessions,
-    touchScenarioAssistantSession,
-    scenarioAssistantSessionView,
     ensureInsideRoot,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
-    preloadResultAssistantTools,
-    preloadScenarioAssistantTools,
     getRunResults,
     decodeEvalId,
     readConfigRecord,

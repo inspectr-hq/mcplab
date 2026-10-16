@@ -18,7 +18,7 @@ import {
 import {
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromLibraries
-} from './scenario-assistant-domain.js';
+} from './assistant-agent.js';
 
 type JobEvent = {
   type: 'started' | 'log' | 'completed' | 'error';

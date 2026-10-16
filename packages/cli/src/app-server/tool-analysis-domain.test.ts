@@ -7,7 +7,7 @@ import {
   discoverMcpToolsForServers,
   parseJsonFromAssistantText
 } from './tool-analysis-domain.js';
-import { pickDefaultAssistantAgentName } from './scenario-assistant-domain.js';
+import { pickDefaultAssistantAgentName } from './assistant-agent.js';
 
 describe('discoverMcpToolsForServers', () => {
   it('returns a "not found" warning when server name does not match any key', async () => {

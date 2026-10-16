@@ -1,11 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, relative, resolve, sep } from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
-import { McpClientManager } from '@inspectr/mcplab-core';
-import { throwIfAborted } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
-  createResultAssistantRuntimeDefinition,
+  setupResultAssistantSession,
+  type ResultAssistantReferenceReport,
   type ResultAssistantSession
 } from './result-assistant-domain.js';
 import {
@@ -13,15 +12,12 @@ import {
   resultAssistantSessionView,
   touchResultAssistantSession
 } from './result-assistant-domain.js';
+import { handleAssistantSessionRoutes } from './assistant-session-routes.js';
 import {
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
-  endAssistantSseClients,
-  createAssistantRequestAbortController,
-  serveAssistantSseStream,
   type AssistantSseEventType
 } from './assistant-events.js';
-import { createAssistantRuntimeService } from './assistant-service.js';
 
 export type ResultAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -31,7 +27,6 @@ export type ResultAssistantRouteDeps = Pick<
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'resolveAssistantAgentFromLibraries'
-  | 'preloadResultAssistantTools'
   | 'assistantRuntimeFactory'
 >;
 
@@ -52,7 +47,6 @@ export async function handleResultAssistantRoutes(params: {
     readLibraries,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromLibraries,
-    preloadResultAssistantTools,
     assistantRuntimeFactory
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -100,7 +94,6 @@ export async function handleResultAssistantRoutes(params: {
       return true;
     }
     const agentConfig = resolveAssistantAgentFromLibraries(libraries, assistantAgentName);
-    const mcp = new McpClientManager();
     const session: ResultAssistantSession = {
       id: `ras-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       scope,
@@ -108,17 +101,13 @@ export async function handleResultAssistantRoutes(params: {
       createdAt: Date.now(),
       lastTouchedAt: Date.now(),
       selectedAssistantAgentName: assistantAgentName,
-      agentConfig,
-      resultSummary: results,
-      referenceReportsForRun: listReferenceReportsForRun(scope === 'run' ? runId : null),
+      model: agentConfig.model,
+      provider: agentConfig.provider,
       toolsLoaded: 0,
       toolServers: [],
       initialMessages: [],
       events: [],
-      clients: new Set(),
-      mcp,
-      tools: [],
-      toolPublicMap: new Map()
+      clients: new Set()
     };
     session.initialMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -129,248 +118,43 @@ export async function handleResultAssistantRoutes(params: {
           : 'Result Assistant session created.',
       createdAt: new Date().toISOString()
     });
-    try {
-      await preloadResultAssistantTools(session, localMcplabMcpUrl());
-      session.toolsLoaded = session.tools.length;
-      session.toolServers = Array.from(
-        new Set(session.tools.map((tool) => tool.name.split('__')[0]))
-      );
-    } catch (error) {
-      session.initialMessages.push({
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role: 'system',
-        text: `Warning: could not preload MCPLab MCP tools: ${errorMessage(error)}`,
-        createdAt: new Date().toISOString()
-      });
-      publishSessionEvent(session, 'session_warning', { warning: errorMessage(error) });
-    }
-    const runtimeDefinition = createResultAssistantRuntimeDefinition(session, () =>
-      listReferenceReportsForRun(session.runId)
-    );
-    runtimeDefinition.onEvent = (event) => {
-      touchResultAssistantSession(session);
-      publishSessionEvent(session, event.type, event.payload);
-    };
-    session.runtime = await createAssistantRuntimeService(
+    await setupResultAssistantSession({
+      session,
+      agentConfig,
+      resultSummary: results,
+      referenceReportsForRun: listReferenceReportsForRun(scope === 'run' ? runId : null),
+      mcpServerUrl: localMcplabMcpUrl(),
+      refreshReports: () => listReferenceReportsForRun(session.runId),
       assistantRuntimeFactory,
-      runtimeDefinition,
-      () => touchResultAssistantSession(session)
-    );
+      onEvent: (event) => {
+        touchResultAssistantSession(session);
+        publishSessionEvent(session, event.type, event.payload);
+      },
+      onActivity: () => touchResultAssistantSession(session)
+    });
     resultAssistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');
     asJson(res, 201, { sessionId: session.id, session: resultAssistantSessionView(session) });
     return true;
   }
 
-  if (
-    pathname.startsWith('/api/result-assistant/sessions/') &&
-    pathname.endsWith('/events') &&
-    method === 'GET'
-  ) {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const sessionId = pathname
-      .replace('/api/result-assistant/sessions/', '')
-      .replace('/events', '');
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
-    serveAssistantSseStream(req, res, session);
-    return true;
-  }
-
-  if (pathname.startsWith('/api/result-assistant/sessions/') && method === 'GET') {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const sessionId = pathname.replace('/api/result-assistant/sessions/', '');
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
-    touchResultAssistantSession(session);
-    asJson(res, 200, { session: resultAssistantSessionView(session) });
-    return true;
-  }
-
-  if (pathname.startsWith('/api/result-assistant/sessions/') && method === 'DELETE') {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const sessionId = pathname.replace('/api/result-assistant/sessions/', '');
-    const session = resultAssistantSessions.get(sessionId);
-    let disposeError: unknown;
-    if (session) {
-      try {
-        await session.runtime?.dispose();
-      } catch (error) {
-        disposeError = error;
-      } finally {
-        try {
-          publishSessionEvent(session, 'session_finished');
-        } finally {
-          endAssistantSseClients(session);
-        }
-      }
-    }
-    resultAssistantSessions.delete(sessionId);
-    if (disposeError) asJson(res, 500, { error: errorMessage(disposeError) });
-    else asJson(res, 200, { ok: true });
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/result-assistant/sessions/') &&
-    pathname.endsWith('/messages') &&
-    method === 'POST'
-  ) {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
-    const abortController = new AbortController();
-    const handleClose = () => {
-      if (res.writableEnded) return;
-      abortController.abort();
-    };
-    res.on('close', handleClose);
-    try {
-      const body = await parseBody(req);
-      const message = String(body.message ?? '').trim();
-      throwIfAborted(abortController.signal);
-      if (!message) {
-        asJson(res, 400, { error: 'message is required' });
-        return true;
-      }
-      const response = await session.runtime!.sendMessage(message, abortController.signal);
-      throwIfAborted(abortController.signal);
-      const normalizedResponse =
-        response.type !== 'assistant_message'
-          ? {
-              type: response.type,
-              text: response.text,
-              pendingToolCall: response.pendingToolCalls[0],
-              pendingToolCalls: response.pendingToolCalls
-            }
-          : response;
-      asJson(res, 200, {
-        session: resultAssistantSessionView(session),
-        response: normalizedResponse
-      });
-      return true;
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        return true;
-      }
-      throw error;
-    } finally {
-      res.off('close', handleClose);
-    }
-  }
-
-  if (
-    pathname.startsWith('/api/result-assistant/sessions/') &&
-    pathname.includes('/tool-calls/') &&
-    pathname.endsWith('/approve') &&
-    method === 'POST'
-  ) {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const callId = parts[6];
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
-    const pending = session
-      .runtime!.getSnapshot()
-      .pendingToolCalls.find((call) => call.id === callId);
-    if (!pending) {
-      asJson(res, 404, { error: 'Result Assistant tool call not found' });
-      return true;
-    }
-    if (pending.status !== 'pending') {
-      asJson(res, 409, { error: `Tool call is already ${pending.status}` });
-      return true;
-    }
-    const abortController = createAssistantRequestAbortController(res);
-    try {
-      const body = (await parseBody(req)) as { argumentsOverride?: unknown };
-      const response = await session.runtime!.resolveToolCalls(
-        [
-          {
-            toolCallId: pending.id,
-            decision: 'approve',
-            ...(Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
-              ? { arguments: body.argumentsOverride }
-              : {})
-          }
-        ],
-        abortController.signal
-      );
-      throwIfAborted(abortController.signal);
-      const normalizedResponse = normalizeResultAssistantResponse(response);
-      asJson(res, 200, {
-        session: resultAssistantSessionView(session),
-        response: normalizedResponse
-      });
-    } catch (error) {
-      if (!abortController.signal.aborted) throw error;
-    } finally {
-      abortController.dispose();
-    }
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/result-assistant/sessions/') &&
-    pathname.includes('/tool-calls/') &&
-    pathname.endsWith('/deny') &&
-    method === 'POST'
-  ) {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const callId = parts[6];
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
-    const pending = session
-      .runtime!.getSnapshot()
-      .pendingToolCalls.find((call) => call.id === callId);
-    if (!pending) {
-      asJson(res, 404, { error: 'Result Assistant tool call not found' });
-      return true;
-    }
-    if (pending.status !== 'pending') {
-      asJson(res, 409, { error: `Tool call is already ${pending.status}` });
-      return true;
-    }
-    const abortController = createAssistantRequestAbortController(res);
-    try {
-      const response = await session.runtime!.resolveToolCalls(
-        [{ toolCallId: pending.id, decision: 'deny' }],
-        abortController.signal
-      );
-      throwIfAborted(abortController.signal);
-      asJson(res, 200, {
-        session: resultAssistantSessionView(session),
-        response: normalizeResultAssistantResponse(response)
-      });
-    } catch (error) {
-      if (!abortController.signal.aborted) throw error;
-    } finally {
-      abortController.dispose();
-    }
-    return true;
-  }
-
-  return false;
+  return handleAssistantSessionRoutes({
+    req,
+    res,
+    pathname,
+    method,
+    prefix: '/api/result-assistant/sessions',
+    missingSessionMessage: 'Result Assistant session not found',
+    toolCallNotFoundMessage: 'Result Assistant tool call not found',
+    parseBody,
+    asJson,
+    sessions: resultAssistantSessions,
+    cleanup: () => cleanupResultAssistantSessions(resultAssistantSessions),
+    touch: touchResultAssistantSession,
+    view: resultAssistantSessionView,
+    finish: (session) => publishSessionEvent(session, 'session_finished'),
+    response: normalizeResultAssistantResponse
+  });
 }
 
 function normalizeResultAssistantResponse(
@@ -396,21 +180,9 @@ function localMcplabMcpUrl(): string {
 function listMarkdownReportsLinkedToRun(
   workspaceRoot: string,
   runId: string | null
-): Array<{
-  path: string;
-  relativePath: string;
-  name: string;
-  sizeBytes: number;
-  mtime: string;
-}> {
+): ResultAssistantReferenceReport[] {
   const root = resolve(workspaceRoot, 'mcplab/reports');
-  const out: Array<{
-    path: string;
-    relativePath: string;
-    name: string;
-    sizeBytes: number;
-    mtime: string;
-  }> = [];
+  const out: ResultAssistantReferenceReport[] = [];
   const isMarkdown = (path: string) => path.endsWith('.md') || path.endsWith('.markdown');
   const walk = (dir: string) => {
     let entries;
