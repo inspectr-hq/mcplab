@@ -61,6 +61,7 @@ import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
+import { useHeightToViewportBottom } from '@/hooks/use-height-to-viewport-bottom';
 import { toast } from '@/hooks/use-toast';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import type { EvalResult } from '@/types/eval';
@@ -230,6 +231,8 @@ const Results = () => {
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
   const dashboardRequestIdRef = useRef(0);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const assistantSlotRef = useRef<HTMLDivElement | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -250,6 +253,12 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  // The panel sits below the header (and the dashboard, when shown); size it to end at the
+  // bottom of the screen so its input is visible without scrolling.
+  const assistantHeight = useHeightToViewportBottom(assistantSlotRef, {
+    active: assistantOpen,
+    observe: pageRef
+  });
   const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
   const { offset, totalCount, hasMore } = pagination;
@@ -768,7 +777,7 @@ const Results = () => {
   };
 
   return (
-    <div className="flex flex-col">
+    <div ref={pageRef} className="flex flex-col">
       <AlertDialog
         open={pendingDeleteRunId !== null}
         onOpenChange={(open) => {
@@ -1308,31 +1317,37 @@ const Results = () => {
         </Card>
 
         {assistantOpen && (
-          <ResultAssistantPanel
-            title="MCP Lab Assistant"
-            description="Analyze historical differences and trends across all result runs."
-            expanded={assistantExpanded}
-            onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
-            onHide={() => setAssistantOpen(false)}
-            messages={assistantMessages}
-            pendingToolCalls={assistantPendingToolCalls}
-            loading={assistantLoading}
-            onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
-            input={assistantInput}
-            onInputChange={setAssistantInput}
-            onSend={() => void askAssistant()}
-            inputPlaceholder="Ask about historical run differences..."
-            snippets={RESULT_ASSISTANT_SNIPPETS}
-            onSnippetSelect={(prompt) => {
-              setAssistantOpen(true);
-              applyResultAssistantSnippet(prompt);
-            }}
-            onApproveToolCall={approveResultAssistantToolCall}
-            onDenyToolCall={denyResultAssistantToolCall}
-            expired={assistantExpired}
-            inputRef={assistantInputRef}
-            className="min-w-0 overflow-hidden xl:flex xl:h-[calc(100vh-6rem)] xl:min-h-[32rem] xl:flex-col"
-          />
+          <div
+            ref={assistantSlotRef}
+            className="min-w-0"
+            style={assistantHeight === undefined ? undefined : { height: assistantHeight }}
+          >
+            <ResultAssistantPanel
+              title="MCP Lab Assistant"
+              description="Analyze historical differences and trends across all result runs."
+              expanded={assistantExpanded}
+              onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
+              onHide={() => setAssistantOpen(false)}
+              messages={assistantMessages}
+              pendingToolCalls={assistantPendingToolCalls}
+              loading={assistantLoading}
+              onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
+              input={assistantInput}
+              onInputChange={setAssistantInput}
+              onSend={() => void askAssistant()}
+              inputPlaceholder="Ask about historical run differences..."
+              snippets={RESULT_ASSISTANT_SNIPPETS}
+              onSnippetSelect={(prompt) => {
+                setAssistantOpen(true);
+                applyResultAssistantSnippet(prompt);
+              }}
+              onApproveToolCall={approveResultAssistantToolCall}
+              onDenyToolCall={denyResultAssistantToolCall}
+              expired={assistantExpired}
+              inputRef={assistantInputRef}
+              className="min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col"
+            />
+          </div>
         )}
       </div>
     </div>
