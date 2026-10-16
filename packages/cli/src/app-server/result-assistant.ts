@@ -89,7 +89,7 @@ export async function handleResultAssistantRoutes(params: {
     if (!assistantAgentName) {
       asJson(res, 400, {
         error:
-          'No assistant agent available. Add an agent in Libraries > Agents or configure the Scenario Assistant Agent in Settings.'
+          'No assistant agent available. Add an agent in Libraries > Agents or configure the Assistant Agent in Settings.'
       });
       return true;
     }
