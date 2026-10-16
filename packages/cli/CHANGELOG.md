@@ -1,5 +1,20 @@
 # @inspectr/mcplab
 
+## 1.31.0
+
+### Minor Changes
+
+- feat: LangGraph Scenario & Result Assistants
+- feat: Improved Chat actions & UI
+- feat: render assistant and report markdown with react-markdown
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.25.0
+  - @inspectr/mcplab-mcp-server@1.10.1
+  - @inspectr/mcplab-reporting@1.3.2
+
 ## 1.30.0
 
 ### Minor Changes
