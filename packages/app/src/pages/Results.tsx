@@ -62,6 +62,7 @@ import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadg
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { useHeightToViewportBottom } from '@/hooks/use-height-to-viewport-bottom';
+import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import type { EvalResult } from '@/types/eval';
@@ -232,7 +233,7 @@ const Results = () => {
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
   const dashboardRequestIdRef = useRef(0);
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const assistantSlotRef = useRef<HTMLDivElement | null>(null);
+  const splitViewRef = useRef<HTMLDivElement | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -253,12 +254,13 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
-  // The panel sits below the header (and the dashboard, when shown); size it to end at the
-  // bottom of the screen so its input is visible without scrolling.
-  const assistantHeight = useHeightToViewportBottom(assistantSlotRef, {
+  // With the assistant open, the table and assistant share the rest of the screen below the
+  // header (and dashboard) and scroll independently, so the assistant's input stays visible.
+  const splitViewHeight = useHeightToViewportBottom(splitViewRef, {
     active: assistantOpen,
     observe: pageRef
   });
+  const splitView = splitViewHeight !== undefined;
   const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
   const { offset, totalCount, hasMore } = pagination;
@@ -1007,18 +1009,34 @@ const Results = () => {
       ) : null}
 
       <div
-        className={`mt-4 grid items-start gap-6 ${
+        ref={splitViewRef}
+        style={splitView ? { height: splitViewHeight } : undefined}
+        className={cn(
+          'mt-4 grid gap-6',
+          splitView ? 'grid-rows-[minmax(0,1fr)]' : 'items-start',
           assistantOpen
             ? assistantExpanded
               ? 'xl:grid-cols-[minmax(0,1fr)_52rem]'
               : 'xl:grid-cols-[minmax(0,1fr)_30rem]'
             : 'grid-cols-1'
-        }`}
+        )}
       >
-        <Card data-testid="results-table" className="results-table-container">
-          <CardContent className="p-0">
-            <Table className="table-auto">
-              <TableHeader>
+        <Card
+          data-testid="results-table"
+          className={cn(
+            'results-table-container',
+            splitView && 'flex min-h-0 flex-col overflow-hidden'
+          )}
+        >
+          <CardContent className={cn('p-0', splitView && 'min-h-0 flex-1')}>
+            <Table className="table-auto" containerClassName={splitView ? 'h-full' : undefined}>
+              <TableHeader
+                className={
+                  splitView
+                    ? 'sticky top-0 z-10 bg-card shadow-[0_1px_0_var(--color-border)]'
+                    : undefined
+                }
+              >
                 <TableRow>
                   <TableHead className="results-table-column-run-id w-120 max-w-120">
                     <button
@@ -1317,11 +1335,7 @@ const Results = () => {
         </Card>
 
         {assistantOpen && (
-          <div
-            ref={assistantSlotRef}
-            className="min-w-0"
-            style={assistantHeight === undefined ? undefined : { height: assistantHeight }}
-          >
+          <div className="min-h-0 min-w-0">
             <ResultAssistantPanel
               title="MCP Lab Assistant"
               description="Analyze historical differences and trends across all result runs."
