@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { McpClientManager } from '@inspectr/mcplab-core';
+import { ASSISTANT_TOOL_TIMEOUT_MESSAGE, ASSISTANT_TOOL_TIMEOUT_MS } from './assistant-common.js';
 import { createMcpContextTools, mcpContextToolGuidance } from './assistant-mcp-context-tools.js';
 import type { AssistantRuntimeDefinition } from './assistant-runtime-contract.js';
 import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
@@ -65,7 +66,35 @@ describe('MCP context tools', () => {
     await expect(
       get!.execute({ server: 'docs', name: 'find_tags', arguments: { area: 'X' } })
     ).resolves.toMatchObject({ server: 'docs', messages: [{ text: 'Find tags for X' }] });
-    expect(mcp.getPrompt).toHaveBeenCalledWith('docs', 'find_tags', { area: 'X' }, undefined);
+    expect(mcp.getPrompt).toHaveBeenCalledWith(
+      'docs',
+      'find_tags',
+      { area: 'X' },
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('times out a slow listing as a whole and aborts its MCP requests', async () => {
+    vi.useFakeTimers();
+    try {
+      const mcp = fakeMcp();
+      let requestSignal: AbortSignal | undefined;
+      mcp.listResources.mockImplementation(async (_server: string, signal?: AbortSignal) => {
+        requestSignal = signal;
+        return new Promise<never>(() => {});
+      });
+      const [list] = createMcpContextTools(mcp as unknown as McpClientManager, {
+        resources: ['docs'],
+        prompts: []
+      });
+      const result = list!.execute({});
+      const assertion = expect(result).rejects.toThrow(ASSISTANT_TOOL_TIMEOUT_MESSAGE);
+      await vi.advanceTimersByTimeAsync(ASSISTANT_TOOL_TIMEOUT_MS);
+      await assertion;
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reads a resource through the agent without pausing for approval', async () => {

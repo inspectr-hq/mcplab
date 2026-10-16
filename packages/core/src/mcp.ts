@@ -39,6 +39,7 @@ export interface McpServerImplementation {
 }
 
 export interface McpServerFeatures {
+  tools: boolean;
   resources: boolean;
   prompts: boolean;
 }
@@ -240,7 +241,11 @@ export class McpClientManager {
   /** Which optional MCP features the connected server advertises. */
   getServerFeatures(serverName: string): McpServerFeatures {
     const capabilities = this.getClient(serverName).getServerCapabilities();
-    return { resources: Boolean(capabilities?.resources), prompts: Boolean(capabilities?.prompts) };
+    return {
+      tools: Boolean(capabilities?.tools),
+      resources: Boolean(capabilities?.resources),
+      prompts: Boolean(capabilities?.prompts)
+    };
   }
 
   async listResources(serverName: string, signal?: AbortSignal): Promise<McpResourceInfo[]> {

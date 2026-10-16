@@ -10,7 +10,11 @@ function managerWith(client: Record<string, unknown>) {
 describe('McpClientManager resources and prompts', () => {
   it('reports the optional features a server advertises', () => {
     const manager = managerWith({ getServerCapabilities: () => ({ resources: {}, tools: {} }) });
-    expect(manager.getServerFeatures('docs')).toEqual({ resources: true, prompts: false });
+    expect(manager.getServerFeatures('docs')).toEqual({
+      tools: true,
+      resources: true,
+      prompts: false
+    });
   });
 
   it('does not ask servers without resources or prompts', async () => {

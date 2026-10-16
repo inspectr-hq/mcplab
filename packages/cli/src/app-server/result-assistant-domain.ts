@@ -8,6 +8,8 @@ import type {
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
+  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   touchSession,
@@ -187,8 +189,8 @@ function createResultAssistantSetup(
             execute: async (arguments_, signal) => {
               const result = await withTimeout(
                 () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
-                30_000,
-                'Tool call timed out after 30000ms',
+                ASSISTANT_TOOL_TIMEOUT_MS,
+                ASSISTANT_TOOL_TIMEOUT_MESSAGE,
                 signal
               );
               if (mapping.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {

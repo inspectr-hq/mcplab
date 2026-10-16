@@ -1,4 +1,9 @@
 import type { McpClientManager } from '@inspectr/mcplab-core';
+import {
+  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  ASSISTANT_TOOL_TIMEOUT_MS,
+  withTimeout
+} from './assistant-common.js';
 import type { AssistantRuntimeTool } from './assistant-runtime-contract.js';
 
 export const MCP_CONTEXT_TOOL_NAMES = [
@@ -138,7 +143,10 @@ export function createMcpContextTools(
       }
     );
   }
-  return tools;
+  return tools.map((tool) => ({
+    ...tool,
+    execute: (args, signal) => withToolTimeout(signal, (bounded) => tool.execute(args, bounded))
+  }));
 }
 
 /** Prompt guidance for the context tools that are actually available. */
@@ -153,6 +161,28 @@ export function mcpContextToolGuidance(servers: McpContextServers): string[] {
       `MCP prompt templates are available from: ${servers.prompts.join(', ')}. Use list_mcp_prompts and get_mcp_prompt to see how the server expects to be used; they are good starting points for scenario prompts.`
     );
   return lines;
+}
+
+/**
+ * One limit covers the whole call, across every page and server, like other assistant tools.
+ * On timeout or completion the MCP requests still in flight are aborted, not left running.
+ */
+async function withToolTimeout<T>(
+  signal: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const stop = new AbortController();
+  const requestSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+  try {
+    return await withTimeout(
+      () => run(requestSignal),
+      ASSISTANT_TOOL_TIMEOUT_MS,
+      ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+      signal
+    );
+  } finally {
+    stop.abort();
+  }
 }
 
 function argument(args: unknown, key: string): unknown {

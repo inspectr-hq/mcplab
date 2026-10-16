@@ -320,6 +320,7 @@ describe('Scenario Assistant runtime definition', () => {
     const features = vi
       .spyOn(McpClientManager.prototype, 'getServerFeatures')
       .mockImplementation((server: string) => ({
+        tools: true,
         resources: server === 'docs',
         prompts: server === 'docs'
       }));
@@ -423,6 +424,68 @@ describe('Scenario Assistant runtime definition', () => {
       expect(definition!.tools.map((tool) => tool.name)).toContain('docs__lookup');
       expect(definition!.tools.map((tool) => tool.name)).not.toContain('list_mcp_resources');
       expect(session.warnings).toEqual([]);
+    } finally {
+      connectAll.mockRestore();
+      listTools.mockRestore();
+      features.mockRestore();
+    }
+  });
+
+  it('offers resources from servers whose tools are missing or fail to load', async () => {
+    const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    const listTools = vi
+      .spyOn(McpClientManager.prototype, 'listTools')
+      .mockRejectedValue(new Error('Method not found'));
+    const features = vi
+      .spyOn(McpClientManager.prototype, 'getServerFeatures')
+      .mockImplementation((server: string) => ({
+        tools: server === 'broken',
+        resources: true,
+        prompts: false
+      }));
+    try {
+      const session = baseSession();
+      let definition: AssistantRuntimeDefinition | undefined;
+      await setupScenarioAssistantSession({
+        session,
+        agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+        context: {
+          scenario: {
+            id: 'scn-1',
+            prompt: 'P',
+            serverNames: ['docs', 'broken'],
+            evalRules: [],
+            extractRules: []
+          }
+        },
+        serversByName: {
+          docs: { transport: 'http', url: 'https://docs.example/mcp' },
+          broken: { transport: 'http', url: 'https://broken.example/mcp' }
+        },
+        selectedServerNames: ['docs', 'broken'],
+        assistantRuntimeFactory: {
+          create: async (runtimeDefinition) => {
+            definition = runtimeDefinition;
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
+              dispose: async () => {}
+            };
+          }
+        },
+        onEvent: () => {},
+        onActivity: () => {}
+      });
+      // The resource-only server is not asked for tools; the failing one keeps its resources.
+      expect(listTools.mock.calls.map(([server]) => server)).toEqual(['broken']);
+      expect(definition!.tools.map((tool) => tool.name)).toContain('read_mcp_resource');
+      expect(definition!.getSystemPrompt()).toContain(
+        'MCP resources are available from: docs, broken'
+      );
+      expect(session.warnings).toHaveLength(1);
+      expect(session.warnings[0]).toContain('broken');
     } finally {
       connectAll.mockRestore();
       listTools.mockRestore();

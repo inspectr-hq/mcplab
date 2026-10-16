@@ -7,10 +7,13 @@ import {
   type ScenarioAssistantSuggestionBundle,
   type ScenarioAssistantSuggestionRule,
   type ScenarioAssistantRuntimeContext,
+  type McpServerFeatures,
   type ToolDef
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
+  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   touchSession,
@@ -222,6 +225,21 @@ function createScenarioAssistantSetup(
           await state.mcp.connectAll({ [serverName]: server }, undefined, {
             serverAuthHeaders: options?.serverAuthHeaders
           });
+        } catch (error: unknown) {
+          session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+          continue;
+        }
+        // A server may offer only resources or prompts, so detect them independently of tools.
+        let features: McpServerFeatures = { tools: true, resources: false, prompts: false };
+        try {
+          features = state.mcp.getServerFeatures(serverName);
+        } catch {
+          // Treat the server as offering tools only.
+        }
+        if (features.resources) state.contextServers.resources.push(serverName);
+        if (features.prompts) state.contextServers.prompts.push(serverName);
+        if (!features.tools) continue;
+        try {
           const tools = await state.mcp.listTools(serverName);
           for (const tool of tools) {
             const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
@@ -235,15 +253,6 @@ function createScenarioAssistantSetup(
           }
         } catch (error: unknown) {
           session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
-          continue;
-        }
-        // Resources and prompts are optional context; failing to detect them must not cost tools.
-        try {
-          const features = state.mcp.getServerFeatures(serverName);
-          if (features.resources) state.contextServers.resources.push(serverName);
-          if (features.prompts) state.contextServers.prompts.push(serverName);
-        } catch {
-          // Treat the server as offering tools only.
         }
       }
       session.toolsLoaded = state.tools.length;
@@ -271,8 +280,8 @@ function createScenarioAssistantSetup(
               execute: async (arguments_: unknown, signal?: AbortSignal) =>
                 withTimeout(
                   () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
-                  30_000,
-                  'Tool call timed out after 30000ms',
+                  ASSISTANT_TOOL_TIMEOUT_MS,
+                  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
                   signal
                 )
             };

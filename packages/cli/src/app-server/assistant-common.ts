@@ -50,6 +50,10 @@ export function touchSession<T extends { lastTouchedAt: number }>(session: T): v
   session.lastTouchedAt = Date.now();
 }
 
+/** Every assistant tool call, MCP or local context, gets the same limit. */
+export const ASSISTANT_TOOL_TIMEOUT_MS = 30_000;
+export const ASSISTANT_TOOL_TIMEOUT_MESSAGE = `Tool call timed out after ${ASSISTANT_TOOL_TIMEOUT_MS}ms`;
+
 export async function withTimeout<T>(
   promiseFactory: () => Promise<T>,
   timeoutMs: number,
