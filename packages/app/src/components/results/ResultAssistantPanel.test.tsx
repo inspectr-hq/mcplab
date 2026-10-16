@@ -1,10 +1,7 @@
 import { createRef } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  ResultAssistantPanel,
-  type ResultAssistantMessageRenderContext
-} from './ResultAssistantPanel';
+import { ResultAssistantPanel } from './ResultAssistantPanel';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import type { EvalDataSource, ResultAssistantSessionView } from '@/lib/data-sources/types';
 
@@ -171,12 +168,11 @@ describe('ResultAssistantPanel', () => {
         onSnippetSelect={vi.fn()}
         onApproveToolCall={onApprove}
         onDenyToolCall={onDeny}
-        chatEndRef={createRef<HTMLDivElement>()}
         inputRef={createRef<HTMLTextAreaElement>()}
       />
     );
 
-    expect(screen.getByText('Tool call mcplab_read_run_artifact')).toBeInTheDocument();
+    expect(screen.getByText('Tool call read run artifact')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
@@ -185,16 +181,7 @@ describe('ResultAssistantPanel', () => {
   });
 
   it('renders an independent approval card for every call in a batch', () => {
-    const renderMessage = vi.fn(
-      ({ message, linkedPendingToolCall }: ResultAssistantMessageRenderContext) => (
-        <div key={message.id}>
-          <span>{`Tool call ${linkedPendingToolCall?.tool}`}</span>
-          <span>
-            {linkedPendingToolCall?.status === 'pending' ? 'Needs approval' : 'Completed'}
-          </span>
-        </div>
-      )
-    );
+    const onApprove = vi.fn();
     render(
       <ResultAssistantPanel
         title="MCP Lab Assistant"
@@ -227,7 +214,8 @@ describe('ResultAssistantPanel', () => {
             tool: 'read_b',
             publicToolName: 'read_b',
             arguments: {},
-            status: 'pending',
+            status: 'approved',
+            resultPreview: '{"ok":true}',
             createdAt: '2026-04-26T10:00:00.000Z'
           }
         ]}
@@ -238,20 +226,94 @@ describe('ResultAssistantPanel', () => {
         inputPlaceholder="Ask..."
         snippets={[]}
         onSnippetSelect={vi.fn()}
-        onApproveToolCall={vi.fn()}
+        onApproveToolCall={onApprove}
         onDenyToolCall={vi.fn()}
-        renderMessage={renderMessage}
-        chatEndRef={createRef<HTMLDivElement>()}
         inputRef={createRef<HTMLTextAreaElement>()}
       />
     );
-    expect(screen.getByText('Tool call read_a')).toBeInTheDocument();
-    expect(screen.getByText('Tool call read_b')).toBeInTheDocument();
-    expect(screen.getAllByText('Needs approval')).toHaveLength(2);
-    expect(renderMessage).toHaveBeenCalledTimes(2);
-    expect(renderMessage.mock.calls.map(([context]) => context.linkedPendingToolCall?.id)).toEqual([
-      'call-a',
-      'call-b'
-    ]);
+    expect(screen.getByText('I need both tools.')).toBeInTheDocument();
+    expect(screen.getByText('Tool call read a')).toBeInTheDocument();
+    expect(screen.getByText('Tool call read b')).toBeInTheDocument();
+    expect(screen.getByText('Needs approval')).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onApprove).toHaveBeenCalledWith('call-a');
+  });
+
+  it('renders page actions in assistant messages through the footer slot', () => {
+    render(
+      <ResultAssistantPanel
+        title="MCP Lab Assistant"
+        description="Analyze results."
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onHide={vi.fn()}
+        messages={[
+          {
+            id: 'u',
+            role: 'user',
+            text: 'Why did it fail?',
+            createdAt: '2026-04-26T10:00:00.000Z'
+          },
+          { id: 'a', role: 'assistant', text: 'Because.', createdAt: '2026-04-26T10:00:01.000Z' }
+        ]}
+        pendingToolCalls={[]}
+        loading={false}
+        input=""
+        onInputChange={vi.fn()}
+        onSend={vi.fn()}
+        inputPlaceholder="Ask..."
+        snippets={[]}
+        onSnippetSelect={vi.fn()}
+        inputRef={createRef<HTMLTextAreaElement>()}
+        renderMessageFooter={(message) =>
+          message.role === 'assistant' ? <button type="button">Write report</button> : null
+        }
+      />
+    );
+    expect(screen.getAllByRole('button', { name: 'Write report' })).toHaveLength(1);
+  });
+
+  it('shows the expired-session notice and disables decisions', () => {
+    render(
+      <ResultAssistantPanel
+        title="MCP Lab Assistant"
+        description="Analyze results."
+        expanded={false}
+        onToggleExpanded={vi.fn()}
+        onHide={vi.fn()}
+        messages={[
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            text: 'Writing.',
+            createdAt: '2026-04-26T10:00:00.000Z',
+            pendingToolCallId: 'call-1'
+          }
+        ]}
+        pendingToolCalls={[
+          {
+            id: 'call-1',
+            server: 'mcplab',
+            tool: 'write',
+            publicToolName: 'write',
+            arguments: {},
+            status: 'pending',
+            createdAt: '2026-04-26T10:00:00.000Z'
+          }
+        ]}
+        loading={false}
+        expired
+        input=""
+        onInputChange={vi.fn()}
+        onSend={vi.fn()}
+        inputPlaceholder="Ask..."
+        snippets={[]}
+        onSnippetSelect={vi.fn()}
+        inputRef={createRef<HTMLTextAreaElement>()}
+      />
+    );
+    expect(screen.getByText(/session has expired/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
   });
 });

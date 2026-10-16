@@ -411,6 +411,65 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exact asset tags.' });
   });
 
+  it('sends edited tool arguments to the Scenario approve endpoint', async () => {
+    mockSource.sendScenarioAssistantMessage.mockResolvedValueOnce({
+      response: { type: 'tool_call_request', text: 'I need to write.' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'write-request',
+            role: 'assistant',
+            text: 'I need to write.',
+            createdAt: new Date().toISOString(),
+            pendingToolCallIds: ['write-1']
+          }
+        ],
+        pendingToolCalls: [
+          {
+            id: 'write-1',
+            server: 'server',
+            tool: 'write_report',
+            publicToolName: 'server__write_report',
+            arguments: { path: 'draft.md' },
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: { type: 'assistant_message', text: 'Written.' },
+      session: { ...makeAssistantSession(), messages: [], pendingToolCalls: [] }
+    });
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
+    fireEvent.change(
+      screen.getByPlaceholderText('Get assistance with creating or refining this scenario ...'),
+      { target: { value: 'Write the report' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit arguments' }));
+    fireEvent.change(screen.getByLabelText('Edit tool call arguments'), {
+      target: { value: '{"path":"final.md"}' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve with edits' }));
+    await waitFor(() =>
+      expect(mockSource.approveScenarioAssistantToolCall).toHaveBeenCalledWith('sas-1', 'write-1', {
+        path: 'final.md'
+      })
+    );
+  });
+
   it('applies structured tool_sequence suggestions with sequence data', async () => {
     const onApplyPatch = vi.fn();
     mockSource.createScenarioAssistantSession.mockResolvedValue({

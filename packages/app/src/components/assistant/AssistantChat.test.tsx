@@ -92,7 +92,7 @@ describe('AssistantChat shared primitives', () => {
     );
 
     expect(screen.getByText('I can help with that.')).toBeInTheDocument();
-    expect(screen.getByText('Tool call read_results')).toBeInTheDocument();
+    expect(screen.getByText('Tool call read results')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));

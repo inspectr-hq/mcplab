@@ -796,7 +796,8 @@ export interface EvalDataSource {
   cancelScenarioAssistantTurn?: (sessionId: string, turnId: string) => Promise<{ ok: boolean }>;
   approveScenarioAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    argumentsOverride?: unknown
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   denyScenarioAssistantToolCall: (
     sessionId: string,

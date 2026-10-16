@@ -1,4 +1,4 @@
-import type { MutableRefObject, ReactNode } from 'react';
+import { useState, type MutableRefObject, type ReactNode } from 'react';
 import {
   Bot,
   ChevronDown,
@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { MarkdownContent } from '@/components/MarkdownContent';
+import { formatAssistantToolName } from '@/lib/assistant-tool-name';
+import { describeToolCall, type ToolCallDisplayTone } from '@/lib/assistant-tool-call-status';
 import { cn } from '@/lib/utils';
 
 export type AssistantSnippet = {
@@ -52,12 +54,15 @@ export function AssistantMessageRow({
   message,
   className,
   assistantLabel,
-  renderActions
+  renderActions,
+  footer
 }: {
   message: AssistantMessage;
   className?: string;
   assistantLabel?: string;
   renderActions?: ReactNode;
+  /** Rendered inside the message bubble, below the text. */
+  footer?: ReactNode;
 }) {
   const role = message.role;
 
@@ -124,6 +129,7 @@ export function AssistantMessageRow({
           ) : (
             <MarkdownContent text={message.text} variant="assistant" className="text-sm" />
           )}
+          {footer}
         </div>
         {renderActions}
       </div>
@@ -136,25 +142,53 @@ export function AssistantMessageRow({
   );
 }
 
+const STATUS_TONE_CLASS: Record<ToolCallDisplayTone, string> = {
+  attention: 'bg-amber-100 text-amber-900',
+  progress: 'bg-sky-100 text-sky-900',
+  success: 'bg-emerald-100 text-emerald-900',
+  neutral: 'bg-gray-100 text-gray-700',
+  danger: 'bg-red-100 text-red-900'
+};
+
 export function AssistantToolCallCard({
   call,
   loading = false,
   onApprove,
   onDeny,
+  allowEdit = false,
   defaultOpen,
   className,
   description
 }: {
   call: AssistantToolCall;
   loading?: boolean;
-  onApprove?: (callId: string) => void;
+  /** Called with edited arguments only when the user changed them. */
+  onApprove?: (callId: string, argumentsOverride?: unknown) => void;
   onDeny?: (callId: string) => void;
+  /** Let the user edit the arguments before approving. */
+  allowEdit?: boolean;
   defaultOpen?: boolean;
   className?: string;
   description?: string;
 }) {
+  const display = describeToolCall(call);
   const isPending = call.status === 'pending';
-  const displayToolName = call.tool || call.publicToolName || 'unknown_tool';
+  const displayToolName = formatAssistantToolName(call.tool || call.publicToolName);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const draftError = editing ? parseArgumentsDraft(draft).error : undefined;
+
+  const startEditing = () => {
+    setDraft(JSON.stringify(call.arguments ?? {}, null, 2));
+    setEditing(true);
+  };
+  const approve = () => {
+    if (!editing) return onApprove?.(call.id);
+    const parsed = parseArgumentsDraft(draft);
+    if (parsed.error) return;
+    setEditing(false);
+    onApprove?.(call.id, parsed.value);
+  };
 
   return (
     <details
@@ -171,22 +205,10 @@ export function AssistantToolCallCard({
             <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
             <span
               className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                isPending
-                  ? 'bg-amber-100 text-amber-900'
-                  : call.status === 'error'
-                    ? 'bg-red-100 text-red-900'
-                    : call.status === 'denied'
-                      ? 'bg-gray-100 text-gray-700'
-                      : 'bg-muted text-muted-foreground'
+                STATUS_TONE_CLASS[display.tone]
               }`}
             >
-              {isPending
-                ? 'Needs approval'
-                : call.status === 'error'
-                  ? 'Error'
-                  : call.status === 'denied'
-                    ? 'Denied'
-                    : 'Approved'}
+              {display.label}
             </span>
           </div>
         </div>
@@ -196,12 +218,61 @@ export function AssistantToolCallCard({
         {description && (
           <MarkdownContent text={description} variant="assistant" className="text-sm" />
         )}
-        <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-        </pre>
-        {call.error && <p className="text-xs text-destructive">{call.error}</p>}
+        {editing ? (
+          <div className="space-y-1">
+            <Textarea
+              aria-label="Edit tool call arguments"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={6}
+              className="font-mono text-xs"
+            />
+            {draftError && <p className="text-xs text-destructive">{draftError}</p>}
+          </div>
+        ) : (
+          <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+            <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+          </pre>
+        )}
+        {display.detail && <p className="text-xs text-muted-foreground">{display.detail}</p>}
+        {display.state === 'failed' && call.error && (
+          <p className="text-xs text-destructive">{call.error}</p>
+        )}
+        {display.state === 'completed' && call.resultPreview && (
+          <details className="rounded border bg-muted/30">
+            <summary className="cursor-pointer px-2 py-1 text-xs text-muted-foreground">
+              Result
+            </summary>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word px-2 pb-2 text-xs">
+              {call.resultPreview}
+            </pre>
+          </details>
+        )}
         {isPending && (
           <div className="mt-2 flex justify-end gap-2">
+            {allowEdit && !editing && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                disabled={loading}
+                onClick={startEditing}
+              >
+                Edit arguments
+              </Button>
+            )}
+            {editing && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setEditing(false)}
+              >
+                Discard edits
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
@@ -216,16 +287,27 @@ export function AssistantToolCallCard({
               type="button"
               size="sm"
               className="h-7 px-2 text-xs"
-              disabled={loading}
-              onClick={() => onApprove?.(call.id)}
+              disabled={loading || Boolean(draftError)}
+              onClick={approve}
             >
-              Approve
+              {editing ? 'Approve with edits' : 'Approve'}
             </Button>
           </div>
         )}
       </div>
     </details>
   );
+}
+
+function parseArgumentsDraft(draft: string): { value?: Record<string, unknown>; error?: string } {
+  try {
+    const value: unknown = JSON.parse(draft);
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      return { error: 'Arguments must be a JSON object.' };
+    return { value: value as Record<string, unknown> };
+  } catch {
+    return { error: 'Arguments must be valid JSON.' };
+  }
 }
 
 export function AssistantTypingIndicator() {

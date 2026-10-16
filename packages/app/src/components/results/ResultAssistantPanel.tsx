@@ -1,31 +1,16 @@
 import type { MutableRefObject, ReactNode } from 'react';
 import { PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
-import {
-  AssistantComposer,
-  AssistantMessageRow,
-  AssistantToolCallCard,
-  AssistantTypingIndicator,
-  type AssistantSnippet
-} from '@/components/assistant/AssistantChat';
+import type { AssistantSnippet } from '@/components/assistant/AssistantChat';
+import { AssistantConversation } from '@/components/assistant/AssistantConversation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MarkdownContent } from '@/components/MarkdownContent';
 import type {
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView
 } from '@/lib/data-sources/types';
 
 export type ResultAssistantSnippet = AssistantSnippet;
-
-export type ResultAssistantMessageRenderContext = {
-  message: ResultAssistantSessionView['messages'][number];
-  index: number;
-  linkedPendingToolCall?: ResultAssistantPendingToolCall;
-  isUser: boolean;
-  isAssistant: boolean;
-  isSystem: boolean;
-  isTool: boolean;
-};
+export type ResultAssistantMessage = ResultAssistantSessionView['messages'][number];
 
 export function ResultAssistantPanel({
   title,
@@ -36,6 +21,7 @@ export function ResultAssistantPanel({
   messages,
   pendingToolCalls,
   loading,
+  expired = false,
   input,
   onInputChange,
   onSend,
@@ -46,10 +32,8 @@ export function ResultAssistantPanel({
   onSnippetSelect,
   onApproveToolCall,
   onDenyToolCall,
-  chatEndRef,
   inputRef,
-  renderMessage,
-  renderMessageExtras,
+  renderMessageFooter,
   className = 'min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col',
   contentClassName = 'flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1'
 }: {
@@ -58,9 +42,10 @@ export function ResultAssistantPanel({
   expanded: boolean;
   onToggleExpanded: () => void;
   onHide: () => void;
-  messages: ResultAssistantSessionView['messages'];
+  messages: ResultAssistantMessage[];
   pendingToolCalls: ResultAssistantPendingToolCall[];
   loading: boolean;
+  expired?: boolean;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
@@ -69,12 +54,11 @@ export function ResultAssistantPanel({
   snippets: readonly ResultAssistantSnippet[];
   snippetsLabel?: string;
   onSnippetSelect: (prompt: string) => void;
-  onApproveToolCall?: (callId: string) => void;
+  onApproveToolCall?: (callId: string, argumentsOverride?: unknown) => void;
   onDenyToolCall?: (callId: string) => void;
-  chatEndRef: MutableRefObject<HTMLDivElement | null>;
   inputRef: MutableRefObject<HTMLTextAreaElement | null>;
-  renderMessage?: (ctx: ResultAssistantMessageRenderContext) => ReactNode;
-  renderMessageExtras?: ReactNode;
+  /** Page-specific actions inside a message bubble, e.g. handoffs. */
+  renderMessageFooter?: (message: ResultAssistantMessage) => ReactNode;
   className?: string;
   contentClassName?: string;
 }) {
@@ -117,119 +101,30 @@ export function ResultAssistantPanel({
         </div>
       </CardHeader>
       <CardContent className={contentClassName}>
-        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/15 px-4 py-4">
-          <div className="space-y-3 pr-2">
-            {messages.map((message, index) => {
-              const isUser = message.role === 'user';
-              const isAssistant = message.role === 'assistant';
-              const isSystem = message.role === 'system';
-              const isTool = message.role === 'tool';
-              const linkedPendingToolCall = message.pendingToolCallId
-                ? pendingToolCalls.find((call) => call.id === message.pendingToolCallId)
-                : undefined;
-              const linkedPendingToolCalls = (
-                message.pendingToolCallIds ??
-                (message.pendingToolCallId ? [message.pendingToolCallId] : [])
-              )
-                .map((id) => pendingToolCalls.find((call) => call.id === id))
-                .filter((call): call is ResultAssistantPendingToolCall => Boolean(call));
-              const isAssistantToolRequest =
-                isAssistant && linkedPendingToolCallIds(message).length > 0;
-
-              if (renderMessage && isAssistantToolRequest) {
-                const calls = linkedPendingToolCalls.length ? linkedPendingToolCalls : [undefined];
-                return calls.map((call, callIndex) => {
-                  const toolMessage = call
-                    ? {
-                        ...message,
-                        id: `${message.id ?? `${message.role}-${index}`}:tool:${call.id}`,
-                        pendingToolCallId: call.id,
-                        pendingToolCallIds: [call.id],
-                        toolRequestName: call.tool,
-                        toolRequestPublicName: call.publicToolName
-                      }
-                    : message;
-                  return renderMessage({
-                    message: toolMessage,
-                    index: index + callIndex,
-                    linkedPendingToolCall: call,
-                    isUser,
-                    isAssistant,
-                    isSystem,
-                    isTool
-                  });
-                });
-              }
-
-              if (renderMessage) {
-                return renderMessage({
-                  message,
-                  index,
-                  linkedPendingToolCall,
-                  isUser,
-                  isAssistant,
-                  isSystem,
-                  isTool
-                });
-              }
-
-              if (isAssistantToolRequest) {
-                return (
-                  <div
-                    key={`${message.id ?? `${message.role}-${index}`}-tool`}
-                    className="rounded-md border bg-background p-3"
-                  >
-                    <MarkdownContent text={message.text} className="text-sm" />
-                    {linkedPendingToolCalls.map((call) => (
-                      <AssistantToolCallCard
-                        key={call.id}
-                        call={call}
-                        loading={loading}
-                        onApprove={onApproveToolCall}
-                        onDeny={onDenyToolCall}
-                        className="mt-3"
-                      />
-                    ))}
-                  </div>
-                );
-              }
-
-              return (
-                <AssistantMessageRow
-                  key={message.id ?? `${message.role}-${index}`}
-                  message={message}
-                />
-              );
-            })}
-            {renderMessageExtras}
-            {loading && <AssistantTypingIndicator />}
-            <div ref={chatEndRef} />
-          </div>
-        </div>
-
-        <div className="border-t bg-background px-4 py-3">
-          <AssistantComposer
-            input={input}
-            onInputChange={onInputChange}
-            onSend={onSend}
-            onCancel={onCancel}
-            inputPlaceholder={inputPlaceholder}
-            snippets={snippets}
-            snippetsLabel={snippetsLabel}
-            onSnippetSelect={onSnippetSelect}
-            loading={loading}
-            inputRef={inputRef}
-          />
-        </div>
+        <AssistantConversation
+          messages={messages}
+          toolCalls={pendingToolCalls}
+          busy={loading}
+          expired={expired}
+          onApprove={onApproveToolCall}
+          onDeny={onDenyToolCall}
+          renderMessageFooter={renderMessageFooter}
+          scrollClassName="bg-muted/15 px-4 py-4"
+          composer={{
+            input,
+            onInputChange,
+            onSend,
+            onCancel,
+            inputPlaceholder,
+            snippets,
+            snippetsLabel,
+            onSnippetSelect,
+            loading,
+            inputRef
+          }}
+          composerClassName="border-t bg-background px-4 py-3"
+        />
       </CardContent>
     </Card>
-  );
-}
-
-function linkedPendingToolCallIds(
-  message: ResultAssistantSessionView['messages'][number]
-): string[] {
-  return (
-    message.pendingToolCallIds ?? (message.pendingToolCallId ? [message.pendingToolCallId] : [])
   );
 }

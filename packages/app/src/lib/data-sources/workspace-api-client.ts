@@ -444,12 +444,16 @@ export const workspaceApiClient = {
       `/api/scenario-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
       { method: 'POST', body: JSON.stringify({}) }
     ),
-  approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  approveScenarioAssistantToolCall: (
+    sessionId: string,
+    callId: string,
+    argumentsOverride?: unknown
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
   denyScenarioAssistantToolCall: (sessionId: string, callId: string) =>

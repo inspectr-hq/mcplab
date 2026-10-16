@@ -247,8 +247,12 @@ export const workspaceSource: EvalDataSource = {
   async cancelScenarioAssistantTurn(sessionId, turnId) {
     return workspaceApiClient.cancelScenarioAssistantTurn(sessionId, turnId);
   },
-  async approveScenarioAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.approveScenarioAssistantToolCall(sessionId, callId);
+  async approveScenarioAssistantToolCall(sessionId, callId, argumentsOverride) {
+    return workspaceApiClient.approveScenarioAssistantToolCall(
+      sessionId,
+      callId,
+      argumentsOverride
+    );
   },
   async denyScenarioAssistantToolCall(sessionId, callId) {
     return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId);

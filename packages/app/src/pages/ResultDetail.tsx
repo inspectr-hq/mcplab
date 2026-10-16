@@ -19,8 +19,6 @@ import {
   Loader2,
   PanelRightOpen,
   PanelRightClose,
-  RectangleEllipsis,
-  Copy,
   NotepadText,
   Plus,
   Clock,
@@ -85,7 +83,6 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import {
   buildCheckItems,
   formatCheckStatusLabel,
@@ -196,8 +193,8 @@ const ResultDetail = () => {
     assistantInput,
     assistantLoading,
     assistantTurnCancelable,
+    assistantExpired,
     cancelAssistantTurn,
-    assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,
     askAssistant: askResultAssistant,
@@ -577,15 +574,6 @@ const ResultDetail = () => {
     }
   };
 
-  const unmatchedPendingToolCalls = assistantPendingToolCalls.filter(
-    (call) =>
-      call.status === 'pending' &&
-      !assistantMessages.some(
-        (message) =>
-          message.pendingToolCallId === call.id || message.pendingToolCallIds?.includes(call.id)
-      )
-  );
-
   const openReportsPanel = (relativePath?: string) => {
     if (relativePath) setSelectedReferenceReportPath(relativePath);
     setContextPanelTab('reports');
@@ -705,19 +693,6 @@ const ResultDetail = () => {
       });
     } finally {
       setApplyReportPending(false);
-    }
-  };
-
-  const copyAssistantChatText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not copy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
     }
   };
 
@@ -2046,277 +2021,44 @@ const ResultDetail = () => {
                 inputPlaceholder="Ask about this result..."
                 snippets={RESULT_ASSISTANT_SNIPPETS}
                 onSnippetSelect={applyResultAssistantSnippet}
-                onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
-                onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
-                chatEndRef={assistantChatEndRef}
+                onApproveToolCall={approveResultAssistantToolCall}
+                onDenyToolCall={denyResultAssistantToolCall}
+                expired={assistantExpired}
                 inputRef={assistantInputRef}
                 className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col"
-                renderMessage={({
-                  message,
-                  index,
-                  linkedPendingToolCall,
-                  isUser,
-                  isAssistant,
-                  isSystem,
-                  isTool
-                }) => {
-                  const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
-                  if (
-                    isTool &&
-                    /^(Approved|Denied) tool call\\b/i.test(String(message.text ?? '').trim())
-                  ) {
-                    return null;
-                  }
-                  const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
-                  const toolStepPublicName =
-                    linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
-                  const canShowHandoff =
-                    isAssistant &&
-                    !isAssistantToolRequest &&
-                    isScenarioAssistantHandoffRelevant(
-                      message.text,
-                      Boolean(assistantContextScenarioId)
-                    );
-
-                  if (isAssistantToolRequest) {
-                    const isPendingApproval = linkedPendingToolCall?.status === 'pending';
-                    const displayToolName = formatAssistantToolName(
-                      toolStepName ?? toolStepPublicName ?? 'unknown_tool'
-                    );
-                    return (
-                      <div
-                        key={`${message.id ?? `${message.role}-${index}`}:${
-                          linkedPendingToolCall ? 'pending' : 'completed'
-                        }`}
-                        className="flex items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          <Bot className="h-3 w-3" />
-                        </div>
-                        <details
-                          open={Boolean(linkedPendingToolCall)}
-                          className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                                <span
-                                  className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                    isPendingApproval
-                                      ? 'bg-amber-100 text-amber-900'
-                                      : 'bg-muted text-muted-foreground'
-                                  }`}
-                                >
-                                  {isPendingApproval ? 'Needs approval' : 'Completed'}
-                                </span>
-                              </div>
-                            </div>
-                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </summary>
-                          <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
-                            <MarkdownContent text={message.text} className="text-sm" />
-                            {isPendingApproval && linkedPendingToolCall && (
-                              <>
-                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/50 p-2 text-xs">
-                                  <code className="wrap-break-word">
-                                    {JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}
-                                  </code>
-                                </pre>
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={assistantLoading}
-                                    onClick={() =>
-                                      void denyResultAssistantToolCall(linkedPendingToolCall.id)
-                                    }
-                                  >
-                                    Deny
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={assistantLoading}
-                                    onClick={() =>
-                                      void approveResultAssistantToolCall(linkedPendingToolCall.id)
-                                    }
-                                  >
-                                    Approve
-                                  </Button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    );
-                  }
-
-                  const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
+                renderMessageFooter={(message) => {
+                  if (message.role !== 'assistant') return null;
+                  const canShowHandoff = isScenarioAssistantHandoffRelevant(
+                    message.text,
+                    Boolean(assistantContextScenarioId)
+                  );
                   return (
-                    <div
-                      key={message.id ?? `${message.role}-${index}`}
-                      className={`flex items-start gap-2 ${
-                        isUser ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      {!isUser && (
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          {isSystem ? (
-                            <RectangleEllipsis className="h-3 w-3" />
-                          ) : (
-                            <Bot className="h-3 w-3" />
-                          )}
-                        </div>
-                      )}
-                      <div className="relative max-w-[92%]">
-                        <div
-                          className={`max-w-full rounded-md border p-3 text-sm ${
-                            isUser
-                              ? 'border-primary/20 bg-primary/10'
-                              : isSystem
-                                ? 'border-amber-400/30 bg-amber-50/70'
-                                : isTool
-                                  ? 'border-blue-300/30 bg-blue-50/50'
-                                  : 'border-border/80 bg-background shadow-xs'
-                          }`}
+                    <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
+                      {canShowHandoff && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          onClick={() => sendToScenarioAssistant(message.text)}
                         >
-                          {!(isUser || isSystem) && (
-                            <p
-                              className={`mb-2 text-[11px] font-semibold text-muted-foreground ${
-                                isUser ? 'text-right' : ''
-                              }`}
-                            >
-                              {isTool ? 'Tool' : 'Assistant'}
-                            </p>
-                          )}
-                          {isUser ? (
-                            <p className="whitespace-pre-wrap">{message.text}</p>
-                          ) : (
-                            <MarkdownContent text={message.text} className="text-sm" />
-                          )}
-                          {canShowHandoff && (
-                            <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => sendToScenarioAssistant(message.text)}
-                              >
-                                <Sparkles className="h-4 w-4 text-amber-500" />
-                                Send to Scenario Assistant
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => openApplyReportDialog(message.text)}
-                              >
-                                <Wrench className="h-3.5 w-3.5" />
-                                Apply: Write Markdown Report
-                              </Button>
-                            </div>
-                          )}
-                          {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
-                            <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => openApplyReportDialog(message.text)}
-                              >
-                                <Wrench className="h-3.5 w-3.5" />
-                                Apply: Write Markdown Report
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                        {showCopyButton && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
-                            onClick={() => void copyAssistantChatText(message.text)}
-                            aria-label="Copy message"
-                            title="Copy message"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                      {isUser && (
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-                          <User className="h-3 w-3" />
-                        </div>
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                          Send to Scenario Assistant
+                        </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 px-2 text-xs"
+                        onClick={() => openApplyReportDialog(message.text)}
+                      >
+                        <Wrench className="h-3.5 w-3.5" />
+                        Apply: Write Markdown Report
+                      </Button>
                     </div>
                   );
                 }}
-                renderMessageExtras={
-                  unmatchedPendingToolCalls.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Pending actions (approve/deny)
-                      </div>
-                      {unmatchedPendingToolCalls.map((call) => (
-                        <details
-                          key={call.id}
-                          open
-                          className="group min-w-0 rounded-md border bg-background"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="break-all font-mono text-xs font-semibold">
-                                {formatAssistantToolName(call.publicToolName)}
-                              </p>
-                              <p className="break-all text-xs text-muted-foreground">
-                                {call.server}::{formatAssistantToolName(call.tool)}
-                              </p>
-                            </div>
-                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </summary>
-                          <div className="border-t px-3 pb-3 pt-2">
-                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/50 p-2 text-xs">
-                              <code className="wrap-break-word">
-                                {JSON.stringify(call.arguments ?? {}, null, 2)}
-                              </code>
-                            </pre>
-                            <div className="mt-2 flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs"
-                                disabled={assistantLoading}
-                                onClick={() => void denyResultAssistantToolCall(call.id)}
-                              >
-                                Deny
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                disabled={assistantLoading}
-                                onClick={() => void approveResultAssistantToolCall(call.id)}
-                              >
-                                Approve
-                              </Button>
-                            </div>
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  ) : null
-                }
               />
             ) : contextPanelTab === 'reports' ? (
               <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
