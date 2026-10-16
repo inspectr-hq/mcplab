@@ -410,45 +410,37 @@ describe('models that reject temperature', () => {
     openAiCreate.mockReset();
   });
 
-  it('retries an Anthropic request without temperature when the model has deprecated it', async () => {
+  it('fails an Anthropic request with what to change instead of retrying', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    anthropicCreate
-      .mockRejectedValueOnce(
-        new Error(
-          '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."}}'
-        )
-      )
-      .mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Ready.' }],
-        usage: { input_tokens: 1, output_tokens: 1 }
-      });
-    await expect(
-      chatWithAgent({
-        agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
-        messages
-      })
-    ).resolves.toMatchObject({ content: 'Ready.' });
-    expect(anthropicCreate).toHaveBeenCalledTimes(2);
-    expect(anthropicCreate.mock.calls[0]![0]).toMatchObject({ temperature: 0.2 });
-    expect(anthropicCreate.mock.calls[1]![0]).not.toHaveProperty('temperature');
+    const rejection = new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."}}'
+    );
+    anthropicCreate.mockRejectedValue(rejection);
+    const result = chatWithAgent({
+      agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
+      messages
+    });
+    await expect(result).rejects.toThrow(
+      "`luna-6` doesn't accept temperature. Remove it from this agent's settings."
+    );
+    await expect(result).rejects.toMatchObject({ cause: rejection });
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('retries an OpenAI request without temperature when only the default is supported', async () => {
+  it('fails an OpenAI request with what to change instead of retrying', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    openAiCreate
-      .mockRejectedValueOnce(
-        new Error(
-          "400 Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported."
-        )
+    openAiCreate.mockRejectedValue(
+      new Error(
+        "400 Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported."
       )
-      .mockResolvedValueOnce({ choices: [{ message: { content: 'Ready.' } }] });
+    );
     await expect(
       chatWithAgent({ agent: { provider: 'openai', model: 'o4-mini', temperature: 0.2 }, messages })
-    ).resolves.toMatchObject({ content: 'Ready.' });
-    expect(openAiCreate.mock.calls[1]![0]).not.toHaveProperty('temperature');
+    ).rejects.toThrow("`o4-mini` doesn't accept temperature.");
+    expect(openAiCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('does not retry other request errors', async () => {
+  it('passes other request errors through unchanged', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
     anthropicCreate.mockRejectedValue(new Error('400 max_tokens is too large'));
     await expect(
@@ -456,7 +448,6 @@ describe('models that reject temperature', () => {
         agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
         messages
       })
-    ).rejects.toThrow('max_tokens is too large');
-    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow('400 max_tokens is too large');
   });
 });

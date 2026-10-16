@@ -581,15 +581,12 @@ class OpenAiAdapter implements LlmAdapter {
       max_tokens: options.max_tokens,
       ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
     };
-    const requestOptions = options.signal ? { signal: options.signal } : undefined;
-    let response;
-    try {
-      response = await this.client.chat.completions.create(request, requestOptions);
-    } catch (error) {
-      if (request.temperature === undefined || !isUnsupportedTemperatureError(error)) throw error;
-      const { temperature: _ignored, ...withoutTemperature } = request;
-      response = await this.client.chat.completions.create(withoutTemperature, requestOptions);
-    }
+    const response = await explainRejectedTemperature(options, () =>
+      this.client.chat.completions.create(
+        request,
+        options.signal ? { signal: options.signal } : undefined
+      )
+    );
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
@@ -661,7 +658,11 @@ class AzureChatAdapter implements LlmAdapter {
           options.signal ? { signal: options.signal } : undefined
         );
       } catch (err: any) {
-        if (!isUnsupportedTemperatureError(err) || !('temperature' in request)) throw err;
+        const message = String(err?.message ?? '');
+        const unsupportedTemperature =
+          message.includes('temperature') &&
+          (message.includes('not supported') || message.includes('Only the default'));
+        if (!unsupportedTemperature || !('temperature' in request)) throw err;
         const { temperature: _ignored, ...withoutTemperature } = request;
         return this.client.chat.completions.create(
           withoutTemperature as any,
@@ -728,28 +729,30 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.createWithModelFallback(
-      options.model,
-      {
-        temperature: options.temperature,
-        max_tokens: options.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
-        system,
-        messages: anthroMessages,
-        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
-        // output_config is an Anthropic-side structured-output field. It is not part of the
-        // stable MessageCreateParams type, so it is injected via object spread. If the model
-        // or API version does not honour it, the constraint is silently dropped and JSON
-        // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
-        ...(options.responseFormat && {
-          output_config: {
-            format: {
-              type: 'json_schema' as const,
-              schema: options.responseFormat.json_schema.schema
+    const response = await explainRejectedTemperature(options, () =>
+      this.createWithModelFallback(
+        options.model,
+        {
+          temperature: options.temperature,
+          max_tokens: options.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+          system,
+          messages: anthroMessages,
+          tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
+          // output_config is an Anthropic-side structured-output field. It is not part of the
+          // stable MessageCreateParams type, so it is injected via object spread. If the model
+          // or API version does not honour it, the constraint is silently dropped and JSON
+          // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
+          ...(options.responseFormat && {
+            output_config: {
+              format: {
+                type: 'json_schema' as const,
+                schema: options.responseFormat.json_schema.schema
+              }
             }
-          }
-        })
-      },
-      options.signal
+          })
+        },
+        options.signal
+      )
     );
 
     const toolCalls: ToolCall[] = [];
@@ -786,20 +789,6 @@ class AnthropicAdapter implements LlmAdapter {
     };
   }
 
-  private async createWithoutRejectedTemperature(
-    request: Anthropic.Messages.MessageCreateParamsNonStreaming,
-    signal?: AbortSignal
-  ): Promise<Anthropic.Messages.Message> {
-    const options = signal ? { signal } : undefined;
-    try {
-      return await this.client.messages.create(request, options);
-    } catch (error) {
-      if (request.temperature === undefined || !isUnsupportedTemperatureError(error)) throw error;
-      const { temperature: _ignored, ...withoutTemperature } = request;
-      return this.client.messages.create(withoutTemperature, options);
-    }
-  }
-
   private async createWithModelFallback(
     model: string,
     payload: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, 'model'>,
@@ -810,9 +799,13 @@ class AnthropicAdapter implements LlmAdapter {
 
     for (const candidate of candidates) {
       try {
-        return await this.createWithoutRejectedTemperature(
-          { model: candidate, stream: false, ...payload },
-          signal
+        return await this.client.messages.create(
+          {
+            model: candidate,
+            stream: false,
+            ...payload
+          },
+          signal ? { signal } : undefined
         );
       } catch (error) {
         lastError = error;
@@ -841,6 +834,26 @@ function anthropicModelCandidates(model: string): string[] {
     out.push(`${match[1]}-latest`);
   }
   return Array.from(new Set(out));
+}
+
+/**
+ * Evaluations run with the settings they are configured with: a model that rejects
+ * `temperature` fails with what to change, instead of silently running at its default.
+ */
+async function explainRejectedTemperature<T>(
+  options: AdapterOptions,
+  send: () => Promise<T>
+): Promise<T> {
+  try {
+    return await send();
+  } catch (error) {
+    if (typeof options.temperature !== 'number' || !isUnsupportedTemperatureError(error))
+      throw error;
+    throw new Error(
+      `\`${options.model}\` doesn't accept temperature. Remove it from this agent's settings.`,
+      { cause: error }
+    );
+  }
 }
 
 /** Providers reject `temperature` for some models (reasoning models, newer Claude models). */
