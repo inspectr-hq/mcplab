@@ -28,13 +28,36 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 
 Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 
+### Browser evaluations with Rover
+
+[MCPLab Rover](https://github.com/inspectr-hq/mcplab-rover) is the browser extension for running scenarios in Claude, ChatGPT, and learned browser providers. MCPLab owns the evaluation queue, assertions, and results. Rover submits prompts in the chat page and returns completed responses for evaluation.
+
+**Set up your first browser agent:**
+
+1. Start the local app with `npx @inspectr/mcplab app --open`.
+2. [Download Rover](https://github.com/inspectr-hq/mcplab-rover/releases/latest), unzip it, and load the folder through **Load unpacked** in `chrome://extensions` with **Developer mode** enabled.
+3. In MCPLab, open **Agents → Browser → Add Agent**. Select the Claude or ChatGPT provider, enter the chat URL, and save.
+4. Open that chat page, sign in, and click the Rover toolbar icon. Its default MCPLab endpoint is `http://127.0.0.1:8787`; use Rover's settings if your app uses another loopback port.
+5. In **Run Evaluation**, select your config, scenarios, and browser agent. Choose the **Conversation behavior**, then start the run. Work waits until Rover is available on the matching provider. Review the captured responses and checks in MCPLab's results.
+
+Claude and ChatGPT are built-in **provider profiles**, available even when Rover is disconnected. A profile defines how Rover interacts with the page; a saved **browser agent** makes that provider selectable for evaluations. Connecting Rover does not automatically create agents, and there is currently no setting to hide the built-in profiles.
+
+**Learn another provider:** Open its chat page, start learning in Rover's **Learn** tab, type and send one message, and wait for its response. Review the detected composer, submission, response, and completion signals. If Rover finds a New Chat action, open a new conversation on the provider page to confirm it before saving with that capability. **Improve with MCPLab AI** uses the configured Evaluation Judge to refine the profile; Rover still validates the proposal before saving. Saving a new learned provider also creates its browser agent in MCPLab.
+
+**Save without New Chat support** omits that action from the profile. To run that agent, select **Continue the same conversation** in MCPLab. Runs that request a new conversation require New Chat support. **Use agent default** starts a new conversation before the run and uses the agent's setting between scenarios.
+
+Browser agents run through Rover in app mode. They use your signed-in browser session instead of an LLM API key, and cannot serve as the Evaluation Judge. API keys are still needed for any API-based judge or assistant you choose. Browser-only capture does not observe MCP tool calls, so tool-dependent checks are `not_evaluated`; a run with passing evaluated checks and unavailable checks is `incomplete`.
+
+See the [Rover Browser Agents guide](https://mcplab.inspectr.dev/docs/app/rover/) for more detail.
+
 ---
 
 ## ✨ Features
 
 ### Core Capabilities
 - **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
-- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
+- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI, Azure Foundry
+- **Browser Agents** - Run evaluations in browser chats through the MCPLab Rover extension
 - **Rich Assertions** - Validate tool usage, sequences, and response content
 - **Judge Agent Checks** - Semantic validation using an LLM judge for fuzzy, natural-language assertions
 - **Variance Testing** - Run multiple iterations to measure stability
@@ -154,7 +177,7 @@ servers:     # MCP servers to test against
     url: "http://localhost:3000/mcp"
   - ref: "shared-server"
 
-agents:      # LLM agents to use for testing
+agents:      # API or browser agents to use for testing
   - id: local-agent
     provider: "anthropic"
     model: "claude-sonnet-4-6"
@@ -213,7 +236,7 @@ auth:
 
 ### Agents
 
-Configure LLM agents with provider-specific settings:
+Configure API-based LLM agents or browser agents with provider-specific settings:
 
 **Anthropic (Claude):**
 ```yaml
@@ -237,7 +260,7 @@ agents:
     system: "You are a helpful assistant."
 ```
 
-**Azure OpenAI:**
+**Azure OpenAI (legacy):**
 ```yaml
 agents:
   - id: azure-gpt
@@ -248,10 +271,53 @@ agents:
     system: "You are a helpful assistant."
 ```
 
-**Required environment variables:**
+The legacy Azure OpenAI provider uses `AZURE_OPENAI_DEPLOYMENT` at runtime. Existing configurations retain this behavior.
+
+**Azure Foundry:**
+
+```yaml
+agents:
+  - id: foundry-agent
+    provider: azure_foundry
+    model: my-chat-deployment
+    max_tokens: 2048
+```
+
+Each Foundry agent uses its own `model` value as the deployment name. Configure `AZURE_FOUNDRY_ENDPOINT` with the resource endpoint, such as `https://your-resource.services.ai.azure.com`, and `AZURE_FOUNDRY_API_KEY` on the backend. If the dedicated key is absent, MCPLab uses `AZURE_OPENAI_API_KEY`; that key must belong to the same resource. The endpoint remains explicit. Restart MCPLab after changing environment variables.
+
+In **Libraries → Agents**, choose **Azure Foundry**, enter the deployment name, and save. **Test Connection** sends a small inference request using the current provider and deployment, even before saving a new agent. It uses a 30-second timeout and clears or cancels the test when the draft changes. Success confirms basic inference access; it does not establish support for every tool or structured-output capability.
+
+Optional `AZURE_FOUNDRY_DEPLOYMENTS` contains comma-separated deployment suggestions. **Load configured deployments** reads this backend environment variable and does not query Azure. Manual entry works without suggestions. Foundry agents can be selected for evaluation runs, assistants, or the Evaluation Judge. Decision Engine deployment and threshold settings remain independent.
+
+V1 supports API-key authentication and deployments compatible with Foundry's `/openai/v1/chat/completions` API through the existing OpenAI SDK. Microsoft-Decision-1 uses the separate Decision Engine setting. Entra authentication, Responses API, and native Anthropic endpoints are outside this integration. See [Microsoft's v1 API documentation](https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle).
+
+**Browser agents (Rover):**
+
+Define a reusable browser agent in `mcplab/agents.yaml`:
+
+```yaml
+chatgpt-browser:
+  name: ChatGPT browser
+  type: browser
+  provider: chatgpt-com
+  url: https://chatgpt.com/
+  new_conversation_between_scenarios: true
+```
+
+Reference it from an evaluation config:
+
+```yaml
+agents:
+  - ref: chatgpt-browser
+```
+
+Use `claude` for Claude, `chatgpt-com` for ChatGPT, or the id of a learned provider. Browser agents use `url` instead of an API `model`. Select them in **Run Evaluation** in the app and run them through Rover. The agent's `new_conversation_between_scenarios` setting is used when **Conversation behavior** is **Use agent default**; the run can override it.
+
+**Required environment variables for API-based LLM agents:**
 - Anthropic: `ANTHROPIC_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Azure: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
+- Azure Foundry: `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY` (or `AZURE_OPENAI_API_KEY` for the same resource)
 
 ### Scenarios
 
@@ -344,6 +410,56 @@ run_defaults:
   - Capture values using regex named groups: `(?<value>...)`
 
 ---
+
+### Optional Decision Engine
+
+In **Settings**, configure an **Evaluation Judge**, then select a **Decision Engine** beside it. Decision engines evaluate semantic `agent_assertions` on the completed answers of API and browser agents. They do not run scenarios or replace conversational assistants.
+
+Supported providers:
+
+| Provider | Default model | Backend configuration |
+| --- | --- | --- |
+| OpenAI Decisions | `gpt-6-luna` | `OPENAI_API_KEY` |
+| Cloudflare Clef | `clef-flash` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AUTH_TOKEN` |
+| TypeSafe Jev | `jev-1.13.0` | `TYPESAFE_API_KEY` |
+| Ollama | `clef-flash` | Server URL, default `http://localhost:11434`; no API key |
+| Azure Foundry | `Microsoft-Decision-1` (deployment name) | `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY` (or `AZURE_OPENAI_API_KEY` for the same resource) |
+
+For Azure Foundry, deploy Microsoft-Decision-1 and select **Azure Foundry** in Settings. Enter your actual **Deployment name**, which can differ from the model name. Set these variables in the backend's environment or `.env`, then restart MCPLab:
+
+```env
+AZURE_FOUNDRY_ENDPOINT=https://your-resource.services.ai.azure.com
+AZURE_FOUNDRY_API_KEY=your-foundry-api-key
+```
+
+Use the Foundry **resource endpoint**. If you copy the deployment Target URI and it ends in `/models`, MCPLab removes that suffix before appending `/providers/microsoft/v1/systemone`. Requests authenticate with the `api-key` header. The dedicated key takes precedence; when absent, MCPLab uses `AZURE_OPENAI_API_KEY` for the same resource. The Foundry endpoint remains explicit, and the decision deployment is separate from conversational agents. This integration supports API keys; it does not acquire Microsoft Entra tokens. See [Microsoft's Decision API documentation](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision).
+
+For Ollama, run `ollama pull clef-flash` yourself to install the default model. MCPLab calls the server's `/v1/systemone` endpoint from its backend. The server URL must be reachable from the machine running MCPLab. Other decision models, including `clef`, `nimble`, and `tev1`, can be selected by model name. MCPLab does not download models automatically. Clef and Clef Flash require Ollama 0.35.1 or later; Tev1 decision support requires 0.35 or later. Use Ollama 0.35.1 or later for the broadest compatibility.
+
+The **Ollama model name** field is editable. Enter the exact installed model name and tag from `ollama list`, such as `tev1:4b` after running `ollama pull tev1:4b`, or `tev1:0.8b` for the smaller variant. Suggestions are examples, not a list of installed models. See the [Ollama decision documentation](https://docs.ollama.com/capabilities/decision) and [Tev1 model reference](https://ollama.com/library/tev1).
+
+Set **Pass probability threshold** and **Fail probability threshold**, then click **Save Decision Engine**. Both refer to the probability that the answer satisfies a semantic assertion. By default, probabilities at or above `0.9` pass, probabilities at or below `0.1` fail, and probabilities between them use the Evaluation Judge. The settings must satisfy `0 ≤ failThreshold < passThreshold ≤ 1`. These are routing thresholds, not guarantees of correctness; check them against reviewed examples from your own scenarios.
+
+Use **Test connection** to check the current provider, model, and Ollama URL before saving. MCPLab sends one small synthetic decision request using backend credentials and reports success or failure, including missing credentials. The test does not save settings or call the Evaluation Judge. Any valid probability counts as a successful connection; thresholds do not determine connection success. Hosted requests use a 10-second timeout, and Ollama uses 120 seconds. Changing the form clears the test result and cancels any pending test.
+
+A valid LLM Evaluation Judge remains required as backup. Missing credentials, unavailable engines/models, invalid responses, and uncertain decisions fall back to that judge. Clear decision failures remain failures. Cancelling an evaluation stops pending evaluation requests. Ollama decisions run on your configured server, but judge fallback can send the answer to a hosted provider if that is how your judge is configured.
+
+Turn **Use Decision Engine** off and click **Save Decision Engine** to use the LLM judge while keeping the provider, model, URL, and thresholds. Turn it back on and save to resume decision evaluation. **Test connection** remains available while off and sends an explicit test request. Existing configurations without an `enabled` flag remain on. Choosing **None** and saving clears the configuration instead.
+
+Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory):
+
+```yaml
+evaluation_judge_agent_name: my-judge
+evaluation_decision:
+  enabled: true
+  provider: ollama
+  model: clef-flash
+  baseUrl: http://localhost:11434
+  passThreshold: 0.9
+  failThreshold: 0.1
+```
+
+In result details, checks decided by the engine show their assertion prompt alongside the decision probability, thresholds, model, and final evaluator. Checks evaluated by the judge retain the judge's explanation and fallback information where applicable. Required tools, tool sequences, and other deterministic assertions continue to use their existing checks. Browser captures still cannot establish tool use when telemetry is unavailable.
 
 ## 🔑 Environment Variables
 
@@ -510,7 +626,7 @@ These features are available through the web app (`mcplab app`).
 
 ### Scenario Assistant
 
-An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns — and can call your MCP server's tools directly to demonstrate expected behavior.
+An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns, and can call your MCP server's tools directly to demonstrate expected behavior.
 
 Open the app, navigate to an eval, and open the **Scenario Assistant** panel on any scenario.
 
@@ -527,7 +643,7 @@ Automated quality review of your MCP server's tools. Connects to your server, di
 - Name and description quality
 - Schema completeness
 - Safety classification (read-like vs. potentially destructive)
-- Sample call behavior (optional — runs real calls against your server)
+- Sample call behavior (optional, runs real calls against your server)
 
 Reports are saved to `mcplab/results/tool-analysis/` and viewable in the app.
 
@@ -546,7 +662,8 @@ Define servers, agents, and scenarios once and reuse them across multiple eval f
 ```
 mcplab/
 ├── servers.yaml       # Shared MCP server definitions
-├── agents.yaml        # Shared LLM agent definitions
+├── agents.yaml        # Shared API and browser agent definitions
+├── browser-providers/ # Learned browser interaction profiles
 └── scenarios/
     ├── scenario-a.yaml
     └── scenario-b.yaml
@@ -589,7 +706,8 @@ mcplab/
 │   └── tool-analysis/              # Saved tool analysis reports
 ├── reports/                        # Custom markdown reports
 ├── servers.yaml                    # Library: shared server definitions
-├── agents.yaml                     # Library: shared agent definitions
+├── agents.yaml                     # Library: shared API and browser agents
+├── browser-providers/              # Library: learned browser provider profiles
 └── scenarios/                      # Library: shared scenario files
 ```
 

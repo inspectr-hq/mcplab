@@ -1,3 +1,357 @@
+export interface EvaluationDecisionConfig {
+  /** Omitted means enabled for compatibility with existing saved configurations. */
+  enabled?: boolean;
+  provider: 'openai' | 'cloudflare' | 'typesafe' | 'ollama' | 'azure_foundry';
+  model: string;
+  passThreshold: number;
+  failThreshold: number;
+  baseUrl?: string;
+}
+
+export interface WorkspaceEvaluationSettings {
+  evaluationJudgeAgentName?: string;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsOverrides {
+  /** The agent every assistant uses unless a session picks another. */
+  assistant_agent_name?: string;
+  evaluation_judge_agent_name?: string;
+  default_queue_workers?: unknown;
+  evaluation_decision?: EvaluationDecisionConfig;
+}
+
+export interface WorkspaceSettingsPatch {
+  defaultQueueWorkers?: number;
+  assistantAgentName?: string | null;
+  evaluationJudgeAgentName?: string | null;
+  evaluationDecision?: EvaluationDecisionConfig | null;
+  evalsDir?: string;
+  runsDir?: string;
+  librariesDir?: string;
+}
+
+export type AssistantKind = 'scenario' | 'result';
+
+export type ScenarioAssistantSuggestionRuleType =
+  | 'required_tool'
+  | 'forbidden_tool'
+  | 'tool_sequence'
+  | `tool_input_${ToolInputAssertion['type']}`
+  | `response_${ResponseAssertion['type']}`
+  | 'agent_check';
+
+export interface ScenarioAssistantSuggestionRule {
+  type: ScenarioAssistantSuggestionRuleType;
+  value?: string | number | boolean;
+  sequence?: string[];
+  path?: string;
+  equals?: string | number | boolean;
+  tool?: string;
+  label?: string;
+  prompt?: string;
+}
+
+export interface ScenarioAssistantSuggestionBundle {
+  prompt?: { replacement: string; rationale?: string };
+  evalRules?: { replacement: ScenarioAssistantSuggestionRule[]; rationale?: string };
+  extractRules?: { replacement: Array<{ name: string; pattern: string }>; rationale?: string };
+  notes?: string[];
+}
+
+export interface ScenarioAssistantRuntimeContext {
+  scenario: {
+    id: string;
+    name?: string;
+    prompt: string;
+    serverNames: string[];
+    evalRules: ScenarioAssistantSuggestionRule[];
+    extractRules: Array<{ name: string; pattern: string }>;
+  };
+  availableServers?: Array<{ name: string; url?: string }>;
+  availableAgents?: Array<{ name: string; provider: string; model: string }>;
+}
+
+export interface ResultAssistantRuntimeContext {
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  resultSummary: ResultsJson | null;
+  referenceReportsForRun: Array<{
+    path: string;
+    relativePath: string;
+    name: string;
+    sizeBytes: number;
+    mtime: string;
+  }>;
+}
+
+export interface AssistantRuntimeMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCallId?: string;
+  pendingToolCallIds?: string[];
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
+  /** The model's reasoning summary for this message, when the provider returns one. */
+  reasoning?: AssistantReasoning;
+}
+
+export interface AssistantReasoning {
+  text: string;
+  /** Set once the model has finished reasoning. */
+  durationMs?: number;
+}
+
+export interface AssistantRuntimeToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  validationError?: string;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+  /** Whether the call waited for the user; automatic and local calls run without asking. */
+  requiresApproval?: boolean;
+  /** Display details from the MCP tool definition. */
+  title?: string;
+  description?: string;
+  hints?: AssistantToolHints;
+  /** Readable labels for argument fields, from the input schema's property titles. */
+  argumentLabels?: Record<string, string>;
+  startedAt?: string;
+  completedAt?: string;
+  /** The user's reason for denying the call, which the model also receives. */
+  denyMessage?: string;
+}
+
+/** The MCP tool annotations that matter to someone approving a call. */
+export interface AssistantToolHints {
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  openWorld?: boolean;
+}
+
+export interface AssistantRuntimeSnapshot {
+  /** Monotonic within a session, including transient text updates. Reads do not advance it. */
+  revision: number;
+  messages: AssistantRuntimeMessage[];
+  pendingToolCalls: AssistantRuntimeToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: {
+    id: string;
+    turnId: string;
+    text: string;
+    createdAt: string;
+    reasoning?: AssistantReasoning;
+  };
+}
+
+export type ScenarioAssistantMessage = AssistantRuntimeMessage;
+export type ScenarioAssistantPendingToolCall = AssistantRuntimeToolCall;
+export type ResultAssistantSessionMessage = AssistantRuntimeMessage;
+export type ResultAssistantPendingToolCall = AssistantRuntimeToolCall;
+
+export interface ScenarioAssistantSessionView {
+  revision: number;
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  warnings: string[];
+  toolsLoaded: number;
+  toolServers: string[];
+  messages: ScenarioAssistantMessage[];
+  pendingToolCalls: ScenarioAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
+}
+
+export interface ResultAssistantSessionView {
+  revision: number;
+  id: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  messages: ResultAssistantSessionMessage[];
+  pendingToolCalls: ResultAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
+}
+
+export type AssistantSessionEvent<TSession = unknown> =
+  | {
+      type: 'assistant_message_delta' | 'assistant_reasoning_delta';
+      ts: string;
+      payload: Record<string, unknown> & {
+        sessionId: string;
+        session?: TSession;
+        turnId: string;
+        messageId: string;
+        offset: number;
+        delta: string;
+        createdAt: string;
+        revision: number;
+      };
+    }
+  | {
+      type: Exclude<
+        AssistantRuntimeEvent['type'],
+        'assistant_message_delta' | 'assistant_reasoning_delta'
+      >;
+      ts: string;
+      payload: Record<string, unknown> & { sessionId: string; session: TSession };
+    };
+
+export type ScenarioAssistantTurnResponse = AssistantRuntimeResponse;
+export type ResultAssistantTurnResponse = AssistantRuntimeResponse;
+
+export interface AssistantRuntimeEvent {
+  type:
+    | 'session_started'
+    | 'turn_started'
+    | 'tool_call_requested'
+    | 'tool_call_approved'
+    | 'tool_call_denied'
+    | 'tool_call_resolved'
+    | 'assistant_message_delta'
+    | 'assistant_reasoning_delta'
+    | 'assistant_message_completed'
+    | 'session_snapshot'
+    | 'session_warning'
+    | 'session_error'
+    | 'session_finished';
+  ts: string;
+  payload: Record<string, unknown>;
+}
+
+export type AssistantRuntimeResponse =
+  | {
+      type: 'assistant_message';
+      text: string;
+      suggestions?: ScenarioAssistantSuggestionBundle;
+    }
+  | {
+      type: 'tool_call_request' | 'tool_call_resolved';
+      text: string;
+      pendingToolCalls: AssistantRuntimeToolCall[];
+      pendingToolCall?: AssistantRuntimeToolCall;
+    };
+
+export interface AssistantToolCallDecision {
+  toolCallId: string;
+  decision: 'approve' | 'deny';
+  arguments?: unknown;
+  /** Why the user denied the call; the model receives it. */
+  message?: string;
+}
+
+export interface EvaluationJudge {
+  name: string;
+  agent: LlmAgentConfig;
+}
+
+export interface WorkspaceEvaluation {
+  evaluationJudge?: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export interface ResolveWorkspaceEvaluationParams {
+  agents: EvalConfig['agents'];
+  scenarios: ReadonlyArray<Pick<Scenario, 'id' | 'eval'>>;
+  scenarioId?: string;
+  settings: WorkspaceEvaluationSettings;
+}
+
+export interface AgentAssertionJudgeResult {
+  label: string;
+  pass: boolean;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SemanticEvaluationParams {
+  assertions: AgentAssertion[];
+  finalText: string;
+  context?: AgentJudgeContext;
+  judge: EvaluationJudge;
+  evaluationDecision?: EvaluationDecisionConfig;
+  signal?: AbortSignal;
+}
+
+export interface DecisionCheck {
+  id: string;
+  prompt: string;
+}
+
+export type DecisionFallback =
+  | 'missing_credentials'
+  | 'http_error'
+  | 'connection_error'
+  | 'timeout'
+  | 'invalid_response'
+  | 'missing_answer'
+  | 'duplicate_answer'
+  | 'refusal'
+  | 'invalid_answer'
+  | 'invalid_configuration'
+  | 'uncertain';
+
+export interface DecisionAnswer {
+  id: string;
+  probability?: number;
+  model?: string;
+  durationMs: number;
+  fallback?: DecisionFallback;
+}
+
+export interface DecisionConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: EvaluationDecisionConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  probability?: number;
+  durationMs: number;
+  failure?: DecisionFallback;
+}
+
+export interface DecisionRequest {
+  config: EvaluationDecisionConfig;
+  evidence: unknown;
+  checks: DecisionCheck[];
+  signal?: AbortSignal;
+}
+
+export interface DecisionAdapter {
+  requiredEnv: readonly (string | readonly string[])[];
+  authEnv?: string | readonly string[];
+  authHeader?: string;
+  authPrefix?: string;
+  url(config: EvaluationDecisionConfig): string;
+  timeoutMs: number;
+  maxBatchSize: number;
+  sequential: boolean;
+  body(params: DecisionRequest): unknown;
+  extract(raw: unknown): Record<string, unknown> | undefined;
+  entries(raw: unknown): Array<[string, unknown]>;
+  answerType: string;
+  probabilityField: string;
+}
+
 export type TransportType = 'http';
 
 export interface ServerAuthBearer {
@@ -59,9 +413,10 @@ export interface ServerRefEntry {
 
 export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
+  type?: 'llm';
   name?: string;
-  provider: 'openai' | 'anthropic' | 'azure_openai';
+  provider: 'openai' | 'anthropic' | 'azure_openai' | 'azure_foundry';
   model: string;
   temperature?: number;
   max_tokens?: number;
@@ -69,16 +424,65 @@ export interface AgentConfig {
   system?: string;
 }
 
-export interface AgentInlineEntry extends AgentConfig {
+export interface AgentConnectionTestResult {
+  ok: boolean;
+  message: string;
+  provider: LlmAgentConfig['provider'];
+  requestedModel: string;
+  model?: string;
+  durationMs: number;
+  failure?: AgentConnectionFailure;
+}
+
+export type AgentConnectionFailure =
+  | 'missing_credentials'
+  | 'authentication'
+  | 'deployment'
+  | 'capability'
+  | 'rate_limit'
+  | 'connection_error'
+  | 'timeout';
+
+export interface ProviderModelsResponse {
+  provider: 'anthropic' | 'openai' | 'azure' | 'azure_foundry';
+  items: string[];
+  kind: 'models' | 'deployments';
+  source: string;
+}
+
+export interface BrowserAgentConfig {
+  type: 'browser';
+  name?: string;
+  provider: string;
+  url: string;
+  newConversationBetweenScenarios?: boolean;
+}
+
+export type RoverAgentProvider = string;
+
+export interface RoverAgentRef {
+  name: string;
+  provider: RoverAgentProvider;
+  url: string;
+  providerRevision?: string;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
+
+export type AgentInlineEntry = (LlmAgentConfig | BrowserAgentConfig) & {
   id: string;
   name?: string;
-}
+};
 
 export interface AgentRefEntry {
   ref: string;
 }
 
 export type AgentListEntry = AgentInlineEntry | AgentRefEntry;
+
+export function isLlmAgent(agent: AgentConfig): agent is LlmAgentConfig {
+  return agent.type !== 'browser';
+}
 
 export interface ToolConstraints {
   required_tools?: string[];
@@ -194,7 +598,13 @@ export interface EvalRules {
   agent_context?: AgentContext;
 }
 
-export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated';
+export type CheckResultStatus =
+  | 'passed'
+  | 'failed'
+  | 'not_evaluated'
+  | 'not_executed'
+  /** @deprecated Persisted results used this name for capability-limited checks. */
+  | 'not_applicable';
 
 export interface CheckResult {
   type: string;
@@ -207,7 +617,12 @@ export interface CheckResult {
 export interface CheckCounts {
   passed: number;
   failed: number;
+  /** Checks intentionally outside the execution source's capabilities. */
   not_evaluated: number;
+  /** Checks expected to run but skipped because execution ended early. */
+  not_executed?: number;
+  /** Legacy field retained when reading older result summaries. */
+  not_applicable?: number;
   total: number;
 }
 
@@ -380,6 +795,7 @@ export interface ScenarioRunTraceRecord {
   ts_start: string;
   ts_end: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
   messages: TraceMessage[];
   metrics?: {
@@ -387,6 +803,10 @@ export interface ScenarioRunTraceRecord {
     total_tool_duration_ms: number;
   };
 }
+
+export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error' | 'stopped';
+
+export type ExecutionSource = 'mcplab' | 'rover';
 
 export interface TraceFileLegacyMeta {
   type: 'trace_meta';
@@ -404,7 +824,9 @@ export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
+  stop_reason?: string;
   failures: string[];
   check_results?: CheckResult[];
   tool_calls: string[];
@@ -429,7 +851,7 @@ export interface ScenarioAggregate {
     forbidden: Record<string, number>;
   };
   runs: ScenarioRunResult[];
-  pass_rate: number;
+  pass_rate: number | null;
   distinct_sequences: Record<string, number>;
   tool_usage_frequency: Record<string, number>;
   extracted_values: Record<string, Record<string, number>>;
@@ -470,18 +892,29 @@ export interface ResultsJson {
     rerun_scenario_ids?: string[];
     rerun_server_override_all?: string[];
     rerun_scenario_server_overrides?: Record<string, string[]>;
+    rerun_new_conversation_before_start?: boolean;
+    rerun_new_conversation_between_scenarios?: boolean;
     tool_tokens_total?: number | null;
     total_duration_ms?: number;
     total_tool_duration_ms?: number;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
+    execution_source?: ExecutionSource;
+    execution_client?: string;
+    /** @deprecated Read legacy results only. New evaluations use evaluation_run_id. */
+    evaluation_group_id?: string;
+    evaluation_run_id?: string;
+    /** @deprecated Read legacy parent-result projections only. */
+    child_run_ids?: string[];
+    execution_status?: 'stopped';
   };
   summary: {
     total_scenarios: number;
     total_runs: number;
-    pass_rate: number;
+    pass_rate: number | null;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
+    outcomes?: Partial<Record<RunOutcome, number>>;
   };
   scenarios: ScenarioAggregate[];
 }

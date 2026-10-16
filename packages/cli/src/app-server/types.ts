@@ -1,4 +1,4 @@
-import type { HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
+import type { WorkspaceEvaluationSettings, HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
 
 export type { HealthMcpConnectionInfo };
 
@@ -13,15 +13,14 @@ export interface AppServerOptions {
   open: boolean;
 }
 
-export interface AppSettings {
+export interface AppSettings extends WorkspaceEvaluationSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
   toolAnalysisResultsDir: string;
   librariesDir: string;
   defaultQueueWorkers: number;
-  scenarioAssistantAgentName?: string;
-  evaluationJudgeAgentName?: string;
+  assistantAgentName?: string;
 }
 
 // Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo

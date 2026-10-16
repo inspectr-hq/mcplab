@@ -1,0 +1,2 @@
+export const DEFAULT_ANTHROPIC_MAX_TOKENS = 1024;
+export const DEFAULT_AZURE_OPENAI_API_VERSION = '2024-02-15-preview';

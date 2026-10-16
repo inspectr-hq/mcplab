@@ -60,7 +60,7 @@ export function AppRouteTree() {
         <Route path="/oauth-debugger" element={<OAuthDebugger />} />
         <Route path="/libraries/servers" element={<Servers />} />
         <Route path="/libraries/servers/:serverId" element={<ServerDetail />} />
-        <Route path="/libraries/agents" element={<Agents />} />
+        <Route path="/libraries/agents" element={<Agents defaultType="llm" />} />
         <Route path="/libraries/agents/:agentName" element={<AgentDetail />} />
         <Route path="/libraries/test-cases" element={<ManageTestCases />} />
         <Route path="/libraries/test-cases/:testCaseId" element={<ManageTestCases />} />

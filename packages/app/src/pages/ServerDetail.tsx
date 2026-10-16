@@ -299,7 +299,10 @@ const ServerDetail = () => {
           >
             <ArrowLeft className="h-4 w-4" /> Servers
           </Link>
-          <h1 className="text-2xl font-bold">{isNew ? 'New Server' : displayName(form)}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <img src="/mcp.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            {isNew ? 'New Server' : displayName(form)}
+          </h1>
         </div>
         {!isNew && (
           <Button
@@ -604,7 +607,9 @@ const ServerDetail = () => {
                 <Button
                   type="button"
                   variant={
-                    !form.oauthMode || form.oauthMode === 'pre_registered' ? 'default' : 'outline'
+                    !form.oauthMode || form.oauthMode === 'pre_registered'
+                      ? 'default'
+                      : 'outline-solid'
                   }
                   size="sm"
                   onClick={() => setForm((f) => ({ ...f, oauthMode: 'pre_registered' }))}
@@ -613,7 +618,7 @@ const ServerDetail = () => {
                 </Button>
                 <Button
                   type="button"
-                  variant={form.oauthMode === 'dcr' ? 'default' : 'outline'}
+                  variant={form.oauthMode === 'dcr' ? 'default' : 'outline-solid'}
                   size="sm"
                   onClick={() =>
                     setForm((f) => ({

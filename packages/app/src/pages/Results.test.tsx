@@ -194,6 +194,8 @@ describe('Results', () => {
     );
 
     const runLink = await screen.findByText('run-with-mcp');
+    expect(screen.getByTestId('results-table')).toHaveClass('results-table-container');
+    expect(screen.getByRole('table')).toHaveClass('table-auto');
     const row = runLink.closest('tr');
     expect(row).not.toBeNull();
     const cells = within(row!).getAllByRole('cell');
@@ -205,6 +207,7 @@ describe('Results', () => {
     const timestampHeader = screen.getByRole('columnheader', { name: 'Timestamp' });
     const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
     const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
+    const avgToolsHeader = screen.getByRole('columnheader', { name: 'Avg Tools' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
     const evaluationName = within(runCell).getByText('Search evaluation');
     const note = within(runCell).getByText(
@@ -212,23 +215,26 @@ describe('Results', () => {
     );
 
     expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
-    expect(runHeader).toHaveClass('w-[25rem]', 'max-w-[25rem]');
-    expect(runHeader).not.toHaveClass('min-w-[25rem]');
-    expect(runCell).toHaveClass('w-[25rem]', 'max-w-[25rem]');
-    expect(runCell).not.toHaveClass('min-w-[25rem]');
+    expect(runHeader).toHaveClass('results-table-column-run-id');
+    expect(runHeader).toHaveClass('w-120', 'max-w-120');
+    expect(runCell).toHaveClass('results-table-column-run-id');
     expect(evaluationHeader).toHaveClass('min-w-0');
-    expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationHeader).toHaveClass('results-table-column-evaluation');
+    expect(evaluationHeader).toHaveClass('w-[20rem]', 'max-w-[20rem]');
+    expect(evaluationHeader).not.toHaveClass('w-40', 'min-w-40', 'max-w-40');
     expect(evaluationCell).toHaveClass('min-w-0');
-    expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
-    expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
-    expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
-    expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
-    expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
-    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass(
-      'w-[9rem]',
-      'min-w-[9rem]',
-      'max-w-[9rem]'
-    );
+    expect(evaluationCell).not.toHaveClass('w-40', 'min-w-40', 'max-w-40');
+    expect(timestampHeader).toHaveClass('results-table-column-timestamp');
+    expect(timestampHeader).toHaveClass('w-44', 'min-w-44', 'max-w-44');
+    expect(passRateHeader).toHaveClass('w-30', 'min-w-30', 'max-w-30');
+    expect(scenariosHeader).toHaveClass('w-22', 'min-w-22', 'max-w-22');
+    expect(avgToolsHeader).toHaveClass('w-30', 'min-w-30', 'max-w-30');
+    expect(toolTokensHeader).toHaveClass('w-36', 'min-w-36', 'max-w-36');
+    expect(passRateHeader).toHaveClass('results-table-column-pass-rate');
+    expect(scenariosHeader).toHaveClass('results-table-column-scenarios');
+    expect(avgToolsHeader).toHaveClass('results-table-column-avg-tools');
+    expect(toolTokensHeader).toHaveClass('results-table-column-tool-tokens');
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass('results-table-column-actions');
     expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
@@ -394,6 +400,26 @@ describe('Results', () => {
     expect(refreshedCall.until).not.toBe(initialCall.until);
   });
 
+  it('shows and hides the MCP Lab Assistant from the header button', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('Results');
+    const toggle = screen.getByRole('button', { name: 'MCP Lab Assistant' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument();
+  });
+
   it('toggles MCP Lab Assistant expand mode in results', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 
@@ -410,6 +436,37 @@ describe('Results', () => {
     const expandButton = screen.getByRole('button', { name: /Expand/i });
     fireEvent.click(expandButton);
     expect(screen.getByRole('button', { name: /Compact/i })).toBeInTheDocument();
+  });
+
+  it('splits the screen between a scrolling table and the assistant on wide screens', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as unknown as MediaQueryList);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1000);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('Results');
+    const table = screen.getByTestId('results-table');
+    expect(table.parentElement!.style.height).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
+    await waitFor(() => expect(table.parentElement!.style.height).not.toBe(''));
+    expect(table.querySelector('thead')).toHaveClass('sticky');
+    expect(table.querySelector('table')!.parentElement).toHaveClass('h-full', 'overflow-auto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitFor(() => expect(table.parentElement!.style.height).toBe(''));
+    expect(table.querySelector('thead')).not.toHaveClass('sticky');
+    vi.restoreAllMocks();
   });
 
   it('renders tool token totals and n/a when unavailable', async () => {

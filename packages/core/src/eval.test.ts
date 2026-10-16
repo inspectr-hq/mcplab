@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAbortError } from './abort.js';
 import {
-  buildNotEvaluatedCheckResults,
+  buildNotExecutedCheckResults,
   evaluateScenario,
   evaluateScenarioWithAgentChecks,
   extractValues,
-  normalizeToolConstraintAliases
+  normalizeToolConstraintAliases,
+  toJudgeErrorResults
 } from './eval.js';
 import type { ToolCall } from './types.js';
 
@@ -834,9 +835,9 @@ describe('evaluateScenarioWithAgentChecks', () => {
   });
 });
 
-describe('buildNotEvaluatedCheckResults', () => {
+describe('buildNotExecutedCheckResults', () => {
   it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
-    const results = buildNotEvaluatedCheckResults({
+    const results = buildNotExecutedCheckResults({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
       tool_sequence: ['search', 'fetch'],
       response_assertions: [
@@ -854,11 +855,11 @@ describe('buildNotEvaluatedCheckResults', () => {
       'response_jsonpath_exists',
       'agent_check'
     ]);
-    expect(results.every((result) => result.status === 'not_evaluated')).toBe(true);
+    expect(results.every((result) => result.status === 'not_executed')).toBe(true);
   });
 
   it('preserves tool-constraint labels without evaluating against an empty tool sequence', () => {
-    const results = buildNotEvaluatedCheckResults({
+    const results = buildNotExecutedCheckResults({
       tool_constraints: { forbidden_tools: ['delete'], required_tools: ['search'] }
     });
 
@@ -866,13 +867,13 @@ describe('buildNotEvaluatedCheckResults', () => {
       {
         type: 'forbidden_tool',
         label: 'Forbidden tool · delete',
-        status: 'not_evaluated',
+        status: 'not_executed',
         reason: undefined
       },
       {
         type: 'required_tool',
         label: 'Required tool · search',
-        status: 'not_evaluated',
+        status: 'not_executed',
         reason: undefined
       }
     ]);
@@ -931,5 +932,18 @@ describe('extractValues', () => {
     ]);
     expect(result.count).toBe(5);
     expect(result.status).toBe('done');
+  });
+});
+
+describe('judge error results', () => {
+  const assertions = [{ label: 'Check', prompt: 'Verify' }];
+  it('normalizes non-Error failures for shared semantic evaluation', () => {
+    expect(toJudgeErrorResults(assertions, 'Unavailable')).toEqual([
+      { label: 'Check', pass: false, reason: 'Agent check failed: Unavailable' }
+    ]);
+  });
+  it('propagates cancellation instead of converting it to failed checks', () => {
+    const error = createAbortError();
+    expect(() => toJudgeErrorResults(assertions, error)).toThrow(error);
   });
 });

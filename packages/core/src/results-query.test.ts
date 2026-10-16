@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
@@ -129,6 +129,16 @@ describe('results-query core', () => {
     const traceDoc = docs.find((d) => d.source === 'trace');
     expect(traceDoc?.text).toContain('returned timeout after 5000ms');
     expect(traceDoc?.text.includes('"type":"text"')).toBe(false);
+  });
+
+  it('does not index a run under an identifier its API cannot resolve', () => {
+    const { runsDir, runId } = fixture();
+    const resultsPath = join(runsDir, runId, 'results.json');
+    const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+    results.metadata.run_id = 'different-id';
+    writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
+
+    expect(buildSearchIndex(runsDir)).toEqual([]);
   });
 
   it('requires around when source=trace', () => {

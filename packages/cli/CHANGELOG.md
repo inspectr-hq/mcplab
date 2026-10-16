@@ -1,5 +1,49 @@
 # @inspectr/mcplab
 
+## 1.31.0
+
+### Minor Changes
+
+- feat: LangGraph Scenario & Result Assistants
+- feat: Improved Chat actions & UI
+- feat: render assistant and report markdown with react-markdown
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.25.0
+  - @inspectr/mcplab-mcp-server@1.10.1
+  - @inspectr/mcplab-reporting@1.3.2
+
+## 1.30.0
+
+### Minor Changes
+
+- feat: add decision (Jev, Ollama, Clef, Microsoft-Decision-1) semantic evaluation
+- feat: add Azure Foundry LLM agents
+- feat: add configuration of decision engine
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.24.0
+  - @inspectr/mcplab-mcp-server@1.10.0
+  - @inspectr/mcplab-reporting@1.3.1
+
+## 1.29.0
+
+### Minor Changes
+
+- feat: Rover browser agent execution, provider profiles, queue lifecycle handling, and browser agent library tools.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @inspectr/mcplab-core@1.23.0
+  - @inspectr/mcplab-mcp-server@1.9.0
+  - @inspectr/mcplab-reporting@1.3.0
+
 ## 1.28.5
 
 ### Patch Changes

@@ -32,7 +32,7 @@ export function McpServerBadge({ versions, showPrefix = true, className }: McpSe
             </span>
           </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-md break-words text-xs">
+        <TooltipContent className="max-w-md wrap-break-word text-xs">
           <span className="font-mono">{summary}</span>
         </TooltipContent>
       </Tooltip>

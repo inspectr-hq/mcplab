@@ -1,0 +1,158 @@
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const originalCwd = process.cwd();
+
+afterEach(() => {
+  process.chdir(originalCwd);
+  vi.resetModules();
+});
+
+function writeFixture(root: string): void {
+  const bundle = join(root, 'mcplab');
+  mkdirSync(bundle, { recursive: true });
+  mkdirSync(join(bundle, 'browser-providers'), { recursive: true });
+  writeFileSync(
+    join(bundle, 'browser-providers', 'custom-chat.yaml'),
+    `schema_version: 1\nname: Custom Chat\nmatch:\n  origins: [https://chat.example]\ncomposer:\n  locator:\n    segments: ['textarea[data-role="composer"]']\n  input_mode: textarea\nsubmit:\n  action: click\n  locator:\n    segments: ['button[data-action="send"]']\nassistant_messages:\n  locator:\n    segments: ['[data-role="assistant-message"]']\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://chat.example\n  confidence: {}\n`,
+    'utf8'
+  );
+}
+
+function setupTools(registerTools: (server: any) => void) {
+  const tools = new Map<string, { cb: (args: Record<string, unknown>) => Promise<any> | any }>();
+  registerTools({
+    registerTool(
+      name: string,
+      _config: unknown,
+      cb: (args: Record<string, unknown>) => Promise<any>
+    ) {
+      tools.set(name, { cb });
+      return { name };
+    }
+  });
+  return tools;
+}
+
+describe('browser provider library tools', () => {
+  it('lists valid profiles even when neighboring files contain invalid YAML or schemas', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    const directory = join(root, 'mcplab', 'browser-providers');
+    writeFileSync(join(directory, 'bad-yaml.yaml'), 'name: [');
+    writeFileSync(join(directory, 'bad-schema.yml'), 'name: Missing fields');
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+
+    const listed = await tools.get('mcplab_list_library')!.cb({
+      kind: 'browser_providers',
+      includeContent: true
+    });
+    expect(listed.isError).not.toBe(true);
+    expect(
+      listed.structuredContent.browser_providers.map((profile: { id: string }) => profile.id)
+    ).toEqual(['chatgpt-com', 'claude', 'custom-chat']);
+    expect(listed.structuredContent.browser_providers[2].entry).toMatchObject({
+      id: 'custom-chat',
+      source: 'workspace'
+    });
+  });
+
+  it('lists and retrieves normalized browser provider profiles from an isolated bundle', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+
+    const listed = await tools.get('mcplab_list_library')!.cb({
+      kind: 'browser_providers',
+      includeContent: true
+    });
+    expect(listed.structuredContent.browser_providers).toMatchObject([
+      { id: 'chatgpt-com' },
+      { id: 'claude' },
+      {
+        id: 'custom-chat',
+        entry: {
+          schemaVersion: 1,
+          composer: { inputMode: 'textarea' },
+          assistantMessages: expect.any(Object)
+        }
+      }
+    ]);
+
+    const item = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'custom-chat'
+    });
+    expect(item.structuredContent.content).toMatchObject({
+      schemaVersion: 1,
+      composer: { inputMode: 'textarea' }
+    });
+    expect(item.structuredContent.yaml).toContain('schema_version: 1');
+    expect(item.structuredContent.yaml).not.toContain('created_at');
+    expect(item.structuredContent.yaml).not.toContain('updated_at');
+
+    const builtIn = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'claude'
+    });
+    expect(builtIn.structuredContent.content).toMatchObject({ id: 'claude', source: 'builtin' });
+    expect(builtIn.structuredContent.yaml).toContain('schema_version: 1');
+    expect(builtIn.structuredContent.yaml).not.toContain('claude:');
+    expect(builtIn.structuredContent.yaml).not.toContain('source: builtin');
+    expect(builtIn.structuredContent.yaml).not.toContain('created_at');
+    expect(builtIn.structuredContent.yaml).not.toContain('updated_at');
+  });
+
+  it('reports a missing inherited provider id as a missing library file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+    const result = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'constructor'
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Library file not found:');
+  });
+
+  it('retrieves a workspace override instead of the built-in profile', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-browser-library-'));
+    writeFixture(root);
+    writeFileSync(
+      join(root, 'mcplab', 'browser-providers', 'claude.yaml'),
+      `schema_version: 1\nname: Workspace Claude\nmatch:\n  origins: [https://claude.ai]\ncomposer:\n  locator:\n    segments: ['textarea']\n  input_mode: textarea\nsubmit:\n  action: enter\nassistant_messages:\n  locator:\n    segments: ['.assistant']\ncompletion:\n  stability_ms: 1000\nlearned:\n  source_origin: https://claude.ai\n  confidence: {}\n`,
+      'utf8'
+    );
+    process.chdir(root);
+    const runtime = await import('./runtime.js');
+    const tools = setupTools(runtime.registerTools);
+
+    const listed = await tools.get('mcplab_list_library')!.cb({
+      kind: 'browser_providers',
+      includeContent: true
+    });
+    const listedClaude = listed.structuredContent.browser_providers.find(
+      (provider: { id: string }) => provider.id === 'claude'
+    );
+    const item = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'browser_providers',
+      id: 'claude'
+    });
+
+    expect(item.structuredContent.content).toMatchObject({
+      id: 'claude',
+      name: 'Workspace Claude',
+      source: 'workspace'
+    });
+    expect(item.structuredContent.content).toEqual(listedClaude.entry);
+    expect(item.structuredContent.yaml).toContain('name: Workspace Claude');
+  });
+});

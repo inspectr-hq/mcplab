@@ -59,6 +59,32 @@ describe('run request validation', () => {
     });
   });
 
+  it('returns 404 when a run detail lookup races with directory deletion', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/missing', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/missing',
+      method: 'GET',
+      settings: { runsDir: '/tmp' } as any,
+      runQueueService: createRunQueueServiceForTest(),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        getRunResults: () => {
+          const error = new Error('Run not found: missing') as Error & { statusCode: number };
+          error.statusCode = 404;
+          throw error;
+        },
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        }
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses).toEqual([{ status: 404, payload: { error: 'Run not found: missing' } }]);
+  });
+
   it('returns 400 when serverOverrideAll is an empty array', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];
     const handled = await handleRunsRoutes({
@@ -220,55 +246,65 @@ describe('run request validation', () => {
     );
   });
 
-  it('returns 400 for preview when evaluation judge setting references a missing agent', async () => {
-    const responses: Array<{ status: number; payload: unknown }> = [];
-    const handled = await handleRunsRoutes({
-      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
-      res: {} as any,
-      pathname: '/api/runs/preview',
-      method: 'POST',
-      settings: {
-        evalsDir: '/tmp',
-        runsDir: '/tmp',
-        librariesDir: '/tmp',
-        workspaceRoot: '/tmp',
-        toolAnalysisResultsDir: '/tmp',
-        evaluationJudgeAgentName: 'missing-judge'
-      } as any,
-      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
-      oauthSessionManager: {} as any,
-      deps: makeRunsRouteDeps({
-        parseBody: async () => ({
-          selectedAgentName: 'assistant-1',
-          scenario: {
-            id: 'scn-1',
-            prompt: 'test',
-            serverNames: ['server-1'],
-            evalRules: [],
-            extractRules: []
+  it.each([true, false])(
+    'only validates the preview judge when semantic checks are present=%s',
+    async (hasSemanticChecks) => {
+      const responses: Array<{ status: number; payload: unknown }> = [];
+      const handled = await handleRunsRoutes({
+        req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+        res: {} as any,
+        pathname: '/api/runs/preview',
+        method: 'POST',
+        settings: {
+          evalsDir: '/tmp',
+          runsDir: '/tmp',
+          librariesDir: '/tmp',
+          workspaceRoot: '/tmp',
+          toolAnalysisResultsDir: '/tmp',
+          evaluationJudgeAgentName: 'missing-judge'
+        } as any,
+        runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+        oauthSessionManager: {} as any,
+        deps: makeRunsRouteDeps({
+          pickDefaultAssistantAgentName: ({ requested }: { requested: string }) => requested,
+          parseBody: async () => ({
+            selectedAgentName: 'assistant-1',
+            scenario: {
+              id: 'scn-1',
+              prompt: 'test',
+              serverNames: ['server-1'],
+              evalRules: hasSemanticChecks
+                ? [{ type: 'agent_check', label: 'Valid', prompt: 'Valid?' }]
+                : [],
+              extractRules: []
+            }
+          }),
+          readLibraries: () => ({
+            agents: {
+              'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+            },
+            servers: {
+              'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+            },
+            scenarios: {}
+          }),
+          asJson: (_res: unknown, status: number, payload: unknown) => {
+            responses.push({ status, payload });
           }
-        }),
-        readLibraries: () => ({
-          agents: {
-            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
-          },
-          servers: {
-            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
-          },
-          scenarios: {}
-        }),
-        asJson: (_res: unknown, status: number, payload: unknown) => {
-          responses.push({ status, payload });
-        }
-      }) as any
-    });
+        }) as any
+      });
 
-    expect(handled).toBe(true);
-    expect(responses[0]?.status).toBe(400);
-    expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
-      'Evaluation judge agent not found: missing-judge'
-    );
-  });
+      expect(handled).toBe(true);
+      expect(responses[0]?.status).toBe(hasSemanticChecks ? 400 : 200);
+      if (hasSemanticChecks) {
+        expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
+          'Evaluation judge agent not found: missing-judge'
+        );
+      } else {
+        expect(vi.mocked(runAll).mock.lastCall?.[1].evaluationJudge).toBeUndefined();
+      }
+    }
+  );
 
   it('passes attachments through preview config', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];

@@ -85,15 +85,37 @@ describe('workspaceApiClient SSE subscriptions', () => {
     MockSharedWorker.reset();
   });
 
-  it('closes terminal assistant subscriptions when the session endpoint returns 404', async () => {
-    const fetchMock = vi.fn(
-      async (): Promise<FetchResponse> => ({
-        status: 404,
-        ok: false,
-        text: async () => 'not found',
-        json: async () => ({})
-      })
+  it('forwards streamed reasoning deltas to assistant subscribers', () => {
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    const onEvent = vi.fn();
+    const unsubscribe = workspaceApiClient.subscribeScenarioAssistantSessionEvents(
+      'sas-1',
+      onEvent
     );
+    const delta = {
+      type: 'assistant_reasoning_delta',
+      ts: '2026-10-16T10:00:00.000Z',
+      payload: {
+        sessionId: 'sas-1',
+        turnId: 't',
+        messageId: 'm',
+        offset: 0,
+        delta: 'Hm',
+        revision: 2
+      }
+    };
+    MockEventSource.instances[0]!.emit('assistant_reasoning_delta', delta);
+    expect(onEvent).toHaveBeenCalledWith(delta);
+    unsubscribe();
+  });
+
+  it('closes terminal assistant subscriptions when the session endpoint returns 404', async () => {
+    const fetchMock = vi.fn(async (): Promise<FetchResponse> => ({
+      status: 404,
+      ok: false,
+      text: async () => 'not found',
+      json: async () => ({})
+    }));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
@@ -180,6 +202,49 @@ describe('workspaceApiClient SSE subscriptions', () => {
   });
 });
 
+describe('workspaceApiClient assistant turns', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('sends the client turn ID with result and scenario messages', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session: {}, response: {} })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session: {}, response: {} })));
+    vi.stubGlobal('fetch', fetchMock);
+    const signal = new AbortController().signal;
+
+    await workspaceApiClient.sendResultAssistantMessage('result-1', 'same text', signal, 'turn-1');
+    await workspaceApiClient.sendScenarioAssistantMessage(
+      'scenario-1',
+      'same text',
+      signal,
+      'turn-2'
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/result-assistant/sessions/result-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ message: 'same text', turnId: 'turn-1' }),
+        signal
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/scenario-assistant/sessions/scenario-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ message: 'same text', turnId: 'turn-2' }),
+        signal
+      })
+    );
+  });
+});
+
 describe('workspaceApiClient assistant request cancellation', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -187,28 +252,26 @@ describe('workspaceApiClient assistant request cancellation', () => {
   });
 
   it('forwards AbortSignal to assistant turn requests', async () => {
-    const fetchMock = vi.fn(
-      async (): Promise<FetchResponse> => ({
-        status: 200,
-        ok: true,
-        text: async () => '',
-        json: async () => ({
-          sessionId: 'ras-1',
-          session: {
-            id: 'ras-1',
-            scope: 'run',
-            runId: 'run-1',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            selectedAssistantAgentName: 'assistant-1',
-            model: 'gpt-4o-mini',
-            provider: 'openai',
-            messages: [],
-            pendingToolCalls: []
-          }
-        })
+    const fetchMock = vi.fn(async (): Promise<FetchResponse> => ({
+      status: 200,
+      ok: true,
+      text: async () => '',
+      json: async () => ({
+        sessionId: 'ras-1',
+        session: {
+          id: 'ras-1',
+          scope: 'run',
+          runId: 'run-1',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          selectedAssistantAgentName: 'assistant-1',
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+          messages: [],
+          pendingToolCalls: []
+        }
       })
-    );
+    }));
     vi.stubGlobal('fetch', fetchMock);
 
     const controller = new AbortController();
@@ -221,6 +284,52 @@ describe('workspaceApiClient assistant request cancellation', () => {
       '/api/result-assistant/sessions',
       expect.objectContaining({
         method: 'POST',
+        signal: controller.signal
+      })
+    );
+  });
+
+  it('sends a decision connection draft to the backend and forwards cancellation', async () => {
+    const result = { ok: false, message: 'Missing OPENAI_API_KEY', failure: 'missing_credentials' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result)));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const config = {
+      provider: 'openai' as const,
+      model: 'gpt-6-luna',
+      passThreshold: 0.9,
+      failThreshold: 0.1
+    };
+    expect(await workspaceApiClient.testDecisionConnection(config, controller.signal)).toEqual(
+      result
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/settings/decision/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(config),
+        signal: controller.signal
+      })
+    );
+  });
+  it('sends a Foundry agent inference probe with cancellation', async () => {
+    const result = {
+      ok: true,
+      provider: 'azure_foundry',
+      requestedModel: 'my-deployment',
+      durationMs: 20,
+      message: 'Responded'
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result)));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const agent = { provider: 'azure_foundry' as const, model: 'my-deployment' };
+    expect(await workspaceApiClient.testAgentConnection(agent, controller.signal)).toEqual(result);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(agent),
         signal: controller.signal
       })
     );

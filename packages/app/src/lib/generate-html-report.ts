@@ -1,11 +1,19 @@
-import type { EvalResult } from '@/types/eval';
+import { calculatePassRate, type EvalResult } from '@/types/eval';
+import { formatPassRate } from '@/lib/utils';
 
 export function generateHtmlReport(result: EvalResult): string {
   const passCount = result.scenarios.reduce(
     (s, sc) => s + sc.runs.filter((r) => r.passed).length,
     0
   );
-  const failCount = result.totalRuns - passCount;
+  const stoppedCount =
+    result.outcomes?.stopped ??
+    result.scenarios.reduce(
+      (sum, scenario) => sum + scenario.runs.filter((run) => run.outcome === 'stopped').length,
+      0
+    );
+  const failCount = Math.max(0, result.totalRuns - passCount - stoppedCount);
+  const passRate = calculatePassRate(passCount, result.totalRuns, stoppedCount);
 
   const toolFreq: Record<string, number> = {};
   result.scenarios.forEach((sc) =>
@@ -19,8 +27,13 @@ export function generateHtmlReport(result: EvalResult): string {
   const toolCounts = Object.values(toolFreq);
 
   const scenarioRows = result.scenarios
-    .map(
-      (sc) => `
+    .map((sc) => {
+      const scenarioRate = calculatePassRate(
+        sc.runs.filter((run) => run.passed).length,
+        sc.runs.length,
+        sc.runs.filter((run) => run.outcome === 'stopped').length
+      );
+      return `
     <div class="scenario-card">
       <div class="scenario-header" onclick="this.parentElement.classList.toggle('open')">
         <span class="chevron">▶</span>
@@ -28,8 +41,14 @@ export function generateHtmlReport(result: EvalResult): string {
         <span class="scenario-agent">${esc(sc.agentName)}</span>
         <span class="mono">${sc.runs.length} runs</span>
         <span class="badge ${
-          sc.passRate >= 0.8 ? 'badge-pass' : sc.passRate >= 0.5 ? 'badge-warn' : 'badge-fail'
-        }">${Math.round(sc.passRate * 100)}%</span>
+          scenarioRate === null
+            ? 'badge-neutral'
+            : scenarioRate >= 0.8
+              ? 'badge-pass'
+              : scenarioRate >= 0.5
+                ? 'badge-warn'
+                : 'badge-fail'
+        }">${formatPassRate(scenarioRate)}</span>
         <span class="mono">${sc.avgToolCalls.toFixed(1)} avg tools</span>
       </div>
       <div class="scenario-detail">
@@ -37,8 +56,8 @@ export function generateHtmlReport(result: EvalResult): string {
           .map(
             (run) => `
           <div class="run-row">
-            <span class="run-status ${run.passed ? 'pass' : 'fail'}">${
-              run.passed ? '✓' : '✗'
+            <span class="run-status ${run.outcome === 'stopped' ? 'stopped' : run.passed ? 'pass' : 'fail'}" title="${run.outcome === 'stopped' ? 'Stopped' : run.passed ? 'Passed' : 'Failed'}">${
+              run.outcome === 'stopped' ? '◷' : run.passed ? '✓' : '✗'
             }</span>
             <span class="mono run-label">Run #${run.runIndex + 1}</span>
             <span class="mono run-duration">${run.duration}ms</span>
@@ -61,8 +80,8 @@ export function generateHtmlReport(result: EvalResult): string {
           )
           .join('')}
       </div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 
   return `<!DOCTYPE html>
@@ -101,6 +120,7 @@ canvas{max-height:220px}
 .run-status{font-weight:700;font-size:1rem}
 .run-status.pass{color:#059669}
 .run-status.fail{color:#dc2626}
+.run-status.stopped{color:#6b7280}
 .run-duration{color:#6b7280}
 .tool-pills{display:flex;flex-wrap:wrap;gap:.25rem}
 .pill{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:9999px;font-size:.7rem;font-family:'JetBrains Mono',monospace}
@@ -110,6 +130,7 @@ canvas{max-height:220px}
 .badge-pass{background:#d1fae5;color:#065f46}
 .badge-warn{background:#fef3c7;color:#92400e}
 .badge-fail{background:#fee2e2;color:#991b1b}
+.badge-neutral{background:#f3f4f6;color:#6b7280}
 .footer{text-align:center;color:#9ca3af;font-size:.7rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #e5e7eb}
 </style>
 </head>
@@ -117,12 +138,14 @@ canvas{max-height:220px}
 <div class="header">
   <h1 class="mono">${esc(result.id)}</h1>
   <span class="badge ${
-    result.overallPassRate >= 0.8
-      ? 'badge-pass'
-      : result.overallPassRate >= 0.5
-      ? 'badge-warn'
-      : 'badge-fail'
-  }">${Math.round(result.overallPassRate * 100)}% pass</span>
+    passRate === null
+      ? 'badge-neutral'
+      : passRate >= 0.8
+        ? 'badge-pass'
+        : passRate >= 0.5
+          ? 'badge-warn'
+          : 'badge-fail'
+  }">${formatPassRate(passRate)}${passRate === null ? '' : ' pass'}</span>
 </div>
 <p class="sub">${new Date(
     result.timestamp
@@ -135,9 +158,7 @@ canvas{max-height:220px}
   <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value">${
     result.totalRuns
   }</div></div>
-  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${Math.round(
-    result.overallPassRate * 100
-  )}%</div></div>
+  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${formatPassRate(passRate)}</div></div>
   <div class="stat"><div class="stat-label">Avg Tool Calls</div><div class="stat-value">${result.avgToolCalls.toFixed(
     1
   )}</div></div>
@@ -147,7 +168,7 @@ canvas{max-height:220px}
 </div>
 
 <div class="charts">
-  <div class="chart-card"><h3>Pass / Fail</h3><canvas id="pieChart"></canvas></div>
+  <div class="chart-card"><h3>Run outcomes</h3><canvas id="pieChart"></canvas></div>
   <div class="chart-card"><h3>Tool Usage</h3><canvas id="barChart"></canvas></div>
 </div>
 
@@ -157,7 +178,7 @@ ${scenarioRows}
 <div class="footer">Generated by MCPLab · ${new Date().toISOString()}</div>
 
 <script>
-new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels:['Pass','Fail'],datasets:[{data:[${passCount},${failCount}],backgroundColor:['#059669','#dc2626'],borderWidth:0}]},options:{cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels:['Pass','Fail','Stopped'],datasets:[{data:[${passCount},${failCount},${stoppedCount}],backgroundColor:['#059669','#dc2626','#6b7280'],borderWidth:0}]},options:{cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
 new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:${JSON.stringify(
     toolLabels
   )},datasets:[{data:${JSON.stringify(

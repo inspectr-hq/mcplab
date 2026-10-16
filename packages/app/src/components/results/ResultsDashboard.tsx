@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@/types/eval';
 import { useMemo } from 'react';
 import { Activity, BarChart3, CheckCircle2, Clock, Layers, Timer, Wrench } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
@@ -14,6 +15,10 @@ type ResultsDashboardProps = {
 const PASS_COLOR = 'hsl(152, 69%, 40%)';
 const FAIL_COLOR = 'hsl(0, 72%, 51%)';
 const NOT_EVALUATED_COLOR = 'hsl(215, 16%, 47%)';
+const NOT_EXECUTED_COLOR = 'hsl(38, 92%, 50%)';
+const INCOMPLETE_COLOR = 'hsl(38, 92%, 50%)';
+const ERROR_COLOR = 'hsl(270, 55%, 50%)';
+const STOPPED_COLOR = 'hsl(215, 16%, 47%)';
 
 function formatNumber(value: number, fractionDigits = 0): string {
   return value.toLocaleString(undefined, {
@@ -26,18 +31,32 @@ export function OutcomeCard({
   title,
   passed,
   failed,
-  notEvaluated = 0
+  incomplete = 0,
+  error = 0,
+  stopped = 0,
+  notEvaluated = 0,
+  notExecuted = 0
 }: {
   title: string;
   passed: number;
   failed: number;
+  incomplete?: number;
+  error?: number;
+  stopped?: number;
   notEvaluated?: number;
+  notExecuted?: number;
 }) {
   const data = [
     { name: 'Passed', value: passed, color: PASS_COLOR },
     { name: 'Failed', value: failed, color: FAIL_COLOR },
+    ...(incomplete > 0 ? [{ name: 'Incomplete', value: incomplete, color: INCOMPLETE_COLOR }] : []),
+    ...(error > 0 ? [{ name: 'Error', value: error, color: ERROR_COLOR }] : []),
+    ...(stopped > 0 ? [{ name: 'Stopped', value: stopped, color: STOPPED_COLOR }] : []),
     ...(notEvaluated > 0
       ? [{ name: 'Not evaluated', value: notEvaluated, color: NOT_EVALUATED_COLOR }]
+      : []),
+    ...(notExecuted > 0
+      ? [{ name: 'Not executed', value: notExecuted, color: NOT_EXECUTED_COLOR }]
       : [])
   ];
 
@@ -77,6 +96,30 @@ export function OutcomeCard({
             <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: FAIL_COLOR }} />
             {formatNumber(failed)} failed
           </div>
+          {incomplete > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: INCOMPLETE_COLOR }}
+              />
+              {formatNumber(incomplete)} incomplete
+            </div>
+          )}
+          {error > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ERROR_COLOR }} />
+              {formatNumber(error)} error
+            </div>
+          )}
+          {stopped > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: STOPPED_COLOR }}
+              />
+              {formatNumber(stopped)} stopped
+            </div>
+          )}
           {notEvaluated > 0 && (
             <div className="flex items-center gap-1.5">
               <div
@@ -84,6 +127,15 @@ export function OutcomeCard({
                 style={{ backgroundColor: NOT_EVALUATED_COLOR }}
               />
               {formatNumber(notEvaluated)} not evaluated
+            </div>
+          )}
+          {notExecuted > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: NOT_EXECUTED_COLOR }}
+              />
+              {formatNumber(notExecuted)} not executed
             </div>
           )}
         </div>
@@ -96,20 +148,40 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
   const summary = useMemo(() => {
     const totalRuns = runs.reduce((sum, run) => sum + Math.max(0, run.totalRuns), 0);
     const passedRuns = runs.reduce(
-      (sum, run) => sum + Math.round(Math.max(0, run.totalRuns) * run.overallPassRate),
+      (sum, run) =>
+        sum +
+        (run.outcomes?.passed ??
+          Math.round(Math.max(0, run.totalRuns) * (run.overallPassRate ?? 0))),
       0
     );
-    const failedRuns = Math.max(0, totalRuns - passedRuns);
+    const incompleteRuns = runs.reduce((sum, run) => sum + (run.outcomes?.incomplete ?? 0), 0);
+    const errorRuns = runs.reduce((sum, run) => sum + (run.outcomes?.error ?? 0), 0);
+    const stoppedRuns = runs.reduce((sum, run) => sum + (run.outcomes?.stopped ?? 0), 0);
+    const failedRuns = runs.reduce(
+      (sum, run) =>
+        sum +
+        (run.outcomes?.failed ??
+          Math.max(
+            0,
+            run.totalRuns -
+              Math.round(Math.max(0, run.totalRuns) * (run.overallPassRate ?? 0)) -
+              (run.outcomes?.incomplete ?? 0) -
+              (run.outcomes?.error ?? 0) -
+              (run.outcomes?.stopped ?? 0)
+          )),
+      0
+    );
     const totalScenarios = runs.reduce((sum, run) => sum + Math.max(0, run.totalScenarios), 0);
     const checkCounts = runs.reduce(
       (counts, run) => {
         counts.passed += run.checkCounts?.passed ?? 0;
         counts.failed += run.checkCounts?.failed ?? 0;
         counts.not_evaluated += run.checkCounts?.not_evaluated ?? 0;
+        counts.not_executed += run.checkCounts?.not_executed ?? 0;
         counts.total += run.checkCounts?.total ?? 0;
         return counts;
       },
-      { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+      { passed: 0, failed: 0, not_evaluated: 0, not_executed: 0, total: 0 }
     );
     const weighted = (selector: (run: EvalResult) => number) =>
       totalRuns === 0
@@ -123,9 +195,12 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
       totalRuns,
       passedRuns,
       failedRuns,
+      incompleteRuns,
+      errorRuns,
+      stoppedRuns,
       checkCounts,
       totalScenarios,
-      passRate: totalRuns === 0 ? 0 : passedRuns / totalRuns,
+      passRate: calculatePassRate(passedRuns, totalRuns, stoppedRuns),
       avgToolCalls: weighted((run) => run.avgToolCalls),
       avgLatency: weighted((run) => run.avgLatency),
       totalTokens,
@@ -158,15 +233,19 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
     <div className="space-y-2" data-testid="results-dashboard">
       <div className="grid gap-3 lg:grid-cols-4">
         <OutcomeCard
-          title="Runs Pass / Fail"
+          title="Runs Pass / Fail / Incomplete / Error / Stopped"
           passed={summary.passedRuns}
           failed={summary.failedRuns}
+          incomplete={summary.incompleteRuns}
+          error={summary.errorRuns}
+          stopped={summary.stoppedRuns}
         />
         <OutcomeCard
-          title="Checks Pass / Fail"
+          title="Checks Pass / Fail / Not evaluated / Not executed"
           passed={summary.checkCounts.passed}
           failed={summary.checkCounts.failed}
           notEvaluated={summary.checkCounts.not_evaluated}
+          notExecuted={summary.checkCounts.not_executed}
         />
 
         <div className="grid self-start content-start gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-4">
@@ -185,7 +264,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           <StatCard
             compact
             title="Pass Rate"
-            value={`${formatNumber(summary.passRate * 100, 1)}%`}
+            value={summary.passRate === null ? '–' : `${formatNumber(summary.passRate * 100, 1)}%`}
             icon={BarChart3}
           />
           <StatCard

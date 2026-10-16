@@ -1,5 +1,38 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.10.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.25.0
+  - @inspectr/mcplab-reporting@1.3.2
+
+## 1.10.0
+
+### Minor Changes
+
+- feat: add decision (Jev, Ollama, Clef, Microsoft-Decision-1) semantic evaluation
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.24.0
+  - @inspectr/mcplab-reporting@1.3.1
+
+## 1.9.0
+
+### Minor Changes
+
+- feat: Rover browser agent execution, provider profiles, queue lifecycle handling, and browser agent library tools.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @inspectr/mcplab-core@1.23.0
+  - @inspectr/mcplab-reporting@1.3.0
+
 ## 1.8.3
 
 ### Patch Changes

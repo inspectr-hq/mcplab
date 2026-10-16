@@ -1,4 +1,5 @@
 import type {
+  AssistantRuntimeEvent,
   CoreEvalConfig,
   CoreSourceEvalConfig,
   CoreResultsJson,
@@ -31,7 +32,13 @@ import type {
   ScenarioPreviewCoreRunResponse,
   WorkspaceHealthResponse,
   CoreLibraryBundle,
-  ScenarioAssistantSseEvent
+  CoreAgentConfig,
+  AgentConnectionTestResult,
+  ScenarioAssistantSseEvent,
+  WorkspaceSettings,
+  WorkspaceSettingsPatch,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult
 } from './types';
 
 function getBaseUrl(): string {
@@ -45,7 +52,10 @@ function getBaseUrl(): string {
 const BASE = getBaseUrl();
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -81,24 +91,30 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   return response.text();
 }
 
+/** Every assistant event the server sends; a new event type fails to compile until listed here. */
+const ASSISTANT_EVENT_TYPES: Record<AssistantRuntimeEvent['type'], true> = {
+  session_started: true,
+  turn_started: true,
+  tool_call_requested: true,
+  tool_call_approved: true,
+  tool_call_denied: true,
+  tool_call_resolved: true,
+  assistant_message_delta: true,
+  assistant_reasoning_delta: true,
+  assistant_message_completed: true,
+  session_snapshot: true,
+  session_warning: true,
+  session_error: true,
+  session_finished: true
+};
+
 function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   path: string,
   onEvent: (event: TEvent) => void
 ): () => void {
   const source = new EventSource(`${BASE}${path}`);
   const terminalSessionPath = path.replace(/\/events$/, '');
-  const eventTypes = [
-    'session_started',
-    'turn_started',
-    'tool_call_requested',
-    'tool_call_approved',
-    'tool_call_denied',
-    'tool_call_resolved',
-    'assistant_message_completed',
-    'session_warning',
-    'session_error',
-    'session_finished'
-  ] as const;
+  const eventTypes = Object.keys(ASSISTANT_EVENT_TYPES) as AssistantRuntimeEvent['type'][];
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -163,30 +179,21 @@ function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, valu
 
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
-  getSettings: () =>
-    request<{
-      workspaceRoot: string;
-      evalsDir: string;
-      runsDir: string;
-      librariesDir: string;
-      defaultQueueWorkers: number;
-      scenarioAssistantAgentName?: string;
-      evaluationJudgeAgentName?: string;
-    }>('/api/settings'),
-  updateSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string;
-  }) =>
-    request<{
-      workspaceRoot: string;
-      evalsDir: string;
-      runsDir: string;
-      librariesDir: string;
-      defaultQueueWorkers: number;
-      scenarioAssistantAgentName?: string;
-      evaluationJudgeAgentName?: string;
-    }>('/api/settings', {
+  getSettings: () => request<WorkspaceSettings>('/api/settings'),
+  testAgentConnection: (agent: CoreAgentConfig, signal?: AbortSignal) =>
+    request<AgentConnectionTestResult>('/api/agents/test', {
+      method: 'POST',
+      body: JSON.stringify(agent),
+      signal
+    }),
+  testDecisionConnection: (config: EvaluationDecisionConfig, signal?: AbortSignal) =>
+    request<DecisionConnectionTestResult>('/api/settings/decision/test', {
+      method: 'POST',
+      body: JSON.stringify(config),
+      signal
+    }),
+  updateSettings: (patch: WorkspaceSettingsPatch) =>
+    request<WorkspaceSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)
     }),
@@ -302,14 +309,24 @@ export const workspaceApiClient = {
     ),
   getResultAssistantSession: (sessionId: string) =>
     request<{ session: ResultAssistantSessionView }>(`/api/result-assistant/sessions/${sessionId}`),
-  sendResultAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendResultAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
+    ),
+  cancelResultAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/result-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
     ),
   approveResultAssistantToolCall: (
     sessionId: string,
@@ -323,12 +340,12 @@ export const workspaceApiClient = {
         body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyResultAssistantToolCall: (sessionId: string, callId: string) =>
+  denyResultAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   closeResultAssistantSession: (sessionId: string) =>
@@ -353,6 +370,8 @@ export const workspaceApiClient = {
     scenarioIds?: string[];
     agents?: string[];
     runNote?: string;
+    newConversationBetweenScenarios?: boolean;
+    newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
     inspectWithInspectr?: boolean;
@@ -386,7 +405,7 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(params)
     }),
-  listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
+  listProviderModels: (provider: ProviderModelsResponse['provider']) =>
     request<ProviderModelsResponse>(
       `/api/providers/models?provider=${encodeURIComponent(provider)}`
     ),
@@ -412,29 +431,43 @@ export const workspaceApiClient = {
     request<{ session: ScenarioAssistantSessionView }>(
       `/api/scenario-assistant/sessions/${sessionId}`
     ),
-  sendScenarioAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendScenarioAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
     ),
-  approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  cancelScenarioAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/scenario-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
+    ),
+  approveScenarioAssistantToolCall: (
+    sessionId: string,
+    callId: string,
+    argumentsOverride?: unknown
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  denyScenarioAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   approveAllScenarioAssistantToolCalls: (sessionId: string) =>
@@ -667,6 +700,39 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'
     }),
+  stopEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; stopped: number }>(
+      `/api/runs/evaluations/${encodeURIComponent(evaluationRunId)}/stop`,
+      { method: 'POST' }
+    ),
+  stopScenario: (jobId: string, scenarioId: string, agentName: string) =>
+    request<{ ok: boolean; status: string }>(
+      `/api/runs/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(
+        scenarioId
+      )}/agents/${encodeURIComponent(agentName)}/stop`,
+      { method: 'POST' }
+    ),
+  removeEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; removed: number }>(
+      `/api/runs/queue/evaluations/${encodeURIComponent(evaluationRunId)}`,
+      { method: 'DELETE' }
+    ),
+  openRover: (jobId: string) =>
+    request<{ ok: boolean; url?: string }>('/api/rover/open', {
+      method: 'POST',
+      body: JSON.stringify({ jobId })
+    }),
+  resumeRover: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/rover/jobs/${encodeURIComponent(jobId)}/resume`, {
+      method: 'POST'
+    }),
+  getRoverStatus: () =>
+    request<{
+      connected: boolean;
+      provider?: string;
+      pageUrl?: string;
+      activeJobId?: string | null;
+    }>('/api/rover/status'),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {

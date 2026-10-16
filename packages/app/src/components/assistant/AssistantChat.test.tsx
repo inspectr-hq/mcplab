@@ -1,11 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  AssistantComposer,
-  AssistantMessageRow,
-  AssistantToolCallCard,
-  type AssistantSnippet
-} from './AssistantChat';
+import { AssistantComposer, AssistantMessageRow, type AssistantSnippet } from './AssistantChat';
+import { ToolApprovalCard } from './AssistantToolCalls';
 
 describe('AssistantChat shared primitives', () => {
   it('renders a shared composer with snippets and send behavior', () => {
@@ -75,7 +71,7 @@ describe('AssistantChat shared primitives', () => {
             createdAt: '2026-04-26T10:00:00.000Z'
           }}
         />
-        <AssistantToolCallCard
+        <ToolApprovalCard
           call={{
             id: 'call-1',
             server: 'mcplab',
@@ -92,7 +88,7 @@ describe('AssistantChat shared primitives', () => {
     );
 
     expect(screen.getByText('I can help with that.')).toBeInTheDocument();
-    expect(screen.getByText('Tool call read_results')).toBeInTheDocument();
+    expect(screen.getByText('Read results')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));

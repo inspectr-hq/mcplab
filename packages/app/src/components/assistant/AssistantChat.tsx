@@ -1,4 +1,4 @@
-import type { MutableRefObject, ReactNode } from 'react';
+import { useState, type MutableRefObject, type ReactNode } from 'react';
 import {
   Bot,
   ChevronDown,
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import { MarkdownContent } from '@/components/MarkdownContent';
+import type { AssistantReasoning as AssistantReasoningValue } from '@/lib/data-sources/types';
 import { cn } from '@/lib/utils';
 
 export type AssistantSnippet = {
@@ -34,30 +35,27 @@ export type AssistantMessage = {
   role: 'user' | 'assistant' | 'tool' | 'system';
   text: string;
   createdAt: string;
+  reasoning?: AssistantReasoningValue;
 };
 
-export type AssistantToolCall = {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-};
+export type { AssistantToolCall } from './AssistantToolCalls';
 
 export function AssistantMessageRow({
   message,
   className,
   assistantLabel,
-  renderActions
+  renderActions,
+  header,
+  footer
 }: {
   message: AssistantMessage;
   className?: string;
   assistantLabel?: string;
   renderActions?: ReactNode;
+  /** Rendered inside the message bubble, above the text. */
+  header?: ReactNode;
+  /** Rendered inside the message bubble, below the text. */
+  footer?: ReactNode;
 }) {
   const role = message.role;
 
@@ -112,18 +110,22 @@ export function AssistantMessageRow({
       )}
       <div className="relative max-w-[92%]">
         <div
-          className={`max-w-full break-words rounded-md border px-3 py-2 text-sm ${
-            isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-sm'
+          className={`max-w-full wrap-break-word rounded-md border px-3 py-2 text-sm ${
+            isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-xs'
           }`}
         >
           {!isUser && assistantLabel && (
             <p className="mb-2 text-[11px] font-semibold text-muted-foreground">{assistantLabel}</p>
           )}
+          {header && <div className={message.text ? 'mb-2' : undefined}>{header}</div>}
           {isUser ? (
             <p className="whitespace-pre-wrap">{message.text}</p>
           ) : (
-            <MarkdownContent text={message.text} variant="assistant" className="text-sm" />
+            message.text && (
+              <MarkdownContent text={message.text} variant="assistant" className="text-sm" />
+            )
           )}
+          {footer}
         </div>
         {renderActions}
       </div>
@@ -133,98 +135,6 @@ export function AssistantMessageRow({
         </div>
       )}
     </div>
-  );
-}
-
-export function AssistantToolCallCard({
-  call,
-  loading = false,
-  onApprove,
-  onDeny,
-  defaultOpen,
-  className,
-  description
-}: {
-  call: AssistantToolCall;
-  loading?: boolean;
-  onApprove?: (callId: string) => void;
-  onDeny?: (callId: string) => void;
-  defaultOpen?: boolean;
-  className?: string;
-  description?: string;
-}) {
-  const isPending = call.status === 'pending';
-  const displayToolName = call.tool || call.publicToolName || 'unknown_tool';
-
-  return (
-    <details
-      open={defaultOpen ?? isPending}
-      className={cn(
-        'group overflow-hidden rounded-md border border-border/60 bg-background',
-        className
-      )}
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-            <span
-              className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                isPending
-                  ? 'bg-amber-100 text-amber-900'
-                  : call.status === 'error'
-                  ? 'bg-red-100 text-red-900'
-                  : call.status === 'denied'
-                  ? 'bg-gray-100 text-gray-700'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {isPending
-                ? 'Needs approval'
-                : call.status === 'error'
-                ? 'Error'
-                : call.status === 'denied'
-                ? 'Denied'
-                : 'Approved'}
-            </span>
-          </div>
-        </div>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="space-y-2 border-t border-border/50 px-3 py-2">
-        {description && (
-          <MarkdownContent text={description} variant="assistant" className="text-sm" />
-        )}
-        <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-        </pre>
-        {call.error && <p className="text-xs text-destructive">{call.error}</p>}
-        {isPending && (
-          <div className="mt-2 flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              disabled={loading}
-              onClick={() => onDeny?.(call.id)}
-            >
-              Deny
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={loading}
-              onClick={() => onApprove?.(call.id)}
-            >
-              Approve
-            </Button>
-          </div>
-        )}
-      </div>
-    </details>
   );
 }
 
@@ -322,7 +232,7 @@ export function AssistantComposer({
   const controlsDisabled = disabled || loading;
 
   return (
-    <div className="rounded-xl border bg-background p-2 shadow-sm">
+    <div className="rounded-xl border bg-background p-2 shadow-xs">
       <Textarea
         ref={inputRef}
         value={input}

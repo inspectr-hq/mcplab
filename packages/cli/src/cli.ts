@@ -10,6 +10,9 @@ import {
   hashConfig,
   selectScenarios,
   runAll,
+  resolveWorkspaceEvaluation,
+  loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
   expandConfigForAgents,
   applyRuntimeServerOverrides,
@@ -22,10 +25,7 @@ import {
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
-import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
-import { resolveEvaluationJudge } from './app-server/run-queue-executor.js';
-import { loadWorkspaceSettingsOverrides } from './app-server/settings-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import {
   resolveRunOptions,
@@ -591,10 +591,10 @@ program
               cwd: process.cwd()
             })
         : options.input
-        ? resolve(String(options.input))
-        : (() => {
-            throw new Error('input is required');
-          })();
+          ? resolve(String(options.input))
+          : (() => {
+              throw new Error('input is required');
+            })();
       const resultsPath = join(runDir, 'results.json');
       const reportPath = join(runDir, 'report.html');
       const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
@@ -649,6 +649,8 @@ program
         throw new Error('Port must be a positive number');
       }
       printCliBanner();
+      // Load the app router only when the user starts the app, keeping CLI commands lightweight.
+      const { startAppServer } = await import('./app-server/index.js');
       await startAppServer({
         host: resolvedAppOptions.host,
         port,
@@ -778,8 +780,8 @@ async function executeSingleConfigRun(params: {
   const requestedAgents = resolvedOptions.agentsAll
     ? Object.keys(config.agents)
     : requestedAgentsFromCsv.length > 0
-    ? requestedAgentsFromCsv
-    : undefined;
+      ? requestedAgentsFromCsv
+      : undefined;
   const runtimeOverrides = parseRuntimeServerOverrides(options);
   const selectedBaseConfig = options.scenario ? selectScenarios(config, options.scenario) : config;
   const selectedOverrides = filterRuntimeOverridesToSelectedScenarios(
@@ -869,9 +871,10 @@ async function executeSingleConfigRun(params: {
     runsDir: String(options.runsDir),
     cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
-    evaluationJudge: resolveEvaluationJudge({
+    ...resolveWorkspaceEvaluation({
       agents: libraryAgents,
-      evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name
+      scenarios: expanded.scenarios,
+      settings: toWorkspaceEvaluationSettings(workspaceSettings)
     }),
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);
@@ -936,7 +939,7 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
     case 'scenario_run_finished':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${event.outcome === 'stopped' ? 'STOPPED' : event.pass ? 'PASS' : 'FAIL'} (${
         event.toolCallCount
       } tool calls)`;
     case 'run_finished':

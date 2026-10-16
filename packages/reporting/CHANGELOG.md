@@ -1,5 +1,31 @@
 # @inspectr/mcplab-reporting
 
+## 1.3.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.25.0
+
+## 1.3.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.24.0
+
+## 1.3.0
+
+### Minor Changes
+
+- feat: Rover Browser Agents
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @inspectr/mcplab-core@1.23.0
+
 ## 1.2.4
 
 ### Patch Changes

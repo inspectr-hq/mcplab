@@ -1,24 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AssistantRuntimeEvent } from '@inspectr/mcplab-core';
 import { sendSseEvent, type SseEvent } from './jobs.js';
 
-export type AssistantSseEventType =
-  | 'session_started'
-  | 'turn_started'
-  | 'tool_call_requested'
-  | 'tool_call_approved'
-  | 'tool_call_denied'
-  | 'tool_call_resolved'
-  | 'assistant_message_completed'
-  | 'session_warning'
-  | 'session_error'
-  | 'session_finished';
+export type AssistantSseEventType = AssistantRuntimeEvent['type'];
 
-export type AssistantSseEvent = SseEvent & {
-  type: AssistantSseEventType;
-};
+/** Streamed text and reasoning deltas are small and frequent; they carry no session snapshot. */
+export function isAssistantDeltaEvent(type: AssistantSseEventType): boolean {
+  return type === 'assistant_message_delta' || type === 'assistant_reasoning_delta';
+}
+export type AssistantSseEvent = AssistantRuntimeEvent & SseEvent;
 
 export interface AssistantSseSessionState {
-  events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
 }
 
@@ -33,14 +25,10 @@ export function createAssistantSseEvent(
   };
 }
 
-const MAX_REPLAYED_EVENTS = 100;
-
 export function broadcastAssistantSseEvent(
   session: AssistantSseSessionState,
   event: AssistantSseEvent
 ): void {
-  session.events.push(event);
-  if (session.events.length > MAX_REPLAYED_EVENTS) session.events.shift();
   for (const client of session.clients) {
     sendSseEvent(client, event);
   }
@@ -49,21 +37,21 @@ export function broadcastAssistantSseEvent(
 export function serveAssistantSseStream(
   req: IncomingMessage,
   res: ServerResponse,
-  session: AssistantSseSessionState
+  session: AssistantSseSessionState,
+  snapshot: Record<string, unknown>
 ): void {
   res.statusCode = 200;
   res.setHeader('content-type', 'text/event-stream');
-  res.setHeader('cache-control', 'no-cache');
+  res.setHeader('cache-control', 'no-cache, no-transform');
+  res.setHeader('x-accel-buffering', 'no');
   res.setHeader('connection', 'keep-alive');
   if ('flushHeaders' in res && typeof res.flushHeaders === 'function') {
     res.flushHeaders();
   }
-  for (const event of session.events) {
-    sendSseEvent(res, event);
-  }
+  sendSseEvent(res, createAssistantSseEvent('session_snapshot', snapshot));
   session.clients.add(res);
-  if (typeof req.on === 'function') {
-    req.on('close', () => {
+  if (typeof res.on === 'function') {
+    res.on('close', () => {
       session.clients.delete(res);
     });
   }
@@ -74,4 +62,16 @@ export function endAssistantSseClients(session: AssistantSseSessionState): void 
     client.end();
   }
   session.clients.clear();
+}
+
+export function createAssistantRequestAbortController(res: ServerResponse) {
+  const controller = new AbortController();
+  const onClose = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  // A response can close before the handler starts, for example when a client
+  // disconnects while the request body is still being received.
+  if (res.destroyed && !res.writableEnded) controller.abort();
+  res.on?.('close', onClose);
+  return { signal: controller.signal, dispose: () => res.off?.('close', onClose) };
 }

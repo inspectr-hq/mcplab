@@ -2,6 +2,9 @@
   "name": "mcplab",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -24,19 +27,19 @@
     "publish:cli": "npm publish -w packages/cli",
     "publish:all": "npm publish -w packages/core -w packages/reporting -w packages/mcp-server -w packages/cli",
     "clean": "rm -rf dist packages/*/dist packages/*/*.tsbuildinfo",
-    "format": "npx prettier --write \"packages/**/*.{ts,tsx,jsx,css, astro}\" --config ./.prettierrc",
+    "format": "oxfmt \"packages/**/*.{ts,tsx,jsx,css}\"",
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "npm run build && changeset publish",
-    "website:dev": "npm run dev -w @inspectr/mcplab-website",
-    "website:build": "npm run build -w @inspectr/mcplab-website",
-    "website:preview": "npm run preview -w @inspectr/mcplab-website",
     "validate:configs": "node scripts/validate-configs.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.9.3"
+    "@types/node": "^22.20.5",
+    "@changesets/cli": "^3.0.3",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

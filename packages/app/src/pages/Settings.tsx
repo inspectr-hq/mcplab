@@ -9,36 +9,44 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { isDecisionEngineEnabled, type EvaluationDecisionConfig } from '@/types/eval';
 import { RefreshCw, Settings as SettingsIcon } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings';
 
 const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
+  const [assistantAgentName, setAssistantAgentName] = useState<string>('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
+  const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
+  const [decisionError, setDecisionError] = useState('');
+  const [testingDecision, setTestingDecision] = useState(false);
+  const llmAgents = agents.filter((agent) => agent.type !== 'browser');
 
   const effectiveAssistantAgentName = useMemo(
-    () => scenarioAssistantAgentName || agents[0]?.name || '',
-    [scenarioAssistantAgentName, agents]
+    () => assistantAgentName || agents[0]?.name || '',
+    [assistantAgentName, agents]
   );
 
   const loadSettings = useCallback(async () => {
     setLoadingSettings(true);
     try {
       const settings = await source.getWorkspaceSettings();
-      setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
+      setAssistantAgentName(settings?.assistantAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
+      setSavedDecision(settings?.evaluationDecision);
     } catch (error: unknown) {
-      setScenarioAssistantAgentName('');
+      setAssistantAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
+      setSavedDecision(undefined);
       toast({
         title: 'Could not load settings',
         description: error instanceof Error ? error.message : String(error),
@@ -54,12 +62,12 @@ const SettingsPage = () => {
   }, [loadSettings]);
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
-    const previousAgentName = scenarioAssistantAgentName;
-    setScenarioAssistantAgentName(nextAgentName);
+    const previousAgentName = assistantAgentName;
+    setAssistantAgentName(nextAgentName);
     setSavingSettings(true);
     try {
       await source.updateWorkspaceSettings({
-        scenarioAssistantAgentName: nextAgentName || undefined
+        assistantAgentName: nextAgentName || undefined
       });
       toast({
         title: 'Settings updated',
@@ -68,7 +76,7 @@ const SettingsPage = () => {
           : 'Default assistant agent cleared (will use first available agent by default).'
       });
     } catch (error: unknown) {
-      setScenarioAssistantAgentName(previousAgentName);
+      setAssistantAgentName(previousAgentName);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
@@ -104,12 +112,18 @@ const SettingsPage = () => {
   };
 
   const saveEvaluationJudgeSetting = async (nextAgentName: string) => {
+    if (!nextAgentName && isDecisionEngineEnabled(savedDecision)) {
+      setDecisionError(
+        'Turn off and save, or clear, the Decision Engine before removing its backup LLM evaluation judge.'
+      );
+      return;
+    }
     const previousAgentName = evaluationJudgeAgentName;
     setEvaluationJudgeAgentName(nextAgentName);
     setSavingSettings(true);
     try {
       await source.updateWorkspaceSettings({
-        evaluationJudgeAgentName: nextAgentName || undefined
+        evaluationJudgeAgentName: nextAgentName || null
       });
       toast({
         title: 'Settings updated',
@@ -150,7 +164,7 @@ const SettingsPage = () => {
           size="sm"
           variant="outline"
           onClick={() => void refreshAll()}
-          disabled={librariesLoading || loadingSettings}
+          disabled={librariesLoading || loadingSettings || savingSettings || testingDecision}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
@@ -205,7 +219,9 @@ const SettingsPage = () => {
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
           <div className="space-y-1.5">
-            <Label className="text-xs">Default Evaluation Judge</Label>
+            <Label className="text-xs" htmlFor="evaluation-judge">
+              Default Evaluation Judge
+            </Label>
             <Select
               value={evaluationJudgeAgentName || '__none__'}
               onValueChange={(value) =>
@@ -213,12 +229,12 @@ const SettingsPage = () => {
               }
               disabled={savingSettings}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger id="evaluation-judge" className="h-9 text-sm">
                 <SelectValue placeholder="Select evaluation judge" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">None</SelectItem>
-                {agents.map((agent) => (
+                {llmAgents.map((agent) => (
                   <SelectItem key={agent.id} value={agent.id}>
                     {agent.name || agent.id} · {agent.model}
                   </SelectItem>
@@ -234,6 +250,20 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
+      <DecisionEngineSettings
+        evaluationJudgeAgentName={evaluationJudgeAgentName}
+        llmAgents={llmAgents}
+        savedDecision={savedDecision}
+        decisionError={decisionError}
+        loadingSettings={loadingSettings}
+        savingSettings={savingSettings}
+        librariesLoading={librariesLoading}
+        onDecisionSaved={setSavedDecision}
+        onDecisionError={setDecisionError}
+        onSavingChange={setSavingSettings}
+        onTestingChange={setTestingDecision}
+      />
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Evaluation Queue</CardTitle>
@@ -243,13 +273,15 @@ const SettingsPage = () => {
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
           <div className="space-y-1.5">
-            <Label className="text-xs">Evaluation workers</Label>
+            <Label htmlFor="evaluation-workers" className="text-xs">
+              Evaluation workers
+            </Label>
             <Select
               value={defaultQueueWorkers}
               onValueChange={(value) => void saveDefaultQueueWorkers(value)}
               disabled={savingSettings}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger id="evaluation-workers" className="h-9 text-sm">
                 <SelectValue placeholder="Select worker count" />
               </SelectTrigger>
               <SelectContent>

@@ -1,7 +1,14 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_OPENAI_API_VERSION
+} from './server-constants.js';
+import { resolveAzureFoundryConnection, resolveAzureOpenAIDeployment } from './azure-config.js';
+import { AgentConnectionError } from './agent-errors.js';
 import type {
   AgentConfig,
+  LlmAgentConfig,
   ExecutableScenario,
   LlmMessage,
   LlmResponse,
@@ -12,6 +19,7 @@ import type {
   TraceMessageContentBlock,
   TraceMessageUsage
 } from './types.js';
+import { isLlmAgent } from './types.js';
 import type { McpClientManager } from './mcp.js';
 import { isAbortError, throwIfAborted } from './abort.js';
 import type { ScenarioTraceSpan } from './langsmith-tracing.js';
@@ -213,9 +221,11 @@ export async function runAgentScenario(params: {
   trace?: ScenarioTraceSpan;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
+  if (!isLlmAgent(agent))
+    throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
   const serverRequestHeaders =
     typeof params.resolveServerRequestHeaders === 'function'
-      ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
+      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
       : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
@@ -510,6 +520,7 @@ export async function chatWithAgent(params: {
   responseFormat?: JsonSchemaResponseFormat;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
+  if (!isLlmAgent(agent)) throw new Error('Browser agents cannot be used for LLM chat.');
   const tools = params.tools ?? [];
   const adapter = createAdapter(agent);
   return adapter.chat(messages, tools, {
@@ -522,7 +533,7 @@ export async function chatWithAgent(params: {
   });
 }
 
-function createAdapter(agent: AgentConfig): LlmAdapter {
+function createAdapter(agent: LlmAgentConfig): LlmAdapter {
   if (agent.provider === 'openai') {
     return new OpenAiAdapter(process.env.OPENAI_API_KEY);
   }
@@ -530,11 +541,20 @@ function createAdapter(agent: AgentConfig): LlmAdapter {
     return new AnthropicAdapter(process.env.ANTHROPIC_API_KEY);
   }
   if (agent.provider === 'azure_openai') {
-    return new AzureOpenAiAdapter({
+    return new AzureChatAdapter({
       apiKey: process.env.AZURE_OPENAI_API_KEY,
       endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+      deployment: resolveAzureOpenAIDeployment(agent.model),
       apiVersion: process.env.AZURE_OPENAI_API_VERSION
+    });
+  }
+  if (agent.provider === 'azure_foundry') {
+    const deployment = agent.model.trim();
+    if (!deployment) throw new Error('Azure Foundry requires a deployment name for this agent.');
+    return new AzureChatAdapter({
+      ...resolveAzureFoundryConnection(),
+      deployment,
+      v1: true
     });
   }
   throw new Error(`Unsupported provider: ${agent.provider}`);
@@ -544,7 +564,7 @@ class OpenAiAdapter implements LlmAdapter {
   private client: OpenAI;
 
   constructor(apiKey?: string) {
-    if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing OPENAI_API_KEY');
     this.client = new OpenAI({ apiKey });
   }
 
@@ -553,16 +573,19 @@ class OpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create(
-      {
-        model: options.model,
-        messages: messages.map(toOpenAiMessage),
-        tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
-      },
-      options.signal ? { signal: options.signal } : undefined
+    const request = {
+      model: options.model,
+      messages: messages.map(toOpenAiMessage),
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+      ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
+    };
+    const response = await explainRejectedTemperature(options, () =>
+      this.client.chat.completions.create(
+        request,
+        options.signal ? { signal: options.signal } : undefined
+      )
     );
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
@@ -585,7 +608,7 @@ class OpenAiAdapter implements LlmAdapter {
   }
 }
 
-class AzureOpenAiAdapter implements LlmAdapter {
+class AzureChatAdapter implements LlmAdapter {
   private client: OpenAI;
   private deployment: string;
   private apiVersion: string;
@@ -595,17 +618,21 @@ class AzureOpenAiAdapter implements LlmAdapter {
     endpoint?: string;
     deployment?: string;
     apiVersion?: string;
+    v1?: boolean;
   }) {
-    const { apiKey, endpoint, deployment, apiVersion } = params;
-    if (!apiKey) throw new Error('Missing AZURE_OPENAI_API_KEY');
-    if (!endpoint) throw new Error('Missing AZURE_OPENAI_ENDPOINT');
-    if (!deployment) throw new Error('Missing AZURE_OPENAI_DEPLOYMENT');
+    const { apiKey, endpoint, deployment, apiVersion, v1 } = params;
+    if (!apiKey)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_API_KEY');
+    if (!endpoint)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_ENDPOINT');
+    if (!deployment)
+      throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
     this.deployment = deployment;
-    this.apiVersion = apiVersion ?? '2024-02-15-preview';
+    this.apiVersion = apiVersion ?? DEFAULT_AZURE_OPENAI_API_VERSION;
     this.client = new OpenAI({
       apiKey,
-      baseURL: `${endpoint}/openai/deployments/${deployment}`,
-      defaultQuery: { 'api-version': this.apiVersion }
+      baseURL: v1 ? `${endpoint}/openai/v1` : `${endpoint}/openai/deployments/${deployment}`,
+      ...(!v1 ? { defaultQuery: { 'api-version': this.apiVersion } } : {})
     });
   }
 
@@ -690,7 +717,7 @@ class AnthropicAdapter implements LlmAdapter {
   private client: Anthropic;
 
   constructor(apiKey?: string) {
-    if (!apiKey) throw new Error('Missing ANTHROPIC_API_KEY');
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing ANTHROPIC_API_KEY');
     this.client = new Anthropic({ apiKey });
   }
 
@@ -702,28 +729,30 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.createWithModelFallback(
-      options.model,
-      {
-        temperature: options.temperature,
-        max_tokens: options.max_tokens ?? 1024,
-        system,
-        messages: anthroMessages,
-        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
-        // output_config is an Anthropic-side structured-output field. It is not part of the
-        // stable MessageCreateParams type, so it is injected via object spread. If the model
-        // or API version does not honour it, the constraint is silently dropped and JSON
-        // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
-        ...(options.responseFormat && {
-          output_config: {
-            format: {
-              type: 'json_schema' as const,
-              schema: options.responseFormat.json_schema.schema
+    const response = await explainRejectedTemperature(options, () =>
+      this.createWithModelFallback(
+        options.model,
+        {
+          temperature: options.temperature,
+          max_tokens: options.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+          system,
+          messages: anthroMessages,
+          tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
+          // output_config is an Anthropic-side structured-output field. It is not part of the
+          // stable MessageCreateParams type, so it is injected via object spread. If the model
+          // or API version does not honour it, the constraint is silently dropped and JSON
+          // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
+          ...(options.responseFormat && {
+            output_config: {
+              format: {
+                type: 'json_schema' as const,
+                schema: options.responseFormat.json_schema.schema
+              }
             }
-          }
-        })
-      },
-      options.signal
+          })
+        },
+        options.signal
+      )
     );
 
     const toolCalls: ToolCall[] = [];
@@ -807,6 +836,37 @@ function anthropicModelCandidates(model: string): string[] {
   return Array.from(new Set(out));
 }
 
+/**
+ * Evaluations run with the settings they are configured with: a model that rejects
+ * `temperature` fails with what to change, instead of silently running at its default.
+ */
+async function explainRejectedTemperature<T>(
+  options: AdapterOptions,
+  send: () => Promise<T>
+): Promise<T> {
+  try {
+    return await send();
+  } catch (error) {
+    if (typeof options.temperature !== 'number' || !isUnsupportedTemperatureError(error))
+      throw error;
+    throw new Error(
+      `\`${options.model}\` doesn't accept temperature. Remove it from this agent's settings.`,
+      { cause: error }
+    );
+  }
+}
+
+/** Providers reject `temperature` for some models (reasoning models, newer Claude models). */
+export function isUnsupportedTemperatureError(error: unknown): boolean {
+  const message = String((error as { message?: unknown })?.message ?? error).toLowerCase();
+  return (
+    message.includes('temperature') &&
+    ['not supported', 'unsupported', 'deprecated', 'only the default', 'does not support'].some(
+      (phrase) => message.includes(phrase)
+    )
+  );
+}
+
 function isModelNotFound(error: unknown): boolean {
   if (!error) return false;
   const anyErr = error as {
@@ -821,6 +881,8 @@ function isModelNotFound(error: unknown): boolean {
     statusNotFound || typeNotFound || (msg.includes('not_found_error') && msg.includes('model'))
   );
 }
+
+export { anthropicModelCandidates, isModelNotFound };
 
 function toOpenAiTool(tool: ToolDef) {
   return {
@@ -880,17 +942,19 @@ function toOpenAiMessage(message: LlmMessage) {
                 image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
               }
             : att.media_type === 'application/pdf'
-            ? {
-                type: 'file' as const,
-                file: {
-                  filename: att.name ?? 'document.pdf',
-                  file_data: att.data ? `data:${att.media_type};base64,${att.data}` : att.url ?? ''
+              ? {
+                  type: 'file' as const,
+                  file: {
+                    filename: att.name ?? 'document.pdf',
+                    file_data: att.data
+                      ? `data:${att.media_type};base64,${att.data}`
+                      : (att.url ?? '')
+                  }
                 }
-              }
-            : {
-                type: 'text' as const,
-                text: attachmentToText(att)
-              }
+              : {
+                  type: 'text' as const,
+                  text: attachmentToText(att)
+                }
         )
       ]
     };

@@ -19,6 +19,8 @@ export async function rerunWithSameSettings(source: EvalDataSource, run: EvalRes
     agents: agents.length > 0 ? agents : undefined,
     runNote: sourceRun.runNote,
     serverOverrideAll: sourceRun.rerunServerOverrideAll,
-    scenarioServerOverrides: sourceRun.rerunScenarioServerOverrides
+    scenarioServerOverrides: sourceRun.rerunScenarioServerOverrides,
+    newConversationBeforeStart: sourceRun.rerunNewConversationBeforeStart,
+    newConversationBetweenScenarios: sourceRun.rerunNewConversationBetweenScenarios
   });
 }

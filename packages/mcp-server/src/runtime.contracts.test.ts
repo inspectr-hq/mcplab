@@ -41,6 +41,24 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('generates a Foundry agent entry accepted by input and output schemas', async () => {
+    const tool = setupTools().get('mcplab_generate_agent_entry')!;
+    const input = asSchema(tool.config.inputSchema).parse({
+      id: 'foundry-agent',
+      provider: 'azure_foundry',
+      model: 'my-deployment'
+    });
+    const result = await tool.cb(input);
+    expect(result.isError).not.toBe(true);
+    expect(asSchema(tool.config.outputSchema).safeParse(result.structuredContent).success).toBe(
+      true
+    );
+    expect(result.structuredContent.entry).toEqual({
+      provider: 'azure_foundry',
+      model: 'my-deployment'
+    });
+    expect(result.structuredContent.yaml).toContain('azure_foundry');
+  });
   it('accepts descriptions in evaluation config create and update inputs', () => {
     const tools = setupTools();
     for (const name of ['mcplab_create_evaluation_config', 'mcplab_update_evaluation_config']) {
@@ -315,6 +333,30 @@ describe('mcp tool contracts', () => {
     const outputSchema = asSchema(tool!.config.outputSchema);
     const parsed = outputSchema.safeParse(sc);
     expect(parsed.success).toBe(true);
+  });
+
+  it('generates a Rover browser agent entry', async () => {
+    const tool = setupTools().get('mcplab_generate_browser_agent_entry');
+    expect(tool).toBeDefined();
+    const result = await tool!.cb({
+      id: 'custom-chat-browser',
+      name: 'Custom Chat browser',
+      provider: 'custom-chat',
+      url: 'https://chat.example',
+      new_conversation_between_scenarios: true
+    });
+    expect(result.structuredContent.entry).toMatchObject({
+      type: 'browser',
+      provider: 'custom-chat'
+    });
+    expect(result.structuredContent.yaml).toContain('type: browser');
+  });
+
+  it('accepts browser providers when retrieving a library item', () => {
+    const tool = setupTools().get('mcplab_get_library_item');
+    const schema = asSchema(tool!.config.inputSchema);
+
+    expect(schema.safeParse({ kind: 'browser_providers', id: 'custom-chat' }).success).toBe(true);
   });
 
   it('mcplab_generate_server_entry exposes required inputs and enforces auth requirements at runtime', async () => {

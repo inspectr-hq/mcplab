@@ -1,11 +1,19 @@
-export interface ProviderModelsResponse {
-  provider: 'anthropic' | 'openai' | 'azure';
-  items: string[];
-  kind: 'models' | 'deployments';
-  source: string;
-}
+import {
+  getAzureOpenAIDeploymentSuggestions,
+  parseDeploymentSuggestions,
+  type ProviderModelsResponse
+} from '@inspectr/mcplab-core';
 
 export async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
+  if (provider === 'azure_foundry') {
+    const items = parseDeploymentSuggestions([process.env.AZURE_FOUNDRY_DEPLOYMENTS]);
+    return {
+      provider,
+      items,
+      kind: 'deployments',
+      source: 'AZURE_FOUNDRY_DEPLOYMENTS environment variable'
+    };
+  }
   if (provider === 'anthropic') {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
@@ -48,20 +56,7 @@ export async function fetchProviderModels(provider: string): Promise<ProviderMod
   }
 
   if (provider === 'azure') {
-    const envCandidates = [
-      process.env.AZURE_OPENAI_DEPLOYMENTS,
-      process.env.AZURE_OPENAI_DEPLOYMENT,
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-    ]
-      .flatMap((value) => (value ?? '').split(','))
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const items = Array.from(new Set(envCandidates)).sort((a, b) => a.localeCompare(b));
-    if (items.length === 0) {
-      throw new Error(
-        'Azure OpenAI discovery uses deployment names. Set AZURE_OPENAI_DEPLOYMENTS (comma-separated) or AZURE_OPENAI_DEPLOYMENT.'
-      );
-    }
+    const items = getAzureOpenAIDeploymentSuggestions();
     return { provider: 'azure', items, kind: 'deployments', source: 'environment variables' };
   }
 

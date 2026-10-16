@@ -41,9 +41,13 @@ describe('rerunWithSameSettings', () => {
     const detailed = {
       ...makeRunResult(),
       rerunAgents: ['agent-explicit-a', 'agent-explicit-b'],
-      rerunScenarioIds: ['scn-1']
+      rerunScenarioIds: ['scn-1'],
+      rerunServerOverrideAll: ['replacement-server'],
+      rerunScenarioServerOverrides: { 'scn-1': ['scenario-server'] },
+      rerunNewConversationBeforeStart: false,
+      rerunNewConversationBetweenScenarios: false
     };
-    (source.getResult as any).mockResolvedValue(detailed);
+    vi.mocked(source.getResult).mockResolvedValue(detailed);
 
     await rerunWithSameSettings(source, summary);
 
@@ -51,7 +55,11 @@ describe('rerunWithSameSettings', () => {
       expect.objectContaining({
         configPath: 'eval.yaml',
         scenarioIds: ['scn-1'],
-        agents: ['agent-explicit-a', 'agent-explicit-b']
+        agents: ['agent-explicit-a', 'agent-explicit-b'],
+        serverOverrideAll: ['replacement-server'],
+        scenarioServerOverrides: { 'scn-1': ['scenario-server'] },
+        newConversationBeforeStart: false,
+        newConversationBetweenScenarios: false
       })
     );
   });

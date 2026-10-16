@@ -1,3 +1,4 @@
+import { calculatePassRate } from '@/types/eval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,
@@ -78,7 +79,7 @@ type AgentSummary = {
   agentName: string;
   provider?: string;
   model?: string;
-  passRate: number;
+  passRate: number | null;
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
@@ -138,6 +139,18 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
       <span className="text-success">{counts.passed} ✓</span>
       <span className="text-muted-foreground"> · </span>
       <span className="text-destructive">{counts.failed} ✕</span>
+      {counts.not_evaluated > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_evaluated} ○</span>
+        </>
+      )}
+      {counts.not_executed > 0 && (
+        <>
+          <span className="text-muted-foreground"> </span>
+          <span>{counts.not_executed} ⊘</span>
+        </>
+      )}
     </>
   );
 }
@@ -397,8 +410,8 @@ const Compare = () => {
 
     const start = parseLocalDateTime(timeFilterStart)?.getTime() ?? null;
     const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
-    const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
-    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
+    const rangeStart = start !== null && end !== null ? Math.min(start, end) : (start ?? null);
+    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : (end ?? null);
     return scenarioFiltered.filter((run) => {
       const timestamp = new Date(run.timestamp).getTime();
       if (Number.isNaN(timestamp)) return false;
@@ -422,7 +435,7 @@ const Compare = () => {
       if (sortBy === 'id') cmp = a.id.localeCompare(b.id);
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'passRate') cmp = (a.overallPassRate ?? -1) - (b.overallPassRate ?? -1);
       if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -781,7 +794,11 @@ const Compare = () => {
         agentName: agent.name,
         provider,
         model,
-        passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+        passRate: calculatePassRate(
+          passCount,
+          totalRuns,
+          runs.filter((run) => run.outcome === 'stopped').length
+        ),
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
         avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns
@@ -1077,10 +1094,7 @@ const Compare = () => {
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                  >
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
                     <Command>
                       <CommandInput placeholder="Search scenarios..." />
                       <CommandList id="compare-within-run-scenario-command-list">
@@ -1141,7 +1155,7 @@ const Compare = () => {
       {mode === 'runs' && (
         <Card>
           <CardContent className="p-0">
-            <Table containerClassName="max-h-[36rem] overflow-auto">
+            <Table containerClassName="max-h-144 overflow-auto">
               <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                 <TableRow>
                   <TableHead className="w-10" />
@@ -1372,7 +1386,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Summary Comparison</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[24rem] overflow-auto p-0">
+            <CardContent className="max-h-96 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1464,7 +1478,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenario Breakdown</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[26rem] overflow-auto p-0">
+            <CardContent className="max-h-104 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1533,7 +1547,8 @@ const Compare = () => {
                 data={selectedRuns.map((r, i) => ({
                   idx: i + 1,
                   runId: r.id,
-                  passRate: Number((r.overallPassRate * 100).toFixed(1))
+                  passRate:
+                    r.overallPassRate === null ? null : Number((r.overallPassRate * 100).toFixed(1))
                 }))}
               >
                 <XAxis dataKey="idx" tickFormatter={(v) => String(v)} />
@@ -1594,7 +1609,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Agent Summary</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[24rem] overflow-auto p-0">
+            <CardContent className="max-h-96 overflow-auto p-0">
               <Table>
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
@@ -1658,7 +1673,7 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenario × Agent Matrix</CardTitle>
             </CardHeader>
-            <CardContent className="max-h-[34rem] overflow-auto p-0">
+            <CardContent className="max-h-136 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>

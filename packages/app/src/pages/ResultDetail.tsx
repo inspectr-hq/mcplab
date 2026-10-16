@@ -1,3 +1,5 @@
+import { calculatePassRate } from '@/types/eval';
+import { formatPassRate } from '@/lib/utils';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -17,8 +19,6 @@ import {
   Loader2,
   PanelRightOpen,
   PanelRightClose,
-  RectangleEllipsis,
-  Copy,
   NotepadText,
   Plus,
   Clock,
@@ -83,8 +83,11 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import { formatAssistantToolName } from '@/lib/assistant-tool-name';
-import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import {
+  buildCheckItems,
+  formatCheckStatusLabel,
+  formatEvalRuleLabel
+} from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
@@ -190,8 +193,8 @@ const ResultDetail = () => {
     assistantInput,
     assistantLoading,
     assistantTurnCancelable,
+    assistantExpired,
     cancelAssistantTurn,
-    assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,
     askAssistant: askResultAssistant,
@@ -437,7 +440,8 @@ const ResultDetail = () => {
     displayAvgLatency,
     displayDurationMs,
     displayToolTimeMs,
-    displayToolTokenUsage
+    displayToolTokenUsage,
+    filteredStoppedRuns
   } = useMemo(() => {
     if (!result) {
       return {
@@ -449,7 +453,8 @@ const ResultDetail = () => {
         displayAvgLatency: 0,
         displayDurationMs: null as number | null,
         displayToolTimeMs: null as number | null,
-        displayToolTokenUsage: null
+        displayToolTokenUsage: null,
+        filteredStoppedRuns: 0
       };
     }
     const scenarios = requestedAgentId
@@ -458,11 +463,24 @@ const ResultDetail = () => {
             scenario.agentId === requestedAgentId || scenario.agentName === requestedAgentId
         )
       : result.scenarios;
-    const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
-    const passCount = scenarios.reduce(
+    const scenarioRunCount = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+    const scenarioPassCount = scenarios.reduce(
       (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
       0
     );
+    const scenarioStoppedCount = scenarios.reduce(
+      (sum, scenario) => sum + scenario.runs.filter((run) => run.outcome === 'stopped').length,
+      0
+    );
+    const totalRuns = !requestedAgentId && result.outcomes ? result.totalRuns : scenarioRunCount;
+    const passCount =
+      !requestedAgentId && result.outcomes?.passed !== undefined
+        ? result.outcomes.passed
+        : scenarioPassCount;
+    const stoppedRuns =
+      !requestedAgentId && result.outcomes?.stopped !== undefined
+        ? result.outcomes.stopped
+        : scenarioStoppedCount;
     const totalToolCalls = scenarios.reduce(
       (sum, scenario) =>
         sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
@@ -474,13 +492,14 @@ const ResultDetail = () => {
       filteredScenarios: scenarios,
       filteredTotalRuns: totalRuns,
       filteredPassCount: passCount,
-      displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+      displayPassRate: calculatePassRate(passCount, totalRuns, stoppedRuns),
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       displayAvgLatency:
         totalRuns === 0 || totalDuration === null ? 0 : Math.round(totalDuration / totalRuns),
       displayDurationMs: totalDuration,
       displayToolTimeMs: totalToolDuration,
-      displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
+      displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage)),
+      filteredStoppedRuns: stoppedRuns
     };
   }, [result, requestedAgentId]);
 
@@ -505,6 +524,16 @@ const ResultDetail = () => {
   const checkCounts = tallyCheckCounts(
     filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
+  const runOutcomes = filteredScenarios.flatMap((scenario) => scenario.runs);
+  const incompleteRuns =
+    !requestedAgentId && result.outcomes?.incomplete !== undefined
+      ? result.outcomes.incomplete
+      : runOutcomes.filter((run) => run.outcome === 'incomplete').length;
+  const errorRuns =
+    !requestedAgentId && result.outcomes?.error !== undefined
+      ? result.outcomes.error
+      : runOutcomes.filter((run) => run.outcome === 'error').length;
+  const stoppedRuns = filteredStoppedRuns;
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -530,8 +559,7 @@ const ResultDetail = () => {
       return next;
     });
   };
-  const isRunSectionOpen = (key: string) => {
-    const defaultOpen = !key.endsWith(':conversation');
+  const isRunSectionOpen = (key: string, defaultOpen = !key.endsWith(':conversation')) => {
     return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
   };
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
@@ -545,12 +573,6 @@ const ResultDetail = () => {
       setAssistantInput(prompt);
     }
   };
-
-  const unmatchedPendingToolCalls = assistantPendingToolCalls.filter(
-    (call) =>
-      call.status === 'pending' &&
-      !assistantMessages.some((message) => message.pendingToolCallId === call.id)
-  );
 
   const openReportsPanel = (relativePath?: string) => {
     if (relativePath) setSelectedReferenceReportPath(relativePath);
@@ -674,19 +696,6 @@ const ResultDetail = () => {
     }
   };
 
-  const copyAssistantChatText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not copy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
   const saveRunNote = async () => {
     if (!result) return;
     setSavingRunNote(true);
@@ -740,7 +749,7 @@ const ResultDetail = () => {
     }
     setRerunningRun(true);
     try {
-      await rerunWithSameSettings(source, result);
+      await rerunWithSameSettings(source, { ...result, configPath });
       toast({
         title: 'Rerun queued',
         description: `${result.id} queued with previous run settings.`
@@ -808,6 +817,19 @@ const ResultDetail = () => {
                   <span className="inline-flex items-center align-middle">
                     Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
                   </span>
+                ) : null}
+                {result.executionSource ? (
+                  <>
+                    {(resultEvalName || resultConfigPath || resultConfigLabel) && (
+                      <span className="mx-1">·</span>
+                    )}
+                    <span className="inline-flex items-center align-middle">
+                      Source: <span className="ml-1 font-medium">{result.executionSource}</span>
+                      {result.executionClient ? (
+                        <span className="ml-1">({result.executionClient})</span>
+                      ) : null}
+                    </span>
+                  </>
                 ) : null}
               </p>
             </div>
@@ -937,11 +959,7 @@ const ResultDetail = () => {
           >
             <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
             <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
-            <StatCard
-              title="Pass Rate"
-              value={`${Math.round(displayPassRate * 100)}%`}
-              icon={BarChart3}
-            />
+            <StatCard title="Pass Rate" value={formatPassRate(displayPassRate)} icon={BarChart3} />
             <StatCard
               title="Avg Tool Calls"
               value={formatCompactOneDecimal(displayAvgToolCalls)}
@@ -973,13 +991,20 @@ const ResultDetail = () => {
             <OutcomeCard
               title="Runs Pass / Fail"
               passed={filteredPassCount}
-              failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
+              failed={Math.max(
+                0,
+                filteredTotalRuns - filteredPassCount - incompleteRuns - errorRuns - stoppedRuns
+              )}
+              incomplete={incompleteRuns}
+              error={errorRuns}
+              stopped={stoppedRuns}
             />
             <OutcomeCard
               title="Checks Pass / Fail"
               passed={checkCounts.passed}
               failed={checkCounts.failed}
               notEvaluated={checkCounts.not_evaluated}
+              notExecuted={checkCounts.not_executed}
             />
 
             <Card className="lg:col-span-2">
@@ -1115,12 +1140,20 @@ const ResultDetail = () => {
                                       checkCounts.not_evaluated
                                         ? ` · ${checkCounts.not_evaluated} not evaluated`
                                         : ''
+                                    }${
+                                      checkCounts.not_executed
+                                        ? ` · ${checkCounts.not_executed} not executed`
+                                        : ''
                                     }`}
                                     aria-label={`${checkCounts.passed} checks passed, ${
                                       checkCounts.failed
                                     } checks failed${
                                       checkCounts.not_evaluated
                                         ? `, ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }${
+                                      checkCounts.not_executed
+                                        ? `, ${checkCounts.not_executed} not executed`
                                         : ''
                                     }`}
                                   >
@@ -1130,7 +1163,13 @@ const ResultDetail = () => {
                                     {checkCounts.not_evaluated > 0 && (
                                       <>
                                         <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_evaluated} ?</span>
+                                        <span>{checkCounts.not_evaluated} ○</span>
+                                      </>
+                                    )}
+                                    {checkCounts.not_executed > 0 && (
+                                      <>
+                                        <span className="text-muted-foreground"> </span>
+                                        <span>{checkCounts.not_executed} ⊘</span>
                                       </>
                                     )}
                                   </span>
@@ -1165,9 +1204,17 @@ const ResultDetail = () => {
                                       <p className="text-xs font-semibold">Scenario details</p>
                                       <p className="text-[11px] text-muted-foreground">
                                         {scenarioLabel} · {sc.agentName} ·{' '}
-                                        {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {formatPassRate(sc.passRate)} pass rate ·{' '}
                                         {hasCheckResults
-                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
+                                              checkCounts.not_evaluated
+                                                ? ` · ${checkCounts.not_evaluated} ○`
+                                                : ''
+                                            }${
+                                              checkCounts.not_executed
+                                                ? ` · ${checkCounts.not_executed} ⊘`
+                                                : ''
+                                            } · `
                                           : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}
@@ -1219,7 +1266,10 @@ const ResultDetail = () => {
                                       className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                                     >
                                       <div className="mt-0.5">
-                                        {run.passed ? (
+                                        {run.outcome === 'incomplete' ||
+                                        run.outcome === 'stopped' ? (
+                                          <Clock3 className="h-4 w-4 text-amber-500" />
+                                        ) : run.passed ? (
                                           <CheckCircle2 className="h-4 w-4 text-success" />
                                         ) : (
                                           <XCircle className="h-4 w-4 text-destructive" />
@@ -1247,6 +1297,9 @@ const ResultDetail = () => {
                                           const notEvaluatedChecks = checks.filter(
                                             (c) => c.status === 'not_evaluated'
                                           );
+                                          const notExecutedChecks = checks.filter(
+                                            (c) => c.status === 'not_executed'
+                                          );
                                           return (
                                             <>
                                               <div className="flex items-center gap-2 flex-wrap">
@@ -1268,14 +1321,28 @@ const ResultDetail = () => {
                                                   )}{' '}
                                                   tool tokens
                                                 </span>
-                                                {!run.passed && (
+                                                {run.outcome === 'incomplete' ? (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-amber-500/30 bg-amber-500/10 text-amber-600 text-[10px]"
+                                                  >
+                                                    Incomplete
+                                                  </Badge>
+                                                ) : run.outcome === 'stopped' ? (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-muted-foreground/30 bg-muted text-muted-foreground text-[10px]"
+                                                  >
+                                                    Stopped
+                                                  </Badge>
+                                                ) : !run.passed ? (
                                                   <Badge
                                                     variant="outline"
                                                     className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]"
                                                   >
                                                     Failed
                                                   </Badge>
-                                                )}
+                                                ) : null}
                                               </div>
                                               {run.failureReasons.length > 0 && (
                                                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
@@ -1292,6 +1359,16 @@ const ResultDetail = () => {
                                                   </ul>
                                                 </div>
                                               )}
+                                              {run.outcome === 'stopped' && run.stopReason ? (
+                                                <div className="rounded-md border border-muted-foreground/20 bg-muted/40 p-2">
+                                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    Stop reason
+                                                  </p>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {run.stopReason}
+                                                  </p>
+                                                </div>
+                                              ) : null}
                                               {checks.length > 0 && (
                                                 <Collapsible
                                                   open={isRunSectionOpen(
@@ -1361,13 +1438,21 @@ const ResultDetail = () => {
                                                             evaluated
                                                           </Badge>
                                                         )}
+                                                        {notExecutedChecks.length > 0 && (
+                                                          <Badge
+                                                            variant="outline"
+                                                            className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
+                                                          >
+                                                            {notExecutedChecks.length} not executed
+                                                          </Badge>
+                                                        )}
                                                       </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
-                                                      {notEvaluatedChecks.length > 0 && (
+                                                      {notExecutedChecks.length > 0 && (
                                                         <p className="mb-2 text-[11px] text-muted-foreground">
-                                                          Checks were not evaluated because this run
-                                                          failed before evaluation.
+                                                          Checks were not executed because this run
+                                                          ended before evaluation.
                                                         </p>
                                                       )}
                                                       <div className="space-y-1">
@@ -1381,15 +1466,20 @@ const ResultDetail = () => {
                                                             className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
-                                                                : check.status === 'not_evaluated'
-                                                                ? 'border-muted-foreground/20 bg-muted/40'
-                                                                : 'border-success/20 bg-success/5'
+                                                                : check.status === 'not_executed'
+                                                                  ? 'border-amber-500/20 bg-amber-500/5'
+                                                                  : check.status === 'not_evaluated'
+                                                                    ? 'border-muted-foreground/20 bg-muted/40'
+                                                                    : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
                                                             <div className="min-w-0">
                                                               <div className="flex items-center gap-2">
                                                                 {check.status === 'failed' ? (
                                                                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                                ) : check.status ===
+                                                                  'not_executed' ? (
+                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
                                                                 ) : check.status ===
                                                                   'not_evaluated' ? (
                                                                   <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1400,11 +1490,23 @@ const ResultDetail = () => {
                                                                   {formatEvalRuleLabel(check.rule)}
                                                                 </span>
                                                               </div>
-                                                              {check.failureReason && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
-                                                                  {formatFailureReason(
-                                                                    check.failureReason
-                                                                  )}
+                                                              {check.decisionInput && (
+                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                                                                  Assertion prompt:{' '}
+                                                                  {check.decisionInput}
+                                                                </p>
+                                                              )}
+                                                              {!check.decisionInput &&
+                                                                check.failureReason && (
+                                                                  <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
+                                                                    {formatFailureReason(
+                                                                      check.failureReason
+                                                                    )}
+                                                                  </p>
+                                                                )}
+                                                              {check.decisionDetails && (
+                                                                <p className="mt-1 pl-5 text-[9px] text-muted-foreground">
+                                                                  {check.decisionDetails}
                                                                 </p>
                                                               )}
                                                             </div>
@@ -1413,12 +1515,15 @@ const ResultDetail = () => {
                                                               className={`shrink-0 text-[10px] ${
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
-                                                                  : check.status === 'not_evaluated'
-                                                                  ? 'border-muted-foreground/30 text-muted-foreground'
-                                                                  : 'border-success/30 text-success'
+                                                                  : check.status === 'not_executed'
+                                                                    ? 'border-amber-500/30 text-amber-600'
+                                                                    : check.status ===
+                                                                        'not_evaluated'
+                                                                      ? 'border-muted-foreground/30 text-muted-foreground'
+                                                                      : 'border-success/30 text-success'
                                                               }`}
                                                             >
-                                                              {check.status}
+                                                              {formatCheckStatusLabel(check.status)}
                                                             </Badge>
                                                           </div>
                                                         ))}
@@ -1437,7 +1542,8 @@ const ResultDetail = () => {
                                               sc.agentName,
                                               run.runIndex,
                                               'extracts'
-                                            )
+                                            ),
+                                            Object.keys(run.extractedValues ?? {}).length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
@@ -1465,7 +1571,9 @@ const ResultDetail = () => {
                                                           sc.agentName,
                                                           run.runIndex,
                                                           'extracts'
-                                                        )
+                                                        ),
+                                                        Object.keys(run.extractedValues ?? {})
+                                                          .length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''
@@ -1520,7 +1628,8 @@ const ResultDetail = () => {
                                               sc.agentName,
                                               run.runIndex,
                                               'tools'
-                                            )
+                                            ),
+                                            run.toolCalls.length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
@@ -1548,7 +1657,8 @@ const ResultDetail = () => {
                                                           sc.agentName,
                                                           run.runIndex,
                                                           'tools'
-                                                        )
+                                                        ),
+                                                        run.toolCalls.length > 0
                                                       )
                                                         ? 'rotate-180'
                                                         : ''
@@ -1785,15 +1895,12 @@ const ResultDetail = () => {
                                                     openAssistantWithPrompt(
                                                       `Explain Run #${
                                                         run.runIndex + 1
-                                                      } for scenario '${scenarioLabel}'. It ${
-                                                        run.passed ? 'passed' : 'failed'
+                                                      } for scenario '${scenarioLabel}'. Its outcome was ${
+                                                        run.outcome ??
+                                                        (run.passed ? 'passed' : 'failed')
                                                       } in ${
                                                         run.duration
-                                                      }ms. Focus on the tool sequence and ${
-                                                        run.passed
-                                                          ? 'why it passed'
-                                                          : 'what caused the failure'
-                                                      }.`,
+                                                      }ms. Focus on the tool sequence and evaluated checks.`,
                                                       { scenarioId: sc.scenarioId }
                                                     )
                                                   }
@@ -1914,277 +2021,44 @@ const ResultDetail = () => {
                 inputPlaceholder="Ask about this result..."
                 snippets={RESULT_ASSISTANT_SNIPPETS}
                 onSnippetSelect={applyResultAssistantSnippet}
-                onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
-                onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
-                chatEndRef={assistantChatEndRef}
+                onApproveToolCall={approveResultAssistantToolCall}
+                onDenyToolCall={denyResultAssistantToolCall}
+                expired={assistantExpired}
                 inputRef={assistantInputRef}
                 className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col"
-                renderMessage={({
-                  message,
-                  index,
-                  linkedPendingToolCall,
-                  isUser,
-                  isAssistant,
-                  isSystem,
-                  isTool
-                }) => {
-                  const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
-                  if (
-                    isTool &&
-                    /^(Approved|Denied) tool call\\b/i.test(String(message.text ?? '').trim())
-                  ) {
-                    return null;
-                  }
-                  const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
-                  const toolStepPublicName =
-                    linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
-                  const canShowHandoff =
-                    isAssistant &&
-                    !isAssistantToolRequest &&
-                    isScenarioAssistantHandoffRelevant(
-                      message.text,
-                      Boolean(assistantContextScenarioId)
-                    );
-
-                  if (isAssistantToolRequest) {
-                    const isPendingApproval = linkedPendingToolCall?.status === 'pending';
-                    const displayToolName = formatAssistantToolName(
-                      toolStepName ?? toolStepPublicName ?? 'unknown_tool'
-                    );
-                    return (
-                      <div
-                        key={`${message.id ?? `${message.role}-${index}`}:${
-                          linkedPendingToolCall ? 'pending' : 'completed'
-                        }`}
-                        className="flex items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          <Bot className="h-3 w-3" />
-                        </div>
-                        <details
-                          open={Boolean(linkedPendingToolCall)}
-                          className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                                <span
-                                  className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                    isPendingApproval
-                                      ? 'bg-amber-100 text-amber-900'
-                                      : 'bg-muted text-muted-foreground'
-                                  }`}
-                                >
-                                  {isPendingApproval ? 'Needs approval' : 'Completed'}
-                                </span>
-                              </div>
-                            </div>
-                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </summary>
-                          <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
-                            <MarkdownContent text={message.text} className="text-sm" />
-                            {isPendingApproval && linkedPendingToolCall && (
-                              <>
-                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                                  <code className="break-words">
-                                    {JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}
-                                  </code>
-                                </pre>
-                                <div className="flex justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={assistantLoading}
-                                    onClick={() =>
-                                      void denyResultAssistantToolCall(linkedPendingToolCall.id)
-                                    }
-                                  >
-                                    Deny
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={assistantLoading}
-                                    onClick={() =>
-                                      void approveResultAssistantToolCall(linkedPendingToolCall.id)
-                                    }
-                                  >
-                                    Approve
-                                  </Button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    );
-                  }
-
-                  const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
+                renderMessageFooter={(message) => {
+                  if (message.role !== 'assistant') return null;
+                  const canShowHandoff = isScenarioAssistantHandoffRelevant(
+                    message.text,
+                    Boolean(assistantContextScenarioId)
+                  );
                   return (
-                    <div
-                      key={message.id ?? `${message.role}-${index}`}
-                      className={`flex items-start gap-2 ${
-                        isUser ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      {!isUser && (
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          {isSystem ? (
-                            <RectangleEllipsis className="h-3 w-3" />
-                          ) : (
-                            <Bot className="h-3 w-3" />
-                          )}
-                        </div>
-                      )}
-                      <div className="relative max-w-[92%]">
-                        <div
-                          className={`max-w-full rounded-md border p-3 text-sm ${
-                            isUser
-                              ? 'border-primary/20 bg-primary/10'
-                              : isSystem
-                              ? 'border-amber-400/30 bg-amber-50/70'
-                              : isTool
-                              ? 'border-blue-300/30 bg-blue-50/50'
-                              : 'border-border/80 bg-background shadow-sm'
-                          }`}
+                    <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
+                      {canShowHandoff && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          onClick={() => sendToScenarioAssistant(message.text)}
                         >
-                          {!(isUser || isSystem) && (
-                            <p
-                              className={`mb-2 text-[11px] font-semibold text-muted-foreground ${
-                                isUser ? 'text-right' : ''
-                              }`}
-                            >
-                              {isTool ? 'Tool' : 'Assistant'}
-                            </p>
-                          )}
-                          {isUser ? (
-                            <p className="whitespace-pre-wrap">{message.text}</p>
-                          ) : (
-                            <MarkdownContent text={message.text} className="text-sm" />
-                          )}
-                          {canShowHandoff && (
-                            <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => sendToScenarioAssistant(message.text)}
-                              >
-                                <Sparkles className="h-4 w-4 text-amber-500" />
-                                Send to Scenario Assistant
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => openApplyReportDialog(message.text)}
-                              >
-                                <Wrench className="h-3.5 w-3.5" />
-                                Apply: Write Markdown Report
-                              </Button>
-                            </div>
-                          )}
-                          {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
-                            <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs"
-                                onClick={() => openApplyReportDialog(message.text)}
-                              >
-                                <Wrench className="h-3.5 w-3.5" />
-                                Apply: Write Markdown Report
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                        {showCopyButton && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
-                            onClick={() => void copyAssistantChatText(message.text)}
-                            aria-label="Copy message"
-                            title="Copy message"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                      {isUser && (
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-                          <User className="h-3 w-3" />
-                        </div>
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                          Send to Scenario Assistant
+                        </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 px-2 text-xs"
+                        onClick={() => openApplyReportDialog(message.text)}
+                      >
+                        <Wrench className="h-3.5 w-3.5" />
+                        Apply: Write Markdown Report
+                      </Button>
                     </div>
                   );
                 }}
-                renderMessageExtras={
-                  unmatchedPendingToolCalls.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Pending actions (approve/deny)
-                      </div>
-                      {unmatchedPendingToolCalls.map((call) => (
-                        <details
-                          key={call.id}
-                          open
-                          className="group min-w-0 rounded-md border bg-background"
-                        >
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="break-all font-mono text-xs font-semibold">
-                                {formatAssistantToolName(call.publicToolName)}
-                              </p>
-                              <p className="break-all text-xs text-muted-foreground">
-                                {call.server}::{formatAssistantToolName(call.tool)}
-                              </p>
-                            </div>
-                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </summary>
-                          <div className="border-t px-3 pb-3 pt-2">
-                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                              <code className="break-words">
-                                {JSON.stringify(call.arguments ?? {}, null, 2)}
-                              </code>
-                            </pre>
-                            <div className="mt-2 flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs"
-                                disabled={assistantLoading}
-                                onClick={() => void denyResultAssistantToolCall(call.id)}
-                              >
-                                Deny
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                disabled={assistantLoading}
-                                onClick={() => void approveResultAssistantToolCall(call.id)}
-                              >
-                                Approve
-                              </Button>
-                            </div>
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  ) : null
-                }
               />
             ) : contextPanelTab === 'reports' ? (
               <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
@@ -2401,7 +2275,7 @@ const ResultDetail = () => {
                       <div className="min-w-0 flex items-center gap-2">
                         <span className="text-muted-foreground">Run note:</span>
                         <span
-                          className={`break-words ${
+                          className={`wrap-break-word ${
                             result.runNote ? 'text-foreground' : 'text-muted-foreground'
                           }`}
                         >
@@ -2490,8 +2364,8 @@ const ResultDetail = () => {
                 {applyReportPending
                   ? 'Writing...'
                   : applyReportIsManual
-                  ? 'Save Report'
-                  : 'Approve & Write'}
+                    ? 'Save Report'
+                    : 'Approve & Write'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2757,7 +2631,7 @@ function buildRunCheckItems(
   checkResults?: Array<{
     type: string;
     label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
+    status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
     reason?: string;
   }>
 ) {

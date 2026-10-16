@@ -178,7 +178,7 @@ const ToolAnalysisPage = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
+        setSettingsAssistantAgentName(settings.assistantAgentName ?? '');
       })
       .catch(() => {
         if (active) setSettingsAssistantAgentName('');
@@ -571,7 +571,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Configure Analysis"
           >
             <Badge
-              variant={viewStep === 'configure' ? 'default' : 'outline'}
+              variant={viewStep === 'configure' ? 'default' : 'outline-solid'}
               className="cursor-pointer"
             >
               Configure Analysis
@@ -585,7 +585,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Run Analysis"
           >
             <Badge
-              variant={viewStep === 'run' ? 'default' : 'outline'}
+              variant={viewStep === 'run' ? 'default' : 'outline-solid'}
               className={canOpenRunStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Run Analysis
@@ -599,7 +599,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Report"
           >
             <Badge
-              variant={viewStep === 'report' ? 'default' : 'outline'}
+              variant={viewStep === 'report' ? 'default' : 'outline-solid'}
               className={canOpenReportStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Report
@@ -626,7 +626,7 @@ const ToolAnalysisPage = () => {
                   <Link to="/libraries/agents" className="underline">
                     Agents
                   </Link>{' '}
-                  and optionally set the default Scenario Assistant Agent in{' '}
+                  and optionally set the default Assistant Agent in{' '}
                   <Link to="/settings" className="underline">
                     Settings
                   </Link>
@@ -827,14 +827,14 @@ const ToolAnalysisPage = () => {
                               tool.safetyClassification === 'read_only'
                                 ? 'read-only'
                                 : isWriteDelete
-                                ? 'write/delete'
-                                : 'unsafe/unknown';
+                                  ? 'write/delete'
+                                  : 'unsafe/unknown';
                             const safetyVariantClass =
                               tool.safetyClassification === 'read_only'
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : isWriteDelete
-                                ? 'border-amber-300 bg-amber-50 text-amber-800'
-                                : 'border-slate-300 bg-slate-100 text-slate-700';
+                                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                  : 'border-slate-300 bg-slate-100 text-slate-700';
                             return (
                               <label
                                 key={`${server.serverName}-${tool.name}`}
@@ -846,7 +846,7 @@ const ToolAnalysisPage = () => {
                                     toggleTool(server.serverName, tool.name, Boolean(value))
                                   }
                                 />
-                                <div className="min-w-0 space-y-1">
+                                <div className="min-w-0 flex-1 space-y-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-mono text-xs">{tool.name}</span>
                                     {tool.title && (
@@ -1017,12 +1017,12 @@ const ToolAnalysisPage = () => {
                   {activeJobId
                     ? 'Live tool-analysis job events:'
                     : report
-                    ? 'Analysis finished. Review the summary below or open the saved report details.'
-                    : runState === 'stopped'
-                    ? 'Analysis was stopped. You can return to Configure Analysis.'
-                    : runState === 'error'
-                    ? 'Analysis ended with an error. Review the log and go back to Configure Analysis.'
-                    : 'Analysis finished.'}
+                      ? 'Analysis finished. Review the summary below or open the saved report details.'
+                      : runState === 'stopped'
+                        ? 'Analysis was stopped. You can return to Configure Analysis.'
+                        : runState === 'error'
+                          ? 'Analysis ended with an error. Review the log and go back to Configure Analysis.'
+                          : 'Analysis finished.'}
                 </CardDescription>
               </div>
               {activeJobId ? (

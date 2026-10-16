@@ -8,12 +8,14 @@ import {
   type ReactNode
 } from 'react';
 import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
+import type { BrowserProviderProfile } from '@inspectr/mcplab-core';
 import { useDataSource } from '@/contexts/DataSourceContext';
 
 interface LibraryState {
   servers: ServerConfig[];
   agents: AgentConfig[];
   scenarios: Scenario[];
+  browserProviders: Record<string, BrowserProviderProfile>;
 }
 
 interface LibraryContextValue extends LibraryState {
@@ -28,7 +30,12 @@ const LibraryContext = createContext<LibraryContextValue | null>(null);
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const { source } = useDataSource();
-  const [state, setState] = useState<LibraryState>({ servers: [], agents: [], scenarios: [] });
+  const [state, setState] = useState<LibraryState>({
+    servers: [],
+    agents: [],
+    scenarios: [],
+    browserProviders: {}
+  });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {

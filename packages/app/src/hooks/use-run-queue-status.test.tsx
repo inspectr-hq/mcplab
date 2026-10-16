@@ -5,7 +5,7 @@ import { useRunQueueStatus } from './use-run-queue-status';
 const sourceRef = {
   current: {
     getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
-    subscribeRunQueue: (_onEvent: (event: any) => void) => () => undefined
+    subscribeRunQueue: (_onEvent: (event: unknown) => void) => () => undefined
   }
 };
 
@@ -17,10 +17,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 
 describe('useRunQueueStatus', () => {
   it('tolerates queue_event payloads from older servers without active_jobs', async () => {
-    let emit: ((event: any) => void) | null = null;
+    let emit: ((event: unknown) => void) | null = null;
     sourceRef.current = {
       getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
-      subscribeRunQueue: (onEvent: (event: any) => void) => {
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
         emit = onEvent;
         return () => undefined;
       }
@@ -49,10 +49,10 @@ describe('useRunQueueStatus', () => {
   });
 
   it('reconstructs active_jobs from legacy active payloads', async () => {
-    let emit: ((event: any) => void) | null = null;
+    let emit: ((event: unknown) => void) | null = null;
     sourceRef.current = {
       getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
-      subscribeRunQueue: (onEvent: (event: any) => void) => {
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
         emit = onEvent;
         return () => undefined;
       }
@@ -92,10 +92,10 @@ describe('useRunQueueStatus', () => {
   });
 
   it('treats admitting jobs as in-flight work', async () => {
-    let emit: ((event: any) => void) | null = null;
+    let emit: ((event: unknown) => void) | null = null;
     sourceRef.current = {
       getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
-      subscribeRunQueue: (onEvent: (event: any) => void) => {
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
         emit = onEvent;
         return () => undefined;
       }
@@ -141,10 +141,10 @@ describe('useRunQueueStatus', () => {
   });
 
   it('increments completionVersion when an in-flight job leaves the queue state', async () => {
-    let emit: ((event: any) => void) | null = null;
+    let emit: ((event: unknown) => void) | null = null;
     sourceRef.current = {
       getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
-      subscribeRunQueue: (onEvent: (event: any) => void) => {
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
         emit = onEvent;
         return () => undefined;
       }
@@ -208,7 +208,7 @@ describe('useRunQueueStatus', () => {
           }
         ]
       }),
-      subscribeRunQueue: (onEvent: (event: any) => void) => {
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
         onEvent({ type: 'connected', payload: {} });
         return () => undefined;
       }

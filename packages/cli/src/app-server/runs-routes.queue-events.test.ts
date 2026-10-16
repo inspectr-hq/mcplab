@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { describe, expect, it, vi } from 'vitest';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
   cleanupFixtureRoot,
@@ -7,6 +8,140 @@ import {
   createRunQueueState,
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
+
+describe('browser agent variance', () => {
+  it.each([
+    { supported: false, count: 1, status: 202 },
+    { supported: false, count: 2, status: 202 },
+    { supported: false, count: 2, status: 400, agentBetween: true },
+    { supported: true, count: 2, status: 202 },
+    { supported: true, count: 2, status: 202, agentBetween: false },
+    { before: true, between: false, supported: false, count: 1, status: 400 },
+    { before: false, between: true, supported: false, count: 2, status: 400 },
+    { before: false, between: false, supported: false, count: 2, status: 202 },
+    { before: false, between: true, supported: false, count: 1, status: 202 },
+    { before: true, between: true, supported: true, count: 2, status: 202 },
+    { before: true, between: true, supported: false, count: 2, status: 202, provider: 'claude' },
+    {
+      before: true,
+      between: true,
+      supported: false,
+      count: 2,
+      status: 202,
+      provider: 'chatgpt-com'
+    }
+  ])(
+    'checks New Chat support before queueing browser jobs (%j)',
+    async ({ before, between, supported, count, status, provider = 'polo', agentBetween }) => {
+      const fixture = createOauthEvalFixture();
+      writeFileSync(
+        fixture.configPath,
+        `servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: ${provider}\n    url: https://polo.example\n${agentBetween !== undefined ? `    new_conversation_between_scenarios: ${agentBetween}\n` : ''}scenarios:\n` +
+          Array.from({ length: count }, (_, i) => `  - id: s${i}\n    prompt: hello\n`).join('')
+      );
+      const response: { status?: number; body?: any } = {};
+      const enqueueRun = vi.fn(() => ({ jobId: 'test-job' }));
+      const deps = makeRunsRouteDeps({
+        parseBody: async () => ({
+          configPath: fixture.configPath,
+          agents: ['browser'],
+          newConversationBeforeStart: before,
+          newConversationBetweenScenarios: between
+        }),
+        asJson: (_res: unknown, status: number, body: unknown) => {
+          response.status = status;
+          response.body = body;
+        },
+        readLibraries: () => ({
+          agents: {},
+          servers: {},
+          browserProviders: {
+            [provider]: {
+              name: 'Polo',
+              learned: { updatedAt: 'now' },
+              ...(supported
+                ? {
+                    newConversation: { action: 'click', locator: { segments: ['button.new-chat'] } }
+                  }
+                : {})
+            }
+          }
+        }),
+        resolveRunSelectedAgents: () => ['browser']
+      });
+      try {
+        await handleRunsRoutes({
+          req: { url: '/api/runs', headers: {} } as never,
+          res: {} as never,
+          pathname: '/api/runs',
+          method: 'POST',
+          settings: { ...fixture, workspaceRoot: fixture.root } as never,
+          runQueueService: { enqueueRun } as never,
+          oauthSessionManager: {} as never,
+          deps: deps as never
+        });
+        expect(response.status).toBe(status);
+        if (status === 400) {
+          expect(response.body.error).toContain('Polo has no New Chat support');
+          expect(response.body.error).toContain('Continue the same conversation');
+          expect(enqueueRun).not.toHaveBeenCalled();
+        } else {
+          expect(enqueueRun).toHaveBeenCalledOnce();
+          const native = ['claude', 'chatgpt-com'].includes(provider);
+          expect(enqueueRun.mock.calls[0][0]).toMatchObject({
+            roverNewConversationBeforeStart: before ?? (supported || native),
+            roverNewConversationBetweenScenarios: between ?? agentBetween ?? (supported || native)
+          });
+        }
+      } finally {
+        cleanupFixtureRoot(fixture.root);
+      }
+    }
+  );
+
+  it('rejects multiple runs before queueing a browser agent', async () => {
+    const fixture = createOauthEvalFixture();
+    writeFileSync(
+      fixture.configPath,
+      'name: Browser variance\nservers: []\nagents:\n  - id: browser\n    type: browser\n    provider: claude\n    url: https://claude.ai\nscenarios:\n  - id: s1\n    prompt: hello\n'
+    );
+    const response: { status?: number; body?: unknown } = {};
+    const deps = makeRunsRouteDeps({
+      parseBody: async () => ({
+        configPath: fixture.configPath,
+        runsPerScenario: 2,
+        agents: ['browser']
+      }),
+      asJson: (_res: unknown, status: number, body: unknown) => {
+        response.status = status;
+        response.body = body;
+      },
+      readLibraries: () => ({ agents: {}, servers: {}, browserProviders: {} }),
+      resolveRunSelectedAgents: () => ['browser']
+    });
+    const service = createRunQueueServiceForTest({ settings: fixture, deps });
+    try {
+      await handleRunsRoutes({
+        req: { url: '/api/runs', headers: {} } as never,
+        res: {} as never,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: { ...fixture, workspaceRoot: fixture.root } as never,
+        runQueueService: service,
+        oauthSessionManager: {} as never,
+        deps: deps as never
+      });
+
+      expect(response).toEqual({
+        status: 400,
+        body: { error: 'Browser agents support one run per scenario.' }
+      });
+      expect(service.jobs.size).toBe(0);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+});
 
 describe('run queue SSE endpoint', () => {
   it('streams initial queue_event and registers client', async () => {
@@ -60,6 +195,75 @@ describe('run queue SSE endpoint', () => {
     expect(writes.join('')).toContain('event: queue_event');
     closeHandler?.();
   });
+
+  it.each(['waiting_for_rover', 'paused_rover'] as const)(
+    'keeps the job event stream open while a Rover job is %s',
+    async (status) => {
+      const writes: string[] = [];
+      let ended = false;
+      const res = {
+        statusCode: 0,
+        headers: {} as Record<string, string>,
+        setHeader(key: string, value: string) {
+          this.headers[key] = value;
+        },
+        write(chunk: string) {
+          writes.push(chunk);
+        },
+        flushHeaders() {
+          return undefined;
+        },
+        end() {
+          ended = true;
+        }
+      } as any;
+      const job = {
+        id: 'rover-job',
+        status,
+        clients: new Set(),
+        events: [],
+        abortController: new AbortController(),
+        runParams: {
+          executionType: 'rover',
+          configPath: '/tmp/eval.yaml',
+          runsPerScenario: 1,
+          roverAgent: { id: 'claude', provider: 'claude' }
+        }
+      } as any;
+      let closeHandler: (() => void) | undefined;
+      const deps = makeRunsRouteDeps();
+
+      const handled = await handleRunsRoutes({
+        req: {
+          url: `/api/runs/jobs/${job.id}/events`,
+          headers: {},
+          on: (event: string, cb: () => void) => {
+            if (event === 'close') closeHandler = cb;
+          }
+        } as any,
+        res,
+        pathname: `/api/runs/jobs/${job.id}/events`,
+        method: 'GET',
+        settings: {
+          evalsDir: '/tmp',
+          runsDir: '/tmp',
+          librariesDir: '/tmp',
+          workspaceRoot: '/tmp',
+          toolAnalysisResultsDir: '/tmp'
+        } as any,
+        runQueueService: createRunQueueServiceForTest({ jobs: new Map([[job.id, job]]), deps }),
+        oauthSessionManager: {} as any,
+        deps: deps as any
+      });
+
+      expect(handled).toBe(true);
+      expect(ended).toBe(false);
+      expect(job.clients.has(res)).toBe(true);
+      closeHandler?.();
+      expect(job.clients.has(res)).toBe(false);
+      expect(writes).toEqual([]);
+    }
+  );
 });
 
 describe('queue event emission', () => {
@@ -132,7 +336,8 @@ describe('queue event emission', () => {
         requestedAgents: undefined,
         runNote: undefined,
         serverOverrideAll: undefined,
-        scenarioServerOverrides: undefined
+        scenarioServerOverrides: undefined,
+        evaluationRunId: 'evaluation-1'
       }
     } as any;
     const queuedJob = { ...runningJob, id: 'job-2', status: 'queued' } as any;
@@ -170,6 +375,9 @@ describe('queue event emission', () => {
       admitting_jobs: [],
       queued: [expect.objectContaining({ jobId: 'job-2' })]
     });
+    expect((res.__body as any).evaluations).toEqual([
+      expect.objectContaining({ evaluationRunId: 'evaluation-1', totalJobs: 2 })
+    ]);
   });
 
   it('queue payload keeps retrying blocked jobs only in admitting_jobs', async () => {

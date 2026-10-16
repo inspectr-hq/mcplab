@@ -8,6 +8,13 @@ import {
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
 
+const evaluatorProviderLabels: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  azure_openai: 'Azure OpenAI',
+  azure_foundry: 'Azure Foundry'
+};
+
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
   failureReasons: string[];
@@ -15,28 +22,98 @@ export interface CheckPresentationInput {
   checkResults?: CheckResult[];
 }
 
+interface CheckPresentationItem {
+  rule: EvalRule;
+  status: CheckResult['status'];
+  failureReason?: string;
+  decisionDetails?: string;
+  decisionInput?: string;
+}
+
+export function formatEvaluatorDetails(metadata?: CheckResult['metadata']): string | undefined {
+  if (
+    typeof metadata?.decision_provider === 'string' &&
+    (typeof metadata.decision_fallback === 'string' || metadata.evaluator === 'judge')
+  ) {
+    const details = ['Evaluated by LLM judge'];
+    if (typeof metadata.judge_provider === 'string') {
+      details.push(evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider);
+    }
+    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
+    return details.join(' · ');
+  }
+  if (typeof metadata?.decision_provider !== 'string') {
+    if (typeof metadata?.judge_provider !== 'string') return undefined;
+    const details = [
+      'Evaluation Judge',
+      evaluatorProviderLabels[metadata.judge_provider] ?? metadata.judge_provider
+    ];
+    if (typeof metadata.judge_model === 'string') details.push(metadata.judge_model);
+    return details.join(' · ');
+  }
+  const details = [`Decision Engine · ${metadata.decision_provider}`];
+  const model = metadata.decision_requested_model ?? metadata.decision_model;
+  if (typeof model === 'string') details.push(model);
+  for (const [key, label] of [
+    ['decision_probability', 'probability'],
+    ['decision_pass_threshold', 'pass ≥'],
+    ['decision_fail_threshold', 'fail ≤']
+  ]) {
+    const value = metadata[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1) {
+      details.push(`${label} ${value.toFixed(3)}`);
+    }
+  }
+  if (
+    typeof metadata.decision_duration_ms === 'number' &&
+    Number.isFinite(metadata.decision_duration_ms)
+  ) {
+    details.push(`${Math.round(metadata.decision_duration_ms)} ms`);
+  }
+  return details.join(' · ');
+}
+
+export function formatCheckStatusLabel(
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed'
+): string {
+  if (status === 'not_evaluated') return 'Not evaluated';
+  if (status === 'not_executed') return 'Not executed';
+  return status === 'passed' ? 'Passed' : 'Failed';
+}
+
 export function buildCheckItems({
   evalRules,
   failureReasons,
   runError,
   checkResults
-}: CheckPresentationInput) {
+}: CheckPresentationInput): CheckPresentationItem[] {
   const scenarioError =
     runError || failureReasons.find((reason) => reason.startsWith('Scenario error:'));
   if (scenarioError) {
     return evalRules.map((rule) => ({
       rule,
-      status: 'not_evaluated' as const,
+      status: 'not_executed' as const,
       failureReason: undefined
     }));
   }
   if (checkResults?.length) {
     return evalRules.map((rule) => {
       const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
+      const decisionDetails =
+        rule.type === 'agent_check' ? formatEvaluatorDetails(match?.metadata) : undefined;
+      const decisionInput =
+        rule.type === 'agent_check' && match?.metadata?.evaluator === 'decision'
+          ? (typeof match.metadata.decision_prompt === 'string'
+              ? match.metadata.decision_prompt
+              : rule.prompt
+            )?.trim()
+          : undefined;
       return {
         rule,
-        status: match?.status ?? ('not_evaluated' as const),
-        failureReason: match?.reason
+        status: match?.status ?? ('not_executed' as const),
+        failureReason: match?.reason,
+        ...(decisionInput ? { decisionInput } : {}),
+        ...(decisionDetails ? { decisionDetails } : {})
       };
     });
   }
@@ -108,13 +185,13 @@ export function matchFailureReasonForRule(
       rule.type === 'tool_input_contains'
         ? { type: 'contains', tool: String(rule.tool ?? ''), value: String(rule.value ?? '') }
         : rule.type === 'tool_input_regex'
-        ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
-        : {
-            type: 'jsonpath',
-            tool: String(rule.tool ?? ''),
-            path: String(rule.path ?? ''),
-            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
-          };
+          ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
+          : {
+              type: 'jsonpath',
+              tool: String(rule.tool ?? ''),
+              path: String(rule.path ?? ''),
+              ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+            };
     const expectedReasons = [
       formatToolInputAssertionFailureReason(assertion, 'tool_not_used'),
       formatToolInputAssertionFailureReason(assertion, 'input_mismatch'),

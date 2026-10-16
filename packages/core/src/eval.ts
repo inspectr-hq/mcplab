@@ -2,6 +2,7 @@ import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
 import type {
   AgentAssertion,
+  AgentAssertionJudgeResult,
   AgentJudgeContext,
   CheckResult,
   EvalRules,
@@ -17,11 +18,13 @@ export interface EvalResult {
   check_results: CheckResult[];
 }
 
-export interface AgentAssertionJudgeResult {
-  label: string;
-  pass: boolean;
-  reason: string;
-  metadata?: Record<string, unknown>;
+export function toJudgeErrorResults(
+  assertions: AgentAssertion[],
+  error: unknown
+): AgentAssertionJudgeResult[] {
+  if (isAbortError(error)) throw error;
+  const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
+  return assertions.map(({ label }) => ({ label, pass: false, reason }));
 }
 
 export interface JudgeAgentAssertionsInput {
@@ -36,14 +39,14 @@ export interface EvaluateScenarioWithAgentChecksOptions {
   scenarioPrompt?: string;
 }
 
-export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
+export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
     results.push({
       type: rule.type,
       label: rule.label,
-      status: 'not_evaluated',
+      status: 'not_executed',
       reason: undefined
     });
   }
@@ -52,20 +55,20 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
     results.push({
       type: 'tool_sequence',
       label: formatToolSequenceLabel(sequence),
-      status: 'not_evaluated',
+      status: 'not_executed',
       metadata: { actual: [], expected: sequence }
     });
   }
   for (const rule of (evalRules.response_assertions ?? []).map(
     toCheckResultTemplateForResponseAssertion
   )) {
-    results.push({ ...rule, status: 'not_evaluated', reason: undefined });
+    results.push({ ...rule, status: 'not_executed', reason: undefined });
   }
   for (const rule of evalRules.tool_input_assertions ?? []) {
     results.push({
       type: toolInputAssertionType(rule),
       label: formatToolInputAssertionLabel(rule),
-      status: 'not_evaluated',
+      status: 'not_executed',
       metadata: {
         tool: rule.tool,
         ...(rule.type === 'jsonpath' ? { path: rule.path } : {})
@@ -73,10 +76,38 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
     });
   }
   for (const assertion of evalRules.agent_assertions ?? []) {
+    results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
+  }
+  return results;
+}
+
+export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
+  if (!evalRules) return [];
+  const results: CheckResult[] = [];
+  for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
     results.push({
-      type: 'agent_check',
-      label: assertion.label,
-      status: 'not_evaluated'
+      type: rule.type,
+      label: rule.label,
+      status: 'not_evaluated',
+      reason: 'Tool telemetry is not available for this execution source.'
+    });
+  }
+  if (evalRules.tool_sequence?.length) {
+    results.push({
+      type: 'tool_sequence',
+      label: formatToolSequenceLabel(evalRules.tool_sequence),
+      status: 'not_evaluated',
+      reason: 'Tool telemetry is not available for this execution source.',
+      metadata: { actual: [], expected: evalRules.tool_sequence }
+    });
+  }
+  for (const rule of evalRules.tool_input_assertions ?? []) {
+    results.push({
+      type: toolInputAssertionType(rule),
+      label: formatToolInputAssertionLabel(rule),
+      status: 'not_evaluated',
+      reason: 'Tool telemetry is not available for this execution source.',
+      metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
     });
   }
   return results;
@@ -190,15 +221,13 @@ export async function evaluateScenarioWithAgentChecks(
       });
     }
   } catch (error) {
-    if (isAbortError(error)) throw error;
-    const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
-    for (const assertion of agentAssertions) {
-      failures.push(reason);
+    for (const result of toJudgeErrorResults(agentAssertions, error)) {
+      failures.push(result.reason);
       check_results.push({
         type: 'agent_check',
-        label: assertion.label,
+        label: result.label,
         status: 'failed',
-        reason
+        reason: result.reason
       });
     }
   }
@@ -262,8 +291,8 @@ function evaluateToolConstraints(
             ? `Forbidden tool used: ${template.tool}`
             : undefined
           : !unique.has(template.tool)
-          ? `Required tool not used: ${template.tool}`
-          : undefined;
+            ? `Required tool not used: ${template.tool}`
+            : undefined;
       if (reason) failures.push(reason);
       return {
         type: template.type,
@@ -340,10 +369,10 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
       : assertion.type === 'regex'
-      ? `matches regex ${assertion.pattern}`
-      : assertion.equals !== undefined
-      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
-      : `JSONPath ${assertion.path} exists`;
+        ? `matches regex ${assertion.pattern}`
+        : assertion.equals !== undefined
+          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath ${assertion.path} exists`;
   return `Tool input · ${assertion.tool} ${operator}`;
 }
 
@@ -374,10 +403,10 @@ export function formatToolInputAssertionFailureReason(
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
       : assertion.type === 'regex'
-      ? `regex ${assertion.pattern}`
-      : assertion.equals !== undefined
-      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
-      : `JSONPath ${assertion.path} exists`;
+        ? `regex ${assertion.pattern}`
+        : assertion.equals !== undefined
+          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath ${assertion.path} exists`;
   if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
     return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
   }
@@ -424,10 +453,10 @@ function evaluateToolInputAssertions(
         matchingCalls.length === 0
           ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
           : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
-          ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
-          : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
-          ? formatToolInputAssertionFailureReason(assertion, 'serialization')
-          : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
+            ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
+            : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
+              ? formatToolInputAssertionFailureReason(assertion, 'serialization')
+              : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
     }
     if (reason) failures.push(reason);
     return {

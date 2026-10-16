@@ -1,0 +1,383 @@
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+const { semanticEvaluator } = vi.hoisted(() => ({ semanticEvaluator: vi.fn() }));
+vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@inspectr/mcplab-core')>()),
+  evaluateSemanticAssertions: semanticEvaluator
+}));
+import { LiveTestService, listLiveTestCases, type LiveTestSession } from './live-tests.js';
+
+const scenarios = [
+  {
+    id: 'plain',
+    name: 'Plain case',
+    servers: ['search'],
+    prompt: 'Find Antwerp',
+    eval: { response_assertions: [{ type: 'contains' as const, value: 'Antwerp' }] }
+  },
+  {
+    id: 'attachment',
+    servers: ['vision'],
+    prompt: 'Describe this',
+    attachments: [{ type: 'image' as const, media_type: 'image/png', data: 'abc' }]
+  }
+];
+
+describe('Live Test catalog', () => {
+  it('returns safe summaries and disables attachment cases', () => {
+    const result = listLiveTestCases(scenarios);
+    expect(result).toEqual([
+      expect.objectContaining({ id: 'plain', eligible: true, assertionCount: 1 }),
+      expect.objectContaining({
+        id: 'attachment',
+        eligible: false,
+        ineligibleReason: expect.stringContaining('Attachments')
+      })
+    ]);
+    expect(result[0]).not.toHaveProperty('prompt');
+    expect(JSON.stringify(result)).not.toContain('servers');
+  });
+});
+
+describe('LiveTestService', () => {
+  it('aborts an in-flight decision evaluation and never persists a cancelled completion', async () => {
+    let finish!: (results: unknown) => void;
+    semanticEvaluator.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const persist = vi.fn();
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      persist,
+      readScenarios: () => [
+        {
+          id: 'semantic',
+          servers: [],
+          prompt: 'Find Antwerp',
+          eval: { agent_assertions: [{ label: 'City', prompt: 'Does it address Antwerp?' }] }
+        }
+      ],
+      getWorkspaceEvaluation: () => ({
+        evaluationJudge: { name: 'backup', agent: { provider: 'openai', model: 'judge' } },
+        evaluationDecision: {
+          provider: 'ollama',
+          model: 'clef-flash',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
+      })
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'browser' });
+    const pending = service.complete(session.id, {
+      finalText: 'Antwerp',
+      startedAt: '2026-10-13T00:00:00Z',
+      completedAt: '2026-10-13T00:00:01Z'
+    });
+    const rejected = expect(pending).rejects.toThrow(/cancelled/);
+    service.cancel(session.id);
+    const signal = semanticEvaluator.mock.lastCall?.[0].signal;
+    finish([{ label: 'City', pass: true, reason: 'done' }]);
+    await rejected;
+    expect(signal?.aborted).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+    expect(service.get(session.id).status).toBe('cancelled');
+  });
+  it('routes Rover semantic assertions through the shared decision evaluator with browser context', async () => {
+    const evaluationDecision = {
+      provider: 'ollama' as const,
+      model: 'clef-flash',
+      passThreshold: 0.9,
+      failThreshold: 0.1
+    };
+    const judge = { name: 'backup', agent: { provider: 'openai' as const, model: 'gpt-5-mini' } };
+    semanticEvaluator.mockResolvedValueOnce([
+      {
+        label: 'Addresses city',
+        pass: true,
+        reason: 'Probability 0.99',
+        metadata: { evaluator: 'decision' }
+      }
+    ]);
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      persist: () => undefined,
+      appendJournalEvent: () => undefined,
+      readScenarios: () => [
+        {
+          id: 'semantic',
+          servers: [],
+          prompt: 'Find Antwerp',
+          eval: {
+            agent_assertions: [{ label: 'Addresses city', prompt: 'Does it address Antwerp?' }],
+            agent_context: {
+              include_prompt: true,
+              include_tool_sequence: true,
+              include_tool_inputs: true
+            }
+          }
+        }
+      ],
+      getWorkspaceEvaluation: () => ({ evaluationJudge: judge, evaluationDecision })
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'polo' });
+    const result = await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-10-13T00:00:00Z',
+      completedAt: '2026-10-13T00:00:01Z'
+    });
+    expect(result.outcome).toBe('passed');
+    expect(semanticEvaluator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluationDecision,
+        judge,
+        finalText: 'Antwerp is in Belgium.',
+        context: { scenario_prompt: 'Find Antwerp' }
+      })
+    );
+  });
+
+  it('requires judge backup before Rover semantic evaluation even when a decision engine is enabled', async () => {
+    semanticEvaluator.mockClear();
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      persist: () => undefined,
+      readScenarios: () => [
+        {
+          id: 'semantic',
+          servers: [],
+          prompt: 'Find Antwerp',
+          eval: {
+            agent_assertions: [{ label: 'Addresses city', prompt: 'Does it address Antwerp?' }]
+          }
+        }
+      ],
+      getWorkspaceEvaluation: () => ({
+        evaluationDecision: {
+          provider: 'ollama',
+          model: 'clef-flash',
+          passThreshold: 0.9,
+          failThreshold: 0.1
+        }
+      })
+    });
+    const session = service.start({ testCaseId: 'semantic', client: 'polo' });
+    await expect(
+      service.complete(session.id, {
+        finalText: 'Antwerp',
+        startedAt: '2026-10-13T00:00:00Z',
+        completedAt: '2026-10-13T00:00:01Z'
+      })
+    ).rejects.toThrow('configured evaluation judge');
+    expect(semanticEvaluator).not.toHaveBeenCalled();
+  });
+  it('uses the queued scenario snapshot for managed runs instead of a matching library ID', () => {
+    const libraryScenario = {
+      id: 'shared-id',
+      servers: [],
+      prompt: 'Library prompt',
+      eval: { response_assertions: [{ type: 'contains' as const, value: 'library' }] }
+    };
+    const queuedScenario = {
+      id: 'shared-id',
+      servers: [],
+      prompt: 'Queued prompt',
+      eval: { response_assertions: [{ type: 'contains' as const, value: 'queued' }] }
+    };
+    const inlineScenario = { id: 'inline-only', servers: [], prompt: 'Inline prompt' };
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: (run) =>
+        run?.evaluationRunId
+          ? run.evaluationRunId === 'evaluation-1'
+            ? [queuedScenario, inlineScenario]
+            : []
+          : [libraryScenario],
+      persist: () => undefined
+    });
+
+    const managed = service.start({
+      testCaseId: 'shared-id',
+      client: 'claude',
+      evaluationRunId: 'evaluation-1',
+      agentName: 'claude-browser'
+    });
+    expect(managed.testCase).toEqual(queuedScenario);
+    expect(service.start({ testCaseId: 'shared-id', client: 'claude' }).testCase).toEqual(
+      libraryScenario
+    );
+    expect(
+      service.start({
+        testCaseId: 'inline-only',
+        client: 'claude',
+        evaluationRunId: 'evaluation-1'
+      }).testCase
+    ).toEqual(inlineScenario);
+    expect(() =>
+      service.start({ testCaseId: 'shared-id', client: 'claude', evaluationRunId: 'unknown' })
+    ).toThrow('Test case not found');
+  });
+
+  it('freezes a selected test case and completes idempotently', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-'));
+    let persisted = 0;
+    const service = new LiveTestService({
+      runsDir,
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => {
+        persisted += 1;
+      }
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    scenarios[0].prompt = 'Changed after start';
+
+    const first = await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    });
+    const repeated = await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    });
+
+    expect(first).toEqual(repeated);
+    expect(first.outcome).toBe('passed');
+    expect(persisted).toBe(1);
+    expect((service.get(session.id) as LiveTestSession).testCase.prompt).toBe('Find Antwerp');
+  });
+
+  it('persists a standalone Rover result without queue identity metadata', async () => {
+    let persistedResults: any;
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: (params) => {
+        persistedResults = params.results;
+      }
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    });
+    expect(session.evaluationRunId).toBeUndefined();
+    expect(persistedResults.metadata.evaluation_run_id).toBeUndefined();
+  });
+
+  it.each(['evals/plain.yaml', '/tmp/evaluations/evals/plain.yaml'])(
+    'projects grouped Rover completion with a relative config path from %s',
+    async (configPath) => {
+      const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-group-'));
+      let persisted = 0;
+      const service = new LiveTestService({
+        runsDir,
+        evalsDir: '/tmp/evaluations',
+        cliVersion: 'test',
+        readScenarios: () => scenarios,
+        persist: () => {
+          persisted += 1;
+        }
+      });
+      const session = service.start({
+        testCaseId: 'plain',
+        client: 'claude',
+        evaluationRunId: 'evaluation-8',
+        configPath,
+        configName: 'Plain evaluation',
+        agentName: 'claude-browser'
+      });
+
+      const completion = await service.complete(session.id, {
+        finalText: 'Antwerp is in Belgium.',
+        startedAt: '2026-09-08T10:00:00.000Z',
+        completedAt: '2026-09-08T10:00:01.000Z'
+      });
+
+      expect(persisted).toBe(0);
+      expect(completion.resultUrl).toBe('/results/evaluation-8');
+      expect(existsSync(join(runsDir, 'evaluation-8', 'results.json'))).toBe(true);
+      const results = JSON.parse(
+        readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8')
+      );
+      expect(results.metadata.run_id).toBe('evaluation-8');
+      expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
+      expect(results.metadata.config_path).toBe('evals/plain.yaml');
+      expect(results.metadata.config_name).toBe('Plain evaluation');
+      expect(results.metadata.rerun_agents).toEqual(['claude-browser']);
+      expect(results.scenarios[0].agent).toBe('claude-browser');
+    }
+  );
+
+  it('rejects conflicting completion data', async () => {
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => undefined
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    const base = {
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    };
+    await service.complete(session.id, { ...base, finalText: 'Antwerp' });
+    await expect(
+      service.complete(session.id, { ...base, finalText: 'Different' })
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('deduplicates concurrent completion requests for one session', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-race-'));
+    let persisted = 0;
+    const service = new LiveTestService({
+      runsDir,
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => {
+        persisted += 1;
+      }
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    const input = {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    };
+    const [first, second] = await Promise.all([
+      service.complete(session.id, input),
+      service.complete(session.id, input)
+    ]);
+    expect(first).toEqual(second);
+    expect(persisted).toBe(1);
+  });
+
+  it('rejects invalid execution timestamps', async () => {
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => undefined
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    await expect(
+      service.complete(session.id, {
+        finalText: 'Antwerp',
+        startedAt: 'invalid',
+        completedAt: '2026-09-08T10:00:01.000Z'
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+});

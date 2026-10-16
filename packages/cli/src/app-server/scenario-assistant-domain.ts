@@ -1,113 +1,47 @@
 import type { ServerResponse } from 'node:http';
-import type { AgentConfig, EvalConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
+import {
+  type LlmAgentConfig,
+  type EvalConfig,
+  type AssistantRuntimeMessage,
+  type AssistantRuntimeEvent,
+  type ScenarioAssistantSuggestionBundle,
+  type ScenarioAssistantSuggestionRule,
+  type ScenarioAssistantRuntimeContext,
+  type McpServerFeatures,
+  type ToolDef
+} from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
-  chatWithJsonRetry,
+  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  assistantToolDisplay,
+  ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
-  newAssistantEntityId,
-  throwIfAborted,
   touchSession,
   truncateJson,
   withTimeout
 } from './assistant-common.js';
-import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
-import { readLibraries } from './libraries-store.js';
+import { setupAssistantRuntimeSession } from './assistant-service.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantToolDisplay,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
+import {
+  createMcpContextTools,
+  MCP_CONTEXT_TOOL_NAMES,
+  mcpContextToolGuidance,
+  type McpContextServers
+} from './assistant-mcp-context-tools.js';
+import { APPROVAL_GUIDANCE } from './assistant-runtime-policy.js';
 
-export { truncateJson } from './assistant-common.js';
+export type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
 
-interface ScenarioAssistantContextInput {
-  scenario: {
-    id: string;
-    name?: string;
-    prompt: string;
-    serverNames: string[];
-    evalRules: Array<{
-      type: string;
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    extractRules: Array<{ name: string; pattern: string }>;
-  };
-  availableServers?: Array<{ name: string; url?: string }>;
-  availableAgents?: Array<{ name: string; provider: string; model: string }>;
-}
+type ScenarioAssistantEvalRuleSuggestion = ScenarioAssistantSuggestionRule;
 
-interface ScenarioAssistantSuggestionBundle {
-  prompt?: { replacement: string; rationale?: string };
-  evalRules?: {
-    replacement: Array<{
-      type: string;
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    rationale?: string;
-  };
-  extractRules?: {
-    replacement: Array<{ name: string; pattern: string }>;
-    rationale?: string;
-  };
-  notes?: string[];
-}
-
-interface ScenarioAssistantEvalRuleSuggestion {
-  type: string;
-  value?: string | number | boolean;
-  sequence?: string[];
-  path?: string;
-  equals?: string | number | boolean;
-  tool?: string;
-  label?: string;
-  prompt?: string;
-}
-
-interface ParsedAssistantToolCall {
-  name: string;
-  arguments?: unknown;
-}
-
-interface ParsedAssistantModelOutput {
-  type: 'assistant_message' | 'tool_call_request';
-  text: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  toolCall?: ParsedAssistantToolCall;
-}
-
-interface AssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-interface AssistantChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCallId?: string;
-  pendingToolCallIds?: string[];
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
+type AssistantChatMessage = AssistantRuntimeMessage;
 
 export interface ScenarioAssistantSession {
   id: string;
@@ -115,56 +49,88 @@ export interface ScenarioAssistantSession {
   lastTouchedAt: number;
   configPath?: string;
   selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  toolsLoaded: number;
+  toolServers: string[];
+  initialMessages: AssistantChatMessage[];
+  warnings: string[];
+  clients: Set<ServerResponse>;
+  runtime: AssistantRuntimeSession;
+}
+
+export type ScenarioAssistantSessionInitializer = Omit<ScenarioAssistantSession, 'runtime'>;
+
+interface ScenarioAssistantResources {
+  agentConfig: LlmAgentConfig;
   context: ScenarioAssistantContextInput;
-  agentConfig: AgentConfig;
   mcp: McpClientManager;
   tools: ToolDef[];
-  toolPublicMap: Map<string, { server: string; tool: string }>;
-  pendingToolCalls: AssistantPendingToolCall[];
-  chatMessages: AssistantChatMessage[];
-  llmMessages: LlmMessage[];
-  warnings: string[];
+  toolPublicMap: Map<string, { server: string; tool: string; display?: AssistantToolDisplay }>;
+  /** Selected servers advertising MCP resources or prompts, offered as read-only context tools. */
+  contextServers: McpContextServers;
   systemPromptCache?: string;
-  events: AssistantSseEvent[];
-  clients: Set<ServerResponse>;
+}
+
+function createScenarioAssistantResources(
+  agentConfig: LlmAgentConfig,
+  context: ScenarioAssistantContextInput
+): ScenarioAssistantResources {
+  return {
+    agentConfig,
+    mcp: new McpClientManager(),
+    tools: [],
+    toolPublicMap: new Map(),
+    contextServers: { resources: [], prompts: [] },
+    context
+  };
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
-const SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN = 3;
-const SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
 
-export function cleanupAssistantSessions(
+// The hard TTL also aborts work in abandoned sessions; active operations refresh lastTouchedAt.
+export function cleanupScenarioAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
+  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, (session) => {
+    void Promise.resolve(session.runtime.dispose()).catch(() => {});
+    endAssistantSseClients(session);
+  });
 }
 
-export function touchAssistantSession(session: ScenarioAssistantSession): void {
+export function touchScenarioAssistantSession(session: ScenarioAssistantSession): void {
   touchSession(session);
 }
 
-export function assistantSessionView(session: ScenarioAssistantSession) {
+export function scenarioAssistantSessionView(session: ScenarioAssistantSession) {
+  const runtimeSnapshot = session.runtime.getSnapshot();
   return {
     id: session.id,
     createdAt: new Date(session.createdAt).toISOString(),
     updatedAt: new Date(session.lastTouchedAt).toISOString(),
     selectedAssistantAgentName: session.selectedAssistantAgentName,
-    model: session.agentConfig.model,
-    provider: session.agentConfig.provider,
+    model: session.model,
+    provider: session.provider,
     warnings: session.warnings,
-    toolsLoaded: session.tools.length,
-    toolServers: Array.from(new Set(session.tools.map((tool) => tool.name.split('__')[0]))),
-    messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls
+    toolsLoaded: session.toolsLoaded,
+    toolServers: session.toolServers,
+    revision: runtimeSnapshot.revision,
+    messages: runtimeSnapshot.messages,
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls,
+    activeTurnId: runtimeSnapshot.activeTurnId,
+    streamingMessage: runtimeSnapshot.streamingMessage
   };
 }
 
-function assistantSystemPrompt(session: ScenarioAssistantSession): string {
-  if (session.systemPromptCache) return session.systemPromptCache;
-  const { scenario } = session.context;
-  const toolLines = session.tools.map((tool) => {
-    const mapping = session.toolPublicMap.get(tool.name);
+function assistantSystemPrompt(
+  session: ScenarioAssistantSessionInitializer,
+  state: ScenarioAssistantResources
+): string {
+  if (state.systemPromptCache) return state.systemPromptCache;
+  const { scenario } = state.context;
+  const toolLines = state.tools.map((tool) => {
+    const mapping = state.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
     return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${
       mapping?.tool ?? tool.name
@@ -174,18 +140,17 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), and Value Capture Rules.',
     'Use the available MCP tools and schemas to ground suggestions.',
-    'If you need live MCP information, call a tool and wait for approval.',
+    APPROVAL_GUIDANCE,
+    ...mcpContextToolGuidance(state.contextServers),
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
-    'Respond ONLY as JSON with one of these envelopes:',
-    `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
-    `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
-    'For suggestions, use keys: prompt, evalRules, extractRules, notes.',
+    'Respond naturally in ordinary prose. Use the local propose_scenario_changes tool whenever you propose scenario edits.',
+    'The local proposal tool accepts these keys: prompt, evalRules, extractRules, notes.',
     'prompt: { replacement: string, rationale?: string }',
     'evalRules: { replacement: [{ type, tool?, value?, sequence?, path?, equals?, label?, prompt? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
-    'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
-    'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
+    'Use the proposal tool with a complete replacement for every field you propose to change, plus a rationale.',
+    'Include only the fields you are changing; omit the others entirely.',
     'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
@@ -212,7 +177,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
       ? `Available MCP tools:\n${toolLines.join('\n')}`
       : 'No MCP tools available.'
   ].join('\n');
-  session.systemPromptCache = prompt;
+  state.systemPromptCache = prompt;
   return prompt;
 }
 
@@ -233,37 +198,153 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
   return `Scenario Assistant MCP preload failed for server '${serverName}': ${raw}`;
 }
 
-export async function preloadAssistantTools(
-  session: ScenarioAssistantSession,
-  serversByName: Record<string, EvalConfig['servers'][string]>,
-  selectedServerNames: string[],
-  options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
-): Promise<void> {
-  const usedNames = new Set<string>();
-  for (const serverName of selectedServerNames) {
-    const server = serversByName[serverName];
-    if (!server) {
-      session.warnings.push(`Scenario Assistant: server '${serverName}' not found in config.`);
-      continue;
-    }
-    try {
-      await session.mcp.connectAll({ [serverName]: server }, undefined, {
-        serverAuthHeaders: options?.serverAuthHeaders
-      });
-      const tools = await session.mcp.listTools(serverName);
-      for (const tool of tools) {
-        const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
-        session.toolPublicMap.set(publicName, { server: serverName, tool: tool.name });
-        session.tools.push({
-          ...tool,
-          name: publicName,
-          description: `${tool.description ?? ''}\n[server=${serverName} tool=${tool.name}]`.trim()
-        });
+function createScenarioAssistantSetup(
+  session: ScenarioAssistantSessionInitializer,
+  agentConfig: LlmAgentConfig,
+  context: ScenarioAssistantContextInput
+) {
+  const state = createScenarioAssistantResources(agentConfig, context);
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () => {
+    disposePromise ??= Promise.resolve().then(() => state.mcp.disconnectAll());
+    return disposePromise;
+  };
+  return {
+    dispose,
+    async preload(
+      serversByName: Record<string, EvalConfig['servers'][string]>,
+      selectedServerNames: string[],
+      options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
+    ): Promise<void> {
+      const usedNames = new Set<string>();
+      for (const serverName of selectedServerNames) {
+        const server = serversByName[serverName];
+        if (!server) {
+          session.warnings.push(`Scenario Assistant: server '${serverName}' not found in config.`);
+          continue;
+        }
+        try {
+          await state.mcp.connectAll({ [serverName]: server }, undefined, {
+            serverAuthHeaders: options?.serverAuthHeaders
+          });
+        } catch (error: unknown) {
+          session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+          continue;
+        }
+        // A server may offer only resources or prompts, so detect them independently of tools.
+        let features: McpServerFeatures = { tools: true, resources: false, prompts: false };
+        try {
+          features = state.mcp.getServerFeatures(serverName);
+        } catch {
+          // Treat the server as offering tools only.
+        }
+        if (features.resources) state.contextServers.resources.push(serverName);
+        if (features.prompts) state.contextServers.prompts.push(serverName);
+        if (!features.tools) continue;
+        try {
+          const tools = await state.mcp.listTools(serverName);
+          for (const tool of tools) {
+            const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
+            state.toolPublicMap.set(publicName, {
+              server: serverName,
+              tool: tool.name,
+              display: assistantToolDisplay(tool)
+            });
+            state.tools.push({
+              ...tool,
+              name: publicName,
+              description:
+                `${tool.description ?? ''}\n[server=${serverName} tool=${tool.name}]`.trim()
+            });
+          }
+        } catch (error: unknown) {
+          session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+        }
       }
-    } catch (error: unknown) {
-      session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+      session.toolsLoaded = state.tools.length;
+      session.toolServers = Array.from(
+        new Set(state.tools.map((tool) => tool.name.split('__')[0]))
+      );
+    },
+    createRuntimeDefinition(): AssistantRuntimeDefinition {
+      return {
+        assistant: 'scenario',
+        agent: state.agentConfig,
+        context: state.context,
+        initialMessages: session.initialMessages,
+        dispose,
+        getSystemPrompt: () => assistantSystemPrompt(session, state),
+        tools: [
+          ...state.tools.map((tool) => {
+            const mapping = state.toolPublicMap.get(tool.name)!;
+            return {
+              name: tool.name,
+              server: mapping.server,
+              tool: mapping.tool,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+              display: mapping.display,
+              execute: async (arguments_: unknown, signal?: AbortSignal) =>
+                withTimeout(
+                  () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
+                  ASSISTANT_TOOL_TIMEOUT_MS,
+                  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+                  signal
+                )
+            };
+          }),
+          {
+            name: PROPOSE_SCENARIO_CHANGES,
+            server: 'local',
+            tool: PROPOSE_SCENARIO_CHANGES,
+            description: 'Submit structured scenario changes for the user to review and apply.',
+            display: { title: 'Propose scenario changes' },
+            inputSchema: proposalSchema,
+            execute: async (args: unknown, _signal?: AbortSignal) =>
+              validateScenarioAssistantProposal(args, state.toolPublicMap),
+            extractProposal: (result) => result as ScenarioAssistantSuggestionBundle
+          },
+          ...createMcpContextTools(state.mcp, state.contextServers)
+        ],
+        approvalPolicy: (name) =>
+          name === PROPOSE_SCENARIO_CHANGES
+            ? 'local'
+            : (MCP_CONTEXT_TOOL_NAMES as readonly string[]).includes(name) ||
+                state.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
+              ? 'automatic'
+              : 'approval_required'
+      };
     }
-  }
+  };
+}
+
+export async function setupScenarioAssistantSession(params: {
+  session: ScenarioAssistantSessionInitializer;
+  agentConfig: LlmAgentConfig;
+  context: ScenarioAssistantContextInput;
+  serversByName: Record<string, EvalConfig['servers'][string]>;
+  selectedServerNames: string[];
+  serverAuthHeaders?: Record<string, Record<string, string>>;
+  initialEvents?: AssistantRuntimeEvent[];
+  assistantRuntimeFactory: AssistantRuntimeFactory;
+  onEvent(event: AssistantRuntimeEvent, session: ScenarioAssistantSession): void;
+  onActivity(session: ScenarioAssistantSession): void;
+}): Promise<ScenarioAssistantSession> {
+  const setup = createScenarioAssistantSetup(params.session, params.agentConfig, params.context);
+  return setupAssistantRuntimeSession({
+    session: params.session,
+    factory: params.assistantRuntimeFactory,
+    disposeSetup: setup.dispose,
+    prepare: async () => {
+      await setup.preload(params.serversByName, params.selectedServerNames, {
+        serverAuthHeaders: params.serverAuthHeaders
+      });
+      return setup.createRuntimeDefinition();
+    },
+    initialEvents: params.initialEvents,
+    onEvent: params.onEvent,
+    onActivity: params.onActivity
+  });
 }
 
 function normalizeEvalRuleToolNames(
@@ -606,242 +687,243 @@ export function normalizeScenarioAssistantEvalRules(
   );
 }
 
-function normalizeEvalRuleSuggestions(
-  suggestions: ScenarioAssistantSuggestionBundle | undefined
-): void {
-  if (!suggestions?.evalRules?.replacement) return;
-  suggestions.evalRules.replacement = normalizeScenarioAssistantEvalRules(
-    suggestions.evalRules.replacement
-  );
-}
-
-function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
-  const cleaned = text.trim();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) {
-      parsed = JSON.parse(fenced[1]);
-    } else {
-      throw new Error('Assistant returned invalid JSON');
+const PROPOSE_SCENARIO_CHANGES = 'propose_scenario_changes';
+const ruleTypes = new Set<string>([
+  'required_tool',
+  'forbidden_tool',
+  'tool_sequence',
+  'tool_input_contains',
+  'tool_input_regex',
+  'tool_input_jsonpath',
+  'response_contains',
+  'response_not_contains',
+  'response_starts_with',
+  'response_ends_with',
+  'response_equals',
+  'response_regex',
+  'response_jsonpath',
+  'response_jsonpath_exists',
+  'response_jsonpath_not_exists',
+  'agent_check'
+]);
+const proposalSchema = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    prompt: {
+      type: 'object',
+      description: 'Omit this field if you are not changing it; do not send null or empty values.',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: { replacement: { type: 'string' }, rationale: { type: 'string' } }
+    },
+    evalRules: {
+      type: 'object',
+      description:
+        'Omit this field if you are not changing it; do not send null or empty values. Use replacement: [] to remove all checks.',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: {
+        replacement: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: [...ruleTypes] },
+              tool: { type: 'string' },
+              value: { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+              sequence: { type: 'array', items: { type: 'string' } },
+              path: { type: 'string' },
+              equals: { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+              label: { type: 'string' },
+              prompt: { type: 'string' }
+            }
+          }
+        },
+        rationale: { type: 'string' }
+      }
+    },
+    extractRules: {
+      type: 'object',
+      description:
+        'Omit this field if you are not changing it; do not send null or empty values. Use replacement: [] to remove all capture rules.',
+      additionalProperties: false,
+      required: ['replacement'],
+      properties: {
+        replacement: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'pattern'],
+            properties: { name: { type: 'string' }, pattern: { type: 'string' } }
+          }
+        },
+        rationale: { type: 'string' }
+      }
+    },
+    notes: {
+      type: 'array',
+      description:
+        'Optional notes accompanying changes. Omit if unused; notes alone are not a change.',
+      items: { type: 'string' }
     }
   }
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Assistant response must be a JSON object');
-  }
-  const parsedObj = parsed as Partial<ParsedAssistantModelOutput>;
-  if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
-    const receivedType = typeof parsedObj.type === 'string' ? `"${parsedObj.type}"` : '(missing)';
-    throw new Error(
-      `Assistant response type ${receivedType} is unsupported; expected 'assistant_message' or 'tool_call_request'`
-    );
-  }
-  if (typeof parsedObj.text !== 'string') {
-    throw new Error('Assistant response missing text');
-  }
-  if (parsedObj.type === 'tool_call_request') {
-    if (!parsedObj.toolCall || typeof parsedObj.toolCall !== 'object') {
-      throw new Error('Assistant tool_call_request missing toolCall');
-    }
-    if (typeof parsedObj.toolCall.name !== 'string' || !parsedObj.toolCall.name.trim()) {
-      throw new Error('Assistant toolCall.name must be a non-empty string');
-    }
-  }
-  return parsedObj as ParsedAssistantModelOutput;
-}
-
-function safeAssistantTextFromResponse(rawText: string): string {
-  try {
-    return parseAssistantModelOutput(rawText).text;
-  } catch {
-    return rawText.trim();
-  }
-}
-
-async function assistantChatModel(
-  session: ScenarioAssistantSession,
-  signal?: AbortSignal
-): Promise<ReturnType<typeof parseAssistantModelOutput>> {
-  return chatWithJsonRetry({
-    agent: session.agentConfig,
-    messages: session.llmMessages,
-    tools: session.tools,
-    system: assistantSystemPrompt(session),
-    parse: parseAssistantModelOutput,
-    toolCallFallbackText: (toolName) => `I need to call '${toolName}' to help answer.`,
-    signal
-  });
-}
-
-export async function continueAssistantTurn(
-  session: ScenarioAssistantSession,
-  signal?: AbortSignal
-): Promise<{
-  session: ReturnType<typeof assistantSessionView>;
-  response: {
-    type: 'assistant_message' | 'tool_call_request';
-    text: string;
-    suggestions?: ScenarioAssistantSuggestionBundle;
-    pendingToolCall?: AssistantPendingToolCall;
-    pendingToolCalls?: AssistantPendingToolCall[];
+};
+export function validateScenarioAssistantProposal(
+  input: unknown,
+  toolPublicMap: Map<string, { server: string; tool: string }>
+): ScenarioAssistantSuggestionBundle {
+  const invalid = (path: string, issue: string): never => {
+    throw new Error(`Invalid scenario proposal at ${path}: ${issue}`);
   };
-}> {
-  const pendingCountForTurn = session.pendingToolCalls.filter((c) => c.status === 'pending').length;
-  if (pendingCountForTurn > SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
-    throw new Error('Scenario Assistant exceeded maximum pending tool calls for this turn');
-  }
-  const modelOutput = await assistantChatModel(session, signal);
-  throwIfAborted(signal);
-  normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
-  normalizeEvalRuleSuggestions(modelOutput.suggestions);
-  if (modelOutput.type === 'tool_call_request') {
-    const requestedCalls =
-      'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
-        ? modelOutput.toolCalls
-        : [modelOutput.toolCall!];
-
-    const pendingCalls: AssistantPendingToolCall[] = [];
-    const llmToolCalls: Array<{ id: string; name: string; arguments: unknown }> = [];
-
-    for (const requested of requestedCalls) {
-      const mapping = session.toolPublicMap.get(requested.name);
-      if (!mapping) {
-        throw new Error(
-          `Scenario Assistant requested unknown tool '${
-            requested.name
-          }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
-        );
-      }
-      const pending: AssistantPendingToolCall = {
-        id: newAssistantEntityId('satc'),
-        server: mapping.server,
-        tool: mapping.tool,
-        publicToolName: requested.name,
-        arguments: requested.arguments ?? {},
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      };
-      throwIfAborted(signal);
-      session.pendingToolCalls.push(pending);
-      pendingCalls.push(pending);
-      llmToolCalls.push({
-        id: pending.id,
-        name: pending.publicToolName,
-        arguments: pending.arguments
-      });
-    }
-
-    const firstPending = pendingCalls[0];
-    session.chatMessages.push({
-      id: newAssistantEntityId('msg'),
-      role: 'assistant',
-      text: modelOutput.text,
-      createdAt: new Date().toISOString(),
-      suggestions: modelOutput.suggestions,
-      pendingToolCallId: firstPending.id,
-      pendingToolCallIds: pendingCalls.map((p) => p.id),
-      toolRequestServer: firstPending.server,
-      toolRequestName: firstPending.tool,
-      toolRequestPublicName: firstPending.publicToolName
-    });
-    session.llmMessages.push({
-      role: 'assistant',
-      content: modelOutput.text,
-      tool_calls: llmToolCalls
-    });
-    touchAssistantSession(session);
-    return {
-      session: assistantSessionView(session),
-      response: {
-        type: 'tool_call_request',
-        text: modelOutput.text,
-        suggestions: modelOutput.suggestions,
-        pendingToolCall: firstPending,
-        pendingToolCalls: pendingCalls
-      }
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return invalid('proposal', 'expected an object');
+  const isUnchangedPlaceholder = (field: unknown) =>
+    field === null ||
+    field === '' ||
+    (typeof field === 'object' && !Array.isArray(field) && Object.keys(field).length === 0);
+  const value = Object.fromEntries(
+    Object.entries(input).filter(([, field]) => !isUnchangedPlaceholder(field))
+  );
+  const checkKeys = (object: Record<string, unknown>, allowed: string[], path: string) => {
+    const unknown = Object.keys(object).find((key) => !allowed.includes(key));
+    if (unknown !== undefined) invalid(`${path}.${unknown}`, 'unknown key');
+  };
+  checkKeys(value, ['prompt', 'evalRules', 'extractRules', 'notes'], 'proposal');
+  const result: ScenarioAssistantSuggestionBundle = {};
+  const validRationale = (obj: Record<string, unknown>) =>
+    obj.rationale === undefined || typeof obj.rationale === 'string';
+  if (value.prompt !== undefined) {
+    if (!value.prompt || typeof value.prompt !== 'object' || Array.isArray(value.prompt))
+      return invalid('prompt', 'expected an object');
+    const p = value.prompt as Record<string, unknown>;
+    checkKeys(p, ['replacement', 'rationale'], 'prompt');
+    if (typeof p.replacement !== 'string' || !p.replacement.trim())
+      return invalid('prompt.replacement', 'expected a non-empty string');
+    if (!validRationale(p)) return invalid('prompt.rationale', 'expected a string');
+    result.prompt = {
+      replacement: p.replacement,
+      ...(p.rationale === undefined ? {} : { rationale: p.rationale as string })
     };
   }
-
-  session.chatMessages.push({
-    id: newAssistantEntityId('msg'),
-    role: 'assistant',
-    text: modelOutput.text,
-    createdAt: new Date().toISOString(),
-    suggestions: modelOutput.suggestions
-  });
-  session.llmMessages.push({
-    role: 'assistant',
-    content: JSON.stringify(modelOutput)
-  });
-  touchAssistantSession(session);
-  return {
-    session: assistantSessionView(session),
-    response: {
-      type: 'assistant_message',
-      text: modelOutput.text,
-      suggestions: modelOutput.suggestions
+  if (value.evalRules !== undefined) {
+    if (!value.evalRules || typeof value.evalRules !== 'object' || Array.isArray(value.evalRules))
+      return invalid('evalRules', 'expected an object');
+    const e = value.evalRules as Record<string, unknown>;
+    checkKeys(e, ['replacement', 'rationale'], 'evalRules');
+    if (!Array.isArray(e.replacement)) return invalid('evalRules.replacement', 'expected an array');
+    if (!validRationale(e)) return invalid('evalRules.rationale', 'expected a string');
+    for (const [index, rule] of e.replacement.entries()) {
+      const path = `evalRules.replacement[${index}]`;
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule))
+        return invalid(path, 'expected an object');
+      const r = rule as Record<string, unknown>;
+      checkKeys(
+        r,
+        ['type', 'tool', 'value', 'sequence', 'path', 'equals', 'label', 'prompt'],
+        path
+      );
+      if (typeof r.type !== 'string') return invalid(`${path}.type`, 'expected a rule type');
+      if (!ruleTypes.has(r.type))
+        return invalid(`${path}.type`, `unsupported rule type '${r.type}'`);
+      for (const key of ['tool', 'path', 'label', 'prompt'])
+        if (r[key] !== undefined && typeof r[key] !== 'string')
+          return invalid(`${path}.${key}`, 'expected a string');
+      if (r.value !== undefined && !['string', 'number', 'boolean'].includes(typeof r.value))
+        return invalid(`${path}.value`, 'expected a string, number, or boolean');
+      if (r.equals !== undefined && !['string', 'number', 'boolean'].includes(typeof r.equals))
+        return invalid(`${path}.equals`, 'expected a string, number, or boolean');
+      if (
+        r.sequence !== undefined &&
+        (!Array.isArray(r.sequence) || !r.sequence.every((x) => typeof x === 'string'))
+      )
+        return invalid(`${path}.sequence`, 'expected an array of strings');
+      const type = r.type as string;
+      if (
+        type === 'required_tool' ||
+        type === 'forbidden_tool' ||
+        (type.startsWith('response_') && !type.includes('jsonpath'))
+      ) {
+        if (typeof r.value !== 'string')
+          return invalid(`${path}.value`, 'required and must be a string');
+      }
+      if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
+        return invalid(`${path}.sequence`, 'required and must be a non-empty array');
+      // Blank names are dropped when the rule is normalized, which could empty the sequence.
+      if (type === 'tool_sequence' && (r.sequence as string[]).some((toolName) => !toolName.trim()))
+        return invalid(`${path}.sequence`, 'tool names must not be blank');
+      if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
+        return invalid(`${path}.tool`, 'required and must be a string');
+      if (
+        (type === 'tool_input_contains' || type === 'tool_input_regex') &&
+        typeof r.value !== 'string'
+      )
+        return invalid(`${path}.value`, 'required and must be a string');
+      if ((type === 'tool_input_regex' || type === 'response_regex') && typeof r.value !== 'string')
+        return invalid(`${path}.value`, 'required and must be a string');
+      if (
+        type.endsWith('jsonpath') ||
+        type.endsWith('jsonpath_exists') ||
+        type.endsWith('jsonpath_not_exists')
+      ) {
+        if (typeof r.path !== 'string')
+          return invalid(`${path}.path`, 'required and must be a string');
+      }
+      if (type === 'agent_check' && typeof r.label !== 'string')
+        return invalid(`${path}.label`, 'required and must be a string');
+      if (type === 'agent_check' && typeof r.prompt !== 'string')
+        return invalid(`${path}.prompt`, 'required and must be a string');
     }
-  };
-}
-
-export async function executeAssistantToolCall(
-  session: ScenarioAssistantSession,
-  pending: AssistantPendingToolCall,
-  signal?: AbortSignal
-): Promise<unknown> {
-  const timeoutMs = 30_000;
-  return withTimeout(
-    () =>
-      session.mcp.callTool(pending.server, pending.tool, pending.arguments, {
-        signal
-      }),
-    timeoutMs,
-    `Tool call timed out after ${timeoutMs}ms`,
-    signal
-  );
-}
-
-export function summarizeToolResultForAssistant(result: unknown): string {
-  return truncateJson(result, SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
-}
-
-export function resolveAssistantAgentFromConfig(
-  config: EvalConfig,
-  selectedAssistantAgentName: string
-): AgentConfig {
-  const agent = config.agents[selectedAssistantAgentName];
-  if (!agent) {
-    throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
+    const rules = structuredClone(e.replacement) as ScenarioAssistantEvalRuleSuggestion[];
+    const bundle = { evalRules: { replacement: rules } };
+    normalizeEvalRuleToolNames(bundle, toolPublicMap);
+    bundle.evalRules.replacement = normalizeScenarioAssistantEvalRules(
+      bundle.evalRules.replacement
     );
+    result.evalRules = {
+      ...bundle.evalRules,
+      ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
+    };
   }
-  return agent;
-}
-
-export function resolveAssistantAgentFromLibraries(
-  libraries: ReturnType<typeof readLibraries>,
-  selectedAssistantAgentName: string
-): AgentConfig {
-  const agent = libraries.agents[selectedAssistantAgentName];
-  if (!agent) {
-    throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
-    );
+  if (value.extractRules !== undefined) {
+    if (
+      !value.extractRules ||
+      typeof value.extractRules !== 'object' ||
+      Array.isArray(value.extractRules)
+    )
+      return invalid('extractRules', 'expected an object');
+    const e = value.extractRules as Record<string, unknown>;
+    checkKeys(e, ['replacement', 'rationale'], 'extractRules');
+    if (!Array.isArray(e.replacement))
+      return invalid('extractRules.replacement', 'expected an array');
+    if (!validRationale(e)) return invalid('extractRules.rationale', 'expected a string');
+    for (const [index, item] of e.replacement.entries()) {
+      const path = `extractRules.replacement[${index}]`;
+      if (!item || typeof item !== 'object' || Array.isArray(item))
+        return invalid(path, 'expected an object');
+      const rule = item as Record<string, unknown>;
+      checkKeys(rule, ['name', 'pattern'], path);
+      if (typeof rule.name !== 'string')
+        return invalid(`${path}.name`, 'required and must be a string');
+      if (typeof rule.pattern !== 'string')
+        return invalid(`${path}.pattern`, 'required and must be a string');
+    }
+    result.extractRules = {
+      replacement: structuredClone(e.replacement) as Array<{ name: string; pattern: string }>,
+      ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
+    };
   }
-  return agent;
-}
-
-export function pickDefaultAssistantAgentName(params: {
-  requested?: string;
-  settingsDefault?: string;
-  agentNames: string[];
-}): string {
-  const requested = params.requested?.trim();
-  if (requested) return requested;
-  const settingsDefault = params.settingsDefault?.trim();
-  if (settingsDefault) return settingsDefault;
-  return params.agentNames[0] ?? '';
+  if (value.notes !== undefined) {
+    if (!Array.isArray(value.notes)) return invalid('notes', 'expected an array');
+    for (const [index, note] of value.notes.entries())
+      if (typeof note !== 'string') return invalid(`notes[${index}]`, 'expected a string');
+    result.notes = [...value.notes] as string[];
+  }
+  if (!result.prompt && !result.evalRules && !result.extractRules)
+    return invalid('proposal', 'must include at least one change');
+  return result;
 }

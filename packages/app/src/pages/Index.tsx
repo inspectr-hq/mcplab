@@ -25,13 +25,13 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { PassRateBadge } from '@/components/PassRateBadge';
-import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult } from '@/types/eval';
 import { buildRunScopeSummary } from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';
+import { formatPassRate } from '@/lib/utils';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -88,7 +88,7 @@ const Dashboard = () => {
     };
 
     Promise.all([
-      source.listResults({ since: last30Since, until: currentUntil }),
+      loadSummaryWindow(last30Since, currentUntil),
       loadSummaryWindow(currentSince, currentUntil),
       loadSummaryWindow(previousSince, previousUntil)
     ])
@@ -108,40 +108,48 @@ const Dashboard = () => {
 
   const totalConfigs = configs.length;
   const totalRuns = last30DayResults.length;
-  const overallPassRate =
-    currentWeekResults.length === 0
-      ? 0
-      : currentWeekResults.reduce((s, r) => s + r.overallPassRate, 0) / currentWeekResults.length;
+  const evaluatedRates = currentWeekResults
+    .map((run) => run.overallPassRate)
+    .filter((rate): rate is number => rate !== null);
+  const overallPassRate = evaluatedRates.length > 0 ? average(evaluatedRates) : null;
   const avgLatency =
     currentWeekResults.length === 0
       ? 0
       : Math.round(
           currentWeekResults.reduce((s, r) => s + r.avgLatency, 0) / currentWeekResults.length
         );
-  const previousWeekPassRate = average(previousWeekResults.map((run) => run.overallPassRate));
+  const previousRates = previousWeekResults
+    .map((run) => run.overallPassRate)
+    .filter((rate): rate is number => rate !== null);
+  const previousWeekPassRate = previousRates.length > 0 ? average(previousRates) : null;
   const previousWeekAvgLatency = average(previousWeekResults.map((run) => run.avgLatency));
-  const passRateDeltaPp = (overallPassRate - previousWeekPassRate) * 100;
+  const passRateDeltaPp =
+    overallPassRate === null || previousWeekPassRate === null
+      ? null
+      : (overallPassRate - previousWeekPassRate) * 100;
   const latencyDeltaMs = avgLatency - previousWeekAvgLatency;
   const hasPreviousWeekBaseline = previousWeekResults.length > 0;
-  const passRateSubtitle = hasPreviousWeekBaseline
-    ? `${formatSigned(passRateDeltaPp, 1)}% from last week`
-    : 'No prior-week baseline';
+  const passRateSubtitle =
+    passRateDeltaPp !== null
+      ? `${formatSigned(passRateDeltaPp, 1)}% from last week`
+      : 'No prior-week baseline';
   const latencySubtitle = hasPreviousWeekBaseline
     ? `${formatSigned(latencyDeltaMs, 0)}ms from last week`
     : 'No prior-week baseline';
-  const passRateTrend = hasPreviousWeekBaseline
-    ? passRateDeltaPp > 0
-      ? ('up' as const)
-      : passRateDeltaPp < 0
-      ? ('down' as const)
-      : ('neutral' as const)
-    : ('neutral' as const);
+  const passRateTrend =
+    passRateDeltaPp !== null
+      ? passRateDeltaPp > 0
+        ? ('up' as const)
+        : passRateDeltaPp < 0
+          ? ('down' as const)
+          : ('neutral' as const)
+      : ('neutral' as const);
   const latencyTrend = hasPreviousWeekBaseline
     ? latencyDeltaMs < 0
       ? ('up' as const)
       : latencyDeltaMs > 0
-      ? ('down' as const)
-      : ('neutral' as const)
+        ? ('down' as const)
+        : ('neutral' as const)
     : ('neutral' as const);
 
   const recentRuns = useMemo(() => {
@@ -149,7 +157,7 @@ const Dashboard = () => {
       let cmp = 0;
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'passRate') cmp = (a.overallPassRate ?? -1) - (b.overallPassRate ?? -1);
       if (sortBy === 'latency') cmp = a.avgLatency - b.avgLatency;
       if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
       return sortDir === 'asc' ? cmp : -cmp;
@@ -165,7 +173,7 @@ const Dashboard = () => {
 
   const chartData = [...recentRuns].reverse().map((r) => ({
     date: new Date(r.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    passRate: Math.round(r.overallPassRate * 100),
+    passRate: r.overallPassRate === null ? null : Math.round(r.overallPassRate * 100),
     latency: r.avgLatency
   }));
 
@@ -212,7 +220,7 @@ const Dashboard = () => {
         <StatCard title="Total Runs" value={totalRuns} icon={Activity} subtitle="Last 30 days" />
         <StatCard
           title="Pass Rate"
-          value={loading ? '—' : `${Math.round(overallPassRate * 100)}%`}
+          value={loading ? '–' : formatPassRate(overallPassRate)}
           icon={BarChart3}
           subtitle={loading ? 'Loading...' : passRateSubtitle}
           trend={loading ? 'neutral' : passRateTrend}
@@ -393,10 +401,7 @@ const Dashboard = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <PassRateBadge rate={run.overallPassRate} />
-                        <RunFailureSignalBadge run={run} />
-                      </div>
+                      <PassRateBadge rate={run.overallPassRate} />
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {run.totalScenarios}

@@ -23,6 +23,9 @@ import {
   loadConfig,
   hashConfig,
   runAll,
+  loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
+  resolveWorkspaceEvaluation,
   selectScenarios,
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
@@ -32,6 +35,8 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  readBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   updateEvaluationConfigFile,
@@ -40,6 +45,8 @@ import {
   readTestCaseFile,
   updateTestCaseFile,
   buildScenarioEntry,
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -111,7 +118,7 @@ const GenericObjectSchema = z.object({}).passthrough();
 const ResultsSummarySchema = z.object({
   total_scenarios: z.number().int().nonnegative(),
   total_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
+  pass_rate: z.number().nullable(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
 });
@@ -133,7 +140,8 @@ const MetricSummarySchema = z.object({
   total_runs: z.number().int().nonnegative(),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
+  stopped_runs: z.number().int().nonnegative().optional(),
+  pass_rate: z.number().nullable(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
 });
@@ -157,7 +165,7 @@ const CompareRowSchema = z.object({
   key: z.string(),
   scenario_id: z.string(),
   agent: z.string(),
-  classification: z.enum(['regressed', 'improved', 'unchanged', 'new', 'missing']),
+  classification: z.enum(['regressed', 'improved', 'unchanged', 'new', 'missing', 'not_evaluated']),
   left: MetricSummarySchema.nullable(),
   right: MetricSummarySchema.nullable(),
   deltas: z.object({
@@ -184,11 +192,19 @@ const LibraryScenarioEntrySchema = z.object({
 });
 
 const AgentEntrySchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'azure_openai']),
+  provider: z.enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry']),
   model: z.string(),
   temperature: z.number().optional(),
   max_tokens: z.number().int().positive().optional(),
   system: z.string().optional()
+});
+
+const BrowserAgentEntrySchema = z.object({
+  type: z.literal('browser'),
+  name: z.string().optional(),
+  provider: z.string(),
+  url: z.string(),
+  new_conversation_between_scenarios: z.boolean().optional()
 });
 
 const LibraryServerEntryContentSchema = z
@@ -209,13 +225,19 @@ const LibraryServerEntrySchema = z.object({
 
 const LibraryAgentEntrySchema = z.object({
   id: z.string(),
-  entry: AgentEntrySchema.optional()
+  entry: z.union([AgentEntrySchema, BrowserAgentEntrySchema]).optional()
+});
+
+const LibraryBrowserProviderEntrySchema = z.object({
+  id: z.string(),
+  entry: GenericObjectSchema.optional()
 });
 
 const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
   servers: z.array(LibraryServerEntrySchema),
   agents: z.array(LibraryAgentEntrySchema),
+  browser_providers: z.array(LibraryBrowserProviderEntrySchema),
   test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
@@ -769,7 +791,7 @@ export async function startMcplabMcpServer(
   const sessions = new Map<string, SessionRuntime>();
   const httpServer = createServer(async (req, res) => {
     try {
-      await handleHttpRequest(req, res, sessions, options.path);
+      await handleHttpRequest(req, res, sessions, options.path, logger);
     } catch (error) {
       logger.error('[mcplab-mcp] request error:', error);
       if (!res.headersSent) {
@@ -904,8 +926,8 @@ export function registerTools(server: McpServer): void {
       args: InputArgs extends ZodRawShapeCompat
         ? ShapeOutput<InputArgs>
         : InputArgs extends AnySchema
-        ? SchemaOutput<InputArgs>
-        : never
+          ? SchemaOutput<InputArgs>
+          : never
     ) => unknown
   ): void => {
     const resolvedTitle = resolveToolTitle(name, config.title, config.annotations?.title);
@@ -1303,7 +1325,7 @@ export function registerTools(server: McpServer): void {
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
-          .enum(['all', 'servers', 'agents', 'test_cases', 'scenarios'])
+          .enum(['all', 'servers', 'agents', 'browser_providers', 'test_cases', 'scenarios'])
           .optional()
           .describe('Which library category to list. Defaults to all.'),
         includeContent: z
@@ -1314,9 +1336,9 @@ export function registerTools(server: McpServer): void {
     },
     async ({ kind, includeContent }) => {
       return withToolHandling(async () => {
-        const root = resolveBundleRoot();
-        const data = readLibrary(root, Boolean(includeContent));
         const selectedKind = kind ?? 'all';
+        const root = resolveBundleRoot();
+        const data = readLibrary(root, Boolean(includeContent), selectedKind);
         const structured =
           selectedKind === 'all'
             ? data
@@ -1324,6 +1346,8 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
+                browser_providers:
+                  selectedKind === 'browser_providers' ? data.browser_providers : [],
                 test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
@@ -1337,10 +1361,10 @@ export function registerTools(server: McpServer): void {
     'mcplab_get_library_item',
     {
       description:
-        'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
+        'Get a specific reusable server, agent, browser provider, test case, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
       outputSchema: {
         bundleRoot: z.string(),
-        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
+        kind: z.enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
         yaml: z.string(),
@@ -1348,7 +1372,7 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         kind: z
-          .enum(['servers', 'agents', 'test_cases', 'scenarios'])
+          .enum(['servers', 'agents', 'browser_providers', 'test_cases', 'scenarios'])
           .describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
@@ -1400,9 +1424,11 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().describe('Agent id key (kebab-case recommended).'),
         provider: z
-          .enum(['openai', 'anthropic', 'azure_openai'])
+          .enum(['openai', 'anthropic', 'azure_openai', 'azure_foundry'])
           .describe('LLM provider supported by MCPLab.'),
-        model: z.string().describe('Model id or deployment name (for Azure OpenAI).'),
+        model: z
+          .string()
+          .describe('Model id or deployment name (for Azure OpenAI and Azure Foundry).'),
         temperature: z.number().optional().describe('Sampling temperature.'),
         max_tokens: z.number().int().positive().optional().describe('Maximum output tokens.'),
         system: z.string().optional().describe('Optional system prompt.')
@@ -1418,6 +1444,53 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+
+  registerTool(
+    'mcplab_generate_browser_agent_entry',
+    {
+      description:
+        'Generate an agents.yaml entry for a Rover browser agent. Browser agents reference a validated browser provider profile and are executed by Rover, not by an LLM API.',
+      outputSchema: {
+        id: z.string(),
+        entry: z.object({
+          type: z.literal('browser'),
+          name: z.string().optional(),
+          provider: z.string(),
+          url: z.string(),
+          new_conversation_between_scenarios: z.boolean().optional()
+        }),
+        yaml: z.string()
+      },
+      inputSchema: {
+        id: z.string().describe('Browser agent id key (kebab-case recommended).'),
+        name: z.string().optional().describe('Human-readable browser agent name.'),
+        provider: z
+          .string()
+          .min(1)
+          .describe('Provider id from browser-providers/<provider-id>.yaml.'),
+        url: z.string().url().describe('Browser origin where Rover should execute the agent.'),
+        new_conversation_between_scenarios: z
+          .boolean()
+          .optional()
+          .describe('Whether Rover should start a new conversation between scenarios.')
+      }
+    },
+    async ({ id, name, provider, url, new_conversation_between_scenarios }) =>
+      withToolHandling(async () => {
+        const entry = removeUndefined({
+          type: 'browser' as const,
+          name,
+          provider,
+          url,
+          new_conversation_between_scenarios
+        });
+        return ok(`Generated browser agent entry '${id}'`, {
+          id,
+          entry,
+          yaml: stringifyYaml({ [id]: entry }).trimEnd()
+        });
+      })
   );
 
   registerTool(
@@ -1909,7 +1982,10 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(
+          loaded.config,
+          readLibraryAgentsAndServers(bundleRoot)
+        );
         const selected = selectScenarios(mergedConfig, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
@@ -1942,7 +2018,7 @@ export function registerTools(server: McpServer): void {
           z.object({
             scenario_id: z.string(),
             agent: z.string(),
-            pass_rate: z.number(),
+            pass_rate: z.number().nullable(),
             tool_usage_frequency: z.record(z.number())
           })
         ),
@@ -1980,7 +2056,8 @@ export function registerTools(server: McpServer): void {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot
         });
-        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const libraries = readLibraryAgentsAndServers(bundleRoot);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, libraries);
         const selected = selectScenarios(mergedConfig, scenario_id);
         const runtimeOverridden = applyRuntimeServerOverrides(selected, {
           serverOverrideAll: server_override_all,
@@ -1991,13 +2068,19 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden,
           runtimeOverridden.run_defaults?.selected_agents
         );
+        const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
           configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir(),
-          cwd: process.cwd()
+          cwd: process.cwd(),
+          ...resolveWorkspaceEvaluation({
+            agents: libraries.agents,
+            scenarios: executable.scenarios,
+            settings: toWorkspaceEvaluationSettings(workspaceSettings)
+          })
         });
 
         const reportHtml = renderReport(results);
@@ -2075,7 +2158,7 @@ export function registerTools(server: McpServer): void {
         const matching = listRunsWithFallback(resolveRunsDir(), undefined, true).filter((entry) => {
           const timestamp = String(
             entry.metadata && typeof entry.metadata === 'object'
-              ? (entry.metadata as any).timestamp ?? ''
+              ? ((entry.metadata as any).timestamp ?? '')
               : ''
           );
           const time = new Date(timestamp).getTime();
@@ -2308,7 +2391,7 @@ export function registerTools(server: McpServer): void {
           left: MetricSummarySchema,
           right: MetricSummarySchema,
           deltas: z.object({
-            pass_rate: z.number(),
+            pass_rate: z.number().nullable(),
             failed_runs: z.number(),
             avg_tool_calls_per_run: z.number(),
             avg_tool_latency_ms: z.number().nullable()
@@ -2318,7 +2401,8 @@ export function registerTools(server: McpServer): void {
             improved: z.number().int().nonnegative(),
             unchanged: z.number().int().nonnegative(),
             new: z.number().int().nonnegative(),
-            missing: z.number().int().nonnegative()
+            missing: z.number().int().nonnegative(),
+            not_evaluated: z.number().int().nonnegative()
           })
         }),
         regressions: z.array(CompareRowSchema),
@@ -2920,7 +3004,7 @@ export function registerTools(server: McpServer): void {
             z.object({
               scenario_id: z.string(),
               agent: z.string(),
-              pass_rate: z.number()
+              pass_rate: z.number().nullable()
             })
           )
           .optional()
@@ -3338,20 +3422,20 @@ function inferToolAnnotations(
         openWorldHint: openWorld
       }
     : DESTRUCTIVE_TOOLS.has(toolName)
-    ? {
-        title,
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      }
-    : {
-        title,
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      };
+      ? {
+          title,
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        }
+      : {
+          title,
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        };
   return {
     ...baseHints,
     ...override,
@@ -3400,8 +3484,10 @@ function resolveBundleRoot(): string {
   return SERVER_OWNED_ROOTS.bundleRoot;
 }
 
-function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): EvalConfig {
-  const libraries = readLibraryAgentsAndServers(bundleRoot);
+function mergeLibraryServersAndAgents(
+  config: EvalConfig,
+  libraries: ReturnType<typeof readLibraryAgentsAndServers>
+): EvalConfig {
   return {
     ...config,
     agents: { ...libraries.agents, ...config.agents },
@@ -3411,18 +3497,23 @@ function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): E
 
 function readLibrary(
   bundleRoot: string,
-  includeContent: boolean
+  includeContent: boolean,
+  kind: 'all' | 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios' = 'all'
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
   const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
-    ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
   const agents = existsSync(agentsPath)
-    ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
+  const browserProviders =
+    kind === 'all' || kind === 'browser_providers'
+      ? mergeBrowserProviderProfiles(readBrowserProviderProfiles(bundleRoot))
+      : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
@@ -3457,6 +3548,14 @@ function readLibrary(
         id,
         ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
       })),
+    browser_providers: Object.keys(browserProviders)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent
+          ? { entry: browserProviders[id] as unknown as Record<string, unknown> }
+          : {})
+      })),
     test_cases: scenarioEntries,
     scenarios: scenarioEntries
   };
@@ -3465,26 +3564,48 @@ function readLibrary(
 
 function getLibraryItem(
   bundleRoot: string,
-  kind: 'servers' | 'agents' | 'test_cases' | 'scenarios',
+  kind: 'servers' | 'agents' | 'browser_providers' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
-  if (kind === 'servers' || kind === 'agents') {
-    const file = join(bundleRoot, `${kind}.yaml`);
+  if (kind === 'servers' || kind === 'agents' || kind === 'browser_providers') {
+    const directory = kind === 'browser_providers' ? join(bundleRoot, 'browser-providers') : null;
+    const builtIn =
+      kind === 'browser_providers' && Object.hasOwn(DEFAULT_BROWSER_PROVIDER_PROFILES, id)
+        ? DEFAULT_BROWSER_PROVIDER_PROFILES[id]
+        : undefined;
+    const file = directory
+      ? findBrowserProviderFile(directory, id)
+      : join(bundleRoot, `${kind}.yaml`);
+    if (builtIn && !existsSync(file)) {
+      const content = structuredClone(builtIn);
+      return {
+        bundleRoot,
+        kind,
+        id,
+        yaml: serializeBrowserProviderProfile(content).trimEnd(),
+        content: content as unknown as Record<string, unknown>
+      };
+    }
     if (!existsSync(file)) {
       throw new Error(`Library file not found: ${file}`);
     }
     const raw = readFileSync(file, 'utf8');
     const parsed = (parseYaml(raw) as Record<string, unknown>) ?? {};
-    if (!(id in parsed)) {
+    if (kind !== 'browser_providers' && !(id in parsed)) {
       throw new Error(`'${id}' not found in ${file}`);
     }
-    const entry = parsed[id];
+    const normalizedEntry =
+      kind === 'browser_providers' ? readBrowserProviderProfiles(bundleRoot)[id] : parsed[id];
+    if (!normalizedEntry) throw new Error(`'${id}' not found in ${file}`);
     return {
       bundleRoot,
       kind,
       id,
-      yaml: stringifyYaml({ [id]: entry }).trimEnd(),
-      content: entry as Record<string, unknown>
+      yaml:
+        kind === 'browser_providers'
+          ? raw.trimEnd()
+          : stringifyYaml({ [id]: normalizedEntry }).trimEnd(),
+      content: normalizedEntry as Record<string, unknown>
     };
   }
 
@@ -3509,6 +3630,14 @@ function getLibraryItem(
     }
   }
   throw new Error(`Scenario '${id}' not found in ${dir}`);
+}
+
+function findBrowserProviderFile(directory: string, id: string): string {
+  if (!existsSync(directory)) return join(directory, `${id}.yaml`);
+  const file = readdirSync(directory)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .find((name) => basename(name, extname(name)) === id);
+  return join(directory, file ?? `${id}.yaml`);
 }
 
 function listEvaluationConfigs(params: {
@@ -3580,18 +3709,18 @@ function listEvaluationConfigs(params: {
       sortBy === 'scenarios'
         ? a.scenario_count
         : sortBy === 'agents'
-        ? a.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(a.updated_at)
-        : a.name;
+          ? a.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(a.updated_at)
+            : a.name;
     const right =
       sortBy === 'scenarios'
         ? b.scenario_count
         : sortBy === 'agents'
-        ? b.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(b.updated_at)
-        : b.name;
+          ? b.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(b.updated_at)
+            : b.name;
     const comparison =
       typeof left === 'number' && typeof right === 'number'
         ? left - right
@@ -4341,8 +4470,8 @@ function buildConversationTimeline(
             message.role === 'assistant'
               ? 'agent_message'
               : message.role === 'user'
-              ? 'user_message'
-              : 'tool_text',
+                ? 'user_message'
+                : 'tool_text',
           role: message.role,
           ts: message.ts,
           message_index: messageIndex,
@@ -4497,16 +4626,23 @@ export async function handleMcplabMcpHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  options?: { path?: string }
+  options?: { path?: string; logger?: Pick<Console, 'log' | 'error'> }
 ): Promise<void> {
-  await handleHttpRequest(req, res, sessions, options?.path ?? DEFAULT_MCP_PATH);
+  await handleHttpRequest(
+    req,
+    res,
+    sessions,
+    options?.path ?? DEFAULT_MCP_PATH,
+    options?.logger ?? console
+  );
 }
 
 async function handleHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  mcpPath: string
+  mcpPath: string,
+  logger: Pick<Console, 'log' | 'error'> = console
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const pathname = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`).pathname;
@@ -4544,14 +4680,32 @@ async function handleHttpRequest(
     }
 
     if (isInitializeRequest(body)) {
+      const clientInfo =
+        body.params && typeof body.params === 'object' && 'clientInfo' in body.params
+          ? body.params.clientInfo
+          : undefined;
+      const clientName =
+        clientInfo && typeof clientInfo === 'object' && 'name' in clientInfo
+          ? String(clientInfo.name)
+          : 'unknown';
+      const clientVersion =
+        clientInfo && typeof clientInfo === 'object' && 'version' in clientInfo
+          ? String(clientInfo.version)
+          : undefined;
       let runtime!: SessionRuntime;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           sessions.set(sid, runtime);
+          logger.log(
+            `[mcplab-mcp] client connected: ${clientName}${
+              clientVersion ? `/${clientVersion}` : ''
+            } (session ${sid})`
+          );
         },
         onsessionclosed: (sid) => {
           sessions.delete(sid);
+          logger.log(`[mcplab-mcp] client disconnected: session ${sid}`);
         }
       });
       const mcpServer = createConfiguredServer();

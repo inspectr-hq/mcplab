@@ -173,6 +173,58 @@ describe('ResultDetail conversation toggle', () => {
     mockResultAssistantState.resetAssistantSession.mockClear();
   });
 
+  it('starts empty extracted values and tool call sequence collapsed, but lets them open', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].toolCalls = [];
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    const extracts = screen.getByRole('button', { name: /Extracted values 0 total/i });
+    const tools = screen.getByRole('button', { name: /Tool call sequence 0 total/i });
+    expect(extracts).toHaveAttribute('aria-expanded', 'false');
+    expect(tools).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(extracts);
+    fireEvent.click(tools);
+    expect(extracts).toHaveAttribute('aria-expanded', 'true');
+    expect(tools).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('starts populated extracted values and tool call sequence expanded', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].extractedValues = { tag: 'TM5-BP2' };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByRole('button', { name: /Extracted values 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /Tool call sequence 1 total/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+  });
+
   it('shows run note placeholder for historical runs without note', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
@@ -192,12 +244,64 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('shows incomplete runs separately from failed runs in the outcome chart', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs.push({
+      ...result.scenarios[0].runs[0],
+      runIndex: 1,
+      passed: false,
+      outcome: 'incomplete',
+      failureReasons: []
+    });
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('Runs Pass / Fail')).toBeTruthy();
+    expect(screen.getByText('1 incomplete')).toBeTruthy();
+  });
+
+  it('includes a stopped child recorded only in aggregate outcomes', async () => {
+    const result = makeResult();
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    result.outcomes = { passed: 1, failed: 0, incomplete: 0, error: 0, stopped: 1 };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('1 stopped')).toBeTruthy();
+    expect(screen.queryByText('1 error')).not.toBeInTheDocument();
+  });
+
   it('shows passed and failed check counts in the scenario table', async () => {
     const result = makeResult();
     result.scenarios[0].runs[0].checkResults = [
       { type: 'required_tool', label: 'Required tool · search_tags', status: 'passed' },
       { type: 'response_contains', label: 'Text contains · ready', status: 'passed' },
-      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' }
+      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' },
+      {
+        type: 'required_tool',
+        label: 'Required tool · get_tag_profile',
+        status: 'not_executed',
+        reason: 'Tool telemetry is not available for this execution source.'
+      }
     ];
     getResultMock.mockResolvedValue(result);
 
@@ -211,11 +315,173 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
-    expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+    expect(screen.getByTitle('2 passed · 1 failed · 1 not executed')).toBeInTheDocument();
     expect(screen.getByText('2 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText(/Checks 2 ✓ · 1 ✕/)).toBeInTheDocument();
+    expect(screen.getByText(/Checks 2 ✓ · 1 ✕ · 1 ⊘/)).toBeInTheDocument();
+    expect(screen.getAllByText('1 not executed').length).toBeGreaterThan(0);
+  });
+
+  it('shows decision probability and fallback alongside the semantic check reason', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      {
+        type: 'agent_check',
+        label: 'Accuracy',
+        status: 'passed',
+        reason: 'Answer is correct.',
+        metadata: {
+          decision_provider: 'ollama',
+          decision_model: 'clef-flash',
+          decision_probability: 0.5,
+          decision_pass_threshold: 0.9,
+          decision_fail_threshold: 0.1,
+          evaluator: 'judge',
+          decision_fallback: 'uncertain',
+          judge_provider: 'anthropic',
+          judge_model: 'claude-haiku-4-5'
+        }
+      }
+    ];
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText('Answer is correct.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Evaluated by LLM judge · Anthropic · claude-haiku-4-5')).toHaveClass(
+      'text-[9px]'
+    );
+  });
+
+  it('shows the Evaluation Judge model below its response in smaller metadata text', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      {
+        type: 'agent_check',
+        label: 'Accuracy',
+        status: 'passed',
+        reason: 'Answer is correct.',
+        metadata: {
+          judge_agent: 'quality-judge',
+          judge_provider: 'openai',
+          judge_model: 'gpt-4o-mini'
+        }
+      }
+    ];
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText('Answer is correct.')).toHaveClass('text-[11px]');
+    expect(screen.getByText('Evaluation Judge · OpenAI · gpt-4o-mini')).toHaveClass('text-[9px]');
+  });
+
+  it('shows the assertion prompt instead of the automatic decision reason', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      {
+        type: 'agent_check',
+        label: 'Accuracy',
+        status: 'passed',
+        reason: 'Satisfaction probability 0.9355110270855933 met the pass threshold 0.9.',
+        metadata: {
+          decision_provider: 'ollama',
+          decision_model: 'clef-flash',
+          decision_probability: 0.9355110270855933,
+          decision_pass_threshold: 0.9,
+          decision_fail_threshold: 0.1,
+          evaluator: 'decision',
+          decision_prompt: 'Original assertion evaluated by the engine'
+        }
+      }
+    ];
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [{ type: 'agent_check', label: 'Accuracy', prompt: 'Check accuracy' }],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(
+      screen.queryByText('Satisfaction probability 0.9355110270855933 met the pass threshold 0.9.')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Assertion prompt: Original assertion evaluated by the engine')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Decision Engine · ollama.*probability 0.936/)).toBeInTheDocument();
+    expect(screen.queryByText(/Evaluated by decision/)).not.toBeInTheDocument();
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
@@ -326,6 +592,7 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
+    fireEvent.click(screen.getByRole('button', { name: /Tool call sequence 0 total/i }));
 
     await waitFor(() => {
       expect(screen.getByText('No tool calls captured for this run.')).toBeInTheDocument();
@@ -516,7 +783,7 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByText('Scenario 2')).not.toBeInTheDocument();
   });
 
-  it('shows resolved assistant tool calls as completed without approval actions', async () => {
+  it('renders every assistant tool call with its custom status and matching approval actions', async () => {
     const result = makeResult();
     getResultMock.mockResolvedValue(result);
     mockResultAssistantState.assistantMessages = [
@@ -526,6 +793,7 @@ describe('ResultDetail conversation toggle', () => {
         text: 'I need to inspect the tags.',
         createdAt: '2026-02-08T10:00:00.000Z',
         pendingToolCallId: 'call-1',
+        pendingToolCallIds: ['call-1', 'call-2'],
         toolRequestName: 'search_tags',
         toolRequestPublicName: 'mcplab__search_tags'
       }
@@ -540,6 +808,15 @@ describe('ResultDetail conversation toggle', () => {
         status: 'approved',
         createdAt: '2026-02-08T10:00:01.000Z',
         resultPreview: 'Approved'
+      },
+      {
+        id: 'call-2',
+        server: 'mcplab',
+        tool: 'list_tags',
+        publicToolName: 'mcplab__list_tags',
+        arguments: {},
+        status: 'pending',
+        createdAt: '2026-02-08T10:00:02.000Z'
       }
     ];
 
@@ -554,16 +831,32 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
 
-    expect(await screen.findByText('Tool call search tags')).toBeInTheDocument();
+    expect(await screen.findByText('Search tags')).toBeInTheDocument();
+    expect(screen.getByText('List tags')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
+    expect(screen.getByText('Needs approval')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Deny' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(mockResultAssistantState.approveResultAssistantToolCall).toHaveBeenCalledWith('call-2');
+    expect(mockResultAssistantState.denyResultAssistantToolCall).toHaveBeenCalledWith('call-2');
   });
 
-  it('queues rerun from detail page with same settings', async () => {
+  it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {
     const result = makeResult();
     result.id = 'run-rerun';
-    result.configPath = 'evaluate-search-tags.yaml';
+    result.configName = 'Search tags';
+    if (hasStoredPath) result.configPath = 'evaluate-search-tags.yaml';
+    mockConfigs.push({
+      id: 'workspace-config',
+      name: 'Search tags',
+      relativePath: 'evaluate-search-tags.yaml',
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
     result.rerunAgents = ['agent-1'];
     result.rerunScenarioIds = ['scn-1'];
     getResultMock.mockResolvedValue(result);
@@ -592,7 +885,7 @@ describe('ResultDetail conversation toggle', () => {
     });
   });
 
-  it('marks checks as not evaluated when the run failed before evaluation and shows the scenario clock icon', async () => {
+  it('marks checks as not executed when the run failed before evaluation and shows the scenario clock icon', async () => {
     const result = makeResult();
     result.configId = 'cfg-with-scenario';
     result.overallPassRate = 0;
@@ -638,13 +931,13 @@ describe('ResultDetail conversation toggle', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/429 Too Many Requests/)).toBeInTheDocument();
-      expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+      expect(screen.getByText('2 not executed')).toBeInTheDocument();
     });
     expect(screen.getAllByText('0 passed').length).toBeGreaterThan(0);
     expect(screen.getAllByText('0 failed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('not_evaluated')).toHaveLength(2);
+    expect(screen.getAllByText('Not executed')).toHaveLength(2);
     expect(
-      screen.getByText('Checks were not evaluated because this run failed before evaluation.')
+      screen.getByText('Checks were not executed because this run ended before evaluation.')
     ).toBeInTheDocument();
     expect(screen.getByText('Required tool · navigate_asset_hierarchy')).toBeInTheDocument();
     expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();

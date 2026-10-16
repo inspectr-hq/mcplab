@@ -1,4 +1,4 @@
-import type { EvalConfig, EvalResult, EvalRule, ScenarioRun } from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
@@ -18,9 +18,68 @@ import type {
   HealthMcpConnectionInfo,
   QueueEntry,
   QueueResponse,
+  QueueChildProgress,
+  EvaluationQueueItem,
   RunQueueEvent,
-  ToolDefinitionTokenEstimates
+  ToolDefinitionTokenEstimates,
+  RoverAgentProvider,
+  RunOutcome,
+  ExecutionSource,
+  BrowserProviderProfile,
+  AssistantKind,
+  AssistantReasoning,
+  AssistantSessionEvent,
+  AssistantRuntimeEvent,
+  AssistantToolHints,
+  AssistantRuntimeMessage,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
+  WorkspaceSettingsPatch,
+  WorkspaceEvaluationSettings
 } from '@inspectr/mcplab-core';
+
+export type {
+  AssistantKind,
+  AssistantReasoning,
+  AssistantSessionEvent,
+  AssistantRuntimeEvent,
+  AssistantToolHints,
+  AssistantRuntimeMessage,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule
+};
 
 import type {
   CheckCounts as CoreCheckCounts,
@@ -29,6 +88,11 @@ import type {
 
 export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
+  calculatePassRate,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
+  normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
@@ -50,6 +114,11 @@ export type {
   HealthMcpConnectionInfo,
   ScenarioAttachment
 };
+export type { RunOutcome, ExecutionSource, RoverAgentProvider };
+export type { EvaluationQueueItem };
+export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { AgentConnectionTestResult, ProviderModelsResponse };
+export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
 export type ScenarioRunTraceMessage = CoreTraceMessage;
@@ -70,6 +139,7 @@ export interface WorkspaceConfigRecord {
 
 export interface WorkspaceRunSummary {
   runId: string;
+  evaluationRunId?: string;
   path: string;
   timestamp: string;
   runNote?: string;
@@ -81,18 +151,24 @@ export interface WorkspaceRunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  agentIds?: string[];
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
   checkCounts?: CoreCheckCounts;
 }
 
@@ -145,13 +221,6 @@ export type RunQueueSseEvent =
   | RunQueueEvent
   | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
 
-export interface ProviderModelsResponse {
-  provider: 'anthropic' | 'openai' | 'azure';
-  items: string[];
-  kind: 'models' | 'deployments';
-  source: string;
-}
-
 // Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo
 export interface WorkspaceHealthResponse {
   ok: boolean;
@@ -159,14 +228,13 @@ export interface WorkspaceHealthResponse {
   mcp: HealthMcpConnectionInfo;
 }
 
-export interface WorkspaceSettings {
+export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
   librariesDir: string;
   defaultQueueWorkers: number;
-  scenarioAssistantAgentName?: string;
-  evaluationJudgeAgentName?: string;
+  assistantAgentName?: string;
 }
 
 export interface StartRunResponse {
@@ -179,81 +247,14 @@ export interface LibraryBundle {
   servers: EvalConfig['servers'];
   agents: EvalConfig['agents'];
   scenarios: EvalConfig['scenarios'];
+  browserProviders: Record<string, BrowserProviderProfile>;
 }
 
 export interface CoreLibraryBundle {
   servers: CoreEvalConfig['servers'];
   agents: CoreEvalConfig['agents'];
   scenarios: CoreEvalConfig['scenarios'];
-}
-
-export interface ScenarioAssistantSuggestionBundle {
-  prompt?: { replacement: string; rationale?: string };
-  evalRules?: {
-    replacement: Array<{
-      type: EvalRule['type'];
-      value?: string | number | boolean;
-      sequence?: string[];
-      path?: string;
-      equals?: string | number | boolean;
-      tool?: string;
-      label?: string;
-      prompt?: string;
-    }>;
-    rationale?: string;
-  };
-  extractRules?: {
-    replacement: Array<{ name: string; pattern: string }>;
-    rationale?: string;
-  };
-  notes?: string[];
-}
-
-export interface ScenarioAssistantMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCallId?: string;
-  pendingToolCallIds?: string[];
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
-
-export interface ScenarioAssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-export interface ScenarioAssistantSessionView {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  selectedAssistantAgentName: string;
-  model: string;
-  provider: string;
-  warnings: string[];
-  toolsLoaded: number;
-  toolServers: string[];
-  messages: ScenarioAssistantMessage[];
-  pendingToolCalls: ScenarioAssistantPendingToolCall[];
-}
-
-export interface ScenarioAssistantTurnResponse {
-  type: 'assistant_message' | 'tool_call_request' | 'tool_call_resolved';
-  text: string;
-  suggestions?: ScenarioAssistantSuggestionBundle;
-  pendingToolCall?: ScenarioAssistantPendingToolCall;
-  pendingToolCalls?: ScenarioAssistantPendingToolCall[];
+  browserProviders?: Record<string, BrowserProviderProfile>;
 }
 
 export interface ResultAssistantApplyReportResponse {
@@ -265,68 +266,8 @@ export interface ResultAssistantApplyReportResponse {
   result: unknown;
 }
 
-export interface ResultAssistantSessionMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  pendingToolCallId?: string;
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
-}
-
-export interface ResultAssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-export interface ResultAssistantSessionView {
-  id: string;
-  scope: 'run' | 'all_runs';
-  runId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  selectedAssistantAgentName: string;
-  model: string;
-  provider: string;
-  messages: ResultAssistantSessionMessage[];
-  pendingToolCalls: ResultAssistantPendingToolCall[];
-}
-
-export interface ResultAssistantTurnResponse {
-  type: 'assistant_message' | 'tool_call_request';
-  text: string;
-  pendingToolCall?: ResultAssistantPendingToolCall;
-}
-
-export type AssistantSseEventType =
-  | 'session_started'
-  | 'turn_started'
-  | 'tool_call_requested'
-  | 'tool_call_approved'
-  | 'tool_call_denied'
-  | 'tool_call_resolved'
-  | 'assistant_message_completed'
-  | 'session_warning'
-  | 'session_error'
-  | 'session_finished';
-
-export interface AssistantSseEvent<TSession> {
-  type: AssistantSseEventType;
-  ts: string;
-  payload: Record<string, unknown> & {
-    sessionId: string;
-    session: TSession;
-  };
-}
+export type AssistantSseEventType = AssistantRuntimeEvent['type'];
+export type AssistantSseEvent<TSession> = AssistantSessionEvent<TSession>;
 
 export type ResultAssistantSseEvent = AssistantSseEvent<ResultAssistantSessionView>;
 export type ScenarioAssistantSseEvent = AssistantSseEvent<ScenarioAssistantSessionView>;
@@ -736,7 +677,7 @@ export interface EvalDataSource {
       relativePath?: string;
       configHash?: string;
     }>;
-  }) => Promise<Record<string, number>>;
+  }) => Promise<Record<string, number | null>>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
@@ -747,11 +688,28 @@ export interface EvalDataSource {
     scenarioIds?: string[];
     agents?: string[];
     runNote?: string;
+    newConversationBetweenScenarios?: boolean;
+    newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
     inspectWithInspectr?: boolean;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
+  stopScenario: (
+    jobId: string,
+    scenarioId: string,
+    agentName: string
+  ) => Promise<{ ok: boolean; status: string }>;
+  stopEvaluationRun: (evaluationRunId: string) => Promise<void>;
+  removeEvaluationRun: (evaluationRunId: string) => Promise<void>;
+  openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;
+  resumeRover: (jobId: string) => Promise<{ ok: boolean }>;
+  getRoverStatus: () => Promise<{
+    connected: boolean;
+    provider?: string;
+    pageUrl?: string;
+    activeJobId?: string | null;
+  }>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;
@@ -776,8 +734,10 @@ export interface EvalDataSource {
   sendResultAssistantMessage: (
     sessionId: string,
     message: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    turnId?: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
+  cancelResultAssistantTurn?: (sessionId: string, turnId: string) => Promise<{ ok: boolean }>;
   approveResultAssistantToolCall: (
     sessionId: string,
     callId: string,
@@ -785,7 +745,8 @@ export interface EvalDataSource {
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   denyResultAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    message?: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   closeResultAssistantSession: (sessionId: string) => Promise<void>;
   subscribeResultAssistantSessionEvents: (
@@ -795,14 +756,18 @@ export interface EvalDataSource {
   getLibraries: () => Promise<LibraryBundle>;
   saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
-    provider: 'anthropic' | 'openai' | 'azure'
+    provider: ProviderModelsResponse['provider']
   ) => Promise<ProviderModelsResponse>;
+  testAgentConnection: (
+    agent: LlmAgentConfig,
+    signal?: AbortSignal
+  ) => Promise<AgentConnectionTestResult>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
-  updateWorkspaceSettings: (patch: {
-    defaultQueueWorkers?: number;
-    scenarioAssistantAgentName?: string;
-    evaluationJudgeAgentName?: string;
-  }) => Promise<WorkspaceSettings | null>;
+  updateWorkspaceSettings: (patch: WorkspaceSettingsPatch) => Promise<WorkspaceSettings | null>;
+  testDecisionConnection: (
+    config: EvaluationDecisionConfig,
+    signal?: AbortSignal
+  ) => Promise<DecisionConnectionTestResult>;
   createScenarioAssistantSession: (
     params: {
       configId?: string;
@@ -839,15 +804,19 @@ export interface EvalDataSource {
   sendScenarioAssistantMessage: (
     sessionId: string,
     message: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    turnId?: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  cancelScenarioAssistantTurn?: (sessionId: string, turnId: string) => Promise<{ ok: boolean }>;
   approveScenarioAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    argumentsOverride?: unknown
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   denyScenarioAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    message?: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   approveAllScenarioAssistantToolCalls: (
     sessionId: string

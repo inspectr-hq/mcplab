@@ -1,6 +1,41 @@
-import { randomUUID } from 'node:crypto';
-import type { AgentConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent, formatAssistantToolName } from '@inspectr/mcplab-core';
+import {
+  formatAssistantToolName,
+  type AssistantToolHints,
+  type ToolDef
+} from '@inspectr/mcplab-core';
+import type { AssistantToolDisplay } from './assistant-runtime-contract.js';
+
+const MAX_DISPLAY_DESCRIPTION_CHARS = 300;
+
+/** What someone approving a call needs from an MCP tool definition: its title, purpose and risk. */
+export function assistantToolDisplay(tool: ToolDef): AssistantToolDisplay {
+  const annotations = tool.annotations;
+  const hints: AssistantToolHints = {
+    ...(annotations?.readOnlyHint !== undefined ? { readOnly: annotations.readOnlyHint } : {}),
+    ...(annotations?.destructiveHint !== undefined
+      ? { destructive: annotations.destructiveHint }
+      : {}),
+    ...(annotations?.idempotentHint !== undefined
+      ? { idempotent: annotations.idempotentHint }
+      : {}),
+    ...(annotations?.openWorldHint !== undefined ? { openWorld: annotations.openWorldHint } : {})
+  };
+  const title = tool.title ?? annotations?.title;
+  // The first paragraph is the summary; the rest is usually guidance for the model.
+  const summary = tool.description
+    ?.trim()
+    .split(/\n\s*\n/)[0]
+    ?.trim();
+  const description =
+    summary && summary.length > MAX_DISPLAY_DESCRIPTION_CHARS
+      ? `${summary.slice(0, MAX_DISPLAY_DESCRIPTION_CHARS - 1).trimEnd()}…`
+      : summary;
+  return {
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(Object.keys(hints).length ? { hints } : {})
+  };
+}
 
 export { formatAssistantToolName };
 
@@ -52,6 +87,10 @@ export function touchSession<T extends { lastTouchedAt: number }>(session: T): v
   session.lastTouchedAt = Date.now();
 }
 
+/** Every assistant tool call, MCP or local context, gets the same limit. */
+export const ASSISTANT_TOOL_TIMEOUT_MS = 30_000;
+export const ASSISTANT_TOOL_TIMEOUT_MESSAGE = `Tool call timed out after ${ASSISTANT_TOOL_TIMEOUT_MS}ms`;
+
 export async function withTimeout<T>(
   promiseFactory: () => Promise<T>,
   timeoutMs: number,
@@ -80,109 +119,9 @@ export async function withTimeout<T>(
   }
 }
 
-export function newAssistantEntityId(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
-}
-
-/**
- * Inject synthetic tool_result messages for any dangling tool_use blocks
- * at the end of llmMessages. This prevents the Anthropic API from rejecting
- * the request when a user sends a new message without approving/denying
- * a pending tool call.
- */
-export function flushDanglingToolCalls(llmMessages: LlmMessage[]): void {
-  if (llmMessages.length === 0) return;
-  const last = llmMessages[llmMessages.length - 1];
-  if (last.role === 'assistant' && last.tool_calls && last.tool_calls.length > 0) {
-    for (const call of last.tool_calls) {
-      llmMessages.push({
-        role: 'tool',
-        content: JSON.stringify({
-          skipped: true,
-          reason: 'User continued without approving or denying this tool call.'
-        }),
-        tool_call_id: call.id ?? 'unknown',
-        name: call.name
-      });
-    }
-  }
-}
-
 export function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
   throw createAbortError();
-}
-
-export interface AssistantToolCallRequestEnvelope {
-  type: 'tool_call_request';
-  text: string;
-  toolCall: { name: string; arguments?: unknown };
-  toolCalls: Array<{ name: string; arguments?: unknown }>;
-}
-
-export async function chatWithJsonRetry<T>(params: {
-  agent: AgentConfig;
-  messages: LlmMessage[];
-  tools: ToolDef[];
-  system: string;
-  parse: (text: string) => T;
-  toolCallFallbackText: (toolName: string) => string;
-  signal?: AbortSignal;
-}): Promise<T | AssistantToolCallRequestEnvelope> {
-  const invalidJsonRetryPrompt =
-    'Your previous response did not match the required assistant envelope. Reply ONLY with one JSON object using exactly one of these types: "assistant_message" with fields {"type":"assistant_message","text":"..."}, or "tool_call_request" with fields {"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}}}. Do not use any other type, such as "message", "assistant", or an event type.';
-
-  const toToolCallRequest = (response: Awaited<ReturnType<typeof chatWithAgent>>) => {
-    if (!response.tool_calls || response.tool_calls.length === 0) return null;
-    const first = response.tool_calls[0];
-    const text = response.content?.trim() || params.toolCallFallbackText(first.name);
-    const allCalls = response.tool_calls.map((tc) => ({
-      name: tc.name,
-      arguments: tc.arguments ?? {}
-    }));
-    return {
-      type: 'tool_call_request' as const,
-      text,
-      toolCall: {
-        name: first.name,
-        arguments: first.arguments ?? {}
-      },
-      toolCalls: allCalls
-    };
-  };
-
-  let response = await chatWithAgent({
-    agent: params.agent,
-    messages: params.messages,
-    tools: params.tools,
-    system: params.system,
-    signal: params.signal
-  });
-  throwIfAborted(params.signal);
-  const nativeFirstPass = toToolCallRequest(response);
-  if (nativeFirstPass) return nativeFirstPass;
-
-  const rawText = response.content?.trim() ?? '';
-  try {
-    return params.parse(rawText);
-  } catch {
-    const retryMessages: LlmMessage[] = [
-      ...params.messages,
-      { role: 'assistant', content: rawText },
-      { role: 'user', content: invalidJsonRetryPrompt }
-    ];
-    response = await chatWithAgent({
-      agent: params.agent,
-      messages: retryMessages,
-      tools: params.tools,
-      system: params.system,
-      signal: params.signal
-    });
-    throwIfAborted(params.signal);
-    const nativeRetryPass = toToolCallRequest(response);
-    if (nativeRetryPass) return nativeRetryPass;
-    return params.parse(response.content?.trim() ?? '');
-  }
 }
 
 function createAbortError(): Error {

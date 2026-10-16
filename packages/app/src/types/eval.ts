@@ -1,9 +1,29 @@
 // Core mcp-lab types
-import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
-export { tallyCheckCounts } from '@/lib/data-sources/types';
+import type {
+  CoreCheckCounts,
+  ScenarioAttachment,
+  ExecutionSource,
+  RoverAgentProvider,
+  RunOutcome
+} from '@/lib/data-sources/types';
+export {
+  calculatePassRate,
+  tallyCheckCounts,
+  DECISION_DEFAULTS,
+  DECISION_PROVIDERS,
+  isDecisionEngineEnabled,
+  normalizeEvaluationDecisionConfig
+} from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
-export type { ScenarioAttachment } from '@/lib/data-sources/types';
+export type {
+  ScenarioAttachment,
+  EvaluationDecisionConfig,
+  DecisionConnectionTestResult,
+  AgentConnectionTestResult,
+  ProviderModelsResponse,
+  WorkspaceSettingsPatch
+} from '@/lib/data-sources/types';
 
 export interface ServerConfig {
   id: string;
@@ -35,16 +55,30 @@ export type ServerEntry =
   | { kind: 'inline'; server: ServerConfig }
   | { kind: 'referenced'; ref: string };
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
+  type?: 'llm';
+  provider: 'openai' | 'anthropic' | 'azure' | 'azure_foundry' | 'google' | 'custom';
   model: string;
   temperature?: number;
   maxTokens: number;
   maxTurns?: number;
   systemPrompt?: string;
 }
+
+export interface BrowserAgentConfig {
+  id: string;
+  name: string;
+  type: 'browser';
+  provider: RoverAgentProvider;
+  model: string;
+  maxTokens: number;
+  url: string;
+  newConversationBetweenScenarios?: boolean;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
 
 export interface EvalRule {
   type:
@@ -76,7 +110,7 @@ export interface EvalRule {
 export interface CheckResult {
   type: string;
   label: string;
-  status: 'passed' | 'failed' | 'not_evaluated';
+  status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
   reason?: string;
   metadata?: Record<string, unknown>;
 }
@@ -168,7 +202,9 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
+  outcome?: RunOutcome;
   error?: string;
+  stopReason?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
@@ -189,7 +225,7 @@ export interface ScenarioResult {
   provider?: string;
   model?: string;
   runs: ScenarioRun[];
-  passRate: number;
+  passRate: number | null;
   avgToolCalls: number;
   avgDuration: number;
   checkCounts?: CheckCounts;
@@ -209,6 +245,8 @@ export interface EvalResult {
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
+  rerunNewConversationBeforeStart?: boolean;
+  rerunNewConversationBetweenScenarios?: boolean;
   rerunScenarioServerOverrides?: Record<string, string[]>;
   timestamp: string;
   runNote?: string;
@@ -216,13 +254,17 @@ export interface EvalResult {
   scenarios: ScenarioResult[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
-  overallPassRate: number;
+  overallPassRate: number | null;
   totalScenarios: number;
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
+  evaluationRunId?: string;
   checkCounts?: CheckCounts;
 }
 
@@ -232,3 +274,25 @@ export interface AppState {
   configs: EvalConfig[];
   results: EvalResult[];
 }
+export type {
+  AssistantKind,
+  AssistantSessionEvent,
+  AssistantRuntimeEvent,
+  AssistantRuntimeMessage,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule
+} from '@/lib/data-sources/types';

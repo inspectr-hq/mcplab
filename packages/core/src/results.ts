@@ -1,4 +1,12 @@
-import type { EvalRules, ResultsJson, ScenarioAggregate, ScenarioRunResult } from './types.js';
+import type {
+  EvalRules,
+  ResultsJson,
+  RunOutcome,
+  ScenarioAggregate,
+  ScenarioRunResult
+} from './types.js';
+import { calculatePassRate } from './result-metrics.js';
+import { deriveRunOutcome } from './scenario-observation.js';
 
 export function aggregateResults(params: {
   runId: string;
@@ -9,6 +17,8 @@ export function aggregateResults(params: {
   cliVersion: string;
   langsmithTraceUrls?: Record<string, string>;
   mcpServerVersions?: Record<string, string | null>;
+  executionSource?: ResultsJson['metadata']['execution_source'];
+  executionClient?: string;
   scenarioRuns: Array<{
     scenario_id: string;
     scenario_name?: string;
@@ -59,8 +69,12 @@ export function aggregateResults(params: {
       lastFinalAnswer = run.final_text || lastFinalAnswer;
     }
 
-    const passRate =
-      entry.runs.length === 0 ? 0 : entry.runs.filter((run) => run.pass).length / entry.runs.length;
+    const completedRuns = entry.runs.filter((run) => run.outcome !== 'stopped');
+    const passRate = calculatePassRate(
+      completedRuns.filter((run) => run.pass).length,
+      entry.runs.length,
+      entry.runs.length - completedRuns.length
+    );
 
     const toolConstraintsStats =
       Object.keys(requiredStats).length > 0 || Object.keys(forbiddenStats).length > 0
@@ -112,6 +126,18 @@ export function aggregateResults(params: {
       ),
     0
   );
+  const outcomes: Partial<Record<RunOutcome, number>> = {
+    passed: 0,
+    failed: 0,
+    incomplete: 0,
+    error: 0,
+    stopped: 0
+  };
+  for (const run of scenarios.flatMap((scenario) => scenario.runs)) {
+    const outcome = run.outcome ?? deriveRunOutcome(run);
+    outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+  }
+  if (outcomes.stopped === 0) delete outcomes.stopped;
   const totalDurationMs = scenarios.reduce(
     (sum, scenario) =>
       sum +
@@ -137,14 +163,17 @@ export function aggregateResults(params: {
       total_duration_ms: totalDurationMs,
       total_tool_duration_ms: totalToolDurationMs,
       cli_version: params.cliVersion,
-      mcp_server_versions: params.mcpServerVersions ?? {}
+      mcp_server_versions: params.mcpServerVersions ?? {},
+      execution_source: params.executionSource ?? 'mcplab',
+      execution_client: params.executionClient
     },
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : totalPasses / totalRuns,
+      pass_rate: calculatePassRate(totalPasses, totalRuns, outcomes.stopped),
       avg_tool_calls_per_run: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
-      avg_tool_latency_ms: avgLatency
+      avg_tool_latency_ms: avgLatency,
+      outcomes
     },
     scenarios
   };
@@ -181,15 +210,18 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   lines.push('');
   lines.push(`Total scenarios: ${results.summary.total_scenarios}`);
   lines.push(`Total runs: ${results.summary.total_runs}`);
-  lines.push(`Pass rate: ${(results.summary.pass_rate * 100).toFixed(1)}%`);
+  lines.push(
+    `Pass rate: ${results.summary.pass_rate === null ? '–' : `${(results.summary.pass_rate * 100).toFixed(1)}%`}`
+  );
   lines.push('');
   lines.push('| Scenario | Agent | Runs | Pass rate | Distinct sequences | Tool calls |');
   lines.push('|---|---|---|---|---|---|');
   for (const scenario of results.scenarios) {
-    const passRate = (scenario.pass_rate * 100).toFixed(1);
+    const passRate =
+      scenario.pass_rate === null ? '–' : `${(scenario.pass_rate * 100).toFixed(1)}%`;
     const toolCalls = scenario.runs.reduce((sum, run) => sum + run.tool_call_count, 0);
     lines.push(
-      `| ${scenario.scenario_id} | ${scenario.agent} | ${scenario.runs.length} | ${passRate}% | ${
+      `| ${scenario.scenario_id} | ${scenario.agent} | ${scenario.runs.length} | ${passRate} | ${
         Object.keys(scenario.distinct_sequences).length
       } | ${toolCalls} |`
     );

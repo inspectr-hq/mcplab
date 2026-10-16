@@ -1,17 +1,170 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const openAiCreate = vi.hoisted(() => vi.fn());
+const openAiOptions = vi.hoisted(() => vi.fn());
 vi.mock('openai', () => ({
   default: class MockOpenAI {
+    constructor(options: unknown) {
+      openAiOptions(options);
+    }
     chat = { completions: { create: openAiCreate } };
+  }
+}));
+
+const anthropicCreate = vi.hoisted(() => vi.fn());
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class MockAnthropic {
+    messages = { create: anthropicCreate };
   }
 }));
 
 import {
   buildBatchJudgeResponseFormat,
   buildSingleCheckJudgeResponseFormat,
+  chatWithAgent,
   runAgentScenario
 } from './agent.js';
+
+describe('Azure Foundry agents', () => {
+  beforeEach(() => {
+    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/');
+    vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
+    vi.stubEnv('AZURE_OPENAI_API_KEY', 'legacy-key');
+    vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://legacy.example');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
+    openAiOptions.mockClear();
+    openAiCreate.mockReset().mockResolvedValue({
+      model: 'resolved-model',
+      choices: [{ message: { content: 'Ready.', tool_calls: [] } }],
+      usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 }
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    openAiCreate.mockReset();
+  });
+  const agent = { provider: 'azure_foundry' as const, model: 'agent-deployment' };
+  const messages = [{ role: 'user' as const, content: 'Hello' }];
+  it('uses the selected deployment through v1 without the global legacy deployment or api-version', async () => {
+    const result = await chatWithAgent({ agent, messages });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'foundry-key',
+        baseURL: 'https://foundry.example/openai/v1'
+      })
+    );
+    expect(openAiOptions.mock.calls[0][0].defaultQuery).toBeUndefined();
+    expect(openAiCreate.mock.calls[0][0].model).toBe('agent-deployment');
+    expect(result).toMatchObject({
+      content: 'Ready.',
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 }
+    });
+  });
+  it('uses separate deployments for two agents with the same backend credentials', async () => {
+    await chatWithAgent({ agent, messages });
+    await chatWithAgent({ agent: { ...agent, model: 'other-deployment' }, messages });
+    expect(openAiCreate.mock.calls.map(([request]) => request.model)).toEqual([
+      'agent-deployment',
+      'other-deployment'
+    ]);
+  });
+  it('rejects a blank per-agent deployment without using the legacy global deployment', async () => {
+    await expect(chatWithAgent({ agent: { ...agent, model: ' ' }, messages })).rejects.toThrow(
+      'deployment name'
+    );
+    expect(openAiCreate).not.toHaveBeenCalled();
+  });
+  it('supports compatible models that accept max_tokens instead of max_completion_tokens', async () => {
+    openAiCreate.mockRejectedValueOnce(new Error('max_completion_tokens is not supported'));
+    await chatWithAgent({ agent: { ...agent, max_tokens: 32 }, messages });
+    expect(openAiCreate.mock.calls[0][0]).toMatchObject({ max_completion_tokens: 32 });
+    expect(openAiCreate.mock.calls[1][0]).toMatchObject({
+      model: 'agent-deployment',
+      max_tokens: 32
+    });
+    expect(openAiCreate.mock.calls[1][0]).not.toHaveProperty('max_completion_tokens');
+  });
+  it('reuses an existing Azure key when the dedicated key is absent', async () => {
+    vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
+    await chatWithAgent({ agent, messages });
+    expect(openAiOptions.mock.calls[0][0].apiKey).toBe('legacy-key');
+  });
+  it('requires an explicit Foundry endpoint and a backend key', async () => {
+    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', '');
+    await expect(chatWithAgent({ agent, messages })).rejects.toThrow('AZURE_FOUNDRY_ENDPOINT');
+    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example');
+    vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
+    vi.stubEnv('AZURE_OPENAI_API_KEY', '');
+    await expect(chatWithAgent({ agent, messages })).rejects.toThrow('AZURE_OPENAI_API_KEY');
+  });
+  it('uses the per-agent Azure deployment with the legacy endpoint and version', async () => {
+    vi.stubEnv('AZURE_OPENAI_API_VERSION', 'legacy-version');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', 'legacy-model-field,global-deployment');
+    await chatWithAgent({
+      agent: { provider: 'azure_openai', model: 'legacy-model-field' },
+      messages
+    });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'legacy-key',
+        baseURL: 'https://legacy.example/openai/deployments/legacy-model-field',
+        defaultQuery: { 'api-version': 'legacy-version' }
+      })
+    );
+    expect(openAiCreate.mock.calls[0][0].model).toBe('legacy-model-field');
+  });
+  it('keeps legacy model suggestions on the global deployment unless configured as deployments', async () => {
+    await chatWithAgent({ agent: { provider: 'azure_openai', model: 'gpt-4o' }, messages });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseURL: 'https://legacy.example/openai/deployments/global-deployment'
+      })
+    );
+    expect(openAiCreate.mock.calls[0][0].model).toBe('global-deployment');
+  });
+  it('falls back to the legacy Azure deployment when the agent has no deployment', async () => {
+    await chatWithAgent({ agent: { provider: 'azure_openai', model: ' ' }, messages });
+    expect(openAiOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseURL: 'https://legacy.example/openai/deployments/global-deployment'
+      })
+    );
+    expect(openAiCreate.mock.calls[0][0].model).toBe('global-deployment');
+  });
+  it('supports tools and structured judge output and propagates the request signal', async () => {
+    const controller = new AbortController();
+    openAiCreate.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              { id: 'call', function: { name: 'search', arguments: '{"query":"test"}' } }
+            ]
+          }
+        }
+      ]
+    });
+    const result = await chatWithAgent({
+      agent,
+      messages,
+      tools: [{ name: 'search', parameters: { type: 'object' } }],
+      responseFormat: buildSingleCheckJudgeResponseFormat(),
+      signal: controller.signal
+    });
+    expect(openAiCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'agent-deployment',
+        tools: [expect.objectContaining({ type: 'function' })],
+        response_format: buildSingleCheckJudgeResponseFormat()
+      }),
+      { signal: controller.signal }
+    );
+    expect(result.tool_calls).toEqual([
+      { id: 'call', name: 'search', arguments: { query: 'test' } }
+    ]);
+  });
+});
 
 describe('runAgentScenario', () => {
   beforeEach(() => {
@@ -246,5 +399,55 @@ describe('judge response formats', () => {
         }
       }
     });
+  });
+});
+
+describe('models that reject temperature', () => {
+  const messages = [{ role: 'user' as const, content: 'Hello' }];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    anthropicCreate.mockReset();
+    openAiCreate.mockReset();
+  });
+
+  it('fails an Anthropic request with what to change instead of retrying', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    const rejection = new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."}}'
+    );
+    anthropicCreate.mockRejectedValue(rejection);
+    const result = chatWithAgent({
+      agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
+      messages
+    });
+    await expect(result).rejects.toThrow(
+      "`luna-6` doesn't accept temperature. Remove it from this agent's settings."
+    );
+    await expect(result).rejects.toMatchObject({ cause: rejection });
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails an OpenAI request with what to change instead of retrying', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    openAiCreate.mockRejectedValue(
+      new Error(
+        "400 Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported."
+      )
+    );
+    await expect(
+      chatWithAgent({ agent: { provider: 'openai', model: 'o4-mini', temperature: 0.2 }, messages })
+    ).rejects.toThrow("`o4-mini` doesn't accept temperature.");
+    expect(openAiCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes other request errors through unchanged', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    anthropicCreate.mockRejectedValue(new Error('400 max_tokens is too large'));
+    await expect(
+      chatWithAgent({
+        agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
+        messages
+      })
+    ).rejects.toThrow('400 max_tokens is too large');
   });
 });

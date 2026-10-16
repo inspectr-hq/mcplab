@@ -22,15 +22,12 @@ import type {
   OAuthDebuggerSession
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
+import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import type {
-  cleanupAssistantSessions,
-  touchAssistantSession,
-  assistantSessionView,
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromConfig,
-  resolveAssistantAgentFromLibraries,
-  ScenarioAssistantSession
-} from './scenario-assistant-domain.js';
+  resolveAssistantAgentFromLibraries
+} from './assistant-agent.js';
 import type {
   getRunResults,
   listRuns,
@@ -47,6 +44,7 @@ import type {
   ExecutableEvalConfig,
   chatWithAgent
 } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeFactory } from './assistant-runtime-contract.js';
 
 export interface AppRouteRequestContext {
   req: IncomingMessage;
@@ -82,37 +80,18 @@ export interface ToolAnalysisDeps extends LibraryDeps {
   runToolAnalysisJob: typeof runToolAnalysisJob;
 }
 
-export interface AssistantDeps extends LibraryDeps {
-  cleanupAssistantSessions: typeof cleanupAssistantSessions;
-  touchAssistantSession: typeof touchAssistantSession;
-  assistantSessionView: typeof assistantSessionView;
-  ensureInsideRoot: typeof ensureInsideRoot;
-  pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
-  resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
-  resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-}
-
 export interface ResultAssistantDeps extends LibraryDeps {
+  assistantRuntimeFactory: AssistantRuntimeFactory;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-  preloadResultAssistantTools: typeof import('./result-assistant-domain.js').preloadResultAssistantTools;
-  continueResultAssistantTurn: typeof import('./result-assistant-domain.js').continueResultAssistantTurn;
-  executeResultAssistantToolCall: typeof import('./result-assistant-domain.js').executeResultAssistantToolCall;
-  summarizeToolResultForResultAssistant: typeof import('./result-assistant-domain.js').summarizeToolResultForResultAssistant;
 }
 
 export interface ScenarioAssistantDeps extends LibraryDeps {
-  cleanupAssistantSessions: typeof cleanupAssistantSessions;
-  touchAssistantSession: typeof touchAssistantSession;
-  assistantSessionView: typeof assistantSessionView;
+  assistantRuntimeFactory: AssistantRuntimeFactory;
   ensureInsideRoot: typeof ensureInsideRoot;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-  preloadAssistantTools: typeof import('./scenario-assistant-domain.js').preloadAssistantTools;
-  continueAssistantTurn: typeof import('./scenario-assistant-domain.js').continueAssistantTurn;
-  executeAssistantToolCall: typeof import('./scenario-assistant-domain.js').executeAssistantToolCall;
-  summarizeToolResultForAssistant: typeof import('./scenario-assistant-domain.js').summarizeToolResultForAssistant;
 }
 
 export interface OAuthDebuggerDeps extends LibraryDeps {
@@ -152,7 +131,8 @@ export interface RunDeps {
 }
 
 export interface AppRouteDeps
-  extends HttpDeps,
+  extends
+    HttpDeps,
     JobStreamDeps,
     ToolAnalysisDeps,
     OAuthDebuggerDeps,
@@ -164,7 +144,7 @@ export interface AppRouteDeps
 export type ToolAnalysisJobsMap = Map<string, ToolAnalysisJob>;
 export type OAuthDebuggerSessionsMap = Map<string, OAuthDebuggerSession>;
 export type OAuthRuntimeSessionsMap = Map<string, OAuthRuntimeSession>;
-export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
+export type ScenarioAssistantSessionsMap = Map<string, ScenarioAssistantSession>;
 export type RunsResults = ResultsJson;
 export type RunsList = RunSummary[];
 export type ConfigRecords = ConfigRecord[];

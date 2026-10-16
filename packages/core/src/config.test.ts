@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { expandConfigForAgents, loadConfig, readLibraryAgentsAndServers } from './config.js';
+import {
+  expandConfigForAgents,
+  loadConfig,
+  normalizeLibraryAgents,
+  readLibraryAgentsAndServers
+} from './config.js';
 import type { EvalConfig } from './types.js';
 
 const BASE_CONFIG: EvalConfig = {
@@ -54,7 +59,85 @@ describe('expandConfigForAgents', () => {
   });
 });
 
+describe('browser agent normalization', () => {
+  it.each([' ', 123])('rejects an invalid Foundry deployment %j', (model) => {
+    expect(() => normalizeLibraryAgents({ foundry: { provider: 'azure_foundry', model } })).toThrow(
+      'deployment'
+    );
+  });
+  it('loads Foundry deployments alongside legacy Azure configurations', () => {
+    expect(
+      normalizeLibraryAgents({
+        foundry: { provider: 'azure_foundry', model: 'my-deployment' },
+        legacy: { provider: 'azure_openai', model: 'gpt-model' }
+      })
+    ).toMatchObject({
+      foundry: { provider: 'azure_foundry', model: 'my-deployment' },
+      legacy: { provider: 'azure_openai', model: 'gpt-model' }
+    });
+  });
+  it('loads browser agents alongside legacy LLM agents', () => {
+    const agents = normalizeLibraryAgents({
+      claude: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+      trendminer: {
+        type: 'browser',
+        provider: 'trendminer',
+        url: 'https://trendminer.example/agent'
+      }
+    });
+    expect(agents.claude).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
+    expect(agents.trendminer).toEqual({
+      type: 'browser',
+      provider: 'trendminer',
+      url: 'https://trendminer.example/agent'
+    });
+  });
+
+  it('rejects incomplete browser agents', () => {
+    expect(() =>
+      normalizeLibraryAgents({ trendminer: { type: 'browser', provider: 'trendminer' } })
+    ).toThrow('Browser agent trendminer requires a url');
+  });
+
+  it('preserves the browser agent conversation default', () => {
+    const agents = normalizeLibraryAgents({
+      separate: {
+        type: 'browser',
+        provider: 'chatgpt-com',
+        url: 'https://chatgpt.com',
+        new_conversation_between_scenarios: false
+      },
+      legacy: {
+        type: 'browser',
+        provider: 'claude',
+        url: 'https://claude.ai'
+      }
+    });
+
+    expect(agents.separate).toMatchObject({
+      type: 'browser',
+      newConversationBetweenScenarios: false
+    });
+    expect(agents.legacy).not.toHaveProperty('newConversationBetweenScenarios');
+  });
+});
+
 describe('loadConfig normalization', () => {
+  it('preserves inline browser conversation settings through source and runtime normalization', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-browser-config-'));
+    try {
+      const path = join(dir, 'config.yaml');
+      writeFileSync(
+        path,
+        'servers: []\nagents:\n  - id: browser\n    type: browser\n    provider: polo\n    url: https://polo.example\n    new_conversation_between_scenarios: false\nscenarios: []\n'
+      );
+      expect(loadConfig(path).config.agents.browser).toMatchObject({
+        newConversationBetweenScenarios: false
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('preserves optional top-level config name from source config', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

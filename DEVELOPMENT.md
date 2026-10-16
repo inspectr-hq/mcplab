@@ -37,12 +37,6 @@ npm run dev
 npm run mcp:dev
 ```
 
-### Website
-
-```bash
-npm run website:dev
-```
-
 ## Building
 
 ```bash
@@ -64,4 +58,3 @@ npm test
 | `packages/core`       | Shared core logic   |
 | `packages/mcp-server` | MCP server          |
 | `packages/reporting`  | Reporting utilities |
-| `packages/website`    | Marketing/docs site |

@@ -1,5 +1,7 @@
 export * from './types.js';
+export * from './server-constants.js';
 export { tallyCheckCounts } from './check-counts.js';
+export { readBrowserProviderProfiles } from './browser-provider-store.js';
 export {
   loadConfig,
   hashConfig,
@@ -11,8 +13,36 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
-export { runAll, type McpRequestHeaderContext, type RunProgressEvent, type RunOptions } from './runner.js';
-export { renderSummaryMarkdown } from './results.js';
+export {
+  createRunId,
+  runAll,
+  type McpRequestHeaderContext,
+  type RunProgressEvent,
+  type RunOptions
+} from './runner.js';
+export { judgeAgentAssertions } from './judge.js';
+export { evaluateSemanticAssertions, testDecisionConnection } from './decisions.js';
+export {
+  normalizeEvaluationDecisionConfig,
+  isDecisionEngineEnabled,
+  DECISION_PROVIDERS,
+  DECISION_DEFAULTS
+} from './decision-config.js';
+export {
+  loadWorkspaceSettingsOverrides,
+  toWorkspaceEvaluationSettings,
+  resolveEvaluationJudge,
+  resolveWorkspaceEvaluation
+} from './workspace-settings.js';
+export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';
+export { aggregateResults, renderSummaryMarkdown } from './results.js';
+export { persistEvaluationArtifacts, type PersistEvaluationArtifactsParams } from './artifacts.js';
+export {
+  deriveRunOutcome,
+  evaluateScenarioObservation,
+  type EvaluateScenarioObservationParams,
+  type ScenarioObservation
+} from './scenario-observation.js';
 export {
   estimateToolDefinitionTokens,
   type ToolDefinitionForTokenEstimate,
@@ -26,12 +56,33 @@ export {
   type ToolInputAssertionFailureKind
 } from './eval.js';
 export { McpClientManager } from './mcp.js';
+export type {
+  McpPromptInfo,
+  McpPromptResult,
+  McpResourceContent,
+  McpResourceInfo,
+  McpServerFeatures
+} from './mcp.js';
 export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
+export { AgentConnectionError } from './agent-errors.js';
+export {
+  getAzureOpenAIDeploymentSuggestions,
+  parseDeploymentSuggestions,
+  resolveAzureFoundryConnection,
+  resolveAzureOpenAIDeployment
+} from './azure-config.js';
+export {
+  anthropicModelCandidates,
+  isModelNotFound,
+  isUnsupportedTemperatureError
+} from './agent.js';
+export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
 export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
+export * from './run-directory-snapshots.js';
 export { applyRuntimeServerOverrides, type RuntimeServerOverrides } from './runtime-overrides.js';
 export {
   createEvaluationConfigFile,
@@ -59,3 +110,17 @@ export {
   type TraceSpan
 } from './langsmith-tracing.js';
 export * from './queue-contract.js';
+export {
+  parseBrowserProviderProfiles,
+  serializeBrowserProviderProfile,
+  validateBrowserProviderProfile,
+  type BrowserProviderProfile,
+  type BrowserProviderConfidence,
+  type ShadowLocator
+} from './browser-providers.js';
+export {
+  DEFAULT_BROWSER_PROVIDER_PROFILES,
+  mergeBrowserProviderProfiles
+} from './default-browser-providers.js';
+
+export { calculatePassRate } from './result-metrics.js';

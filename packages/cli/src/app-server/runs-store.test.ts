@@ -1,10 +1,16 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { listRuns } from './runs-store.js';
+import {
+  getRunResults,
+  getScenarioRunTraceRecords,
+  listRuns,
+  RunNotFoundError,
+  RunValidationError
+} from './runs-store.js';
 
-function writeRun(runsDir: string, runId: string, timestamp: string) {
+function writeRun(runsDir: string, runId: string, timestamp: string, evaluationRunId?: string) {
   const runDir = join(runsDir, runId);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(
@@ -13,7 +19,8 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
       metadata: {
         run_id: runId,
         timestamp,
-        config_hash: `hash-${runId}`
+        config_hash: `hash-${runId}`,
+        ...(evaluationRunId ? { evaluation_run_id: evaluationRunId } : {})
       },
       summary: {
         total_scenarios: 1,
@@ -26,6 +33,7 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
         {
           scenario_id: 'scn-default',
           scenario_name: 'Default Scenario',
+          agent: 'm365.cloud.microsoft',
           runs: [
             {
               check_results: [
@@ -43,6 +51,89 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
 }
 
 describe('listRuns filters', () => {
+  it('reads grouped execution traces without execution results.json', () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-grouped-trace-'));
+    try {
+      const runDir = join(runsDir, 'execution-1');
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(
+        join(runDir, 'trace.jsonl'),
+        `${JSON.stringify({
+          type: 'scenario_run',
+          trace_version: 3,
+          scenario_id: 'scenario-1',
+          agent: 'llm',
+          run_index: 0
+        })}\n`,
+        'utf8'
+      );
+
+      expect(
+        getScenarioRunTraceRecords('execution-1', runsDir, { requireResults: false })
+      ).toHaveLength(1);
+    } finally {
+      rmSync(runsDir, { recursive: true, force: true });
+    }
+  });
+  it('uses the directory name as the canonical run id', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, 'directory-id', '2026-03-10T10:00:00.000Z');
+    const resultsPath = join(runsDir, 'directory-id', 'results.json');
+    const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+    results.metadata.run_id = 'metadata-id';
+    writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
+
+    expect(listRuns(runsDir)).toEqual([]);
+    expect(() => getRunResults('directory-id', runsDir)).toThrow(RunValidationError);
+  });
+
+  it('discovers added runs and evicts deleted runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, 'run-a', '2026-03-10T10:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-a']);
+
+    writeRun(runsDir, 'run-b', '2026-03-10T11:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-b', 'run-a']);
+
+    rmSync(join(runsDir, 'run-a'), { recursive: true, force: true });
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['run-b']);
+  });
+
+  it('does not cache malformed or incomplete runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(join(runsDir, 'malformed'), { recursive: true });
+    writeFileSync(join(runsDir, 'malformed', 'results.json'), '{bad json', 'utf8');
+    mkdirSync(join(runsDir, 'incomplete'), { recursive: true });
+
+    expect(listRuns(runsDir)).toEqual([]);
+    writeRun(runsDir, 'malformed', '2026-03-10T10:00:00.000Z');
+    writeRun(runsDir, 'incomplete', '2026-03-10T11:00:00.000Z');
+    expect(listRuns(runsDir).map((run) => run.runId)).toEqual(['incomplete', 'malformed']);
+  });
+
+  it('returns typed not-found errors for missing runs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    expect(() => getRunResults('missing', runsDir)).toThrow(RunNotFoundError);
+  });
+
+  it('exposes the parent evaluation run identity in summaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'child-run', '2026-03-10T10:00:00.000Z', 'evaluation-1');
+
+    expect(listRuns(runsDir)[0]?.evaluationRunId).toBe('evaluation-1');
+  });
+
   it('includes MCP server versions in run summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');
@@ -57,6 +148,16 @@ describe('listRuns filters', () => {
     expect(listRuns(runsDir)[0]?.mcpServerVersions).toEqual({ api: '1.2.3', docs: null });
   });
 
+  it('includes agents in run summaries for list views', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-agent', '2026-03-10T10:00:00.000Z');
+
+    expect(listRuns(runsDir)[0]?.agentIds).toEqual(['m365.cloud.microsoft']);
+  });
+
   it('aggregates check counts for dashboard summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');
@@ -68,6 +169,7 @@ describe('listRuns filters', () => {
       passed: 1,
       failed: 1,
       not_evaluated: 1,
+      not_executed: 0,
       total: 3
     });
   });

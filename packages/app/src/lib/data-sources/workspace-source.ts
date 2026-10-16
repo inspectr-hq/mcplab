@@ -5,7 +5,8 @@ import {
   fromCoreResultsJson,
   fromCoreScenarioRunPreview,
   toCoreConfigYaml,
-  toCoreLibraries
+  toCoreLibraries,
+  toCoreAgent
 } from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
 import type { EvalDataSource, LibraryBundle } from './types';
@@ -59,11 +60,11 @@ export const workspaceSource: EvalDataSource = {
       offset = page.next_offset;
     }
     const resultPromises = summaries.map(async (summary) => {
-      const [{ results }, trace] = await Promise.all([
+      const [{ runId, results }, trace] = await Promise.all([
         workspaceApiClient.getRun(summary.runId),
         workspaceApiClient.getRunTrace(summary.runId)
       ]);
-      return fromCoreResultsJson(results, trace.records);
+      return fromCoreResultsJson(results, trace.records, runId);
     });
     return Promise.all(resultPromises);
   },
@@ -87,11 +88,11 @@ export const workspaceSource: EvalDataSource = {
   },
   async getResult(id) {
     try {
-      const [{ results }, trace] = await Promise.all([
+      const [{ runId, results }, trace] = await Promise.all([
         workspaceApiClient.getRun(id),
         workspaceApiClient.getRunTrace(id)
       ]);
-      return fromCoreResultsJson(results, trace.records);
+      return fromCoreResultsJson(results, trace.records, runId);
     } catch {
       return undefined;
     }
@@ -152,6 +153,24 @@ export const workspaceSource: EvalDataSource = {
   async stopRun(jobId) {
     await workspaceApiClient.stopRun(jobId);
   },
+  async stopScenario(jobId, scenarioId, agentName) {
+    return workspaceApiClient.stopScenario(jobId, scenarioId, agentName);
+  },
+  async stopEvaluationRun(evaluationRunId) {
+    await workspaceApiClient.stopEvaluationRun(evaluationRunId);
+  },
+  async removeEvaluationRun(evaluationRunId) {
+    await workspaceApiClient.removeEvaluationRun(evaluationRunId);
+  },
+  async openRover(jobId) {
+    return workspaceApiClient.openRover(jobId);
+  },
+  async resumeRover(jobId) {
+    return workspaceApiClient.resumeRover(jobId);
+  },
+  async getRoverStatus() {
+    return workspaceApiClient.getRoverStatus();
+  },
   async getRunQueue() {
     return workspaceApiClient.getRunQueue();
   },
@@ -176,14 +195,17 @@ export const workspaceSource: EvalDataSource = {
   async getResultAssistantSession(sessionId) {
     return workspaceApiClient.getResultAssistantSession(sessionId);
   },
-  async sendResultAssistantMessage(sessionId, message, signal) {
-    return workspaceApiClient.sendResultAssistantMessage(sessionId, message, signal);
+  async sendResultAssistantMessage(sessionId, message, signal, turnId) {
+    return workspaceApiClient.sendResultAssistantMessage(sessionId, message, signal, turnId);
+  },
+  async cancelResultAssistantTurn(sessionId, turnId) {
+    return workspaceApiClient.cancelResultAssistantTurn(sessionId, turnId);
   },
   async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
     return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
   },
-  async denyResultAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.denyResultAssistantToolCall(sessionId, callId);
+  async denyResultAssistantToolCall(sessionId, callId, message) {
+    return workspaceApiClient.denyResultAssistantToolCall(sessionId, callId, message);
   },
   async closeResultAssistantSession(sessionId) {
     await workspaceApiClient.closeResultAssistantSession(sessionId);
@@ -201,11 +223,17 @@ export const workspaceSource: EvalDataSource = {
   async listProviderModels(provider) {
     return workspaceApiClient.listProviderModels(provider);
   },
+  async testAgentConnection(agent, signal) {
+    return workspaceApiClient.testAgentConnection(toCoreAgent(agent), signal);
+  },
   async getWorkspaceSettings() {
     return workspaceApiClient.getSettings();
   },
   async updateWorkspaceSettings(patch) {
     return workspaceApiClient.updateSettings(patch);
+  },
+  async testDecisionConnection(config, signal) {
+    return workspaceApiClient.testDecisionConnection(config, signal);
   },
   async createScenarioAssistantSession(params, signal) {
     return workspaceApiClient.createScenarioAssistantSession(params, signal);
@@ -213,14 +241,21 @@ export const workspaceSource: EvalDataSource = {
   async getScenarioAssistantSession(sessionId) {
     return workspaceApiClient.getScenarioAssistantSession(sessionId);
   },
-  async sendScenarioAssistantMessage(sessionId, message, signal) {
-    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message, signal);
+  async sendScenarioAssistantMessage(sessionId, message, signal, turnId) {
+    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message, signal, turnId);
   },
-  async approveScenarioAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.approveScenarioAssistantToolCall(sessionId, callId);
+  async cancelScenarioAssistantTurn(sessionId, turnId) {
+    return workspaceApiClient.cancelScenarioAssistantTurn(sessionId, turnId);
   },
-  async denyScenarioAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId);
+  async approveScenarioAssistantToolCall(sessionId, callId, argumentsOverride) {
+    return workspaceApiClient.approveScenarioAssistantToolCall(
+      sessionId,
+      callId,
+      argumentsOverride
+    );
+  },
+  async denyScenarioAssistantToolCall(sessionId, callId, message) {
+    return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId, message);
   },
   async approveAllScenarioAssistantToolCalls(sessionId) {
     return workspaceApiClient.approveAllScenarioAssistantToolCalls(sessionId);

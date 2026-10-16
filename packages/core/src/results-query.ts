@@ -1,6 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ResultsJson, ScenarioRunTraceRecord } from './types.js';
+import {
+  listRunDirectories,
+  snapshotRunDirectory,
+  snapshotsEqual,
+  type RunDirectorySnapshot
+} from './run-directory-snapshots.js';
 
 export type ResultSource = 'results' | 'trace' | 'summary';
 export type ResultStatus = 'passed' | 'failed';
@@ -45,8 +51,8 @@ export interface SearchFilters {
 }
 
 export interface IndexManifest {
-  version: 1;
-  runs: Record<string, { mtime_ms: number; files: string[] }>;
+  version: 2;
+  runs: Record<string, RunDirectorySnapshot>;
 }
 
 export interface ContextOptions {
@@ -91,39 +97,8 @@ function ensureIndexDir(runsDir: string): ReturnType<typeof getResultsIndexPaths
   return paths;
 }
 
-function listRunDirs(runsDir: string): string[] {
-  if (!existsSync(runsDir)) return [];
-  return readdirSync(runsDir)
-    .map((name) => ({ name, abs: join(runsDir, name) }))
-    .filter((entry) => {
-      try {
-        return statSync(entry.abs).isDirectory();
-      } catch {
-        return false;
-      }
-    })
-    .map((entry) => entry.name)
-    .sort();
-}
-
 export function listRunIdsDesc(runsDir: string): string[] {
-  return listRunDirs(runsDir).slice().reverse();
-}
-
-function getRunFileSet(runDir: string): string[] {
-  return ['results.json', 'trace.jsonl', 'summary.md'].filter((name) =>
-    existsSync(join(runDir, name))
-  );
-}
-
-function getRunMtime(runDir: string, files: string[]): number {
-  // Empty run directories return 0; treated as stable sentinel for "no artifact mtime".
-  let maxMtime = 0;
-  for (const file of files) {
-    const st = statSync(join(runDir, file));
-    maxMtime = Math.max(maxMtime, st.mtimeMs);
-  }
-  return maxMtime;
+  return listRunDirectories(runsDir).slice().reverse();
 }
 
 export function resolveRunArtifactPath(runsDir: string, runId: string, file: string): string {
@@ -147,20 +122,21 @@ export function indexNeedsRefresh(runsDir: string): boolean {
     return true;
   }
 
-  if (manifest.version !== 1) return true;
+  if (manifest.version !== 2) return true;
 
-  const runIds = listRunDirs(runsDir);
+  const runIds = listRunDirectories(runsDir);
   const manifestRunIds = Object.keys(manifest.runs).sort();
   if (runIds.join(',') !== manifestRunIds.join(',')) return true;
 
   for (const runId of runIds) {
-    const runDir = join(runsDir, runId);
-    const files = getRunFileSet(runDir);
-    const mtime = getRunMtime(runDir, files);
     const existing = manifest.runs[runId];
     if (!existing) return true;
-    if (existing.mtime_ms !== mtime) return true;
-    if (existing.files.join(',') !== files.join(',')) return true;
+    const current = snapshotRunDirectory(runsDir, runId, [
+      'results.json',
+      'trace.jsonl',
+      'summary.md'
+    ]);
+    if (!current || !snapshotsEqual(existing, current)) return true;
   }
   return false;
 }
@@ -324,7 +300,7 @@ function buildDocsFromTrace(runId: string, tracePath: string, runTimestamp?: str
 
 export function buildSearchIndex(runsDir: string): SearchDoc[] {
   const docs: SearchDoc[] = [];
-  const runIds = listRunDirs(runsDir);
+  const runIds = listRunDirectories(runsDir);
   for (const runId of runIds) {
     const runDir = resolve(runsDir, runId);
     const resultsPath = resolveRunArtifactPath(runsDir, runId, 'results.json');
@@ -335,6 +311,7 @@ export function buildSearchIndex(runsDir: string): SearchDoc[] {
     } catch {
       continue;
     }
+    if (!results.metadata || results.metadata.run_id !== runId) continue;
     docs.push(...buildDocsFromResults(runId, runDir, results));
     docs.push(
       ...buildDocsFromTrace(runId, join(runDir, 'trace.jsonl'), results.metadata.timestamp)
@@ -351,15 +328,15 @@ export function writeSearchIndex(runsDir: string, docs: SearchDoc[]): void {
     'utf8'
   );
 
-  const runIds = listRunDirs(runsDir);
-  const manifest: IndexManifest = { version: 1, runs: {} };
+  const runIds = listRunDirectories(runsDir);
+  const manifest: IndexManifest = { version: 2, runs: {} };
   for (const runId of runIds) {
-    const runDir = join(runsDir, runId);
-    const files = getRunFileSet(runDir);
-    manifest.runs[runId] = {
-      mtime_ms: getRunMtime(runDir, files),
-      files
-    };
+    const snapshot = snapshotRunDirectory(runsDir, runId, [
+      'results.json',
+      'trace.jsonl',
+      'summary.md'
+    ]);
+    if (snapshot) manifest.runs[runId] = snapshot;
   }
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 }

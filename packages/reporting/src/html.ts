@@ -13,7 +13,8 @@ function escapeHtml(value: string | number | boolean | null | undefined): string
     .replace(/'/g, '&#39;');
 }
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return '–';
   return `${(value * 100).toFixed(1)}%`;
 }
 
@@ -24,12 +25,18 @@ export function renderHtml(results: ResultsJson): string {
       const passRate = formatPercent(scenario.pass_rate);
       const sequences = Object.keys(scenario.distinct_sequences).length;
       const status =
-        scenario.pass_rate === 1 ? 'pass' : scenario.pass_rate === 0 ? 'fail' : 'mixed';
+        scenario.pass_rate === null
+          ? 'neutral'
+          : scenario.pass_rate === 1
+            ? 'pass'
+            : scenario.pass_rate === 0
+              ? 'fail'
+              : 'mixed';
       return `
         <tr data-status="${status}">
           <td><a href="#scenario-${escapeHtml(scenario.scenario_id)}">${escapeHtml(
-        scenario.scenario_id
-      )}</a></td>
+            scenario.scenario_id
+          )}</a></td>
           <td>${escapeHtml(scenario.agent)}</td>
           <td>${scenario.runs.length}</td>
           <td>${passRate}</td>
@@ -99,8 +106,8 @@ export function renderHtml(results: ResultsJson): string {
         <section id="scenario-${escapeHtml(scenario.scenario_id)}" class="scenario">
           <h3>${escapeHtml(scenario.scenario_id)}</h3>
           <p><strong>Agent:</strong> ${escapeHtml(scenario.agent)} | <strong>Runs:</strong> ${
-        scenario.runs.length
-      } | <strong>Pass rate:</strong> ${formatPercent(scenario.pass_rate)}</p>
+            scenario.runs.length
+          } | <strong>Pass rate:</strong> ${formatPercent(scenario.pass_rate)}</p>
 
           <h4>Distinct tool sequences</h4>
           <table>
