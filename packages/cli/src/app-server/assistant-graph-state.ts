@@ -160,3 +160,40 @@ export const withToolMessages = (state: GraphState) => {
     batchIds: []
   };
 };
+
+export const toPersistedToolRequest = (native: AIMessage, calls: AssistantRuntimeToolCall[]) => {
+  const kwargs = { ...native.additional_kwargs };
+  delete kwargs.tool_calls;
+  let nativeToolIndex = 0;
+  const content = Array.isArray(native.content)
+    ? native.content.map((block) => {
+        if (
+          !block ||
+          typeof block !== 'object' ||
+          (block as { type?: unknown }).type !== 'tool_use'
+        )
+          return block;
+        const call = calls[nativeToolIndex++];
+        return call
+          ? ({
+              ...(block as Record<string, unknown>),
+              id: call.id,
+              input: call.arguments
+            } as unknown as typeof block)
+          : block;
+      })
+    : native.content;
+  return new AIMessage({
+    content,
+    id: native.id ?? messageId(),
+    additional_kwargs: kwargs,
+    response_metadata: native.response_metadata,
+    usage_metadata: native.usage_metadata,
+    tool_calls: calls.map((call) => ({
+      id: call.id,
+      name: call.publicToolName,
+      args: call.arguments as Record<string, unknown>,
+      type: 'tool_call' as const
+    }))
+  });
+};

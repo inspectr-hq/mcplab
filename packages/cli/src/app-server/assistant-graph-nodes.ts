@@ -12,14 +12,12 @@ import type { AssistantModelCall } from './assistant-model.js';
 import {
   classifyToolCalls,
   createPendingToolCall,
-  AssistantTurnBudgetExceededError,
   MAX_ASSISTANT_MODEL_CALLS,
   mergeAssistantSuggestions,
   OVERSIZED_ASSISTANT_TOOL_BATCH_ERROR,
   raceAssistantAbort,
   terminalToolFeedback,
-  terminalToolStatus,
-  validateToolCallDecisions
+  terminalToolStatus
 } from './assistant-runtime-policy.js';
 import {
   State,
@@ -28,30 +26,34 @@ import {
   type TerminalReason,
   messageId,
   persistNativeMessage,
+  toPersistedToolRequest,
   hasResult,
   addResult,
   addResults,
   withToolMessages
 } from './assistant-graph-state.js';
 
-type NodeState = GraphState & { goto?: string; events?: GraphEvent[] };
+type NodeName =
+  | 'model'
+  | 'policy'
+  | 'approval'
+  | 'apply'
+  | 'select'
+  | 'execute'
+  | 'finish'
+  | 'cleanup';
 type ApprovalResume = AssistantToolCallDecision[] | { terminal: TerminalReason; error?: string };
-type GraphUpdate = Partial<GraphState> & { goto?: string; events?: GraphEvent[] };
+type GraphUpdate = Partial<GraphState> & { goto: NodeName | 'end'; events?: GraphEvent[] };
 type NodeConfig = {
   configurable?: { requestSignal?: AbortSignal };
   writer?: (event: GraphEvent) => void;
 };
 const commandNode =
-  (handler: (state: NodeState, config: NodeConfig) => unknown) =>
+  (handler: (state: GraphState, config: NodeConfig) => GraphUpdate | Promise<GraphUpdate>) =>
   async (state: GraphState, config: NodeConfig) => {
-    const result = await handler(state as NodeState, config);
-    const update = { ...(result as Record<string, unknown>) };
-    const destination = update.goto as string | undefined;
-    const events = (update.events ?? []) as GraphEvent[];
-    delete update.goto;
-    delete update.events;
+    const { goto, events = [], ...update } = await handler(state, config);
     for (const next of events) config.writer?.(next);
-    return new Command({ goto: destination === 'end' ? END : (destination ?? END), update });
+    return new Command({ goto: goto === 'end' ? END : goto, update });
   };
 
 export function createAssistantGraph(
@@ -64,7 +66,11 @@ export function createAssistantGraph(
     type,
     payload
   });
-  const cleanupUpdate = (state: GraphState, reason: TerminalReason, error?: unknown) => {
+  const cleanupUpdate = (
+    state: GraphState,
+    reason: TerminalReason,
+    error?: unknown
+  ): GraphUpdate => {
     const detail = error instanceof Error ? error.message : String(error ?? '');
     const updates: GraphUpdate = {
       terminal: reason,
@@ -98,7 +104,7 @@ export function createAssistantGraph(
     next: { calls: AssistantRuntimeToolCall[]; results: Record<string, string> },
     id: string,
     proposals = state.proposals
-  ) => {
+  ): GraphUpdate => {
     const rest = state.decisions.some(
       (decision) =>
         decision.toolCallId !== id &&
@@ -128,7 +134,7 @@ export function createAssistantGraph(
   const graph = new StateGraph(State)
     .addNode(
       'model',
-      commandNode(async (state: NodeState, config: NodeConfig) => {
+      commandNode(async (state: GraphState, config: NodeConfig) => {
         const signal = config.configurable?.requestSignal;
         if (signal?.aborted)
           return cleanupUpdate({ ...state, executingId: undefined }, state.terminal ?? 'cancelled');
@@ -175,41 +181,10 @@ export function createAssistantGraph(
           const calls = output.toolCalls.map((call) =>
             createPendingToolCall(definition, call, ids)
           );
-          const native = output.nativeMessage;
-          const kwargs = { ...(native?.additional_kwargs ?? {}) };
-          delete kwargs.tool_calls;
-          let nativeToolIndex = 0;
-          const content = Array.isArray(native?.content)
-            ? native.content.map((block) => {
-                if (
-                  !block ||
-                  typeof block !== 'object' ||
-                  (block as { type?: unknown }).type !== 'tool_use'
-                )
-                  return block;
-                const call = calls[nativeToolIndex++];
-                return call
-                  ? ({
-                      ...(block as Record<string, unknown>),
-                      id: call.id,
-                      input: call.arguments
-                    } as unknown as typeof block)
-                  : block;
-              })
-            : (native?.content ?? output.text);
-          const incoming = new AIMessage({
-            content,
-            id: native?.id ?? messageId(),
-            additional_kwargs: kwargs,
-            response_metadata: native?.response_metadata,
-            usage_metadata: native?.usage_metadata,
-            tool_calls: calls.map((call) => ({
-              id: call.id,
-              name: call.publicToolName,
-              args: call.arguments as Record<string, unknown>,
-              type: 'tool_call' as const
-            }))
-          });
+          const incoming = toPersistedToolRequest(
+            output.nativeMessage ?? new AIMessage({ content: output.text }),
+            calls
+          );
           const persisted = persistNativeMessage(incoming, state.messages);
           const ui: AssistantRuntimeMessage = {
             id: messageId(),
@@ -241,7 +216,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'policy',
-      commandNode((state: NodeState) => {
+      commandNode((state: GraphState) => {
         const batch = state.calls.filter((call) => state.batchIds.includes(call.id));
         if (state.rounds >= MAX_ASSISTANT_MODEL_CALLS) return cleanupUpdate(state, 'budget');
         const { oversized, unknown, invalid, local, validExternal, needsApproval } =
@@ -332,7 +307,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'approval',
-      commandNode((state: NodeState, config: NodeConfig) => {
+      commandNode((state: GraphState, config: NodeConfig) => {
         const signal = config.configurable?.requestSignal;
         if (signal?.aborted)
           return {
@@ -356,7 +331,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'apply',
-      commandNode((state: NodeState) => {
+      commandNode((state: GraphState) => {
         let calls = state.calls;
         let results = state.results;
         const events: GraphEvent[] = [];
@@ -431,7 +406,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'select',
-      commandNode((state: NodeState, config: NodeConfig) => {
+      commandNode((state: GraphState, config: NodeConfig) => {
         const signal = config.configurable?.requestSignal;
         if (signal?.aborted) return cleanupUpdate(state, 'cancelled');
         const next =
@@ -455,7 +430,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'execute',
-      commandNode(async (state: NodeState, config: NodeConfig) => {
+      commandNode(async (state: GraphState, config: NodeConfig) => {
         const id = state.executingId;
         const call = state.calls.find((item) => item.id === id);
         if (!id || !call) return { goto: 'policy', executingId: undefined };
@@ -511,7 +486,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'finish',
-      commandNode((state: NodeState) => {
+      commandNode((state: GraphState) => {
         const update = withToolMessages(state);
         return { ...update, goto: 'end' };
       }),
@@ -519,7 +494,7 @@ export function createAssistantGraph(
     )
     .addNode(
       'cleanup',
-      commandNode((state: NodeState) =>
+      commandNode((state: GraphState) =>
         cleanupUpdate(state, state.terminal ?? 'failure', state.error)
       ),
       { ends: ['finish'] }

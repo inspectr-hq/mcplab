@@ -131,6 +131,7 @@ function assistantSystemPrompt(
     'evalRules: { replacement: [{ type, tool?, value?, sequence?, path?, equals?, label?, prompt? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'Use the proposal tool with a complete replacement for every field you propose to change, plus a rationale.',
+    'Include only the fields you are changing; omit the others entirely.',
     'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
@@ -666,15 +667,19 @@ const ruleTypes = new Set<string>([
 const proposalSchema = {
   type: 'object',
   additionalProperties: false,
+  minProperties: 1,
   properties: {
     prompt: {
       type: 'object',
+      description: 'Omit this field if you are not changing it; do not send null or empty values.',
       additionalProperties: false,
       required: ['replacement'],
       properties: { replacement: { type: 'string' }, rationale: { type: 'string' } }
     },
     evalRules: {
       type: 'object',
+      description:
+        'Omit this field if you are not changing it; do not send null or empty values. Use replacement: [] to remove all checks.',
       additionalProperties: false,
       required: ['replacement'],
       properties: {
@@ -701,6 +706,8 @@ const proposalSchema = {
     },
     extractRules: {
       type: 'object',
+      description:
+        'Omit this field if you are not changing it; do not send null or empty values. Use replacement: [] to remove all capture rules.',
       additionalProperties: false,
       required: ['replacement'],
       properties: {
@@ -716,7 +723,12 @@ const proposalSchema = {
         rationale: { type: 'string' }
       }
     },
-    notes: { type: 'array', items: { type: 'string' } }
+    notes: {
+      type: 'array',
+      description:
+        'Optional notes accompanying changes. Omit if unused; notes alone are not a change.',
+      items: { type: 'string' }
+    }
   }
 };
 export function validateScenarioAssistantProposal(
@@ -728,7 +740,13 @@ export function validateScenarioAssistantProposal(
   };
   if (!input || typeof input !== 'object' || Array.isArray(input))
     return invalid('proposal', 'expected an object');
-  const value = input as Record<string, unknown>;
+  const isUnchangedPlaceholder = (field: unknown) =>
+    field === null ||
+    field === '' ||
+    (typeof field === 'object' && !Array.isArray(field) && Object.keys(field).length === 0);
+  const value = Object.fromEntries(
+    Object.entries(input).filter(([, field]) => !isUnchangedPlaceholder(field))
+  );
   const checkKeys = (object: Record<string, unknown>, allowed: string[], path: string) => {
     const unknown = Object.keys(object).find((key) => !allowed.includes(key));
     if (unknown !== undefined) invalid(`${path}.${unknown}`, 'unknown key');
@@ -742,8 +760,8 @@ export function validateScenarioAssistantProposal(
       return invalid('prompt', 'expected an object');
     const p = value.prompt as Record<string, unknown>;
     checkKeys(p, ['replacement', 'rationale'], 'prompt');
-    if (typeof p.replacement !== 'string')
-      return invalid('prompt.replacement', 'expected a string');
+    if (typeof p.replacement !== 'string' || !p.replacement.trim())
+      return invalid('prompt.replacement', 'expected a non-empty string');
     if (!validRationale(p)) return invalid('prompt.rationale', 'expected a string');
     result.prompt = {
       replacement: p.replacement,

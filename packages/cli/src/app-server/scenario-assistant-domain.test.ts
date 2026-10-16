@@ -348,6 +348,30 @@ describe('Scenario Assistant runtime definition', () => {
     ]);
   });
 
+  it('omits unchanged placeholders while preserving proposed checks', () => {
+    const evalRules = { replacement: [{ type: 'response_contains', value: 'answer' }] };
+    expect(
+      validateScenarioAssistantProposal({ prompt: null, extractRules: {}, evalRules }, new Map())
+    ).toEqual({ evalRules });
+  });
+
+  it('rejects placeholder-only changes even when notes are supplied', () => {
+    expect(() =>
+      validateScenarioAssistantProposal({ prompt: '', notes: ['x'] }, new Map())
+    ).toThrow('must include at least one change');
+  });
+
+  it.each(['evalRules', 'extractRules'])('preserves explicit removal of all %s', (field) => {
+    const proposal = { [field]: { replacement: [] } };
+    expect(validateScenarioAssistantProposal(proposal, new Map())).toEqual(proposal);
+  });
+
+  it('rejects an explicitly empty replacement prompt', () => {
+    expect(() =>
+      validateScenarioAssistantProposal({ prompt: { replacement: '' } }, new Map())
+    ).toThrow('prompt.replacement');
+  });
+
   it('returns corrective validation errors for malformed or empty proposals', () => {
     expect(() =>
       validateScenarioAssistantProposal(
