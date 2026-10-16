@@ -211,7 +211,7 @@ describe('assistant runtime service', () => {
     await expect(service.sendMessage('next')).resolves.toMatchObject({ text: 'ok' });
     await service.dispose();
   });
-  it('serializes opaque runtime operations and owns idempotent cleanup', async () => {
+  it('serializes operations and disposes an opaque runtime that settles only during cleanup', async () => {
     let finish!: (value: { type: 'assistant_message'; text: string }) => void;
     const inFlight = new Promise<{ type: 'assistant_message'; text: string }>((resolve) => {
       finish = resolve;
@@ -220,7 +220,9 @@ describe('assistant runtime service', () => {
       sendMessage: vi.fn(() => inFlight),
       resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
       getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
-      dispose: vi.fn()
+      dispose: vi.fn(() => {
+        finish({ type: 'assistant_message', text: 'done' });
+      })
     };
     const disposeResources = vi.fn();
     const definition = { dispose: disposeResources } as unknown as AssistantRuntimeDefinition;
@@ -236,11 +238,11 @@ describe('assistant runtime service', () => {
     expect(onActivity).toHaveBeenCalledOnce();
     await expect(service.resolveToolCalls([])).rejects.toThrow('busy');
     expect(onActivity).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(runtime.sendMessage).toHaveBeenCalledOnce());
     await service.dispose();
     await service.dispose();
     expect(runtime.dispose).toHaveBeenCalledOnce();
     expect(disposeResources).toHaveBeenCalledOnce();
-    finish({ type: 'assistant_message', text: 'done' });
     await expect(send).rejects.toThrow('aborted');
     expect(onActivity).toHaveBeenCalledTimes(1);
     const decisionService = await createAssistantRuntimeService(
@@ -329,6 +331,88 @@ describe('assistant runtime service', () => {
         .map((message) => message.tool_call_id)
     ).toEqual(['new-call']);
     expect(service.getSnapshot().pendingToolCalls.map((call) => call.id)).toEqual(['new-call']);
+    await service.dispose();
+  });
+
+  it('owns active tool cancellation, rejects overlap, and keeps late tool results stale', async () => {
+    let release!: (value: unknown) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => (markStarted = resolve));
+    const slowResult = new Promise((resolve) => (release = resolve));
+    const slowExecute = vi.fn(() => slowResult);
+    const siblingExecute = vi.fn(async () => ({ sibling: true }));
+    const histories: any[][] = [];
+    let round = 0;
+    const events: AssistantRuntimeEvent[] = [];
+    const definition = {
+      assistant: 'result',
+      agent: { provider: 'openai', model: 'fake' },
+      context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+      getSystemPrompt: () => 'prompt',
+      onEvent: (event: AssistantRuntimeEvent) => events.push(event),
+      tools: [
+        {
+          name: 'slow',
+          server: 's',
+          tool: 'slow',
+          execute: () => {
+            markStarted();
+            return slowExecute();
+          }
+        },
+        { name: 'sibling', server: 's', tool: 'sibling', execute: siblingExecute }
+      ],
+      approvalPolicy: () => 'automatic'
+    } as unknown as AssistantRuntimeDefinition;
+    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+      histories.push([...messages]);
+      round++;
+      return round === 1
+        ? {
+            type: 'tool_call_request',
+            text: 'Run both tools',
+            toolCalls: [
+              { id: 'executing-call', name: 'slow' },
+              { id: 'sibling-call', name: 'sibling' }
+            ]
+          }
+        : { type: 'assistant_message', text: 'New turn finished' };
+    }).create(definition);
+    const service = await createAssistantRuntimeService(
+      { create: async () => runtime },
+      definition
+    );
+    const controller = new AbortController();
+    const oldTurn = service.sendMessage('Old turn', controller.signal);
+    await started;
+    await expect(service.sendMessage('overlapping turn')).rejects.toMatchObject({
+      statusCode: 409
+    });
+    controller.abort();
+    await expect(oldTurn).rejects.toThrow();
+    await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
+    const terminalSnapshot = service.getSnapshot();
+    expect(terminalSnapshot.pendingToolCalls).toMatchObject([
+      { id: 'executing-call', status: 'error', error: expect.stringContaining('outcome unknown') },
+      {
+        id: 'sibling-call',
+        status: 'error',
+        error: expect.stringContaining('cancelled before execution')
+      }
+    ]);
+    expect(siblingExecute).not.toHaveBeenCalled();
+    await expect(service.sendMessage('New turn')).resolves.toMatchObject({
+      type: 'assistant_message',
+      text: 'New turn finished'
+    });
+    const snapshotBeforeLateTool = service.getSnapshot();
+    const eventsBeforeLateTool = [...events];
+    release({ late: true });
+    await Promise.resolve();
+    expect(service.getSnapshot()).toEqual(snapshotBeforeLateTool);
+    expect(events).toEqual(eventsBeforeLateTool);
+    expect(histories[1].filter((message) => message.getType?.() === 'tool')).toHaveLength(2);
+    expect(slowExecute).toHaveBeenCalledOnce();
     await service.dispose();
   });
 });

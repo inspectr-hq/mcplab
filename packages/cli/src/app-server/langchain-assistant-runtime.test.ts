@@ -5,7 +5,11 @@ import { withRunTree, getCurrentRunTree } from 'langsmith/traceable';
 import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
 import { MemorySaver } from '@langchain/langgraph';
 import { assistantRuntimeContract } from '../../test-support/assistant-runtime-contract.js';
-import type { AssistantRuntimeDefinition, AssistantRuntimeSession } from '@inspectr/mcplab-core';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeEvent,
+  AssistantRuntimeSession
+} from '@inspectr/mcplab-core';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
 assistantRuntimeContract('LangGraph assistant runtime', createLangChainAssistantRuntimeFactory);
@@ -300,6 +304,8 @@ it('checkpoints a pending batch, its proposal, and model-call budget before appr
     const saved = await latestRead.saver.getTuple(latestRead.config);
     expect(saved).toBeTruthy();
     const values = saved?.checkpoint.channel_values as Record<string, unknown>;
+    expect(values).not.toHaveProperty('route');
+    expect(values).not.toHaveProperty('events');
     expect(values.rounds).toBe(1);
     expect(values.batchIds).toEqual(['proposal', 'write-1', 'write-2']);
     expect(values.results).toMatchObject({ proposal: expect.stringContaining('ok') });
@@ -499,6 +505,7 @@ it('recovers a checkpoint write failure without replaying the completed tool', a
   let session: AssistantRuntimeSession | undefined;
   let rounds = 0;
   const histories: BaseMessage[][] = [];
+  const events: AssistantRuntimeEvent[] = [];
   const execute = vi.fn(async () => {
     failNextPut = true;
     return { ok: true };
@@ -518,6 +525,7 @@ it('recovers a checkpoint write failure without replaying the completed tool', a
       agent: { provider: 'openai', model: 'test' },
       context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
       getSystemPrompt: () => 'Prompt',
+      onEvent: (event) => events.push(event),
       tools: [{ name: 'write', server: 's', tool: 'write', execute }],
       approvalPolicy: () => 'approval_required'
     } satisfies AssistantRuntimeDefinition);
@@ -533,6 +541,7 @@ it('recovers a checkpoint write failure without replaying the completed tool', a
     expect(
       session.getSnapshot().messages.filter((message) => message.role === 'tool')
     ).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'tool_call_resolved')).toHaveLength(1);
     await expect(
       session.resolveToolCalls([{ toolCallId: 'write-once', decision: 'approve' }])
     ).rejects.toThrow();
