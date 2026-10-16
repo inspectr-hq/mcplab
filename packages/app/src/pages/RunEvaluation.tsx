@@ -95,7 +95,6 @@ const RunEvaluation = () => {
     Record<string, string[]>
   >({});
   const [runNote, setRunNote] = useState('');
-  const [inspectWithInspectr, setInspectWithInspectr] = useState(false);
   const [inspectionDashboards, setInspectionDashboards] = useState<
     Array<{ upstreamOrigin: string; dashboardUrl: string }>
   >([]);
@@ -404,8 +403,7 @@ const RunEvaluation = () => {
         ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
           ? { scenarioServerOverrides: filteredScenarioServerOverrides }
           : {}),
-        runNote: runNote.trim() ? runNote.trim() : undefined,
-        inspectWithInspectr: inspectWithInspectr || undefined
+        runNote: runNote.trim() ? runNote.trim() : undefined
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -696,6 +694,8 @@ const RunEvaluation = () => {
   const attachRunJob = (jobId: string) => {
     if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
+    // Dashboard links belong to the attached job; its replayed events re-add them.
+    if (attachedJobIdRef.current !== jobId) setInspectionDashboards([]);
     attachedJobIdRef.current = jobId;
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
@@ -960,63 +960,18 @@ const RunEvaluation = () => {
               )}
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="run-note">Run Note</Label>
-                <span className="text-xs text-muted-foreground">{runNote.length}/500</span>
-              </div>
-              <Textarea
-                id="run-note"
-                value={runNote}
-                onChange={(e) => setRunNote(e.target.value.slice(0, 500))}
-                placeholder="Optional context for this run (for example: mcp-server v1.8.2 #staging)"
-                rows={2}
-              />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="run-note">Run Note</Label>
+              <span className="text-xs text-muted-foreground">{runNote.length}/500</span>
             </div>
-            <div className="flex min-h-0 flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="inspect-with-inspectr">Inspect MCP requests with Inspectr</Label>
-              </div>
-              <div className="flex flex-1 items-center gap-3 rounded-md border p-3">
-                <a
-                  href="https://inspectr.dev/brand/inspectr_brand_logo.png"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Inspectr"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-background p-1.5"
-                >
-                  <img
-                    src="https://inspectr.dev/brand/inspectr_brand_logo.png"
-                    alt="Inspectr"
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </a>
-                <div className="min-w-0 flex-1 space-y-1">
-                <p
-                  className="truncate text-xs text-muted-foreground"
-                  title="Route MCP traffic through local Inspectr proxies for request tracing."
-                >
-                  Route MCP traffic through local Inspectr proxies for request tracing.
-                </p>
-                <a
-                  href="https://inspectr.dev"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Learn more about Inspectr"
-                  className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  Learn more about Inspectr <span aria-hidden="true">↗</span>
-                </a>
-                </div>
-                <Switch
-                  id="inspect-with-inspectr"
-                  checked={inspectWithInspectr}
-                  onCheckedChange={setInspectWithInspectr}
-                  className="shrink-0"
-                />
-              </div>
-            </div>
+            <Textarea
+              id="run-note"
+              value={runNote}
+              onChange={(e) => setRunNote(e.target.value.slice(0, 500))}
+              placeholder="Optional context for this run (for example: mcp-server v1.8.2 #staging)"
+              rows={2}
+            />
           </div>
           {selectedConfig && (
             <div className="space-y-2">

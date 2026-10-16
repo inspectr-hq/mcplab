@@ -444,7 +444,9 @@ function toUiServerConfigFromMcpEntry(
     oauthAudience:
       auth?.type === 'oauth_client_credentials'
         ? String(auth.audience || '') || undefined
-        : undefined
+        : undefined,
+    inspectrEnabled:
+      (entry.inspectr as { enabled?: unknown } | undefined)?.enabled === true || undefined
   };
   return { id, server };
 }
@@ -518,7 +520,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       oauthClientSecretEnv:
         entry.auth?.type === 'oauth_client_credentials' ? entry.auth.client_secret_env : undefined,
       oauthAudience:
-        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.audience : undefined
+        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.audience : undefined,
+      inspectrEnabled: entry.inspectr?.enabled === true || undefined
     };
     servers.push(mappedServer);
     mixedServerEntries.push({ kind: 'inline', server: mappedServer });
@@ -685,7 +688,8 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         name: normalizeText(server.name) || name,
         transport: server.transport,
         url: server.url,
-        auth: server.auth
+        auth: server.auth,
+        ...(server.inspectr ? { inspectr: server.inspectr } : {})
       })) as unknown as CoreSourceEvalConfig['servers'],
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
         id: name,
@@ -762,7 +766,8 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
       transport: 'http',
       url: server.url || 'http://localhost:3000/mcp',
-      ...(auth !== undefined ? { auth } : {})
+      ...(auth !== undefined ? { auth } : {}),
+      ...(server.inspectrEnabled ? { inspectr: { enabled: true } } : {})
     } satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
   };
   const mixedServerEntries =
@@ -920,7 +925,8 @@ export function toCoreLibraries(
                           ? { token_url: server.oauthTokenEndpoint }
                           : {})
                       }
-                    : undefined
+                    : undefined,
+          ...(server.inspectrEnabled ? { inspectr: { enabled: true } } : {})
         };
       })()
     ])

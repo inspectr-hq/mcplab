@@ -14,7 +14,6 @@ type RunParamsBase = {
   oauthServerNames?: string[];
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
-  inspectWithInspectr?: boolean;
   newConversationBeforeStart?: boolean;
   newConversationBetweenScenarios?: boolean;
 };

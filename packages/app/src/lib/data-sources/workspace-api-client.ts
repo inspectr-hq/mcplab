@@ -374,7 +374,6 @@ export const workspaceApiClient = {
     newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
-    inspectWithInspectr?: boolean;
   }) =>
     request<{ jobId: string; queued?: boolean; position?: number }>('/api/runs', {
       method: 'POST',

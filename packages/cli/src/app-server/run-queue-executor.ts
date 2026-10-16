@@ -185,8 +185,7 @@ export async function executeRunJob(params: {
     requestedAgents,
     runNote,
     serverOverrideAll,
-    scenarioServerOverrides,
-    inspectWithInspectr
+    scenarioServerOverrides
   } = job.runParams;
 
   try {
@@ -303,15 +302,18 @@ export async function executeRunJob(params: {
     const usedServerNames = new Set(
       expandedConfig.scenarios.flatMap((scenario) => scenario.servers)
     );
+    const inspectedServerNames = Array.from(usedServerNames).filter(
+      (serverName) => expandedConfig.servers[serverName]?.inspectr?.enabled
+    );
     const mcpServerUrlOverrides: Record<string, string> = {};
-    if (inspectWithInspectr) {
+    if (inspectedServerNames.length > 0) {
       if (!params.inspectrSessionManager) {
         throw new Error('Inspectr request inspection is not available in this app server');
       }
       const sessions = new Map<string, Awaited<ReturnType<InspectrSessionManager['acquire']>>>();
-      for (const serverName of usedServerNames) {
+      for (const serverName of inspectedServerNames) {
         const server = expandedConfig.servers[serverName];
-        if (!server || server.transport !== 'http') {
+        if (server.transport !== 'http') {
           throw new Error(
             `Inspectr request inspection currently supports HTTP MCP servers only: ${serverName}`
           );
@@ -378,9 +380,13 @@ export async function executeRunJob(params: {
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
       mcpServerUrlOverrides,
-      resolveMcpRequestHeaders: inspectWithInspectr
-        ? (context) => buildInspectrRequestHeaders(context)
-        : undefined,
+      resolveMcpRequestHeaders:
+        inspectedServerNames.length > 0
+          ? (context) =>
+              context.serverName in mcpServerUrlOverrides
+                ? buildInspectrRequestHeaders(context)
+                : undefined
+          : undefined,
       ...resolveWorkspaceEvaluation({
         agents: libraryAgents,
         scenarios: expandedConfig.scenarios,

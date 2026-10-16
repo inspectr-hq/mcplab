@@ -692,7 +692,6 @@ export interface EvalDataSource {
     newConversationBeforeStart?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
-    inspectWithInspectr?: boolean;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
   stopScenario: (

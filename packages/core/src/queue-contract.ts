@@ -39,7 +39,6 @@ interface QueueRunParamsBase {
   runNote: string | null;
   serverOverrideAll: string[] | null;
   scenarioServerOverrides: Record<string, string[]> | null;
-  inspectWithInspectr: boolean;
   newConversationBeforeStart?: boolean;
   newConversationBetweenScenarios?: boolean;
 }

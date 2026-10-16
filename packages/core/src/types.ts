@@ -394,12 +394,18 @@ export type ServerAuth =
   | ServerAuthOauthClientCredentials
   | ServerAuthOauthAuthorizationCode;
 
+export interface ServerInspectrConfig {
+  /** Route this server's MCP traffic through a local Inspectr proxy during evaluations. */
+  enabled: boolean;
+}
+
 export interface ServerConfig {
   name?: string;
   transport: TransportType;
   url: string;
   headers?: Record<string, string>;
   auth?: ServerAuth;
+  inspectr?: ServerInspectrConfig;
 }
 
 export interface ServerInlineEntry extends ServerConfig {

@@ -138,6 +138,41 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it('preserves the per-server Inspectr setting for inline and scenario servers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-inspectr-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers:',
+          '  - id: inspected',
+          '    transport: http',
+          '    url: http://a.test/mcp',
+          '    inspectr:',
+          '      enabled: true',
+          'agents: []',
+          'scenarios:',
+          '  - id: scn-1',
+          '    prompt: test',
+          '    mcp_servers:',
+          '      - id: scoped',
+          '        transport: http',
+          '        url: http://b.test/mcp',
+          '        inspectr:',
+          '          enabled: true'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.servers.inspected?.inspectr).toEqual({ enabled: true });
+      expect(config.servers.scoped?.inspectr).toEqual({ enabled: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('preserves optional top-level config name from source config', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

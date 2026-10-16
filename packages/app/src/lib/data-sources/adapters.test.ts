@@ -751,6 +751,26 @@ describe('fromCoreResultsJson conversation mapping', () => {
 });
 
 describe('library mapping', () => {
+  it('round-trips the per-server Inspectr setting', () => {
+    const libraries = fromCoreLibraries({
+      servers: {
+        inspected: { transport: 'http', url: 'http://a.test/mcp', inspectr: { enabled: true } },
+        plain: { transport: 'http', url: 'http://b.test/mcp' }
+      },
+      agents: {},
+      scenarios: []
+    });
+    expect(libraries.servers.find((server) => server.id === 'inspected')?.inspectrEnabled).toBe(
+      true
+    );
+    expect(libraries.servers.find((server) => server.id === 'plain')?.inspectrEnabled).toBe(
+      undefined
+    );
+    const core = toCoreLibraries(libraries);
+    expect(core.servers.inspected?.inspectr).toEqual({ enabled: true });
+    expect(core.servers.plain).not.toHaveProperty('inspectr');
+  });
+
   it('preserves browser provider profiles from the workspace API', () => {
     const profile = {
       schemaVersion: 1 as const,

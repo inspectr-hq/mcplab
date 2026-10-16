@@ -63,7 +63,8 @@ export class InspectrSessionManager {
     this.commandPath = options.commandPath ?? resolveInspectrCommand();
     this.log = options.log ?? console.log;
     this.allocatePort = options.allocatePort ?? allocateFreePort;
-    this.spawn = options.spawn ?? ((command, args, spawnOptions) => defaultSpawn(command, args, spawnOptions));
+    this.spawn =
+      options.spawn ?? ((command, args, spawnOptions) => defaultSpawn(command, args, spawnOptions));
     this.waitForReady = options.waitForReady ?? waitForPorts;
   }
 
@@ -166,7 +167,12 @@ function normalizeOrigin(serverUrl: string): string {
 
 export function rewriteUrlThroughInspectr(serverUrl: string, proxyOrigin: string): string {
   const original = new URL(serverUrl);
-  return new URL(`${original.pathname}${original.search}`, proxyOrigin).toString();
+  // Assign path and query onto the proxy URL: resolving them as a relative reference would treat
+  // a `//host/...` path as a new authority and bypass the proxy.
+  const proxied = new URL(proxyOrigin);
+  proxied.pathname = original.pathname;
+  proxied.search = original.search;
+  return proxied.toString();
 }
 
 function originKey(origin: string): string {
@@ -174,7 +180,12 @@ function originKey(origin: string): string {
 }
 
 function tagPart(value: string): string {
-  return value.trim().replace(/[\u0000-\u001f\u007f,]+/g, '_').slice(0, 120) || 'unknown';
+  return (
+    value
+      .trim()
+      .replace(/[\u0000-\u001f\u007f,]+/g, '_')
+      .slice(0, 120) || 'unknown'
+  );
 }
 
 async function allocateFreePort(): Promise<number> {
@@ -202,7 +213,7 @@ async function waitForPorts(session: InspectrProxySession, child: InspectrChild)
   let stableChecks = 0;
   while (Date.now() < deadline) {
     if (childExited) throw new Error('Inspectr process exited during startup');
-    if (await Promise.all(ports.map(canConnect))) {
+    if ((await Promise.all(ports.map(canConnect))).every(Boolean)) {
       stableChecks += 1;
       if (stableChecks >= 2 && (await hasDashboardConfig(session.dashboardUrl))) return;
     } else {

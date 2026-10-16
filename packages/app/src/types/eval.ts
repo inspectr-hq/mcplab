@@ -49,6 +49,8 @@ export interface ServerConfig {
   oauthClientIdEnv?: string;
   oauthClientSecretEnv?: string;
   oauthAudience?: string;
+  // Route MCP traffic through a local Inspectr proxy during evaluations
+  inspectrEnabled?: boolean;
 }
 
 export type ServerEntry =

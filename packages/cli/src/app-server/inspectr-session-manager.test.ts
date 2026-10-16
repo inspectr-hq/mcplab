@@ -59,6 +59,12 @@ describe('InspectrSessionManager', () => {
     ).toBe('http://127.0.0.1:49000/base/mcp?tenant=acme');
   });
 
+  it('keeps the proxy host when the upstream path starts with a double slash', () => {
+    expect(
+      rewriteUrlThroughInspectr('https://backend.test//evil.test/mcp', 'http://127.0.0.1:49000')
+    ).toBe('http://127.0.0.1:49000//evil.test/mcp');
+  });
+
   it('builds run and execution tags without allowing header delimiters', () => {
     expect(
       buildInspectrRequestHeaders({

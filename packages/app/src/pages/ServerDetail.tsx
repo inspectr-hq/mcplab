@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -548,18 +549,59 @@ const ServerDetail = () => {
                 </SelectContent>
               </Select>
             </div>
-            {form.authType === 'bearer' && (
+            {form.transport !== 'stdio' && (
               <div className="space-y-1.5">
-                <Label>Token</Label>
-                <Input
-                  value={form.authValue || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
-                  placeholder="${DATABRICKS_TOKEN}"
-                  className="font-mono text-xs"
-                />
+                <Label htmlFor="server-inspectr-enabled">Inspect MCP requests with Inspectr</Label>
+                <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+                  <a
+                    href="https://inspectr.dev"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Inspectr"
+                    className="shrink-0"
+                  >
+                    <img
+                      src="https://inspectr.dev/brand/inspectr_brand_logo.png"
+                      alt="Inspectr"
+                      className="h-6 w-6 object-contain"
+                    />
+                  </a>
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                    Route MCP traffic through a local Inspectr proxy for request tracing.{' '}
+                    <a
+                      href="https://inspectr.dev"
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Learn more about Inspectr"
+                      className="underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      Learn more <span aria-hidden="true">↗</span>
+                    </a>
+                  </p>
+                  <Switch
+                    id="server-inspectr-enabled"
+                    checked={Boolean(form.inspectrEnabled)}
+                    onCheckedChange={(checked) =>
+                      setForm((f) => ({ ...f, inspectrEnabled: checked || undefined }))
+                    }
+                    className="shrink-0"
+                  />
+                </div>
               </div>
             )}
           </div>
+
+          {form.authType === 'bearer' && (
+            <div className="space-y-1.5">
+              <Label>Token</Label>
+              <Input
+                value={form.authValue || ''}
+                onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
+                placeholder="${DATABRICKS_TOKEN}"
+                className="font-mono text-xs"
+              />
+            </div>
+          )}
 
           {form.authType === 'bearer' && (
             <p className="text-xs text-muted-foreground -mt-1">

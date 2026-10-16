@@ -27,6 +27,8 @@ export function useResultAssistant(params: {
     recreateExpiredOnSend: true,
     onSession: onSessionSync
   });
+  // The hook returns a fresh object each render; depend on its stable callbacks instead.
+  const { send, cancel, reset } = assistant;
   const [assistantInput, setAssistantInput] = useState('');
   const [introMessage, setIntroMessage] =
     useState<ResultAssistantSessionView['messages'][number]>();
@@ -36,19 +38,19 @@ export function useResultAssistant(params: {
     const question = assistantInput.trim();
     if (!question || (scope === 'run' && !runId)) return;
     setAssistantInput('');
-    await assistant.send(question);
-  }, [assistant, assistantInput, scope, runId]);
+    await send(question);
+  }, [send, assistantInput, scope, runId]);
 
   const cancelAssistantTurn = useCallback(() => {
-    const prompt = assistant.cancel();
+    const prompt = cancel();
     if (prompt !== undefined) setAssistantInput(prompt);
-  }, [assistant]);
+  }, [cancel]);
 
   const resetAssistantSession = useCallback(() => {
-    assistant.reset();
+    reset();
     setAssistantInput('');
     setIntroMessage(undefined);
-  }, [assistant]);
+  }, [reset]);
 
   /** Shows a greeting until the conversation has its first message. */
   const ensureIntroMessage = useCallback((text: string) => {

@@ -572,17 +572,6 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Inline Agent')).toBeInTheDocument();
     });
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
-    expect(
-      screen.getByText('Inspect MCP requests with Inspectr', { exact: true })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Inspectr' })).toHaveAttribute(
-      'src',
-      'https://inspectr.dev/brand/inspectr_brand_logo.png'
-    );
-    expect(screen.getByRole('link', { name: 'Learn more about Inspectr' })).toHaveAttribute(
-      'href',
-      'https://inspectr.dev'
-    );
   });
 
   it('selects and clears LLM and browser agents independently', async () => {
@@ -716,7 +705,6 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Agent A')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Inspect MCP requests with Inspectr' }));
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => {
@@ -726,8 +714,7 @@ describe('RunEvaluation', () => {
       expect.objectContaining({
         configPath: '/path/to/test.yaml',
         scenarioIds: ['scenario-1'],
-        agents: ['agent-a', 'agent-b'],
-        inspectWithInspectr: true
+        agents: ['agent-a', 'agent-b']
       })
     );
   });
