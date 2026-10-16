@@ -50,6 +50,13 @@ export {
   type ToolInputAssertionFailureKind
 } from './eval.js';
 export { McpClientManager } from './mcp.js';
+export type {
+  McpPromptInfo,
+  McpPromptResult,
+  McpResourceContent,
+  McpResourceInfo,
+  McpServerFeatures
+} from './mcp.js';
 export { resolveConfigValue } from './config-values.js';
 export { chatWithAgent } from './agent.js';
 export { AgentConnectionError } from './agent-errors.js';

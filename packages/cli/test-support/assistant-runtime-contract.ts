@@ -2,10 +2,9 @@ import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langcha
 import { describe, expect, it, vi } from 'vitest';
 import type {
   AssistantRuntimeDefinition,
-  AssistantRuntimeModelOutput
-} from '@inspectr/mcplab-core';
-import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
-import type { AssistantModelCall } from './scripted-chat-model.js';
+  AssistantRuntimeFactory
+} from '../src/app-server/assistant-runtime-contract.js';
+import type { AssistantModelCall, AssistantRuntimeModelOutput } from './scripted-chat-model.js';
 import { validateScenarioAssistantProposal } from '../src/app-server/scenario-assistant-domain.js';
 
 export function assistantRuntimeContract(

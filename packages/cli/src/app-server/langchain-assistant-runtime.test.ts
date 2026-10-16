@@ -5,12 +5,12 @@ import { withRunTree, getCurrentRunTree } from 'langsmith/traceable';
 import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
 import { MemorySaver } from '@langchain/langgraph';
 import { assistantRuntimeContract } from '../../test-support/assistant-runtime-contract.js';
+import type { AssistantRuntimeEvent } from '@inspectr/mcplab-core';
+import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import type {
   AssistantRuntimeDefinition,
-  AssistantRuntimeEvent,
   AssistantRuntimeSession
-} from '@inspectr/mcplab-core';
-import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
+} from './assistant-runtime-contract.js';
 
 assistantRuntimeContract('LangGraph assistant runtime', createScriptedRuntimeFactory);
 

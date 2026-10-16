@@ -50,8 +50,6 @@ export async function handleResultAssistantRoutes(params: {
     resolveAssistantAgentFromLibraries,
     assistantRuntimeFactory
   } = deps;
-  const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-  const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const listReferenceReportsForRun = (runId: string | null) =>
     listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
   const publishSessionEvent = (

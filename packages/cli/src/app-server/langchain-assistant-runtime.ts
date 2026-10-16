@@ -20,12 +20,9 @@ import {
 } from 'langchain';
 import {
   isAbortError,
-  type AssistantRuntimeDefinition,
   type AssistantRuntimeEvent,
-  type AssistantRuntimeFactory,
   type AssistantRuntimeMessage,
   type AssistantRuntimeResponse,
-  type AssistantRuntimeSession,
   type AssistantRuntimeSnapshot,
   type AssistantRuntimeToolCall,
   type AssistantToolCallDecision,
@@ -42,6 +39,11 @@ import {
   uniqueToolCallId,
   validateToolCallDecisions
 } from './assistant-runtime-policy.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
 
 export interface LangChainAssistantRuntimeOptions {
   /** Defaults to MCPlab's provider configuration on LangChain chat models. */

@@ -1,11 +1,11 @@
 import { EventEmitter } from 'node:events';
-import type { AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   handleAssistantSessionRoutes,
   type AssistantHttpSession
 } from './assistant-session-routes.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
+import type { AssistantRuntimeDefinition } from './assistant-runtime-contract.js';
 
 function makeRuntimeDefinition(
   assistant: AssistantRuntimeDefinition['assistant'] = 'scenario'

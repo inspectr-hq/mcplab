@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
-import { isAbortError } from '@/lib/abort';
+import { createAbortError, isAbortError } from '@/lib/abort';
 import { assistantMessagesWithStreaming } from '@/lib/assistant-streaming';
 import { ApiError } from '@/lib/data-sources/workspace-api-client';
 import type {
@@ -60,6 +60,11 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
   const sessionIdRef = useRef<string | null>(null);
   const sessionRef = useRef<TSession | null>(null);
   const startRef = useRef<Promise<string> | null>(null);
+  /**
+   * A lifecycle ends on reset or unmount. Session creation belongs to the lifecycle that started
+   * it: aborted when that lifecycle ends, and any session it still returns is closed, not adopted.
+   */
+  const lifecycleRef = useRef(new AbortController());
   const turnRef = useRef<LocalTurn | null>(null);
   const turnCounterRef = useRef(0);
 
@@ -105,36 +110,52 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
     setSessionId(null);
   }, []);
 
-  const start = useCallback(
-    async (signal?: AbortSignal): Promise<string> => {
-      if (sessionIdRef.current) return sessionIdRef.current;
-      if (!startRef.current) {
-        setStarting(true);
-        startRef.current = apiRef.current
-          .createSession(signal)
-          .then(({ sessionId: id, session: created }) => {
-            adoptSession(id || created.id, created);
-            return id || created.id;
-          })
-          .finally(() => setStarting(false));
-        startRef.current.catch(() => {
-          startRef.current = null;
-        });
-      }
-      return startRef.current;
-    },
-    [adoptSession]
-  );
+  const start = useCallback((): Promise<string> => {
+    if (sessionIdRef.current) return Promise.resolve(sessionIdRef.current);
+    if (startRef.current) return startRef.current;
+    const lifecycle = lifecycleRef.current;
+    setStarting(true);
+    // Creation is shared by every waiter (auto-start and the first message), so it follows the
+    // session lifecycle rather than one turn: cancelling a turn does not cancel creation.
+    const attempt: Promise<string> = apiRef.current
+      .createSession(lifecycle.signal)
+      .then(({ sessionId: returnedId, session: created }) => {
+        const id = returnedId || created.id;
+        if (lifecycle.signal.aborted || startRef.current !== attempt) {
+          void apiRef.current.closeSession(id).catch(() => undefined);
+          throw createAbortError('Assistant session was reset while it was being created');
+        }
+        adoptSession(id, created);
+        return id;
+      })
+      .finally(() => {
+        if (startRef.current === attempt) setStarting(false);
+      });
+    startRef.current = attempt;
+    attempt.catch(() => {
+      if (startRef.current === attempt) startRef.current = null;
+    });
+    return attempt;
+  }, [adoptSession]);
+
+  /** Ends the current lifecycle: pending creation is abandoned and its session closed. */
+  const endLifecycle = useCallback(() => {
+    lifecycleRef.current.abort();
+    lifecycleRef.current = new AbortController();
+    startRef.current = null;
+    setStarting(false);
+  }, []);
 
   useEffect(() => {
     if (!autoStart || !open || sessionIdRef.current || startRef.current) return;
-    start().catch((error: unknown) =>
+    start().catch((error: unknown) => {
+      if (isAbortError(error)) return;
       toast({
         title: `Could not start ${label}`,
         description: errorText(error),
         variant: 'destructive'
-      })
-    );
+      });
+    });
   }, [autoStart, open, label, start, sessionId]);
 
   const applyTurnResult = useCallback(
@@ -167,7 +188,7 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
       setBusy(true);
       setCancelable(true);
       try {
-        let id = await start(turn.controller.signal);
+        let id = await start();
         if (!isCurrent()) return 'cancelled';
         turn.sessionId = id;
         let result: AssistantTurnResult<TSession>;
@@ -182,7 +203,7 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
           if (!isCurrent() || isAbortError(error)) return 'cancelled';
           if (!recreateExpiredOnSend || !isSessionNotFound(error)) throw error;
           dropSession();
-          id = await start(turn.controller.signal);
+          id = await start();
           if (!isCurrent()) return 'cancelled';
           turn.sessionId = id;
           result = await apiRef.current.sendMessage(
@@ -286,6 +307,7 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
 
   /** Ends the session here and on the backend, and clears the conversation. */
   const reset = useCallback(() => {
+    endLifecycle();
     turnRef.current?.controller.abort();
     turnRef.current = null;
     const id = sessionIdRef.current;
@@ -296,10 +318,11 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
     setBusy(false);
     setCancelable(false);
     setExpired(false);
-  }, [dropSession]);
+  }, [dropSession, endLifecycle]);
 
   useEffect(
     () => () => {
+      lifecycleRef.current.abort();
       turnRef.current?.controller.abort();
       const id = sessionIdRef.current;
       if (id) void apiRef.current.closeSession(id).catch(() => undefined);

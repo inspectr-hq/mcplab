@@ -1,12 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AgentConnectionError,
-  type AssistantRuntimeDefinition,
   type AssistantRuntimeEvent,
-  type AssistantRuntimeTool,
   type LlmAgentConfig
 } from '@inspectr/mcplab-core';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeTool
+} from './assistant-runtime-contract.js';
 
 type Provider = LlmAgentConfig['provider'];
 type WireRequest = { url: string; body: Record<string, unknown>; authorization: string };
@@ -69,7 +71,7 @@ function openAiStream(
   toolCalls: Array<{ id: string; name: string; arguments: string }> = [],
   options: { failAfter?: string } = {}
 ) {
-  const events: unknown[] = [];
+  const events: Array<Record<string, unknown>> = [];
   if (text)
     events.push({
       choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }]
@@ -160,6 +162,13 @@ function captureFetch(respond: (request: WireRequest, index: number) => Response
   });
   return requests;
 }
+
+// Provider packages load lazily; warm them outside the per-test timeout so the first provider
+// test does not pay the module-loading cost under a busy parallel run.
+beforeAll(async () => {
+  await import('@langchain/openai');
+  await import('@langchain/anthropic').catch(() => undefined);
+}, 60_000);
 
 beforeEach(() => {
   vi.stubEnv('LANGSMITH_TRACING', 'false');

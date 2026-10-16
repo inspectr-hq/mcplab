@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import {
   setupScenarioAssistantSession,
   normalizeScenarioAssistantEvalRules,
@@ -8,6 +7,7 @@ import {
 } from './scenario-assistant-domain.js';
 import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import { McpClientManager } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeDefinition } from './assistant-runtime-contract.js';
 
 function baseSession(): ScenarioAssistantSessionInitializer {
   return {
@@ -307,12 +307,133 @@ describe('Scenario Assistant runtime definition', () => {
     expect(prompt).toContain('agent_check');
     expect(prompt).toContain('tool_input_regex to match a regular expression anywhere');
     expect(prompt).toContain('ordinary prose');
-    expect(prompt).toContain('up to three external tool calls');
-    expect(prompt).toContain('per batch');
-    expect(prompt).toContain('including read calls');
+    expect(prompt).toContain('Read-only tools run immediately');
+    expect(prompt).not.toContain('up to three external tool calls');
     expect(prompt).not.toContain('call a tool and wait for approval');
     expect(prompt).not.toContain('Respond ONLY as JSON');
     expect(definition.tools.some((tool) => tool.name === 'propose_scenario_changes')).toBe(true);
+  });
+
+  it('offers MCP resources and prompts as automatically approved tools when servers advertise them', async () => {
+    const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+    const features = vi
+      .spyOn(McpClientManager.prototype, 'getServerFeatures')
+      .mockImplementation((server: string) => ({
+        resources: server === 'docs',
+        prompts: server === 'docs'
+      }));
+    try {
+      let definition: AssistantRuntimeDefinition | undefined;
+      await setupScenarioAssistantSession({
+        session: baseSession(),
+        agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+        context: {
+          scenario: {
+            id: 'scn-1',
+            prompt: 'Prompt',
+            serverNames: ['docs', 'plain'],
+            evalRules: [],
+            extractRules: []
+          }
+        },
+        serversByName: {
+          docs: { transport: 'http', url: 'https://docs.example/mcp' },
+          plain: { transport: 'http', url: 'https://plain.example/mcp' }
+        },
+        selectedServerNames: ['docs', 'plain'],
+        assistantRuntimeFactory: {
+          create: async (runtimeDefinition) => {
+            definition = runtimeDefinition;
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
+              dispose: async () => {}
+            };
+          }
+        },
+        onEvent: () => {},
+        onActivity: () => {}
+      });
+      const names = definition!.tools.map((tool) => tool.name);
+      expect(names).toEqual(
+        expect.arrayContaining([
+          'list_mcp_resources',
+          'read_mcp_resource',
+          'list_mcp_prompts',
+          'get_mcp_prompt'
+        ])
+      );
+      expect(definition!.approvalPolicy('read_mcp_resource')).toBe('automatic');
+      expect(definition!.approvalPolicy('get_mcp_prompt')).toBe('automatic');
+      const prompt = definition!.getSystemPrompt();
+      expect(prompt).toContain('MCP resources are available from: docs');
+      expect(prompt).not.toContain('available from: docs, plain');
+    } finally {
+      connectAll.mockRestore();
+      listTools.mockRestore();
+      features.mockRestore();
+    }
+  });
+
+  it('keeps the tools of a server whose resources and prompts cannot be detected', async () => {
+    const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    const listTools = vi
+      .spyOn(McpClientManager.prototype, 'listTools')
+      .mockResolvedValue([{ name: 'lookup', inputSchema: { type: 'object' } }]);
+    const features = vi
+      .spyOn(McpClientManager.prototype, 'getServerFeatures')
+      .mockImplementation(() => {
+        throw new Error('capabilities unavailable');
+      });
+    try {
+      const session = baseSession();
+      let definition: AssistantRuntimeDefinition | undefined;
+      await setupScenarioAssistantSession({
+        session,
+        agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+        context: {
+          scenario: {
+            id: 'scn-1',
+            prompt: 'P',
+            serverNames: ['docs'],
+            evalRules: [],
+            extractRules: []
+          }
+        },
+        serversByName: { docs: { transport: 'http', url: 'https://docs.example/mcp' } },
+        selectedServerNames: ['docs'],
+        assistantRuntimeFactory: {
+          create: async (runtimeDefinition) => {
+            definition = runtimeDefinition;
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
+              dispose: async () => {}
+            };
+          }
+        },
+        onEvent: () => {},
+        onActivity: () => {}
+      });
+      expect(definition!.tools.map((tool) => tool.name)).toContain('docs__lookup');
+      expect(definition!.tools.map((tool) => tool.name)).not.toContain('list_mcp_resources');
+      expect(session.warnings).toEqual([]);
+    } finally {
+      connectAll.mockRestore();
+      listTools.mockRestore();
+      features.mockRestore();
+    }
+  });
+
+  it('offers no MCP context tools when no selected server has resources or prompts', async () => {
+    const definition = await createDefinition();
+    expect(definition.tools.map((tool) => tool.name)).not.toContain('list_mcp_resources');
+    expect(definition.getSystemPrompt()).not.toContain('MCP resources are available');
   });
 
   it('normalizes tool names and redundant regex suggestions in native proposals', () => {

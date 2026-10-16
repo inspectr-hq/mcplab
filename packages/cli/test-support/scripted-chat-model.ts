@@ -3,14 +3,25 @@ import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, type BaseMessage } from '@langchain/core/messages';
 import type { ChatResult } from '@langchain/core/outputs';
-import type {
-  AssistantRuntimeDefinition,
-  AssistantRuntimeModelOutput
-} from '@inspectr/mcplab-core';
+import type { AssistantRuntimeDefinition } from '../src/app-server/assistant-runtime-contract.js';
 import {
   createLangChainAssistantRuntimeFactory,
   type LangChainAssistantRuntimeOptions
 } from '../src/app-server/langchain-assistant-runtime.js';
+
+/** What a scripted model turn returns: text, or tool calls (optionally malformed). */
+export type AssistantRuntimeModelOutput =
+  | { type: 'assistant_message'; text: string }
+  | {
+      type: 'tool_call_request';
+      text: string;
+      toolCalls: Array<{
+        id?: string;
+        name: string;
+        arguments?: unknown;
+        validationError?: string;
+      }>;
+    };
 
 export type AssistantModelOutput = AssistantRuntimeModelOutput & { nativeMessage?: AIMessage };
 

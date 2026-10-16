@@ -172,4 +172,69 @@ describe('useAssistantSession', () => {
     unmount();
     expect(api.closeSession).toHaveBeenCalledWith('session-1');
   });
+
+  it('closes a session created after a reset instead of adopting it', async () => {
+    let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
+    const api = makeApi({
+      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+    });
+    const { result } = renderHook(() =>
+      useAssistantSession({ api, open: true, label: 'Test Assistant', autoStart: true })
+    );
+    await waitFor(() => expect(api.createSession).toHaveBeenCalledOnce());
+    act(() => result.current.reset());
+    await act(async () => {
+      finishCreate({ sessionId: 'late-session', session: session({ id: 'late-session' }) });
+    });
+    expect(result.current.sessionId).toBeNull();
+    expect(result.current.starting).toBe(false);
+    expect(api.closeSession).toHaveBeenCalledWith('late-session');
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
+  it('closes a session whose creation finishes after unmount', async () => {
+    let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
+    const api = makeApi({
+      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+    });
+    const { unmount } = renderHook(() =>
+      useAssistantSession({ api, open: true, label: 'Test Assistant', autoStart: true })
+    );
+    await waitFor(() => expect(api.createSession).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.createSession).mock.calls[0]?.[0]?.aborted).toBe(false);
+    unmount();
+    expect(vi.mocked(api.createSession).mock.calls[0]?.[0]?.aborted).toBe(true);
+    await act(async () => {
+      finishCreate({ sessionId: 'orphan-session', session: session({ id: 'orphan-session' }) });
+    });
+    expect(api.closeSession).toHaveBeenCalledWith('orphan-session');
+  });
+
+  it('keeps creating the session when the first message is cancelled, then reuses it', async () => {
+    let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
+    const api = makeApi({
+      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+    });
+    const { result } = renderHook(() =>
+      useAssistantSession({ api, open: true, label: 'Test Assistant' })
+    );
+    let outcome: Promise<string> | undefined;
+    act(() => {
+      outcome = result.current.send('first');
+    });
+    act(() => {
+      result.current.cancel();
+    });
+    await act(async () => {
+      finishCreate({ sessionId: 'session-1', session: session() });
+    });
+    await expect(outcome).resolves.toBe('cancelled');
+    expect(api.sendMessage).not.toHaveBeenCalled();
+    expect(result.current.sessionId).toBe('session-1');
+    await act(async () => {
+      await result.current.send('second');
+    });
+    expect(api.createSession).toHaveBeenCalledOnce();
+    expect(api.sendMessage).toHaveBeenCalledOnce();
+  });
 });

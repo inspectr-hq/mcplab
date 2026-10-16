@@ -38,6 +38,41 @@ export interface McpServerImplementation {
   icons?: McpImplementationIcon[];
 }
 
+export interface McpServerFeatures {
+  resources: boolean;
+  prompts: boolean;
+}
+
+export interface McpResourceInfo {
+  uri: string;
+  name: string;
+  title?: string;
+  description?: string;
+  mimeType?: string;
+}
+
+/** Text is returned as-is; binary content is reported by type and size, not included. */
+export interface McpResourceContent {
+  uri: string;
+  mimeType?: string;
+  text?: string;
+  blobBytes?: number;
+}
+
+export interface McpPromptInfo {
+  name: string;
+  title?: string;
+  description?: string;
+  arguments?: Array<{ name: string; description?: string; required?: boolean }>;
+}
+
+export interface McpPromptResult {
+  description?: string;
+  messages: Array<{ role: string; text: string }>;
+}
+
+const MAX_LIST_PAGES = 10;
+
 export function normalizeListedTool(tool: any): ToolDef {
   const annotations =
     tool.annotations && typeof tool.annotations === 'object' && !Array.isArray(tool.annotations)
@@ -198,6 +233,120 @@ export class McpClientManager {
       }
       throw new Error(
         formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err)
+      );
+    }
+  }
+
+  /** Which optional MCP features the connected server advertises. */
+  getServerFeatures(serverName: string): McpServerFeatures {
+    const capabilities = this.getClient(serverName).getServerCapabilities();
+    return { resources: Boolean(capabilities?.resources), prompts: Boolean(capabilities?.prompts) };
+  }
+
+  async listResources(serverName: string, signal?: AbortSignal): Promise<McpResourceInfo[]> {
+    if (!this.getServerFeatures(serverName).resources) return [];
+    const client = this.getClient(serverName);
+    const resources: McpResourceInfo[] = [];
+    let cursor: string | undefined;
+    try {
+      for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+        const result = await client.listResources(cursor ? { cursor } : undefined, { signal });
+        for (const resource of result.resources ?? [])
+          resources.push({
+            uri: resource.uri,
+            name: resource.name,
+            ...(resource.title ? { title: resource.title } : {}),
+            ...(resource.description ? { description: resource.description } : {}),
+            ...(resource.mimeType ? { mimeType: resource.mimeType } : {})
+          });
+        cursor = result.nextCursor;
+        if (!cursor) break;
+      }
+      return resources;
+    } catch (err: any) {
+      if (signal?.aborted || isAbortError(err)) throw err;
+      throw new Error(
+        formatMcpError(`Failed to list resources for server '${serverName}'`, undefined, err)
+      );
+    }
+  }
+
+  async readResource(
+    serverName: string,
+    uri: string,
+    signal?: AbortSignal
+  ): Promise<McpResourceContent[]> {
+    try {
+      const result = await this.getClient(serverName).readResource({ uri }, { signal });
+      return (result.contents ?? []).map((content: any) => ({
+        uri: content.uri,
+        ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+        ...(typeof content.text === 'string'
+          ? { text: content.text }
+          : typeof content.blob === 'string'
+            ? { blobBytes: Math.floor((content.blob.length * 3) / 4) }
+            : {})
+      }));
+    } catch (err: any) {
+      if (signal?.aborted || isAbortError(err)) throw err;
+      throw new Error(
+        formatMcpError(`Failed to read resource '${uri}' on server '${serverName}'`, undefined, err)
+      );
+    }
+  }
+
+  async listPrompts(serverName: string, signal?: AbortSignal): Promise<McpPromptInfo[]> {
+    if (!this.getServerFeatures(serverName).prompts) return [];
+    const client = this.getClient(serverName);
+    const prompts: McpPromptInfo[] = [];
+    let cursor: string | undefined;
+    try {
+      for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+        const result = await client.listPrompts(cursor ? { cursor } : undefined, { signal });
+        for (const prompt of result.prompts ?? [])
+          prompts.push({
+            name: prompt.name,
+            ...(prompt.title ? { title: prompt.title } : {}),
+            ...(prompt.description ? { description: prompt.description } : {}),
+            ...(prompt.arguments?.length ? { arguments: prompt.arguments } : {})
+          });
+        cursor = result.nextCursor;
+        if (!cursor) break;
+      }
+      return prompts;
+    } catch (err: any) {
+      if (signal?.aborted || isAbortError(err)) throw err;
+      throw new Error(
+        formatMcpError(`Failed to list prompts for server '${serverName}'`, undefined, err)
+      );
+    }
+  }
+
+  async getPrompt(
+    serverName: string,
+    name: string,
+    args?: Record<string, string>,
+    signal?: AbortSignal
+  ): Promise<McpPromptResult> {
+    try {
+      const result = await this.getClient(serverName).getPrompt(
+        { name, ...(args ? { arguments: args } : {}) },
+        { signal }
+      );
+      return {
+        ...(result.description ? { description: result.description } : {}),
+        messages: (result.messages ?? []).map((message: any) => ({
+          role: message.role,
+          text:
+            message.content?.type === 'text'
+              ? message.content.text
+              : `[${message.content?.type ?? 'unknown'} content omitted]`
+        }))
+      };
+    } catch (err: any) {
+      if (signal?.aborted || isAbortError(err)) throw err;
+      throw new Error(
+        formatMcpError(`Failed to get prompt '${name}' on server '${serverName}'`, undefined, err)
       );
     }
   }

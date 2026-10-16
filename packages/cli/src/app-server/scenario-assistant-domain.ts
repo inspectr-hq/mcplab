@@ -3,9 +3,7 @@ import {
   type LlmAgentConfig,
   type EvalConfig,
   type AssistantRuntimeMessage,
-  type AssistantRuntimeDefinition,
   type AssistantRuntimeEvent,
-  type AssistantRuntimeSession,
   type ScenarioAssistantSuggestionBundle,
   type ScenarioAssistantSuggestionRule,
   type ScenarioAssistantRuntimeContext,
@@ -21,7 +19,18 @@ import {
 } from './assistant-common.js';
 import { endAssistantSseClients } from './assistant-events.js';
 import { setupAssistantRuntimeSession } from './assistant-service.js';
-import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
+import {
+  createMcpContextTools,
+  MCP_CONTEXT_TOOL_NAMES,
+  mcpContextToolGuidance,
+  type McpContextServers
+} from './assistant-mcp-context-tools.js';
+import { APPROVAL_GUIDANCE } from './assistant-runtime-policy.js';
 
 export type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
 
@@ -53,6 +62,8 @@ interface ScenarioAssistantResources {
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
+  /** Selected servers advertising MCP resources or prompts, offered as read-only context tools. */
+  contextServers: McpContextServers;
   systemPromptCache?: string;
 }
 
@@ -65,6 +76,7 @@ function createScenarioAssistantResources(
     mcp: new McpClientManager(),
     tools: [],
     toolPublicMap: new Map(),
+    contextServers: { resources: [], prompts: [] },
     context
   };
 }
@@ -123,7 +135,8 @@ function assistantSystemPrompt(
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), and Value Capture Rules.',
     'Use the available MCP tools and schemas to ground suggestions.',
-    'Use up to three external tool calls per batch. Read-only batches can continue automatically. If any call in a batch requires approval, wait for a decision on every call in that batch, including read calls; each call is approved or denied separately.',
+    APPROVAL_GUIDANCE,
+    ...mcpContextToolGuidance(state.contextServers),
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
     'Respond naturally in ordinary prose. Use the local propose_scenario_changes tool whenever you propose scenario edits.',
@@ -222,6 +235,15 @@ function createScenarioAssistantSetup(
           }
         } catch (error: unknown) {
           session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+          continue;
+        }
+        // Resources and prompts are optional context; failing to detect them must not cost tools.
+        try {
+          const features = state.mcp.getServerFeatures(serverName);
+          if (features.resources) state.contextServers.resources.push(serverName);
+          if (features.prompts) state.contextServers.prompts.push(serverName);
+        } catch {
+          // Treat the server as offering tools only.
         }
       }
       session.toolsLoaded = state.tools.length;
@@ -264,12 +286,14 @@ function createScenarioAssistantSetup(
             execute: async (args: unknown, _signal?: AbortSignal) =>
               validateScenarioAssistantProposal(args, state.toolPublicMap),
             extractProposal: (result) => result as ScenarioAssistantSuggestionBundle
-          }
+          },
+          ...createMcpContextTools(state.mcp, state.contextServers)
         ],
         approvalPolicy: (name) =>
           name === PROPOSE_SCENARIO_CHANGES
             ? 'local'
-            : state.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
+            : (MCP_CONTEXT_TOOL_NAMES as readonly string[]).includes(name) ||
+                state.tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint === true
               ? 'automatic'
               : 'approval_required'
       };

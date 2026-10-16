@@ -1,14 +1,16 @@
 import type {
-  AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
-  AssistantRuntimeFactory,
   AssistantRuntimeMessage,
   AssistantRuntimeResponse,
-  AssistantRuntimeSession,
   AssistantRuntimeToolCall,
   AssistantToolCallDecision
 } from '@inspectr/mcplab-core';
 import { randomUUID } from 'node:crypto';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from '../src/app-server/assistant-runtime-contract.js';
 
 /** Stateful, deterministic alternative runtime for route acceptance tests. */
 export function createStatefulAssistantRuntimeHarness() {

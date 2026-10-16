@@ -9,11 +9,11 @@ import {
   isModelNotFound,
   resolveAzureFoundryConnection,
   resolveAzureOpenAIDeployment,
-  type AssistantRuntimeDefinition,
   type LlmAgentConfig,
   DEFAULT_ANTHROPIC_MAX_TOKENS,
   DEFAULT_AZURE_OPENAI_API_VERSION
 } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeDefinition } from './assistant-runtime-contract.js';
 
 export interface AssistantChatModelOptions {
   /** Attached to every model instance so streamed tokens reach the runtime exactly once. */

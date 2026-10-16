@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AssistantRuntimeSession } from '@inspectr/mcplab-core';
 import { cleanupScenarioAssistantSessions } from './scenario-assistant-domain.js';
 import { cleanupResultAssistantSessions } from './result-assistant-domain.js';
+import type { AssistantRuntimeSession } from './assistant-runtime-contract.js';
 
 describe('assistant session TTL', () => {
   it.each([

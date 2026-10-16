@@ -42,9 +42,9 @@ import type {
   ResultsJson,
   EvalConfig,
   ExecutableEvalConfig,
-  AssistantRuntimeFactory,
   chatWithAgent
 } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeFactory } from './assistant-runtime-contract.js';
 
 export interface AppRouteRequestContext {
   req: IncomingMessage;

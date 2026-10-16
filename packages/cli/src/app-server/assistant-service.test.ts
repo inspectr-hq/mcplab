@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import type {
-  AssistantRuntimeDefinition,
-  AssistantRuntimeEvent,
-  AssistantRuntimeModelOutput,
-  AssistantRuntimeResponse,
-  AssistantRuntimeSession
-} from '@inspectr/mcplab-core';
+import type { AssistantRuntimeEvent, AssistantRuntimeResponse } from '@inspectr/mcplab-core';
 import { createAssistantRuntimeService } from './assistant-service.js';
 import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
+import type { AssistantRuntimeModelOutput } from '../../test-support/scripted-chat-model.js';
 
 describe('assistant runtime service', () => {
   it('guards callbacks cached by a factory after service disposal', async () => {

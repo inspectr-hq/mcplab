@@ -2,9 +2,7 @@ import type { ServerResponse } from 'node:http';
 import type {
   LlmAgentConfig,
   AssistantRuntimeMessage,
-  AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
-  AssistantRuntimeSession,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
@@ -18,11 +16,16 @@ import {
 } from './assistant-common.js';
 import { endAssistantSseClients } from './assistant-events.js';
 import { setupAssistantRuntimeSession } from './assistant-service.js';
-import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
 import {
   isResultAssistantAllowedTool,
   isResultAssistantAutoApprovedTool
 } from './result-assistant-tools.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
+import { APPROVAL_GUIDANCE } from './assistant-runtime-policy.js';
 
 type ResultAssistantChatMessage = AssistantRuntimeMessage;
 
@@ -283,7 +286,7 @@ function resultAssistantSystemPrompt(
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
-    'Use up to three external tool calls per batch. Read-only batches can continue automatically. If any call in a batch requires approval, wait for a decision on every call in that batch, including read calls; each call is approved or denied separately.',
+    APPROVAL_GUIDANCE,
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
       ? 'Scope: all historical runs. Use mcplab_results_search for broad retrieval, mcplab_results_context for focused excerpts, and mcplab_read_run_artifact only for raw fallback reads.'

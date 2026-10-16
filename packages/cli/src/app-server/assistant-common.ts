@@ -1,4 +1,3 @@
-import type { ToolDef } from '@inspectr/mcplab-core';
 import { formatAssistantToolName } from '@inspectr/mcplab-core';
 
 export { formatAssistantToolName };

@@ -8,6 +8,10 @@ import { truncateJson } from './assistant-common.js';
 
 export const MAX_ASSISTANT_MODEL_CALLS = 25;
 
+/** How tool approval works, as the model should understand it. */
+export const APPROVAL_GUIDANCE =
+  'Read-only tools run immediately. Tools that can change something wait for the user to approve, edit or deny each call; a denied call returns a denial you should respect.';
+
 export class AssistantTurnBudgetExceededError extends Error {
   readonly statusCode = 422;
 

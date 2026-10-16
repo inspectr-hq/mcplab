@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AssistantRuntimeResponse, AssistantRuntimeSession } from '@inspectr/mcplab-core';
+import type { AssistantRuntimeResponse } from '@inspectr/mcplab-core';
 import { throwIfAborted } from './assistant-common.js';
 import {
   createAssistantRequestAbortController,
@@ -7,6 +7,7 @@ import {
   serveAssistantSseStream,
   type AssistantSseSessionState
 } from './assistant-events.js';
+import type { AssistantRuntimeSession } from './assistant-runtime-contract.js';
 
 export interface AssistantHttpSession extends AssistantSseSessionState {
   id: string;

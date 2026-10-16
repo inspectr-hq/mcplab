@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type {
-  AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
-  AssistantRuntimeFactory,
   AssistantRuntimeResponse,
-  AssistantRuntimeSession,
   AssistantToolCallDecision
 } from '@inspectr/mcplab-core';
 import { throwIfAborted } from './assistant-common.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
 
 export class AssistantSessionBusyError extends Error {
   readonly statusCode = 409;

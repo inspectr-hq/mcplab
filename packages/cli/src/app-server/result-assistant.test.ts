@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { McpClientManager, type AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
+import { McpClientManager } from '@inspectr/mcplab-core';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import {
   setupResultAssistantSession,
@@ -12,6 +12,7 @@ import {
 } from './result-assistant-domain.js';
 import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
+import type { AssistantRuntimeDefinition } from './assistant-runtime-contract.js';
 
 async function createResultDefinition(params: {
   tools: Array<{ name: string; inputSchema?: unknown }>;
@@ -881,7 +882,7 @@ describe('Result Assistant runtime factory', () => {
 
     await route('/api/result-assistant/sessions', 'POST', { scope: 'all_runs' });
     const sessionId = captured[0]!.body.sessionId;
-    expect(runtimeDefinition.getSystemPrompt()).toContain('up to three external tool calls');
+    expect(runtimeDefinition.getSystemPrompt()).toContain('Read-only tools run immediately');
     expect(runtimeDefinition.getSystemPrompt()).not.toContain('request exactly one tool call');
     const session = resultAssistantSessions.get(sessionId)!;
     const streamWrites: string[] = [];
