@@ -4,6 +4,7 @@ import {
   type EvalConfig,
   type AssistantRuntimeMessage,
   type AssistantRuntimeDefinition,
+  type AssistantRuntimeEvent,
   type AssistantRuntimeSession,
   type ScenarioAssistantSuggestionBundle,
   type ScenarioAssistantSuggestionRule,
@@ -20,7 +21,7 @@ import {
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
-import { createAssistantRuntimeService } from './assistant-service.js';
+import { setupAssistantRuntimeSession } from './assistant-service.js';
 import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
 
 export type ScenarioAssistantContextInput = ScenarioAssistantRuntimeContext;
@@ -281,44 +282,26 @@ export async function setupScenarioAssistantSession(params: {
   serversByName: Record<string, EvalConfig['servers'][string]>;
   selectedServerNames: string[];
   serverAuthHeaders?: Record<string, Record<string, string>>;
-  initialEvents?: import('@inspectr/mcplab-core').AssistantRuntimeEvent[];
+  initialEvents?: AssistantRuntimeEvent[];
   assistantRuntimeFactory: AssistantRuntimeFactory;
-  onEvent(
-    event: import('@inspectr/mcplab-core').AssistantRuntimeEvent,
-    session: ScenarioAssistantSession
-  ): void;
+  onEvent(event: AssistantRuntimeEvent, session: ScenarioAssistantSession): void;
   onActivity(session: ScenarioAssistantSession): void;
 }): Promise<ScenarioAssistantSession> {
   const setup = createScenarioAssistantSetup(params.session, params.agentConfig, params.context);
-  let readySession: ScenarioAssistantSession | undefined;
-  let startupEvents: import('@inspectr/mcplab-core').AssistantRuntimeEvent[] = [
-    ...(params.initialEvents ?? [])
-  ];
-  try {
-    await setup.preload(params.serversByName, params.selectedServerNames, {
-      serverAuthHeaders: params.serverAuthHeaders
-    });
-    const definition = setup.createRuntimeDefinition();
-    definition.onEvent = (event) => {
-      if (!readySession) startupEvents.push(event);
-      else params.onEvent(event, readySession);
-    };
-    const runtime = await createAssistantRuntimeService(
-      params.assistantRuntimeFactory,
-      definition,
-      () => {
-        if (readySession) params.onActivity(readySession);
-      }
-    );
-    readySession = Object.assign(params.session, { runtime });
-    for (const event of startupEvents) params.onEvent(event, readySession);
-    startupEvents = [];
-    return readySession;
-  } catch (error) {
-    if (readySession) await Promise.resolve(readySession.runtime.dispose()).catch(() => {});
-    else await setup.dispose().catch(() => {});
-    throw error;
-  }
+  return setupAssistantRuntimeSession({
+    session: params.session,
+    factory: params.assistantRuntimeFactory,
+    disposeSetup: setup.dispose,
+    prepare: async () => {
+      await setup.preload(params.serversByName, params.selectedServerNames, {
+        serverAuthHeaders: params.serverAuthHeaders
+      });
+      return setup.createRuntimeDefinition();
+    },
+    initialEvents: params.initialEvents,
+    onEvent: params.onEvent,
+    onActivity: params.onActivity
+  });
 }
 
 function normalizeEvalRuleToolNames(

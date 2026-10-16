@@ -138,6 +138,64 @@ it('publishes factory-time Result events with a finalized runtime session', asyn
   }
 });
 
+it('publishes preload warnings before factory-time Result events', async () => {
+  vi.spyOn(McpClientManager.prototype, 'connectAll').mockRejectedValue(new Error('offline'));
+  const observed: Array<{ type: string; warning?: unknown }> = [];
+  const session: ResultAssistantSessionInitializer = {
+    id: 'ras-preload-warning',
+    scope: 'all_runs',
+    runId: null,
+    createdAt: Date.now(),
+    lastTouchedAt: Date.now(),
+    selectedAssistantAgentName: 'assistant',
+    model: 'test',
+    provider: 'openai',
+    toolsLoaded: 0,
+    toolServers: [],
+    initialMessages: [],
+    events: [],
+    clients: new Set()
+  };
+  try {
+    await setupResultAssistantSession({
+      session,
+      agentConfig: { provider: 'openai', model: 'test' },
+      resultSummary: null,
+      referenceReportsForRun: [],
+      mcpServerUrl: 'http://mcplab.test/mcp',
+      refreshReports: () => [],
+      assistantRuntimeFactory: {
+        create: async (definition) => {
+          definition.onEvent?.({
+            type: 'session_warning',
+            ts: new Date().toISOString(),
+            payload: { warning: 'factory startup' }
+          });
+          return {
+            sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+            resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            isBusy: () => false,
+            dispose: async () => {}
+          };
+        }
+      },
+      onEvent: (event) => observed.push({ type: event.type, warning: event.payload.warning }),
+      onActivity: () => {}
+    });
+    expect(session.initialMessages).toHaveLength(1);
+    expect(session.initialMessages[0]?.text).toContain(
+      'could not preload MCPLab MCP tools: offline'
+    );
+    expect(observed).toEqual([
+      { type: 'session_warning', warning: 'offline' },
+      { type: 'session_warning', warning: 'factory startup' }
+    ]);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
 it('disposes the Result runtime and MCP client when a startup observer throws', async () => {
   vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
   vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);

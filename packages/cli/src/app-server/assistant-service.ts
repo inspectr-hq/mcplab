@@ -1,5 +1,6 @@
 import type {
   AssistantRuntimeDefinition,
+  AssistantRuntimeEvent,
   AssistantRuntimeFactory,
   AssistantRuntimeResponse,
   AssistantRuntimeSession,
@@ -13,6 +14,43 @@ export class AssistantSessionBusyError extends Error {
   constructor() {
     super('Assistant session is busy');
     this.name = 'AssistantSessionBusyError';
+  }
+}
+
+export async function setupAssistantRuntimeSession<TSession extends object>(params: {
+  session: TSession;
+  prepare(
+    emitInitialEvent: (event: AssistantRuntimeEvent) => void
+  ): Promise<AssistantRuntimeDefinition>;
+  disposeSetup(): Promise<void>;
+  factory: AssistantRuntimeFactory;
+  initialEvents?: AssistantRuntimeEvent[];
+  onEvent(
+    event: AssistantRuntimeEvent,
+    session: TSession & { runtime: AssistantRuntimeSession }
+  ): void;
+  onActivity(session: TSession & { runtime: AssistantRuntimeSession }): void;
+}): Promise<TSession & { runtime: AssistantRuntimeSession }> {
+  type ReadySession = TSession & { runtime: AssistantRuntimeSession };
+  let readySession: ReadySession | undefined;
+  const startupEvents = [...(params.initialEvents ?? [])];
+  try {
+    const definition = await params.prepare((event) => startupEvents.push(event));
+    definition.onEvent = (event) => {
+      if (readySession) params.onEvent(event, readySession);
+      else startupEvents.push(event);
+    };
+    const runtime = await createAssistantRuntimeService(params.factory, definition, () => {
+      if (readySession) params.onActivity(readySession);
+    });
+    readySession = Object.assign(params.session, { runtime });
+    for (const event of startupEvents) params.onEvent(event, readySession);
+    startupEvents.length = 0;
+    return readySession;
+  } catch (error) {
+    if (readySession) await Promise.resolve(readySession.runtime.dispose()).catch(() => {});
+    else await params.disposeSetup().catch(() => {});
+    throw error;
   }
 }
 
@@ -35,7 +73,11 @@ export async function createAssistantRuntimeService(
     runtime = await factory.create(definition);
   } catch (error) {
     disposed = true;
-    await definition.dispose?.();
+    try {
+      await definition.dispose?.();
+    } catch {
+      // Preserve the runtime factory error when setup cleanup also fails.
+    }
     throw error;
   }
 

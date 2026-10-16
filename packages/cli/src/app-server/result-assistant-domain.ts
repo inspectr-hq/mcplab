@@ -3,6 +3,7 @@ import type {
   LlmAgentConfig,
   AssistantRuntimeMessage,
   AssistantRuntimeDefinition,
+  AssistantRuntimeEvent,
   AssistantRuntimeSession,
   AssistantRuntimeToolCall,
   ResultsJson,
@@ -18,8 +19,8 @@ import {
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
-import { createAssistantRuntimeService } from './assistant-service.js';
-import type { AssistantRuntimeFactory, AssistantRuntimeEvent } from '@inspectr/mcplab-core';
+import { setupAssistantRuntimeSession } from './assistant-service.js';
+import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
 import {
   isResultAssistantAllowedTool,
   isResultAssistantAutoApprovedTool
@@ -226,46 +227,32 @@ export async function setupResultAssistantSession(params: {
     params.referenceReportsForRun,
     params.refreshReports
   );
-  let readySession: ResultAssistantSession | undefined;
-  let startupEvents: AssistantRuntimeEvent[] = [];
-  try {
-    try {
-      await setup.preload(params.mcpServerUrl);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      params.session.initialMessages.push({
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role: 'system',
-        text: `Warning: could not preload MCPLab MCP tools: ${message}`,
-        createdAt: new Date().toISOString()
-      });
-      startupEvents.push({
-        type: 'session_warning',
-        ts: new Date().toISOString(),
-        payload: { warning: message }
-      });
-    }
-    const definition = setup.createRuntimeDefinition();
-    definition.onEvent = (event) => {
-      if (!readySession) startupEvents.push(event);
-      else params.onEvent(event, readySession);
-    };
-    const runtime = await createAssistantRuntimeService(
-      params.assistantRuntimeFactory,
-      definition,
-      () => {
-        if (readySession) params.onActivity(readySession);
+  return setupAssistantRuntimeSession({
+    session: params.session,
+    factory: params.assistantRuntimeFactory,
+    disposeSetup: setup.dispose,
+    prepare: async (emitInitialEvent) => {
+      try {
+        await setup.preload(params.mcpServerUrl);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        params.session.initialMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'system',
+          text: `Warning: could not preload MCPLab MCP tools: ${message}`,
+          createdAt: new Date().toISOString()
+        });
+        emitInitialEvent({
+          type: 'session_warning',
+          ts: new Date().toISOString(),
+          payload: { warning: message }
+        });
       }
-    );
-    readySession = Object.assign(params.session, { runtime });
-    for (const event of startupEvents) params.onEvent(event, readySession);
-    startupEvents = [];
-    return readySession;
-  } catch (error) {
-    if (readySession) await Promise.resolve(readySession.runtime.dispose()).catch(() => {});
-    else await setup.dispose().catch(() => {});
-    throw error;
-  }
+      return setup.createRuntimeDefinition();
+    },
+    onEvent: params.onEvent,
+    onActivity: params.onActivity
+  });
 }
 
 function resultAssistantSystemPrompt(

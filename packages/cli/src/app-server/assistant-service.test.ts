@@ -53,6 +53,21 @@ describe('assistant runtime service', () => {
     expect(onEvent).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledOnce();
   });
+
+  it('preserves the factory error when definition cleanup also fails', async () => {
+    const factoryError = new Error('factory failed');
+    const definition = {
+      dispose: vi.fn().mockRejectedValue(new Error('cleanup failed'))
+    } as unknown as AssistantRuntimeDefinition;
+    await expect(
+      createAssistantRuntimeService(
+        { create: async () => Promise.reject(factoryError) },
+        definition
+      )
+    ).rejects.toBe(factoryError);
+    expect(definition.dispose).toHaveBeenCalledOnce();
+  });
+
   it('holds its lock after abort until an opaque runtime settles and suppresses its late events', async () => {
     let finishOld!: (value: { type: 'assistant_message'; text: string }) => void;
     const oldResult = new Promise<{ type: 'assistant_message'; text: string }>((resolve) => {
