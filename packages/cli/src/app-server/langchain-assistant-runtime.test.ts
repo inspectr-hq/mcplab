@@ -746,3 +746,22 @@ it('shows each call with its tool details and timing, and passes a deny reason t
   });
   await session.dispose();
 });
+
+it('adds no placeholder text when the model requests tools without writing anything', async () => {
+  const session = await createScriptedRuntimeFactory(async () => ({
+    type: 'tool_call_request',
+    text: '',
+    toolCalls: [{ id: 'w1', name: 'write', arguments: {} }]
+  })).create(
+    definitionWith({
+      tools: [{ name: 'write', server: 's', tool: 'write', execute: async () => ({}) }]
+    })
+  );
+  await expect(session.sendMessage('go')).resolves.toMatchObject({
+    type: 'tool_call_request',
+    text: ''
+  });
+  const request = session.getSnapshot().messages.find((message) => message.role === 'assistant');
+  expect(request).toMatchObject({ text: '', pendingToolCallIds: ['w1'] });
+  await session.dispose();
+});

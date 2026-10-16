@@ -90,7 +90,6 @@ interface StreamingReasoning {
   part?: number;
 }
 
-const TOOL_REQUEST_FALLBACK_TEXT = 'I need a tool to help answer.';
 const DENIED_REASON = 'User denied tool call';
 const MAX_DENY_MESSAGE_CHARS = 2000;
 // Each model round and tool batch is a few graph steps; the model-call budget is the real limit.
@@ -740,7 +739,7 @@ class LangChainAssistantRuntime {
         {
           id,
           role: 'assistant',
-          text: messageText(message) || TOOL_REQUEST_FALLBACK_TEXT,
+          text: messageText(message),
           createdAt,
           ...(reasoning ? { reasoning } : {}),
           pendingToolCallId: callIds[0],
@@ -792,7 +791,7 @@ class LangChainAssistantRuntime {
 
   private lastAssistantText() {
     const last = [...this.history].reverse().find((message) => AIMessage.isInstance(message));
-    return (last && messageText(last)) || TOOL_REQUEST_FALLBACK_TEXT;
+    return last ? messageText(last) : '';
   }
 
   private updateCall(id: string, update: Partial<AssistantRuntimeToolCall>) {

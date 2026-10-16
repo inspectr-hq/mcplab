@@ -179,6 +179,38 @@ describe('AssistantConversation', () => {
     expect(screen.queryByText('Thinking...')).not.toBeInTheDocument();
   });
 
+  it('shows a tool result on its call, not again as a separate message', () => {
+    render(
+      <AssistantConversation
+        messages={[
+          toolRequest(['auto']),
+          {
+            id: 'msg-tool',
+            role: 'tool' as const,
+            text: '{"hits":10}',
+            createdAt: '2026-10-16T10:00:01.000Z'
+          }
+        ]}
+        toolCalls={[
+          call({
+            id: 'auto',
+            tool: 'search_results',
+            arguments: { query: 'failed' },
+            status: 'approved',
+            resultPreview: '{"hits":10}',
+            requiresApproval: false
+          })
+        ]}
+        busy={false}
+        composer={composer}
+      />
+    );
+    expect(screen.getByText('failed')).toBeVisible();
+    expect(screen.queryByText('{"hits":10}')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Search results/ }));
+    expect(screen.getAllByText('{"hits":10}')).toHaveLength(1);
+  });
+
   it('lists pending calls that no message references', () => {
     render(
       <AssistantConversation
