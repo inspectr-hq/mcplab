@@ -998,7 +998,7 @@ const Results = () => {
       ) : null}
 
       <div
-        className={`mt-4 grid gap-6 ${
+        className={`mt-4 grid items-start gap-6 ${
           assistantOpen
             ? assistantExpanded
               ? 'xl:grid-cols-[minmax(0,1fr)_52rem]'
@@ -1331,7 +1331,7 @@ const Results = () => {
             onDenyToolCall={denyResultAssistantToolCall}
             expired={assistantExpired}
             inputRef={assistantInputRef}
-            className="min-w-0 overflow-hidden xl:flex xl:h-[calc(100vh-14rem)] xl:min-h-0 xl:flex-col"
+            className="min-w-0 overflow-hidden xl:flex xl:h-[calc(100vh-6rem)] xl:min-h-[32rem] xl:flex-col"
           />
         )}
       </div>

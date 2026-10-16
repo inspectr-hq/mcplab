@@ -83,6 +83,8 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
     followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX;
   };
 
+  // Tool results are shown on their call (row or approval card), so the raw message would repeat them.
+  const visibleMessages = messages.filter((message) => message.role !== 'tool');
   const referencedCallIds = new Set(messages.flatMap((message) => toolCallIdsOf(message)));
   const unreferencedPending = toolCalls.filter(
     (call) => call.status === 'pending' && !referencedCallIds.has(call.id)
@@ -103,7 +105,7 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
       >
         <div className="space-y-3 pr-2">
           {notices}
-          {messages.map((message, index) => {
+          {visibleMessages.map((message, index) => {
             const key = message.id ?? `${message.role}-${index}`;
             const callIds = toolCallIdsOf(message);
             const body =
