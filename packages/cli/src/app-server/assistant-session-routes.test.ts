@@ -330,6 +330,25 @@ describe('shared assistant session route behavior', () => {
     );
   });
 
+  it('passes a deny reason to the runtime and rejects one that is not text', async () => {
+    const { options, session, asJson } = makeOptions('/tool-calls/tool-1/deny');
+    options.parseBody = vi.fn().mockResolvedValue({ message: 'Use the staging server' });
+    await handleAssistantSessionRoutes(options);
+    expect(session.runtime.resolveToolCalls).toHaveBeenCalledWith(
+      [{ toolCallId: 'tool-1', decision: 'deny', message: 'Use the staging server' }],
+      expect.any(AbortSignal)
+    );
+
+    const invalid = makeOptions('/tool-calls/tool-1/deny');
+    invalid.options.parseBody = vi.fn().mockResolvedValue({ message: 42 });
+    await handleAssistantSessionRoutes(invalid.options);
+    expect(invalid.asJson).toHaveBeenCalledWith(expect.anything(), 400, {
+      error: 'Invalid request body'
+    });
+    expect(invalid.session.runtime.resolveToolCalls).not.toHaveBeenCalled();
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 200, expect.any(Object));
+  });
+
   it('allows an empty body for approval', async () => {
     const { options, session, asJson } = makeOptions('/tool-calls/tool-1/approve');
     options.parseBody = vi.fn().mockResolvedValue({});

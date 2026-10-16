@@ -5,6 +5,7 @@ import type {
   AssistantRuntimeResponse,
   AssistantRuntimeSnapshot,
   AssistantToolCallDecision,
+  AssistantToolHints,
   LlmAgentConfig,
   ResultAssistantRuntimeContext,
   ScenarioAssistantRuntimeContext,
@@ -33,8 +34,16 @@ export interface AssistantRuntimeTool {
   tool: string;
   description?: string;
   inputSchema?: unknown;
+  /** How the call is presented to the user; never sent to the model. */
+  display?: AssistantToolDisplay;
   execute(arguments_: unknown, signal?: AbortSignal): Promise<unknown>;
   extractProposal?(result: unknown): ScenarioAssistantSuggestionBundle | undefined;
+}
+
+export interface AssistantToolDisplay {
+  title?: string;
+  description?: string;
+  hints?: AssistantToolHints;
 }
 
 export interface AssistantRuntimeSession {

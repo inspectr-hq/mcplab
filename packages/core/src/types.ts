@@ -95,6 +95,14 @@ export interface AssistantRuntimeMessage {
   toolRequestServer?: string;
   toolRequestName?: string;
   toolRequestPublicName?: string;
+  /** The model's reasoning summary for this message, when the provider returns one. */
+  reasoning?: AssistantReasoning;
+}
+
+export interface AssistantReasoning {
+  text: string;
+  /** Set once the model has finished reasoning. */
+  durationMs?: number;
 }
 
 export interface AssistantRuntimeToolCall {
@@ -108,6 +116,26 @@ export interface AssistantRuntimeToolCall {
   createdAt: string;
   resultPreview?: string;
   error?: string;
+  /** Whether the call waited for the user; automatic and local calls run without asking. */
+  requiresApproval?: boolean;
+  /** Display details from the MCP tool definition. */
+  title?: string;
+  description?: string;
+  hints?: AssistantToolHints;
+  /** Readable labels for argument fields, from the input schema's property titles. */
+  argumentLabels?: Record<string, string>;
+  startedAt?: string;
+  completedAt?: string;
+  /** The user's reason for denying the call, which the model also receives. */
+  denyMessage?: string;
+}
+
+/** The MCP tool annotations that matter to someone approving a call. */
+export interface AssistantToolHints {
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  openWorld?: boolean;
 }
 
 export interface AssistantRuntimeSnapshot {
@@ -121,6 +149,7 @@ export interface AssistantRuntimeSnapshot {
     turnId: string;
     text: string;
     createdAt: string;
+    reasoning?: AssistantReasoning;
   };
 }
 
@@ -164,7 +193,7 @@ export interface ResultAssistantSessionView {
 
 export type AssistantSessionEvent<TSession = unknown> =
   | {
-      type: 'assistant_message_delta';
+      type: 'assistant_message_delta' | 'assistant_reasoning_delta';
       ts: string;
       payload: Record<string, unknown> & {
         sessionId: string;
@@ -178,7 +207,10 @@ export type AssistantSessionEvent<TSession = unknown> =
       };
     }
   | {
-      type: Exclude<AssistantRuntimeEvent['type'], 'assistant_message_delta'>;
+      type: Exclude<
+        AssistantRuntimeEvent['type'],
+        'assistant_message_delta' | 'assistant_reasoning_delta'
+      >;
       ts: string;
       payload: Record<string, unknown> & { sessionId: string; session: TSession };
     };
@@ -195,6 +227,7 @@ export interface AssistantRuntimeEvent {
     | 'tool_call_denied'
     | 'tool_call_resolved'
     | 'assistant_message_delta'
+    | 'assistant_reasoning_delta'
     | 'assistant_message_completed'
     | 'session_snapshot'
     | 'session_warning'
@@ -221,6 +254,8 @@ export interface AssistantToolCallDecision {
   toolCallId: string;
   decision: 'approve' | 'deny';
   arguments?: unknown;
+  /** Why the user denied the call; the model receives it. */
+  message?: string;
 }
 
 export interface EvaluationJudge {

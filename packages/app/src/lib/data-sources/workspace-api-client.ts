@@ -335,12 +335,12 @@ export const workspaceApiClient = {
         body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyResultAssistantToolCall: (sessionId: string, callId: string) =>
+  denyResultAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   closeResultAssistantSession: (sessionId: string) =>
@@ -456,12 +456,12 @@ export const workspaceApiClient = {
         body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  denyScenarioAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   approveAllScenarioAssistantToolCalls: (sessionId: string) =>

@@ -55,7 +55,7 @@ export function ResultAssistantPanel({
   snippetsLabel?: string;
   onSnippetSelect: (prompt: string) => void;
   onApproveToolCall?: (callId: string, argumentsOverride?: unknown) => void;
-  onDenyToolCall?: (callId: string) => void;
+  onDenyToolCall?: (callId: string, message?: string) => void;
   inputRef: MutableRefObject<HTMLTextAreaElement | null>;
   /** Page-specific actions inside a message bubble, e.g. handoffs. */
   renderMessageFooter?: (message: ResultAssistantMessage) => ReactNode;

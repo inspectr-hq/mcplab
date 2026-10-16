@@ -35,7 +35,11 @@ export interface AssistantSessionApi<TSession extends AssistantSessionShape> {
     callId: string,
     argumentsOverride?: unknown
   ): Promise<AssistantTurnResult<TSession>>;
-  denyToolCall(sessionId: string, callId: string): Promise<AssistantTurnResult<TSession>>;
+  denyToolCall(
+    sessionId: string,
+    callId: string,
+    message?: string
+  ): Promise<AssistantTurnResult<TSession>>;
   approveAllToolCalls?(sessionId: string): Promise<AssistantTurnResult<TSession>>;
   cancelTurn?(sessionId: string, turnId: string): Promise<unknown>;
   closeSession(sessionId: string): Promise<void>;
@@ -55,7 +59,8 @@ export function createResultAssistantApi(
       source.sendResultAssistantMessage(sessionId, message, signal, turnId),
     approveToolCall: (sessionId, callId, argumentsOverride) =>
       source.approveResultAssistantToolCall(sessionId, callId, argumentsOverride),
-    denyToolCall: (sessionId, callId) => source.denyResultAssistantToolCall(sessionId, callId),
+    denyToolCall: (sessionId, callId, message) =>
+      source.denyResultAssistantToolCall(sessionId, callId, message),
     ...(source.cancelResultAssistantTurn
       ? { cancelTurn: (sessionId, turnId) => source.cancelResultAssistantTurn!(sessionId, turnId) }
       : {}),
@@ -78,7 +83,8 @@ export function createScenarioAssistantApi(
       source.sendScenarioAssistantMessage(sessionId, message, signal, turnId),
     approveToolCall: (sessionId, callId, argumentsOverride) =>
       source.approveScenarioAssistantToolCall(sessionId, callId, argumentsOverride),
-    denyToolCall: (sessionId, callId) => source.denyScenarioAssistantToolCall(sessionId, callId),
+    denyToolCall: (sessionId, callId, message) =>
+      source.denyScenarioAssistantToolCall(sessionId, callId, message),
     approveAllToolCalls: (sessionId) => source.approveAllScenarioAssistantToolCalls(sessionId),
     ...(source.cancelScenarioAssistantTurn
       ? {

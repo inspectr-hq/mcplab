@@ -438,3 +438,129 @@ describe('assistant chat models on the standard agent', () => {
     expect(requests[0]!.body.max_tokens).toBe(1024);
   });
 });
+
+function openAiResponsesStream(answer: string) {
+  const event = (data: Record<string, unknown>) =>
+    `event: ${String(data.type)}\ndata: ${JSON.stringify(data)}\n\n`;
+  const reasoningItem = {
+    type: 'reasoning',
+    id: 'rs_1',
+    summary: [
+      { type: 'summary_text', text: 'Checking the run.' },
+      { type: 'summary_text', text: 'Two checks fail.' }
+    ],
+    encrypted_content: 'encrypted-reasoning'
+  };
+  const messageItem = {
+    type: 'message',
+    id: 'msg_1',
+    role: 'assistant',
+    status: 'completed',
+    content: [{ type: 'output_text', text: answer, annotations: [] }]
+  };
+  const response = (status: string, output: unknown[]) => ({
+    id: 'resp_1',
+    object: 'response',
+    created_at: 0,
+    model: 'o4-mini',
+    status,
+    output,
+    usage: {
+      input_tokens: 1,
+      output_tokens: 2,
+      total_tokens: 3,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens_details: { reasoning_tokens: 1 }
+    }
+  });
+  const summary = (index: number, delta: string) => [
+    event({
+      type: 'response.reasoning_summary_part.added',
+      item_id: 'rs_1',
+      output_index: 0,
+      summary_index: index,
+      part: { type: 'summary_text', text: '' }
+    }),
+    event({
+      type: 'response.reasoning_summary_text.delta',
+      item_id: 'rs_1',
+      output_index: 0,
+      summary_index: index,
+      delta
+    })
+  ];
+  return sse([
+    event({ type: 'response.created', response: response('in_progress', []) }),
+    event({
+      type: 'response.output_item.added',
+      output_index: 0,
+      item: { type: 'reasoning', id: 'rs_1', summary: [] }
+    }),
+    ...summary(0, 'Checking the run.'),
+    ...summary(1, 'Two checks fail.'),
+    event({ type: 'response.output_item.done', output_index: 0, item: reasoningItem }),
+    event({
+      type: 'response.output_item.added',
+      output_index: 1,
+      item: { ...messageItem, status: 'in_progress', content: [] }
+    }),
+    event({
+      type: 'response.output_text.delta',
+      item_id: 'msg_1',
+      output_index: 1,
+      content_index: 0,
+      delta: answer
+    }),
+    event({ type: 'response.output_item.done', output_index: 1, item: messageItem }),
+    event({
+      type: 'response.completed',
+      response: response('completed', [reasoningItem, messageItem])
+    })
+  ]);
+}
+
+describe('OpenAI reasoning summaries', () => {
+  it('streams reasoning separately from the answer, unstored, and replays it encrypted', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    const requests = captureFetch(() => openAiResponsesStream('answer'));
+    const { response, events, session } = await ask(
+      definition('openai', 'o4-mini', { agent: { provider: 'openai', model: 'o4-mini' } })
+    );
+
+    await expect(response).resolves.toMatchObject({ type: 'assistant_message', text: 'answer' });
+    expect(requests[0]!.url).toBe('https://api.openai.com/v1/responses');
+    expect(requests[0]!.body).toMatchObject({
+      reasoning: { summary: 'auto' },
+      store: false,
+      include: ['reasoning.encrypted_content']
+    });
+    const reasoningDeltas = events
+      .filter((event) => event.type === 'assistant_reasoning_delta')
+      .map((event) => event.payload.delta);
+    expect(reasoningDeltas.join('')).toBe('Checking the run.\n\nTwo checks fail.');
+    const answer = session.getSnapshot().messages.at(-1)!;
+    expect(answer).toMatchObject({
+      role: 'assistant',
+      text: 'answer',
+      reasoning: { text: 'Checking the run.\n\nTwo checks fail.' }
+    });
+    expect(answer.reasoning!.durationMs).toEqual(expect.any(Number));
+
+    await session.sendMessage('follow-up');
+    const replayed = requests[1]!.body.input as Array<Record<string, unknown>>;
+    expect(replayed).toContainEqual(
+      expect.objectContaining({ type: 'reasoning', encrypted_content: 'encrypted-reasoning' })
+    );
+    await session.dispose();
+  });
+
+  it('keeps non-reasoning OpenAI models on Chat Completions', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    const requests = captureFetch(() => openAiStream('answer'));
+    const { response, session } = await ask(definition('openai', 'gpt-4o-mini'));
+    await expect(response).resolves.toMatchObject({ text: 'answer' });
+    expect(requests[0]!.url).toBe('https://api.openai.com/v1/chat/completions');
+    expect(requests[0]!.body.reasoning).toBeUndefined();
+    await session.dispose();
+  });
+});

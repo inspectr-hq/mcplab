@@ -9,6 +9,7 @@ import type {
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  assistantToolDisplay,
   ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
@@ -24,6 +25,7 @@ import {
 } from './result-assistant-tools.js';
 import type {
   AssistantRuntimeDefinition,
+  AssistantToolDisplay,
   AssistantRuntimeFactory,
   AssistantRuntimeSession
 } from './assistant-runtime-contract.js';
@@ -63,7 +65,7 @@ interface ResultAssistantResources {
   referenceReportsForRun: ResultAssistantReferenceReport[];
   mcp: McpClientManager;
   tools: ToolDef[];
-  toolPublicMap: Map<string, { server: string; tool: string }>;
+  toolPublicMap: Map<string, { server: string; tool: string; display?: AssistantToolDisplay }>;
   systemPromptCache?: string;
 }
 
@@ -151,7 +153,8 @@ function createResultAssistantSetup(
         );
         state.toolPublicMap.set(publicName, {
           server: RESULT_ASSISTANT_MCP_SERVER_NAME,
-          tool: tool.name
+          tool: tool.name,
+          display: assistantToolDisplay(tool)
         });
         state.tools.push({
           ...tool,
@@ -186,6 +189,7 @@ function createResultAssistantSetup(
             tool: mapping.tool,
             description: tool.description,
             inputSchema: tool.inputSchema,
+            display: mapping.display,
             execute: async (arguments_, signal) => {
               const result = await withTimeout(
                 () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),

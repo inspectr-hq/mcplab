@@ -292,7 +292,8 @@ export function useAssistantSession<TSession extends AssistantSessionShape>(para
     [decide]
   );
   const deny = useCallback(
-    (callId: string) => decide('deny', (id) => apiRef.current.denyToolCall(id, callId)),
+    (callId: string, message?: string) =>
+      decide('deny', (id) => apiRef.current.denyToolCall(id, callId, message)),
     [decide]
   );
   const approveAllCallback = useCallback(

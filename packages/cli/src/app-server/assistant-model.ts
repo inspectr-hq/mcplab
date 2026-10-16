@@ -34,6 +34,8 @@ export type AssistantChatModelFactory = (
 
 interface ModelVariant {
   anthropicModel?: string;
+  /** OpenAI reasoning models use the Responses API, which returns reasoning summaries. */
+  openaiReasoning?: boolean;
   azureTokenField: 'max_completion_tokens' | 'max_tokens';
   includeTemperature: boolean;
 }
@@ -68,6 +70,9 @@ function providerModelMiddleware(agent: LlmAgentConfig, options: AssistantChatMo
     wrapModelCall: async (request, handler) => {
       let variant: ModelVariant = {
         ...(anthropicCandidates.length ? { anthropicModel: anthropicCandidates[0] } : {}),
+        ...(agent.provider === 'openai' && isOpenAIReasoningModel(agent.model)
+          ? { openaiReasoning: true }
+          : {}),
         azureTokenField: 'max_completion_tokens',
         includeTemperature: typeof agent.temperature === 'number'
       };
@@ -99,6 +104,15 @@ function nextVariant(
     if (!anthropicModel) throw anthropicModelNotFound(agent.model, anthropicCandidates);
     return { ...variant, anthropicModel };
   }
+  if (agent.provider === 'openai') {
+    const message = errorMessage(error).toLowerCase();
+    // Fall back to Chat Completions if a model rejects the reasoning settings.
+    return variant.openaiReasoning &&
+      message.includes('reasoning') &&
+      (message.includes('not supported') || message.includes('unsupported'))
+      ? { ...variant, openaiReasoning: false }
+      : undefined;
+  }
   if (agent.provider !== 'azure_openai' && agent.provider !== 'azure_foundry') return undefined;
   const message = errorMessage(error).toLowerCase();
   if (
@@ -117,6 +131,16 @@ function nextVariant(
   return undefined;
 }
 
+/** The OpenAI models that reason, matching @langchain/openai's own check. */
+export function isOpenAIReasoningModel(model: string): boolean {
+  const name = model.trim();
+  return (
+    /^o\d/.test(name) ||
+    (name.startsWith('gpt-5') && !name.startsWith('gpt-5-chat')) ||
+    (name.startsWith('gpt-6') && !name.startsWith('gpt-6-chat'))
+  );
+}
+
 async function buildChatModel(
   agent: LlmAgentConfig,
   variant: ModelVariant,
@@ -125,6 +149,22 @@ async function buildChatModel(
   if (agent.provider === 'openai') {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing OPENAI_API_KEY');
+    if (variant.openaiReasoning) {
+      const { ChatOpenAIResponses } = await import('@langchain/openai');
+      return new ChatOpenAIResponses({
+        apiKey,
+        model: agent.model,
+        temperature: agent.temperature,
+        maxTokens: agent.max_tokens,
+        maxRetries: 0,
+        configuration: { maxRetries: 0 },
+        callbacks,
+        reasoning: { summary: 'auto' },
+        // Keep responses out of OpenAI storage; reasoning is replayed encrypted between calls.
+        zdrEnabled: true,
+        modelKwargs: { include: ['reasoning.encrypted_content'] }
+      });
+    }
     const { ChatOpenAICompletions } = await import('@langchain/openai');
     return new ChatOpenAICompletions({
       apiKey,

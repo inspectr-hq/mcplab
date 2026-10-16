@@ -831,8 +831,8 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
 
-    expect(await screen.findByText('Tool call search tags')).toBeInTheDocument();
-    expect(screen.getByText('Tool call list tags')).toBeInTheDocument();
+    expect(await screen.findByText('Search tags')).toBeInTheDocument();
+    expect(screen.getByText('List tags')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(screen.getByText('Needs approval')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(1);

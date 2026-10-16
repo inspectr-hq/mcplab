@@ -27,8 +27,10 @@ import type {
   ExecutionSource,
   BrowserProviderProfile,
   AssistantKind,
+  AssistantReasoning,
   AssistantSessionEvent,
   AssistantRuntimeEvent,
+  AssistantToolHints,
   AssistantRuntimeMessage,
   AssistantRuntimeResponse,
   AssistantRuntimeSnapshot,
@@ -56,8 +58,10 @@ import type {
 
 export type {
   AssistantKind,
+  AssistantReasoning,
   AssistantSessionEvent,
   AssistantRuntimeEvent,
+  AssistantToolHints,
   AssistantRuntimeMessage,
   AssistantRuntimeResponse,
   AssistantRuntimeSnapshot,
@@ -732,7 +736,8 @@ export interface EvalDataSource {
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   denyResultAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    message?: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   closeResultAssistantSession: (sessionId: string) => Promise<void>;
   subscribeResultAssistantSessionEvents: (
@@ -801,7 +806,8 @@ export interface EvalDataSource {
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   denyScenarioAssistantToolCall: (
     sessionId: string,
-    callId: string
+    callId: string,
+    message?: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   approveAllScenarioAssistantToolCalls: (
     sessionId: string

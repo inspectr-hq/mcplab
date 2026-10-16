@@ -134,6 +134,51 @@ describe('AssistantConversation', () => {
     expect(screen.queryByText('Completed')).not.toBeInTheDocument();
   });
 
+  it('shows calls that ran without asking as activity and the rest as approval cards', () => {
+    render(
+      <AssistantConversation
+        messages={[toolRequest(['auto', 'ask'])]}
+        toolCalls={[
+          call({
+            id: 'auto',
+            tool: 'read_mcp_resource',
+            arguments: { uri: 'docs://guide' },
+            status: 'approved',
+            resultPreview: '{}',
+            requiresApproval: false
+          }),
+          call({ id: 'ask', requiresApproval: true })
+        ]}
+        busy={false}
+        onApprove={vi.fn()}
+        composer={composer}
+      />
+    );
+    expect(screen.getByText('docs://guide')).toBeVisible();
+    expect(screen.getByRole('group', { name: 'Approval needed: Write report' })).toBeVisible();
+  });
+
+  it('shows streaming reasoning instead of the typing indicator', () => {
+    render(
+      <AssistantConversation
+        messages={[
+          {
+            id: 'm',
+            role: 'assistant' as const,
+            text: '',
+            createdAt: '2026-10-16T10:00:00.000Z',
+            reasoning: { text: 'Comparing runs' }
+          }
+        ]}
+        toolCalls={[]}
+        busy
+        composer={composer}
+      />
+    );
+    expect(screen.getByText('Comparing runs')).toBeVisible();
+    expect(screen.queryByText('Thinking...')).not.toBeInTheDocument();
+  });
+
   it('lists pending calls that no message references', () => {
     render(
       <AssistantConversation
@@ -145,7 +190,7 @@ describe('AssistantConversation', () => {
       />
     );
     expect(screen.getByText('Pending actions')).toBeInTheDocument();
-    expect(screen.getByText('Tool call write report')).toBeInTheDocument();
+    expect(screen.getByText('Write report')).toBeInTheDocument();
   });
 
   it('stops following new output while the user reads earlier messages', () => {

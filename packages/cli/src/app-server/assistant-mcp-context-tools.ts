@@ -14,6 +14,7 @@ export const MCP_CONTEXT_TOOL_NAMES = [
 ] as const;
 
 const MAX_LISTED_ITEMS = 200;
+const READ_ONLY = { readOnly: true };
 
 export interface McpContextServers {
   /** Selected servers that advertise MCP resources. */
@@ -50,6 +51,7 @@ export function createMcpContextTools(
         name: 'list_mcp_resources',
         server: 'mcp',
         tool: 'list_mcp_resources',
+        display: { title: 'List MCP resources', hints: READ_ONLY },
         description:
           'List the resources (documents, schemas, reference data) the selected MCP servers expose. Read relevant ones before proposing scenario changes.',
         inputSchema: {
@@ -69,6 +71,7 @@ export function createMcpContextTools(
         name: 'read_mcp_resource',
         server: 'mcp',
         tool: 'read_mcp_resource',
+        display: { title: 'Read MCP resource', hints: READ_ONLY },
         description:
           'Read one MCP resource by URI. Binary content is reported by type and size only.',
         inputSchema: {
@@ -93,6 +96,7 @@ export function createMcpContextTools(
         name: 'list_mcp_prompts',
         server: 'mcp',
         tool: 'list_mcp_prompts',
+        display: { title: 'List MCP prompts', hints: READ_ONLY },
         description:
           'List the prompt templates the selected MCP servers provide. They show how the server expects to be used.',
         inputSchema: {
@@ -112,6 +116,7 @@ export function createMcpContextTools(
         name: 'get_mcp_prompt',
         server: 'mcp',
         tool: 'get_mcp_prompt',
+        display: { title: 'Get MCP prompt', hints: READ_ONLY },
         description: 'Get one MCP prompt template, filled in with the given arguments.',
         inputSchema: {
           type: 'object',

@@ -186,9 +186,12 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     }
     const decision = parts[3] as 'approve' | 'deny';
     await respondWithRuntime(async (signal) => {
-      const body = decision === 'approve' ? await options.parseBody(req) : {};
+      const body = await options.parseBody(req);
       throwIfAborted(signal);
-      if (!isPlainObject(body)) {
+      if (
+        !isPlainObject(body) ||
+        (body.message !== undefined && typeof body.message !== 'string')
+      ) {
         asJson(res, 400, { error: 'Invalid request body' });
         return undefined;
       }
@@ -200,6 +203,9 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
             ...(decision === 'approve' &&
             Object.prototype.hasOwnProperty.call(body, 'argumentsOverride')
               ? { arguments: body.argumentsOverride }
+              : {}),
+            ...(decision === 'deny' && typeof body.message === 'string'
+              ? { message: body.message }
               : {})
           }
         ],

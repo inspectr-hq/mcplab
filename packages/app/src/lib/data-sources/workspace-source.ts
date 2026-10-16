@@ -204,8 +204,8 @@ export const workspaceSource: EvalDataSource = {
   async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
     return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
   },
-  async denyResultAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.denyResultAssistantToolCall(sessionId, callId);
+  async denyResultAssistantToolCall(sessionId, callId, message) {
+    return workspaceApiClient.denyResultAssistantToolCall(sessionId, callId, message);
   },
   async closeResultAssistantSession(sessionId) {
     await workspaceApiClient.closeResultAssistantSession(sessionId);
@@ -254,8 +254,8 @@ export const workspaceSource: EvalDataSource = {
       argumentsOverride
     );
   },
-  async denyScenarioAssistantToolCall(sessionId, callId) {
-    return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId);
+  async denyScenarioAssistantToolCall(sessionId, callId, message) {
+    return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId, message);
   },
   async approveAllScenarioAssistantToolCalls(sessionId) {
     return workspaceApiClient.approveAllScenarioAssistantToolCalls(sessionId);

@@ -176,7 +176,12 @@ describe('useAssistantSession', () => {
   it('closes a session created after a reset instead of adopting it', async () => {
     let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
     const api = makeApi({
-      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+      createSession: vi.fn(
+        () =>
+          new Promise<{ sessionId: string; session: ResultAssistantSessionView }>(
+            (resolve) => (finishCreate = resolve)
+          )
+      )
     });
     const { result } = renderHook(() =>
       useAssistantSession({ api, open: true, label: 'Test Assistant', autoStart: true })
@@ -195,7 +200,12 @@ describe('useAssistantSession', () => {
   it('closes a session whose creation finishes after unmount', async () => {
     let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
     const api = makeApi({
-      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+      createSession: vi.fn(
+        () =>
+          new Promise<{ sessionId: string; session: ResultAssistantSessionView }>(
+            (resolve) => (finishCreate = resolve)
+          )
+      )
     });
     const { unmount } = renderHook(() =>
       useAssistantSession({ api, open: true, label: 'Test Assistant', autoStart: true })
@@ -213,7 +223,12 @@ describe('useAssistantSession', () => {
   it('keeps creating the session when the first message is cancelled, then reuses it', async () => {
     let finishCreate!: (value: { sessionId: string; session: ResultAssistantSessionView }) => void;
     const api = makeApi({
-      createSession: vi.fn(() => new Promise((resolve) => (finishCreate = resolve)))
+      createSession: vi.fn(
+        () =>
+          new Promise<{ sessionId: string; session: ResultAssistantSessionView }>(
+            (resolve) => (finishCreate = resolve)
+          )
+      )
     });
     const { result } = renderHook(() =>
       useAssistantSession({ api, open: true, label: 'Test Assistant' })

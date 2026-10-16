@@ -211,7 +211,7 @@ export function ScenarioAssistantDialog({
 
   const handleApprove = (callId: string, argumentsOverride?: unknown) =>
     assistant.approve(callId, argumentsOverride);
-  const handleDeny = (callId: string) => assistant.deny(callId);
+  const handleDeny = (callId: string, message?: string) => assistant.deny(callId, message);
   const handleApproveAll = () => assistant.approveAll?.();
 
   const blurActiveElement = () => {
@@ -331,7 +331,7 @@ export function ScenarioAssistantDialog({
                 onApprove={(callId, argumentsOverride) =>
                   void handleApprove(callId, argumentsOverride)
                 }
-                onDeny={(callId) => void handleDeny(callId)}
+                onDeny={(callId, message) => void handleDeny(callId, message)}
                 onApproveAll={assistant.approveAll ? () => void handleApproveAll() : undefined}
                 notices={session?.warnings?.map((warning, index) => (
                   <div

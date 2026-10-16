@@ -7,11 +7,12 @@ import { cn } from '@/lib/utils';
 import {
   AssistantComposer,
   AssistantMessageRow,
-  AssistantToolCallCard,
   AssistantTypingIndicator,
   type AssistantMessage,
   type AssistantToolCall
 } from './AssistantChat';
+import { AssistantReasoning } from './AssistantReasoning';
+import { ToolActivity, ToolApprovalCard } from './AssistantToolCalls';
 
 export type ConversationMessage = AssistantMessage & {
   id?: string;
@@ -51,7 +52,7 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
   starting?: boolean;
   expired?: boolean;
   onApprove?: (callId: string, argumentsOverride?: unknown) => void;
-  onDeny?: (callId: string) => void;
+  onDeny?: (callId: string, message?: string) => void;
   onApproveAll?: () => void;
   allowEditArguments?: boolean;
   /** Actions inside a user or assistant message bubble (not tool requests). */
@@ -87,6 +88,11 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
     (call) => call.status === 'pending' && !referencedCallIds.has(call.id)
   );
   const decisionsDisabled = busy || expired;
+  // The reasoning block shows the model is working; a second indicator would repeat it.
+  const reasoningInProgress =
+    last?.role === 'assistant' &&
+    last.reasoning !== undefined &&
+    last.reasoning.durationMs === undefined;
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
@@ -117,6 +123,11 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
                 <AssistantMessageRow
                   message={message}
                   assistantLabel={message.role === 'assistant' ? 'Assistant' : undefined}
+                  header={
+                    message.role === 'assistant' && message.reasoning ? (
+                      <AssistantReasoning reasoning={message.reasoning} />
+                    ) : undefined
+                  }
                   footer={renderMessageFooter?.(message)}
                   renderActions={
                     message.role === 'user' || message.role === 'assistant' ? (
@@ -138,10 +149,10 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
                 Pending actions
               </div>
               {unreferencedPending.map((call) => (
-                <AssistantToolCallCard
+                <ToolApprovalCard
                   key={call.id}
                   call={call}
-                  loading={decisionsDisabled}
+                  disabled={decisionsDisabled}
                   allowEdit={allowEditArguments}
                   onApprove={onApprove}
                   onDeny={onDeny}
@@ -160,7 +171,7 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
               Starting assistant session...
             </div>
           )}
-          {busy && !starting && <AssistantTypingIndicator />}
+          {busy && !starting && !reasoningInProgress && <AssistantTypingIndicator />}
           <div ref={endRef} />
         </div>
       </div>
@@ -185,21 +196,26 @@ function ToolRequest({
   disabled: boolean;
   allowEdit: boolean;
   onApprove?: (callId: string, argumentsOverride?: unknown) => void;
-  onDeny?: (callId: string) => void;
+  onDeny?: (callId: string, message?: string) => void;
   onApproveAll?: () => void;
 }) {
-  const pendingCount = calls.filter((call) => call.status === 'pending').length;
+  // Calls that ran without asking are activity; the rest are decisions with a lasting record.
+  const automatic = calls.filter((call) => call.requiresApproval === false);
+  const decisions = calls.filter((call) => call.requiresApproval !== false);
+  const pendingCount = decisions.filter((call) => call.status === 'pending').length;
   return (
     <div className="flex items-start gap-2">
       <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
         <Bot className="h-3 w-3" />
       </div>
       <div className="w-full min-w-0 max-w-[92%] space-y-2">
+        {message.reasoning && <AssistantReasoning reasoning={message.reasoning} />}
         {message.text && <MarkdownContent text={message.text} className="text-sm" />}
-        {onApproveAll && calls.length > 1 && pendingCount > 0 && (
+        {automatic.length > 0 && <ToolActivity calls={automatic} />}
+        {onApproveAll && decisions.length > 1 && pendingCount > 0 && (
           <div className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-1.5">
             <span className="text-xs text-amber-900">
-              {calls.length - pendingCount} of {calls.length} tool calls resolved
+              {decisions.length - pendingCount} of {decisions.length} tool calls resolved
             </span>
             <Button
               type="button"
@@ -212,11 +228,11 @@ function ToolRequest({
             </Button>
           </div>
         )}
-        {calls.map((call) => (
-          <AssistantToolCallCard
+        {decisions.map((call) => (
+          <ToolApprovalCard
             key={call.id}
             call={call}
-            loading={disabled}
+            disabled={disabled}
             allowEdit={allowEdit}
             onApprove={onApprove}
             onDeny={onDeny}

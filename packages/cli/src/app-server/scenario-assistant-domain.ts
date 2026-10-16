@@ -13,6 +13,7 @@ import {
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  assistantToolDisplay,
   ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
@@ -24,6 +25,7 @@ import { endAssistantSseClients } from './assistant-events.js';
 import { setupAssistantRuntimeSession } from './assistant-service.js';
 import type {
   AssistantRuntimeDefinition,
+  AssistantToolDisplay,
   AssistantRuntimeFactory,
   AssistantRuntimeSession
 } from './assistant-runtime-contract.js';
@@ -64,7 +66,7 @@ interface ScenarioAssistantResources {
   context: ScenarioAssistantContextInput;
   mcp: McpClientManager;
   tools: ToolDef[];
-  toolPublicMap: Map<string, { server: string; tool: string }>;
+  toolPublicMap: Map<string, { server: string; tool: string; display?: AssistantToolDisplay }>;
   /** Selected servers advertising MCP resources or prompts, offered as read-only context tools. */
   contextServers: McpContextServers;
   systemPromptCache?: string;
@@ -243,7 +245,11 @@ function createScenarioAssistantSetup(
           const tools = await state.mcp.listTools(serverName);
           for (const tool of tools) {
             const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
-            state.toolPublicMap.set(publicName, { server: serverName, tool: tool.name });
+            state.toolPublicMap.set(publicName, {
+              server: serverName,
+              tool: tool.name,
+              display: assistantToolDisplay(tool)
+            });
             state.tools.push({
               ...tool,
               name: publicName,
@@ -277,6 +283,7 @@ function createScenarioAssistantSetup(
               tool: mapping.tool,
               description: tool.description,
               inputSchema: tool.inputSchema,
+              display: mapping.display,
               execute: async (arguments_: unknown, signal?: AbortSignal) =>
                 withTimeout(
                   () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
@@ -291,6 +298,7 @@ function createScenarioAssistantSetup(
             server: 'local',
             tool: PROPOSE_SCENARIO_CHANGES,
             description: 'Submit structured scenario changes for the user to review and apply.',
+            display: { title: 'Propose scenario changes' },
             inputSchema: proposalSchema,
             execute: async (args: unknown, _signal?: AbortSignal) =>
               validateScenarioAssistantProposal(args, state.toolPublicMap),

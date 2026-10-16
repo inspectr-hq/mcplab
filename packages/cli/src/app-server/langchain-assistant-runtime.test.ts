@@ -668,3 +668,81 @@ it('cancels a running turn directly, without the service aborting it', async () 
   expect(session.getSnapshot()).not.toHaveProperty('activeTurnId');
   await session.dispose();
 });
+
+it('shows each call with its tool details and timing, and passes a deny reason to the model', async () => {
+  const histories: BaseMessage[][] = [];
+  const session = await createScriptedRuntimeFactory(async (_definition, messages) => {
+    histories.push(messages);
+    return histories.length === 1
+      ? {
+          type: 'tool_call_request',
+          text: 'Reading, then writing',
+          toolCalls: [
+            { id: 'r1', name: 'read', arguments: {} },
+            { id: 'w1', name: 'write', arguments: { path: '/etc/app' } }
+          ]
+        }
+      : { type: 'assistant_message', text: 'Understood' };
+  }).create(
+    definitionWith({
+      tools: [
+        {
+          name: 'read',
+          server: 's',
+          tool: 'read',
+          execute: async () => ({ ok: true })
+        },
+        {
+          name: 'write',
+          server: 's',
+          tool: 'write',
+          inputSchema: { properties: { path: { type: 'string', title: 'File path' } } },
+          display: {
+            title: 'Write a file',
+            description: 'Overwrites a file.',
+            hints: { destructive: true }
+          },
+          execute: vi.fn(async () => ({ ok: true }))
+        }
+      ],
+      approvalPolicy: (name) => (name === 'read' ? 'automatic' : 'approval_required')
+    })
+  );
+  await session.sendMessage('go');
+  const byId = () =>
+    Object.fromEntries(session.getSnapshot().pendingToolCalls.map((call) => [call.id, call]));
+  expect(byId().r1).toMatchObject({ requiresApproval: false, status: 'approved' });
+  expect(byId().r1!.startedAt).toBeDefined();
+  expect(byId().r1!.completedAt).toBeDefined();
+  expect(byId().w1).toMatchObject({
+    requiresApproval: true,
+    status: 'pending',
+    title: 'Write a file',
+    description: 'Overwrites a file.',
+    hints: { destructive: true },
+    argumentLabels: { path: 'File path' }
+  });
+
+  await expect(
+    session.resolveToolCalls([{ toolCallId: 'w1', decision: 'deny', message: 'x'.repeat(2001) }])
+  ).rejects.toMatchObject({ statusCode: 400 });
+  expect(byId().w1!.status).toBe('pending');
+
+  await expect(
+    session.resolveToolCalls([
+      { toolCallId: 'w1', decision: 'deny', message: ' Use /tmp instead ' }
+    ])
+  ).resolves.toMatchObject({ type: 'assistant_message', text: 'Understood' });
+  expect(byId().w1).toMatchObject({ status: 'denied', denyMessage: 'Use /tmp instead' });
+  expect(byId().w1!.startedAt).toBeUndefined();
+  const denial = histories[1]!.find(
+    (message): message is ToolMessage =>
+      ToolMessage.isInstance(message) && message.tool_call_id === 'w1'
+  );
+  expect(JSON.parse(String(denial?.content))).toEqual({
+    denied: true,
+    reason: 'User denied tool call',
+    message: 'Use /tmp instead'
+  });
+  await session.dispose();
+});

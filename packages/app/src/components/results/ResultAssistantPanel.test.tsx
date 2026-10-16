@@ -172,7 +172,7 @@ describe('ResultAssistantPanel', () => {
       />
     );
 
-    expect(screen.getByText('Tool call read run artifact')).toBeInTheDocument();
+    expect(screen.getByText('Read run artifact')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
@@ -232,8 +232,8 @@ describe('ResultAssistantPanel', () => {
       />
     );
     expect(screen.getByText('I need both tools.')).toBeInTheDocument();
-    expect(screen.getByText('Tool call read a')).toBeInTheDocument();
-    expect(screen.getByText('Tool call read b')).toBeInTheDocument();
+    expect(screen.getByText('Read a')).toBeInTheDocument();
+    expect(screen.getByText('Read b')).toBeInTheDocument();
     expect(screen.getByText('Needs approval')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));

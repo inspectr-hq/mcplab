@@ -20,6 +20,7 @@ import {
 } from 'langchain';
 import {
   isAbortError,
+  type AssistantReasoning,
   type AssistantRuntimeEvent,
   type AssistantRuntimeMessage,
   type AssistantRuntimeResponse,
@@ -70,12 +71,28 @@ interface ActiveTurn {
   proposals: ScenarioAssistantSuggestionBundle[];
   /** Calls the user already decided; LangGraph keeps listing them until the batch settles. */
   decided: Set<string>;
-  streaming?: { id: string; text: string; createdAt: string };
+  streaming?: StreamingMessage;
   paused: boolean;
 }
 
+interface StreamingMessage {
+  id: string;
+  text: string;
+  createdAt: string;
+  reasoning?: StreamingReasoning;
+}
+
+interface StreamingReasoning {
+  text: string;
+  startedAt: number;
+  durationMs?: number;
+  /** Summary part being streamed; a new part starts a new paragraph. */
+  part?: number;
+}
+
 const TOOL_REQUEST_FALLBACK_TEXT = 'I need a tool to help answer.';
-const DENIED_RESULT = JSON.stringify({ denied: true, reason: 'User denied tool call' });
+const DENIED_REASON = 'User denied tool call';
+const MAX_DENY_MESSAGE_CHARS = 2000;
 // Each model round and tool batch is a few graph steps; the model-call budget is the real limit.
 const GRAPH_RECURSION_LIMIT = MAX_ASSISTANT_MODEL_CALLS * 10;
 
@@ -101,6 +118,7 @@ class LangChainAssistantRuntime {
   /** Calls answered by settling; a late tool completion must not change them again. */
   private readonly settled = new Set<string>();
   private readonly suggestionsByMessageId = new Map<string, ScenarioAssistantSuggestionBundle>();
+  private readonly reasoningByMessageId = new Map<string, AssistantReasoning>();
   private readonly createdAt = new Map<string, string>();
   private readonly turnIds = new Set<string>();
   /** Which turn and streamed message each model run started for; late tokens are matched against it. */
@@ -127,7 +145,8 @@ class LangChainAssistantRuntime {
   async initialize(createChatModel: AssistantChatModelFactory) {
     const tokens = new TokenSink(
       (runId) => this.onModelRunStart(runId),
-      (token, runId) => this.onToken(token, runId)
+      (token, runId) => this.onToken(token, runId),
+      (text, part, runId) => this.onReasoning(text, part, runId)
     );
     const setup = await createChatModel(this.definition, {
       callbacks: [tokens],
@@ -212,13 +231,38 @@ class LangChainAssistantRuntime {
       throw Object.assign(new Error('Edited tool arguments must be a JSON object'), {
         statusCode: 400
       });
+    if (
+      validated.some(
+        ({ decision }) =>
+          decision.message !== undefined &&
+          (decision.decision !== 'deny' ||
+            typeof decision.message !== 'string' ||
+            decision.message.length > MAX_DENY_MESSAGE_CHARS)
+      )
+    )
+      throw Object.assign(
+        new Error(`A deny reason must be text of at most ${MAX_DENY_MESSAGE_CHARS} characters`),
+        { statusCode: 400 }
+      );
     const resume: Record<string, unknown> = {};
     for (const { decision, call } of validated) {
       turn.decided.add(call.id);
       if (decision.decision === 'deny') {
-        this.updateCall(call.id, { status: 'denied', error: 'User denied tool call' });
+        const message = decision.message?.trim();
+        this.updateCall(call.id, {
+          status: 'denied',
+          error: DENIED_REASON,
+          ...(message ? { denyMessage: message } : {})
+        });
         this.emit('tool_call_denied', { pendingToolCallId: call.id });
-        resume[interrupts.get(call.id)!] = { type: 'reject', message: DENIED_RESULT };
+        resume[interrupts.get(call.id)!] = {
+          type: 'reject',
+          message: JSON.stringify({
+            denied: true,
+            reason: DENIED_REASON,
+            ...(message ? { message } : {})
+          })
+        };
       } else {
         const edited = decision.arguments !== undefined;
         this.updateCall(call.id, {
@@ -419,6 +463,7 @@ class LangChainAssistantRuntime {
         if (this.turn) this.turn.streaming = { id, text: '', createdAt };
         this.createdAt.set(id, createdAt);
         const response = await handler(request);
+        this.keepReasoning(id);
         return this.normalizeModelResponse(response as AIMessage, id);
       },
       wrapToolCall: async (request, handler) => {
@@ -466,6 +511,8 @@ class LangChainAssistantRuntime {
     const toolCalls = requested.map((call) => {
       const callId = uniqueToolCallId(call.providerId, usedIds);
       const known = this.definition.tools.find((item) => item.name === call.name);
+      const display = known?.display;
+      const argumentLabels = known ? schemaFieldTitles(known.inputSchema) : undefined;
       this.calls.push({
         id: callId,
         server: known?.server ?? 'unknown',
@@ -474,18 +521,27 @@ class LangChainAssistantRuntime {
         arguments: call.args,
         ...(call.validationError ? { validationError: call.validationError } : {}),
         status: 'pending',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        requiresApproval: this.definition.approvalPolicy(call.name) === 'approval_required',
+        ...(display?.title ? { title: display.title } : {}),
+        ...(display?.description ? { description: display.description } : {}),
+        ...(display?.hints ? { hints: display.hints } : {}),
+        ...(argumentLabels ? { argumentLabels } : {})
       });
       if (call.validationError) this.validationErrors.set(callId, call.validationError);
       return { id: callId, name: call.name, args: call.args, type: 'tool_call' as const };
     });
     const additionalKwargs = { ...response.additional_kwargs };
     delete additionalKwargs.tool_calls;
+    // OpenAI's Responses API replays its raw output, which carries the provider's call IDs.
+    const responseMetadata = { ...response.response_metadata };
+    if (toolCalls.some((call, index) => call.id !== requested[index]!.providerId))
+      delete responseMetadata.output;
     return new AIMessage({
       content: withNormalizedToolUseBlocks(response.content, toolCalls),
       id,
       additional_kwargs: additionalKwargs,
-      response_metadata: response.response_metadata,
+      response_metadata: responseMetadata,
       usage_metadata: response.usage_metadata,
       tool_calls: toolCalls,
       invalid_tool_calls: []
@@ -499,6 +555,8 @@ class LangChainAssistantRuntime {
         const turn = this.turn;
         if (callId) {
           this.executing.add(callId);
+          // Approval happens before the tool runs, so this is when execution really starts.
+          this.updateCall(callId, { startedAt: new Date().toISOString() });
           if (this.calls.find((call) => call.id === callId)?.status === 'pending') {
             this.updateCall(callId, { status: 'approved' });
             this.emit('tool_call_approved', { pendingToolCallId: callId });
@@ -526,6 +584,7 @@ class LangChainAssistantRuntime {
     const current = this.calls.find((call) => call.id === callId);
     if (!current || this.settled.has(callId) || this.disposed) return;
     const content = messageText(result);
+    if (current.startedAt) this.updateCall(callId, { completedAt: new Date().toISOString() });
     if (current.status === 'denied') {
       this.updateCall(callId, { resultPreview: resultPreview(content) });
     } else if (result.status === 'error') {
@@ -560,6 +619,8 @@ class LangChainAssistantRuntime {
     if (!token) return;
     const delta = streaming.text ? token : token.trimStart();
     if (!delta) return;
+    if (streaming.reasoning && streaming.reasoning.durationMs === undefined)
+      streaming.reasoning.durationMs = Date.now() - streaming.reasoning.startedAt;
     const offset = streaming.text.length;
     streaming.text += delta;
     this.publish();
@@ -570,6 +631,40 @@ class LangChainAssistantRuntime {
       delta,
       createdAt: streaming.createdAt,
       revision: this.revision
+    });
+  }
+
+  private onReasoning(text: string, part: number | undefined, runId: string) {
+    const origin = this.modelRuns.get(runId);
+    const streaming = this.turn?.streaming;
+    if (!origin || origin.turn !== this.turn || !streaming || streaming.id !== origin.messageId)
+      return;
+    const reasoning = (streaming.reasoning ??= { text: '', startedAt: Date.now() });
+    const newPart = reasoning.text !== '' && part !== undefined && part !== reasoning.part;
+    reasoning.part = part ?? reasoning.part;
+    const delta = reasoning.text ? (newPart ? `\n\n${text}` : text) : text.trimStart();
+    if (!delta) return;
+    const offset = reasoning.text.length;
+    reasoning.text += delta;
+    this.publish();
+    this.emit('assistant_reasoning_delta', {
+      turnId: this.turn!.id,
+      messageId: streaming.id,
+      offset,
+      delta,
+      createdAt: streaming.createdAt,
+      revision: this.revision
+    });
+  }
+
+  /** Keeps a finished model call's reasoning for its message, once the call has returned. */
+  private keepReasoning(messageId: string) {
+    const reasoning = this.turn?.streaming?.reasoning;
+    if (this.turn?.streaming?.id !== messageId || !reasoning?.text.trim()) return;
+    reasoning.durationMs ??= Date.now() - reasoning.startedAt;
+    this.reasoningByMessageId.set(messageId, {
+      text: reasoning.text.trim(),
+      durationMs: reasoning.durationMs
     });
   }
 
@@ -588,6 +683,7 @@ class LangChainAssistantRuntime {
     this.revision += 1;
     const turn = this.turn;
     const active = turn && (this.running || turn.paused);
+    const streaming = active ? turn.streaming : undefined;
     this.projection = {
       revision: this.revision,
       messages: [
@@ -596,13 +692,23 @@ class LangChainAssistantRuntime {
       ],
       pendingToolCalls: structuredClone(this.calls),
       ...(active ? { activeTurnId: turn.id } : {}),
-      ...(active && turn.streaming?.text
+      ...(streaming && (streaming.text || streaming.reasoning?.text)
         ? {
             streamingMessage: {
-              id: turn.streaming.id,
-              turnId: turn.id,
-              text: turn.streaming.text,
-              createdAt: turn.streaming.createdAt
+              id: streaming.id,
+              turnId: turn!.id,
+              text: streaming.text,
+              createdAt: streaming.createdAt,
+              ...(streaming.reasoning?.text
+                ? {
+                    reasoning: {
+                      text: streaming.reasoning.text,
+                      ...(streaming.reasoning.durationMs !== undefined
+                        ? { durationMs: streaming.reasoning.durationMs }
+                        : {})
+                    }
+                  }
+                : {})
             }
           }
         : {})
@@ -618,6 +724,7 @@ class LangChainAssistantRuntime {
       const callIds = (message.tool_calls ?? []).map((call) => call.id ?? '');
       const first = this.calls.find((call) => call.id === callIds[0]);
       const suggestions = this.suggestionsByMessageId.get(id);
+      const reasoning = this.reasoningByMessageId.get(id);
       if (!callIds.length)
         return [
           {
@@ -625,7 +732,8 @@ class LangChainAssistantRuntime {
             role: 'assistant',
             text: messageText(message),
             createdAt,
-            ...(suggestions ? { suggestions } : {})
+            ...(suggestions ? { suggestions } : {}),
+            ...(reasoning ? { reasoning } : {})
           }
         ];
       return [
@@ -634,6 +742,7 @@ class LangChainAssistantRuntime {
           role: 'assistant',
           text: messageText(message) || TOOL_REQUEST_FALLBACK_TEXT,
           createdAt,
+          ...(reasoning ? { reasoning } : {}),
           pendingToolCallId: callIds[0],
           pendingToolCallIds: callIds,
           toolRequestServer: first?.server,
@@ -719,7 +828,8 @@ class TokenSink extends BaseCallbackHandler {
 
   constructor(
     private readonly onStart: (runId: string) => void,
-    private readonly onToken: (token: string, runId: string) => void
+    private readonly onToken: (token: string, runId: string) => void,
+    private readonly onReasoning: (text: string, part: number | undefined, runId: string) => void
   ) {
     super();
   }
@@ -728,9 +838,46 @@ class TokenSink extends BaseCallbackHandler {
     this.onStart(runId);
   }
 
-  handleLLMNewToken(token: string, _index: unknown, runId: string) {
+  handleLLMNewToken(
+    token: string,
+    _index: unknown,
+    runId: string,
+    _parentRunId?: string,
+    _tags?: string[],
+    fields?: { chunk?: unknown }
+  ) {
+    // Reasoning arrives as standard content blocks next to (empty) answer text.
+    for (const block of reasoningBlocks(fields?.chunk))
+      this.onReasoning(block.text, block.part, runId);
     this.onToken(token, runId);
   }
+}
+
+function reasoningBlocks(chunk: unknown): Array<{ text: string; part?: number }> {
+  const content =
+    isRecord(chunk) && isRecord(chunk.message) ? (chunk.message.content as unknown) : undefined;
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block) =>
+    isRecord(block) && block.type === 'reasoning' && typeof block.reasoning === 'string'
+      ? [
+          {
+            text: block.reasoning,
+            ...(typeof block.index === 'number' ? { part: block.index } : {})
+          }
+        ]
+      : []
+  );
+}
+
+/** Readable labels for argument fields, where the input schema gives property titles. */
+function schemaFieldTitles(schema: unknown): Record<string, string> | undefined {
+  const properties = isRecord(schema) && isRecord(schema.properties) ? schema.properties : {};
+  const titles = Object.entries(properties).flatMap(([key, property]) =>
+    isRecord(property) && typeof property.title === 'string' && property.title.trim()
+      ? [[key, property.title.trim()] as const]
+      : []
+  );
+  return titles.length ? Object.fromEntries(titles) : undefined;
 }
 
 /** LangChain wraps errors raised in middleware; callers need the original (status codes, categories). */

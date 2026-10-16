@@ -57,7 +57,8 @@ export function useAssistantStream<TSession extends StreamSession>(params: {
             messages: current.messages,
             activeTurnId: current.activeTurnId,
             streamingMessage: current.streamingMessage,
-            delta
+            delta,
+            kind: event.type === 'assistant_reasoning_delta' ? 'reasoning' : 'text'
           });
           if (streamingMessage === current.streamingMessage) return;
           const next = { ...current, revision: delta.revision, streamingMessage } as TSession;

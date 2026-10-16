@@ -1,4 +1,41 @@
-import { formatAssistantToolName } from '@inspectr/mcplab-core';
+import {
+  formatAssistantToolName,
+  type AssistantToolHints,
+  type ToolDef
+} from '@inspectr/mcplab-core';
+import type { AssistantToolDisplay } from './assistant-runtime-contract.js';
+
+const MAX_DISPLAY_DESCRIPTION_CHARS = 300;
+
+/** What someone approving a call needs from an MCP tool definition: its title, purpose and risk. */
+export function assistantToolDisplay(tool: ToolDef): AssistantToolDisplay {
+  const annotations = tool.annotations;
+  const hints: AssistantToolHints = {
+    ...(annotations?.readOnlyHint !== undefined ? { readOnly: annotations.readOnlyHint } : {}),
+    ...(annotations?.destructiveHint !== undefined
+      ? { destructive: annotations.destructiveHint }
+      : {}),
+    ...(annotations?.idempotentHint !== undefined
+      ? { idempotent: annotations.idempotentHint }
+      : {}),
+    ...(annotations?.openWorldHint !== undefined ? { openWorld: annotations.openWorldHint } : {})
+  };
+  const title = tool.title ?? annotations?.title;
+  // The first paragraph is the summary; the rest is usually guidance for the model.
+  const summary = tool.description
+    ?.trim()
+    .split(/\n\s*\n/)[0]
+    ?.trim();
+  const description =
+    summary && summary.length > MAX_DISPLAY_DESCRIPTION_CHARS
+      ? `${summary.slice(0, MAX_DISPLAY_DESCRIPTION_CHARS - 1).trimEnd()}…`
+      : summary;
+  return {
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(Object.keys(hints).length ? { hints } : {})
+  };
+}
 
 export { formatAssistantToolName };
 

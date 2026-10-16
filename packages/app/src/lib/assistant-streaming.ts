@@ -1,4 +1,8 @@
-import type { AssistantRuntimeSnapshot, AssistantSessionEvent } from '@/lib/data-sources/types';
+import type {
+  AssistantReasoning,
+  AssistantRuntimeSnapshot,
+  AssistantSessionEvent
+} from '@/lib/data-sources/types';
 
 export type AssistantStreamingMessage = NonNullable<AssistantRuntimeSnapshot['streamingMessage']>;
 
@@ -7,39 +11,49 @@ type AssistantMessageLike = {
   role: string;
   text: string;
   createdAt: string;
+  reasoning?: AssistantReasoning;
 };
 
-export type AssistantMessageDelta = Extract<
+type AssistantDeltaEvent = Extract<
   AssistantSessionEvent,
-  { type: 'assistant_message_delta' }
->['payload'];
+  { type: 'assistant_message_delta' | 'assistant_reasoning_delta' }
+>;
 
+export type AssistantMessageDelta = AssistantDeltaEvent['payload'];
+
+/** Applies an answer or reasoning delta; out-of-order or stale deltas leave the message as is. */
 export function applyAssistantMessageDelta<TMessage extends AssistantMessageLike>(params: {
   messages: TMessage[];
   activeTurnId?: string;
   streamingMessage?: AssistantStreamingMessage;
   delta: AssistantMessageDelta;
+  kind?: 'text' | 'reasoning';
 }): AssistantStreamingMessage | undefined {
-  const { messages, activeTurnId, streamingMessage, delta } = params;
+  const { messages, activeTurnId, streamingMessage, delta, kind = 'text' } = params;
   if (activeTurnId !== delta.turnId || messages.some((message) => message.id === delta.messageId)) {
     return streamingMessage;
   }
+  const current =
+    streamingMessage?.id === delta.messageId
+      ? streamingMessage
+      : { id: delta.messageId, turnId: delta.turnId, text: '', createdAt: delta.createdAt };
+  if (current.turnId !== delta.turnId) return streamingMessage;
 
-  if (!streamingMessage || streamingMessage.id !== delta.messageId) {
-    if (delta.offset !== 0) return streamingMessage;
-    return {
-      id: delta.messageId,
-      turnId: delta.turnId,
-      text: delta.delta,
-      createdAt: delta.createdAt
-    };
+  if (kind === 'reasoning') {
+    const reasoning = current.reasoning ?? { text: '' };
+    if (delta.offset !== reasoning.text.length) return streamingMessage;
+    return { ...current, reasoning: { ...reasoning, text: reasoning.text + delta.delta } };
   }
-
-  if (streamingMessage.turnId !== delta.turnId || delta.offset !== streamingMessage.text.length) {
-    return streamingMessage;
-  }
-
-  return { ...streamingMessage, text: streamingMessage.text + delta.delta };
+  if (delta.offset !== current.text.length) return streamingMessage;
+  const reasoning = current.reasoning;
+  return {
+    ...current,
+    text: current.text + delta.delta,
+    // Answer text means reasoning has finished; the snapshot brings the exact duration.
+    ...(reasoning && reasoning.durationMs === undefined
+      ? { reasoning: { ...reasoning, durationMs: Date.now() - Date.parse(current.createdAt) } }
+      : {})
+  };
 }
 
 export function assistantMessagesWithStreaming<TMessage extends AssistantMessageLike>(
@@ -55,7 +69,8 @@ export function assistantMessagesWithStreaming<TMessage extends AssistantMessage
       id: streamingMessage.id,
       role: 'assistant' as const,
       text: streamingMessage.text,
-      createdAt: streamingMessage.createdAt
+      createdAt: streamingMessage.createdAt,
+      ...(streamingMessage.reasoning ? { reasoning: streamingMessage.reasoning } : {})
     } as TMessage
   ];
 }
@@ -73,6 +88,9 @@ export function shouldUseAssistantSession<
 
 export function isAssistantMessageDelta<TSession>(
   event: AssistantSessionEvent<TSession>
-): event is Extract<AssistantSessionEvent<TSession>, { type: 'assistant_message_delta' }> {
-  return event.type === 'assistant_message_delta';
+): event is Extract<
+  AssistantSessionEvent<TSession>,
+  { type: 'assistant_message_delta' | 'assistant_reasoning_delta' }
+> {
+  return event.type === 'assistant_message_delta' || event.type === 'assistant_reasoning_delta';
 }
