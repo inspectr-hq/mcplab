@@ -238,4 +238,35 @@ describe('AssistantConversation', () => {
     );
     expect(scrollIntoView).toHaveBeenCalled();
   });
+
+  it('follows growing reasoning, unless the user scrolled up', () => {
+    const scrollIntoView = vi.mocked(HTMLElement.prototype.scrollIntoView);
+    const thinking = (text: string) => [
+      {
+        id: 'm',
+        role: 'assistant' as const,
+        text: '',
+        createdAt: '2026-10-16T10:00:00.000Z',
+        reasoning: { text }
+      }
+    ];
+    const view = (text: string) => (
+      <AssistantConversation messages={thinking(text)} toolCalls={[]} busy composer={composer} />
+    );
+    const { container, rerender } = render(view('Checking'));
+    scrollIntoView.mockClear();
+    rerender(view('Checking the run'));
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    const scroller = container.querySelector('.overflow-y-auto') as HTMLDivElement;
+    Object.defineProperties(scroller, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, writable: true, value: 100 }
+    });
+    fireEvent.scroll(scroller);
+    scrollIntoView.mockClear();
+    rerender(view('Checking the run and its checks'));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
 });

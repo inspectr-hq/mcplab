@@ -75,7 +75,7 @@ export function AssistantConversation<TMessage extends ConversationMessage>({
   useEffect(() => {
     if (!followRef.current) return;
     endRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, last?.text, toolCalls.length, busy]);
+  }, [messages.length, last?.text, last?.reasoning?.text, toolCalls.length, busy]);
 
   const onScroll = () => {
     const el = scrollRef.current;

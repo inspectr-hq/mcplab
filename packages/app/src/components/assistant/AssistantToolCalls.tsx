@@ -117,8 +117,12 @@ export function ToolApprovalCard({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!pending || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
     event.preventDefault();
-    if (event.target instanceof HTMLTextAreaElement && event.target.dataset.role === 'reason')
-      deny();
+    // A focused Approve or Deny button decides; elsewhere the card's mode does.
+    const focused =
+      event.target instanceof HTMLElement
+        ? event.target.closest<HTMLElement>('[data-action]')?.dataset.action
+        : undefined;
+    if ((focused ?? (explaining ? 'deny' : 'approve')) === 'deny') deny();
     else if (!draftError) approve();
   };
 
@@ -288,6 +292,8 @@ export function ToolApprovalCard({
           variant="outline"
           className="h-7 px-2 text-xs"
           disabled={disabled}
+          data-action="deny"
+          aria-keyshortcuts={explaining ? 'Meta+Enter Control+Enter' : undefined}
           onClick={deny}
         >
           Deny
@@ -298,6 +304,7 @@ export function ToolApprovalCard({
             size="sm"
             className="h-7 px-2 text-xs"
             disabled={disabled || Boolean(draftError)}
+            data-action="approve"
             aria-keyshortcuts="Meta+Enter Control+Enter"
             onClick={approve}
           >

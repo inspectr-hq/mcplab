@@ -58,6 +58,38 @@ describe('ToolApprovalCard', () => {
     expect(onApprove).toHaveBeenCalledWith('call-1');
   });
 
+  it('denies, never approves, with Cmd+Enter while a reason is being written or Deny has focus', () => {
+    const onApprove = vi.fn();
+    const onDeny = vi.fn();
+    const { rerender } = render(
+      <ToolApprovalCard call={call()} onApprove={onApprove} onDeny={onDeny} />
+    );
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Deny' }), {
+      key: 'Enter',
+      ctrlKey: true
+    });
+    expect(onDeny).toHaveBeenLastCalledWith('call-1');
+
+    rerender(
+      <ToolApprovalCard call={call({ id: 'call-2' })} onApprove={onApprove} onDeny={onDeny} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add reason' }));
+    fireEvent.change(screen.getByLabelText('Reason for denying'), {
+      target: { value: 'Not now' }
+    });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Deny' }), {
+      key: 'Enter',
+      metaKey: true
+    });
+    expect(onDeny).toHaveBeenLastCalledWith('call-2', 'Not now');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'No reason' }), {
+      key: 'Enter',
+      metaKey: true
+    });
+    expect(onDeny).toHaveBeenCalledTimes(3);
+    expect(onApprove).not.toHaveBeenCalled();
+  });
+
   it('collapses a decided call to its outcome, keeping the reason or error visible', () => {
     const { rerender } = render(
       <ToolApprovalCard
