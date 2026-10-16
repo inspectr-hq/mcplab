@@ -177,7 +177,8 @@ class LangChainAssistantRuntime {
         modelCallLimitMiddleware({ runLimit: MAX_ASSISTANT_MODEL_CALLS, exitBehavior: 'error' })
       ],
       checkpointer: this.checkpointer,
-      name: 'MCPLab Assistant'
+      // The agent stamps this on every reply, and OpenAI rejects message names with spaces.
+      name: 'mcplab_assistant'
     }) as unknown as AssistantAgent;
   }
 

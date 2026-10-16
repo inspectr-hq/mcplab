@@ -262,6 +262,9 @@ describe('assistant chat models on the standard agent', () => {
       { id: 'call-1', function: { name: 'lookup' } }
     ]);
     expect(followup.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call-1' });
+    // OpenAI rejects replayed messages whose name does not match this pattern.
+    for (const message of followup)
+      if (message.name !== undefined) expect(message.name).toMatch(/^[^\s<|\\/>]+$/);
     await session.dispose();
   });
 
