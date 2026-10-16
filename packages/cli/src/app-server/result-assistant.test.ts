@@ -10,7 +10,7 @@ import {
   type ResultAssistantSession,
   type ResultAssistantSessionInitializer
 } from './result-assistant-domain.js';
-import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
 
 async function createResultDefinition(params: {
@@ -479,7 +479,7 @@ describe('Result Assistant report refresh', () => {
 });
 
 describe('Result Assistant discovered tool approvals', () => {
-  it('automatically runs discovered reads and pauses every call in a mixed batch', async () => {
+  it('automatically runs discovered reads and pauses only the write in a mixed batch', async () => {
     const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([
       { name: 'mcplab_read_run_artifact', inputSchema: { type: 'object' } },
       { name: 'mcplab_trace_stats', inputSchema: { type: 'object' } },
@@ -559,32 +559,30 @@ describe('Result Assistant discovered tool approvals', () => {
       expect(definition.approvalPolicy('unknown_tool')).toBe('approval_required');
       expect(definition.approvalPolicy('mcplab_trace_stats')).toBe('approval_required');
 
-      const runtime = await createLangChainAssistantRuntimeFactory(
-        async (_definition, messages) => {
-          histories.push([...messages]);
-          modelRound += 1;
-          if (modelRound === 1) {
-            return {
-              type: 'tool_call_request',
-              text: '',
-              toolCalls: toolDefinitions.map((tool, index) => ({
-                id: `read-${index + 1}`,
-                name: readNames[index]!,
-                arguments: tool.arguments
-              }))
-            };
-          }
-          if (modelRound === 2) return { type: 'assistant_message', text: 'Read results.' };
+      const runtime = await createScriptedRuntimeFactory(async (_definition, messages) => {
+        histories.push([...messages]);
+        modelRound += 1;
+        if (modelRound === 1) {
           return {
             type: 'tool_call_request',
             text: '',
-            toolCalls: [
-              { id: 'mixed-read', name: readNames[0]!, arguments: {} },
-              { id: 'mixed-write', name: writeName, arguments: { title: 'Report' } }
-            ]
+            toolCalls: toolDefinitions.map((tool, index) => ({
+              id: `read-${index + 1}`,
+              name: readNames[index]!,
+              arguments: tool.arguments
+            }))
           };
         }
-      ).create(definition);
+        if (modelRound === 2) return { type: 'assistant_message', text: 'Read results.' };
+        return {
+          type: 'tool_call_request',
+          text: '',
+          toolCalls: [
+            { id: 'mixed-read', name: readNames[0]!, arguments: {} },
+            { id: 'mixed-write', name: writeName, arguments: { title: 'Report' } }
+          ]
+        };
+      }).create(definition);
 
       await expect(
         runtime.sendMessage('What is the result of the last eval?')
@@ -609,9 +607,9 @@ describe('Result Assistant discovered tool approvals', () => {
 
       const mixed = await runtime.sendMessage('Read the artifact and write a report');
       expect(mixed.type).toBe('tool_call_request');
-      expect(callTool).toHaveBeenCalledTimes(2);
+      expect(callTool).toHaveBeenCalledTimes(3);
       expect(runtime.getSnapshot().pendingToolCalls.slice(-2)).toMatchObject([
-        { id: 'mixed-read', status: 'pending' },
+        { id: 'mixed-read', status: 'approved' },
         { id: 'mixed-write', status: 'pending' }
       ]);
     } finally {
@@ -648,7 +646,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       .mockReturnValue({ provider: 'openai', model: 'test' }),
     assistantRuntimeFactory: {
       create: (definition: any) =>
-        createLangChainAssistantRuntimeFactory(async (_def, messages) => {
+        createScriptedRuntimeFactory(async (_def, messages) => {
           modelRound++;
           if (modelRound === 1)
             return {
@@ -719,24 +717,14 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       status: 200,
       body: { response: { type: 'tool_call_request' } }
     });
+    // The read-only artifact read runs automatically; only the report write waits for approval.
+    expect(captured.at(-1)!.body.response.pendingToolCalls).toMatchObject([{ id: 'write-id' }]);
     const [read, write] = session.runtime.getSnapshot().pendingToolCalls;
     expect([read!.id, write!.id]).toEqual(['read-id', 'write-id']);
-
-    await route(
-      `/api/result-assistant/sessions/${sessionId}/tool-calls/${read!.id}/approve`,
-      'POST',
-      {
-        argumentsOverride: { path: 'edited' }
-      }
-    );
-    expect(captured.at(-1)).toMatchObject({
-      status: 200,
-      body: { response: { type: 'tool_call_resolved', pendingToolCalls: [{ id: 'write-id' }] } }
-    });
     expect(callTool).toHaveBeenCalledWith(
       'mcplab',
       'mcplab_read_run_artifact',
-      { path: 'edited' },
+      { path: 'original' },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
 
@@ -746,7 +734,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       body: {
         session: {
           pendingToolCalls: [
-            { id: 'read-id', status: 'approved', arguments: { path: 'edited' } },
+            { id: 'read-id', status: 'approved', arguments: { path: 'original' } },
             { id: 'write-id', status: 'pending' }
           ]
         }
@@ -764,7 +752,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
     });
     expect(callTool).toHaveBeenCalledTimes(1);
     expect(session.runtime.getSnapshot().pendingToolCalls).toMatchObject([
-      { id: 'read-id', status: 'approved', arguments: { path: 'edited' } },
+      { id: 'read-id', status: 'approved', arguments: { path: 'original' } },
       { id: 'write-id', status: 'denied' }
     ]);
     expect(sseChunks.join('')).toContain('event: tool_call_resolved');

@@ -7,7 +7,7 @@ import type {
   AssistantRuntimeSession
 } from '@inspectr/mcplab-core';
 import { createAssistantRuntimeService } from './assistant-service.js';
-import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 
 describe('assistant runtime service', () => {
   it('guards callbacks cached by a factory after service disposal', async () => {
@@ -161,7 +161,7 @@ describe('assistant runtime service', () => {
         if (event.type === 'session_error') snapshotAtCancellation = runtime.getSnapshot();
       }
     };
-    runtime = await createLangChainAssistantRuntimeFactory(async () => ({
+    runtime = await createScriptedRuntimeFactory(async () => ({
       type: 'tool_call_request',
       text: 'Reading',
       toolCalls: [
@@ -177,6 +177,14 @@ describe('assistant runtime service', () => {
     const controller = new AbortController();
     const operation = service.sendMessage('read', controller.signal);
     await started;
+    // Tools run in parallel: cancel once the fast calls have finished.
+    await vi.waitFor(() =>
+      expect(
+        events
+          .filter((event) => event.type === 'tool_call_resolved')
+          .map((event) => event.payload.pendingToolCallId)
+      ).toEqual(expect.arrayContaining(['first-id', 'third-id']))
+    );
     controller.abort();
     await expect(operation).rejects.toThrow('aborted');
     await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
@@ -191,10 +199,9 @@ describe('assistant runtime service', () => {
     expect(settledSnapshot.pendingToolCalls.map(({ id, status }) => [id, status])).toEqual([
       ['first-id', 'approved'],
       ['slow-id', 'error'],
-      ['third-id', 'error']
+      ['third-id', 'approved']
     ]);
     expect(settledSnapshot.pendingToolCalls[1]?.error).toContain('outcome unknown');
-    expect(settledSnapshot.pendingToolCalls[2]?.error).toContain('before execution');
 
     finishSlow({ value: 'late' });
     await Promise.resolve();
@@ -398,7 +405,7 @@ describe('assistant runtime service', () => {
       approvalPolicy: () => 'approval_required',
       onEvent: (event: { type: string }) => events.push(event.type)
     } as unknown as AssistantRuntimeDefinition;
-    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+    const runtime = await createScriptedRuntimeFactory(async (_definition, messages) => {
       modelHistories.push([...messages]);
       modelCalls += 1;
       if (modelCalls === 1) {
@@ -485,7 +492,7 @@ describe('assistant runtime service', () => {
       ],
       approvalPolicy: () => 'automatic'
     } as unknown as AssistantRuntimeDefinition;
-    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+    const runtime = await createScriptedRuntimeFactory(async (_definition, messages) => {
       histories.push([...messages]);
       round++;
       return round === 1
@@ -509,19 +516,25 @@ describe('assistant runtime service', () => {
     await expect(service.sendMessage('overlapping turn')).rejects.toMatchObject({
       statusCode: 409
     });
+    // The sibling runs in parallel; cancel once it has finished.
+    await vi.waitFor(() =>
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'tool_call_resolved' &&
+            event.payload.pendingToolCallId === 'sibling-call'
+        )
+      ).toBe(true)
+    );
     controller.abort();
     await expect(oldTurn).rejects.toThrow();
     await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
     const terminalSnapshot = service.getSnapshot();
     expect(terminalSnapshot.pendingToolCalls).toMatchObject([
       { id: 'executing-call', status: 'error', error: expect.stringContaining('outcome unknown') },
-      {
-        id: 'sibling-call',
-        status: 'error',
-        error: expect.stringContaining('cancelled before execution')
-      }
+      { id: 'sibling-call', status: 'approved' }
     ]);
-    expect(siblingExecute).not.toHaveBeenCalled();
+    expect(siblingExecute).toHaveBeenCalledOnce();
     await expect(service.sendMessage('New turn')).resolves.toMatchObject({
       type: 'assistant_message',
       text: 'New turn finished'

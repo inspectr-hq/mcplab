@@ -537,11 +537,17 @@ An AI chat that analyzes completed evaluation runs. Ask it to explain failures, 
 
 Open a run in the app and click **Result Assistant**.
 
-Both assistants use one shared LangGraph runtime automatically, with separate assistant definitions and in-memory sessions. No runtime flags are needed. Existing `MCPLAB_RESULT_ASSISTANT_RUNTIME` and `MCPLAB_SCENARIO_ASSISTANT_RUNTIME` entries can be removed from `.env`; they are unused, including values such as `native`, `langchain`, or `langgraph`.
+Both assistants run on a standard LangChain agent (`createAgent`), with separate assistant definitions and in-memory sessions. Tool approvals use LangChain's human-in-the-loop middleware, so each call that needs approval can be approved, edited or denied on its own while read-only calls run immediately. Each user turn is limited to 25 model calls. Responses stream as they are generated. MCPLab keeps provider configuration and credentials, MCP connections and execution, OAuth, tool allowlists, and approval policies. Sessions stay in process; durable state is not enabled.
 
-The framework-neutral assistant interface remains in place. Both assistants use native LangChain chat models for OpenAI, Anthropic, and Azure. MCPLab retains provider configuration and credentials, MCP connections and execution, OAuth, tool allowlists, and approval policies. Sessions stay in process; durable state and streaming are not enabled.
+Assistant conversations are not sent to LangSmith by default, even when evaluation tracing is enabled. To trace them as well, set `MCPLAB_ASSISTANT_TRACING=true` together with your LangSmith settings:
 
-Assistant conversations are never sent to LangSmith. This remains true when evaluation tracing is enabled, which continues to trace evaluation scenarios independently.
+```sh
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+MCPLAB_ASSISTANT_TRACING=true
+```
+
+Assistant traces include prompts, run results, tool inputs and tool results.
 
 ```sh
 npm run app:dev

@@ -1,12 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
-import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { scenarioAssistantSessionView } from './scenario-assistant-domain.js';
 
 function harness(
-  modelCall: Parameters<typeof createLangChainAssistantRuntimeFactory>[0],
+  modelCall: Parameters<typeof createScriptedRuntimeFactory>[0],
   tools: Array<Record<string, unknown>> = []
 ) {
   const captured: Array<{ status: number; body: any }> = [];
@@ -24,7 +24,7 @@ function harness(
     selectedAssistantAgentName: 'assistant-1',
     context: { scenario }
   };
-  const factory = createLangChainAssistantRuntimeFactory(modelCall);
+  const factory = createScriptedRuntimeFactory(modelCall);
   const deps: any = {
     parseBody: vi.fn(async (req: any) => req.body ?? body),
     asJson: vi.fn((_res: any, status: number, result: unknown) =>
@@ -250,7 +250,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
           name: 'lookup',
           description: 'Read',
           inputSchema: { type: 'object' },
-          annotations: { readOnlyHint: true }
+          annotations: { readOnlyHint: false }
         },
         {
           name: 'update',
@@ -343,7 +343,10 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     ]);
     expect(toolMessages.map((message) => message.content)).toEqual([
       expect.stringContaining('"replacement":"Updated prompt"'),
-      '"lookup:{\\"query\\":\\"edited\\"}"',
+      // LangChain's edit notice tells the model which arguments actually ran.
+      expect.stringMatching(
+        /human reviewer replaced this tool call[\s\S]*"lookup:\{\\"query\\":\\"edited\\"\}"/
+      ),
       '{"denied":true,"reason":"User denied tool call"}'
     ]);
     const callMessage = finalMessages.find((message) => (message as any).tool_calls?.length);
@@ -365,7 +368,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     );
   });
 
-  it('approves all calls sequentially and rejects a repeated approval without replaying MCP calls', async () => {
+  it('approves all calls and rejects a repeated approval without replaying MCP calls', async () => {
     let turn = 0;
     const executionOrder: string[] = [];
     const { invoke, sessions, mcpCall } = harness(
@@ -422,8 +425,8 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
       'POST',
       `/api/scenario-assistant/sessions/${id}/tool-calls/approve-all`
     );
+    // Approved calls run in parallel, each exactly once.
     await firstStarted;
-    expect(executionOrder).toEqual(['lookup']);
     releaseFirst();
     const { result: approved } = await approval;
     expect(approved?.status).toBe(200);
@@ -431,7 +434,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
       type: 'assistant_message',
       text: 'Completed 3 calls.'
     });
-    expect(executionOrder).toEqual(['lookup', 'update']);
+    expect([...executionOrder].sort()).toEqual(['lookup', 'update']);
     expect(approved?.body.response.suggestions).toEqual({
       prompt: { replacement: 'Approved proposal prompt' },
       notes: ['Captured']
@@ -441,7 +444,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
       `/api/scenario-assistant/sessions/${id}/tool-calls/first/approve`
     );
     expect(duplicate?.status).toBe(409);
-    expect(executionOrder).toEqual(['lookup', 'update']);
+    expect([...executionOrder].sort()).toEqual(['lookup', 'update']);
     expect(calls!).toHaveBeenCalledTimes(2);
   });
 

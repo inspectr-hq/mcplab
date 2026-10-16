@@ -6,7 +6,7 @@ import {
   validateScenarioAssistantProposal,
   type ScenarioAssistantSessionInitializer
 } from './scenario-assistant-domain.js';
-import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import { createScriptedRuntimeFactory } from '../../test-support/scripted-chat-model.js';
 import { McpClientManager } from '@inspectr/mcplab-core';
 
 function baseSession(): ScenarioAssistantSessionInitializer {
@@ -421,7 +421,7 @@ describe('Scenario Assistant runtime definition', () => {
     const histories: Array<Array<{ role: string; content: string }>> = [];
     let round = 0;
     const definition = await createDefinition();
-    const runtime = await createLangChainAssistantRuntimeFactory(async (_definition, messages) => {
+    const runtime = await createScriptedRuntimeFactory(async (_definition, messages) => {
       histories.push(
         messages.map((message) => ({ role: message.getType(), content: String(message.content) }))
       );

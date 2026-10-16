@@ -1,439 +1,257 @@
-import { ChatAnthropic } from '@langchain/anthropic';
-import {
-  AIMessage,
-  AIMessageChunk,
-  SystemMessage,
-  type BaseMessage
-} from '@langchain/core/messages';
-import { ChatOpenAICompletions, type ChatOpenAICompletionsCallOptions } from '@langchain/openai';
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ChatResult } from '@langchain/core/outputs';
+import { createMiddleware, type AgentMiddleware } from 'langchain';
 import {
   AgentConnectionError,
   anthropicModelCandidates,
+  isAbortError,
   isModelNotFound,
   resolveAzureFoundryConnection,
   resolveAzureOpenAIDeployment,
   type AssistantRuntimeDefinition,
-  type AssistantRuntimeModelOutput,
+  type LlmAgentConfig,
   DEFAULT_ANTHROPIC_MAX_TOKENS,
   DEFAULT_AZURE_OPENAI_API_VERSION
 } from '@inspectr/mcplab-core';
-import { withAssistantTraceExportDisabled } from './assistant-tracing.js';
 
-export type AssistantModelCall = (
+export interface AssistantChatModelOptions {
+  /** Attached to every model instance so streamed tokens reach the runtime exactly once. */
+  callbacks: BaseCallbackHandler[];
+  /** Compatibility retries are only safe before any text has been shown to the user. */
+  hasStreamedText(): boolean;
+}
+
+export interface AssistantChatModelSetup {
+  model: BaseChatModel;
+  middleware: AgentMiddleware[];
+}
+
+export type AssistantChatModelFactory = (
   definition: AssistantRuntimeDefinition,
-  messages: BaseMessage[],
-  signal?: AbortSignal,
-  onText?: (delta: string) => void
-) => Promise<AssistantModelOutput>;
+  options: AssistantChatModelOptions
+) => AssistantChatModelSetup | Promise<AssistantChatModelSetup>;
 
-export type AssistantModelOutput = AssistantRuntimeModelOutput & { nativeMessage?: AIMessage };
+interface ModelVariant {
+  anthropicModel?: string;
+  azureTokenField: 'max_completion_tokens' | 'max_tokens';
+  includeTemperature: boolean;
+}
 
-export const callAssistantModel: AssistantModelCall = (definition, messages, signal, onText) =>
-  withAssistantTraceExportDisabled(async () => {
-    signal?.throwIfAborted();
-    const history = [
-      new SystemMessage(definition.getSystemPrompt()),
-      ...messages.filter((message) => message.getType() !== 'system')
-    ];
-    const tools = assistantTools(definition);
-    const agent = definition.agent;
-    let response;
+/**
+ * Production models: MCPlab provider configuration on standard LangChain chat models. The
+ * concrete model is chosen per call by middleware, so missing credentials surface on the first
+ * message (as before) and provider compatibility fallbacks stay out of the agent loop.
+ */
+export const createAssistantChatModel: AssistantChatModelFactory = (definition, options) => ({
+  model: new UnresolvedAssistantChatModel(),
+  middleware: [providerModelMiddleware(definition.agent, options)]
+});
 
-    if (agent.provider === 'openai') {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing OPENAI_API_KEY');
-      const model = new ChatOpenAICompletions({
-        apiKey,
-        model: agent.model,
-        temperature: agent.temperature,
-        maxTokens: agent.max_tokens,
-        maxRetries: 0,
-        configuration: { maxRetries: 0 }
-      });
-      response = await invoke(model, tools, history, signal, onText);
-    } else if (agent.provider === 'anthropic') {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey)
-        throw new AgentConnectionError('missing_credentials', 'Missing ANTHROPIC_API_KEY');
-      const candidates = anthropicModelCandidates(agent.model);
-      let lastError: unknown;
-      for (const candidate of candidates) {
-        signal?.throwIfAborted();
-        const model = new ChatAnthropic({
-          apiKey,
-          model: candidate,
-          temperature: agent.temperature,
-          maxTokens: agent.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
-          maxRetries: 0,
-          clientOptions: { maxRetries: 0 }
-        });
+function providerModelMiddleware(agent: LlmAgentConfig, options: AssistantChatModelOptions) {
+  const cache = new Map<string, Promise<BaseChatModel>>();
+  const modelFor = (variant: ModelVariant) => {
+    const key = JSON.stringify(variant);
+    let model = cache.get(key);
+    if (!model) {
+      model = buildChatModel(agent, variant, options.callbacks);
+      model.catch(() => cache.delete(key));
+      cache.set(key, model);
+    }
+    return model;
+  };
+  const anthropicCandidates =
+    agent.provider === 'anthropic' ? anthropicModelCandidates(agent.model) : [];
+
+  return createMiddleware({
+    name: 'McplabProviderModel',
+    wrapModelCall: async (request, handler) => {
+      let variant: ModelVariant = {
+        ...(anthropicCandidates.length ? { anthropicModel: anthropicCandidates[0] } : {}),
+        azureTokenField: 'max_completion_tokens',
+        includeTemperature: typeof agent.temperature === 'number'
+      };
+      for (;;) {
+        const model = await modelFor(variant);
         try {
-          response = await invoke(model, tools, history, signal, onText);
-          break;
+          return await handler({ ...request, model });
         } catch (error) {
-          lastError = error;
-          if (signal?.aborted || !isAnthropicModelNotFound(error)) throw error;
-          if (onText && wasTextEmitted(error)) throw error;
-          if (candidate === candidates.at(-1))
-            throw anthropicModelNotFound(agent.model, candidates);
+          if (isAbortError(error) || options.hasStreamedText()) throw error;
+          const next = nextVariant(agent, variant, error, anthropicCandidates);
+          if (!next) throw error;
+          variant = next;
         }
       }
-      if (!response) {
-        if (isAnthropicModelNotFound(lastError))
-          throw anthropicModelNotFound(agent.model, candidates);
-        throw lastError;
-      }
-    } else if (agent.provider === 'azure_openai') {
-      const apiKey = process.env.AZURE_OPENAI_API_KEY;
-      const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-      const deployment = resolveAzureOpenAIDeployment(agent.model);
-      if (!apiKey)
-        throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_API_KEY');
-      if (!endpoint)
-        throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_ENDPOINT');
-      if (!deployment)
-        throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
-      const apiVersion = process.env.AZURE_OPENAI_API_VERSION ?? DEFAULT_AZURE_OPENAI_API_VERSION;
-      response = await invokeAzure(
-        {
-          apiKey,
-          endpoint: `${endpoint.replace(/\/$/, '')}/openai/deployments/${deployment}`,
-          apiVersion,
-          model: deployment,
-          maxTokens: agent.max_tokens,
-          temperature: agent.temperature
-        },
-        tools,
-        history,
-        signal,
-        onText
-      );
-    } else if (agent.provider === 'azure_foundry') {
-      const deployment = agent.model.trim();
-      if (!deployment) throw new Error('Azure Foundry requires a deployment name for this agent.');
-      const connection = resolveAzureFoundryConnection();
-      response = await invokeAzure(
-        {
-          apiKey: connection.apiKey,
-          endpoint: `${connection.endpoint}/openai/v1`,
-          model: deployment,
-          maxTokens: agent.max_tokens,
-          temperature: agent.temperature
-        },
-        tools,
-        history,
-        signal,
-        onText
-      );
-    } else {
-      throw new Error(`Unsupported provider: ${agent.provider}`);
     }
-
-    return toAssistantOutput(response);
   });
-
-async function invoke(
-  model: ChatOpenAICompletions | ChatAnthropic,
-  tools: ReturnType<typeof assistantTools>,
-  messages: BaseMessage[],
-  signal?: AbortSignal,
-  onText?: (delta: string) => void
-) {
-  const bound = bindTools(model, tools);
-  return onText
-    ? streamModel(bound as Parameters<typeof streamModel>[0], messages, signal, onText)
-    : bound.invoke(messages, { signal, maxRetries: 0 });
 }
 
-async function streamModel(
-  model: {
-    stream(
-      messages: BaseMessage[],
-      options: { signal?: AbortSignal; maxRetries: number }
-    ): Promise<AsyncIterable<AIMessageChunk>>;
-  },
-  messages: BaseMessage[],
-  signal: AbortSignal | undefined,
-  onText: (delta: string) => void
-): Promise<AIMessage> {
-  let aggregate: AIMessageChunk | undefined;
-  let started = false;
-  let pendingWhitespace = '';
-  try {
-    for await (const chunk of await model.stream(messages, { signal, maxRetries: 0 })) {
-      signal?.throwIfAborted();
-      const next = chunk as AIMessageChunk;
-      aggregate = aggregate ? aggregate.concat(next) : next;
-      const text = contentToText(next.content);
-      if (!text) continue;
-      if (!started) {
-        const visible = text.trimStart();
-        if (!visible) continue;
-        started = true;
-        const ready = visible.trimEnd();
-        pendingWhitespace = visible.slice(ready.length);
-        if (ready) onText(ready);
-      } else {
-        const combined = pendingWhitespace + text;
-        const ready = combined.trimEnd();
-        pendingWhitespace = combined.slice(ready.length);
-        if (ready) onText(ready);
-      }
-    }
-  } catch (error) {
-    if (started)
-      throw Object.assign(new Error(errorMessage(error), { cause: error }), {
-        assistantTextEmitted: true
-      });
-    throw error;
+function nextVariant(
+  agent: LlmAgentConfig,
+  variant: ModelVariant,
+  error: unknown,
+  anthropicCandidates: string[]
+): ModelVariant | undefined {
+  if (agent.provider === 'anthropic') {
+    if (!isAnthropicModelNotFound(error)) return undefined;
+    const index = anthropicCandidates.indexOf(variant.anthropicModel ?? '');
+    const anthropicModel = anthropicCandidates[index + 1];
+    if (!anthropicModel) throw anthropicModelNotFound(agent.model, anthropicCandidates);
+    return { ...variant, anthropicModel };
   }
-  if (!aggregate) throw new Error('Assistant model stream returned no message');
-  return new AIMessage({
-    content: aggregate.content,
-    ...(aggregate.id ? { id: aggregate.id } : {}),
-    ...(aggregate.name ? { name: aggregate.name } : {}),
-    additional_kwargs: aggregate.additional_kwargs,
-    response_metadata: aggregate.response_metadata,
-    tool_calls: aggregate.tool_calls,
-    invalid_tool_calls: aggregate.invalid_tool_calls,
-    usage_metadata: aggregate.usage_metadata
-  });
+  if (agent.provider !== 'azure_openai' && agent.provider !== 'azure_foundry') return undefined;
+  const message = errorMessage(error).toLowerCase();
+  if (
+    variant.azureTokenField === 'max_completion_tokens' &&
+    agent.max_tokens !== undefined &&
+    message.includes('max_completion_tokens') &&
+    message.includes('not supported')
+  )
+    return { ...variant, azureTokenField: 'max_tokens' };
+  if (
+    variant.includeTemperature &&
+    message.includes('temperature') &&
+    (message.includes('not supported') || message.includes('only the default'))
+  )
+    return { ...variant, includeTemperature: false };
+  return undefined;
 }
 
-function wasTextEmitted(error: unknown): boolean {
-  return isRecord(error) && error.assistantTextEmitted === true;
-}
-
-function bindTools(
-  model: ChatOpenAICompletions | ChatAnthropic,
-  tools: ReturnType<typeof assistantTools>
-) {
-  if (!tools.length) return model;
-  return model instanceof ChatAnthropic
-    ? model.bindTools(tools as Parameters<ChatAnthropic['bindTools']>[0])
-    : model.bindTools(tools as Parameters<ChatOpenAICompletions['bindTools']>[0]);
-}
-
-function assistantTools(definition: AssistantRuntimeDefinition) {
-  return definition.tools.map((tool) => ({
-    type: 'function' as const,
-    function: {
-      name: tool.name,
-      description: tool.description ?? '',
-      parameters: asJsonSchema(tool.inputSchema)
-    }
-  }));
-}
-
-async function invokeAzure(
-  params: {
-    apiKey: string;
-    endpoint: string;
-    apiVersion?: string;
-    model: string;
-    maxTokens?: number;
-    temperature?: number;
-  },
-  tools: ReturnType<typeof assistantTools>,
-  messages: BaseMessage[],
-  signal?: AbortSignal,
-  onText?: (delta: string) => void
-) {
-  let tokenField: 'max_completion_tokens' | 'max_tokens' = 'max_completion_tokens';
-  let includeTemperature = typeof params.temperature === 'number';
-  for (;;) {
-    signal?.throwIfAborted();
-    const model = new AzureAssistantChatOpenAI({
-      apiKey: params.apiKey,
-      model: params.model,
-      temperature: includeTemperature ? params.temperature : undefined,
-      maxTokens: params.maxTokens,
-      tokenField,
+async function buildChatModel(
+  agent: LlmAgentConfig,
+  variant: ModelVariant,
+  callbacks: BaseCallbackHandler[]
+): Promise<BaseChatModel> {
+  if (agent.provider === 'openai') {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing OPENAI_API_KEY');
+    const { ChatOpenAICompletions } = await import('@langchain/openai');
+    return new ChatOpenAICompletions({
+      apiKey,
+      model: agent.model,
+      temperature: agent.temperature,
+      maxTokens: agent.max_tokens,
       maxRetries: 0,
-      configuration: {
-        baseURL: params.endpoint,
-        defaultQuery: params.apiVersion ? { 'api-version': params.apiVersion } : undefined,
-        maxRetries: 0
-      }
+      configuration: { maxRetries: 0 },
+      callbacks
     });
-    try {
-      const bound = bindTools(model, tools);
-      return onText
-        ? await streamModel(bound as Parameters<typeof streamModel>[0], messages, signal, onText)
-        : await bound.invoke(messages, { signal, maxRetries: 0 });
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      if (wasTextEmitted(error)) throw error;
-      const message = errorMessage(error).toLowerCase();
-      if (
-        tokenField === 'max_completion_tokens' &&
-        params.maxTokens !== undefined &&
-        message.includes('max_completion_tokens') &&
-        message.includes('not supported')
-      ) {
-        tokenField = 'max_tokens';
-        continue;
+  }
+  if (agent.provider === 'anthropic') {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new AgentConnectionError('missing_credentials', 'Missing ANTHROPIC_API_KEY');
+    const { ChatAnthropic } = await import('@langchain/anthropic');
+    return new ChatAnthropic({
+      apiKey,
+      model: variant.anthropicModel ?? agent.model,
+      temperature: agent.temperature,
+      maxTokens: agent.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+      maxRetries: 0,
+      clientOptions: { maxRetries: 0 },
+      callbacks
+    });
+  }
+  if (agent.provider === 'azure_openai') {
+    const apiKey = process.env.AZURE_OPENAI_API_KEY;
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+    const deployment = resolveAzureOpenAIDeployment(agent.model);
+    if (!apiKey)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_API_KEY');
+    if (!endpoint)
+      throw new AgentConnectionError('missing_credentials', 'Missing AZURE_OPENAI_ENDPOINT');
+    if (!deployment)
+      throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
+    return buildAzureModel({
+      apiKey,
+      baseURL: `${endpoint.replace(/\/$/, '')}/openai/deployments/${deployment}`,
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION ?? DEFAULT_AZURE_OPENAI_API_VERSION,
+      model: deployment,
+      agent,
+      variant,
+      callbacks
+    });
+  }
+  if (agent.provider === 'azure_foundry') {
+    const deployment = agent.model.trim();
+    if (!deployment) throw new Error('Azure Foundry requires a deployment name for this agent.');
+    const connection = resolveAzureFoundryConnection();
+    return buildAzureModel({
+      apiKey: connection.apiKey,
+      baseURL: `${connection.endpoint}/openai/v1`,
+      model: deployment,
+      agent,
+      variant,
+      callbacks
+    });
+  }
+  throw new Error(`Unsupported provider: ${agent.provider}`);
+}
+
+async function buildAzureModel(params: {
+  apiKey: string;
+  baseURL: string;
+  apiVersion?: string;
+  model: string;
+  agent: LlmAgentConfig;
+  variant: ModelVariant;
+  callbacks: BaseCallbackHandler[];
+}): Promise<BaseChatModel> {
+  const { ChatOpenAICompletions } = await import('@langchain/openai');
+  const tokenField = params.variant.azureTokenField;
+  // Azure deployments are sent max_completion_tokens first, regardless of model naming.
+  class AzureAssistantChatOpenAI extends ChatOpenAICompletions {
+    override invocationParams(
+      options?: this['ParsedCallOptions'],
+      extra?: { streaming?: boolean }
+    ) {
+      const invocation = super.invocationParams(options, extra);
+      if (typeof this.maxTokens === 'number') {
+        delete invocation.max_tokens;
+        delete invocation.max_completion_tokens;
+        invocation[tokenField] = this.maxTokens;
       }
-      if (
-        includeTemperature &&
-        message.includes('temperature') &&
-        (message.includes('not supported') || message.includes('only the default'))
-      ) {
-        includeTemperature = false;
-        continue;
-      }
-      throw error;
+      return invocation;
     }
   }
+  return new AzureAssistantChatOpenAI({
+    apiKey: params.apiKey,
+    model: params.model,
+    temperature: params.variant.includeTemperature ? params.agent.temperature : undefined,
+    maxTokens: params.agent.max_tokens,
+    maxRetries: 0,
+    configuration: {
+      baseURL: params.baseURL,
+      defaultQuery: params.apiVersion ? { 'api-version': params.apiVersion } : undefined,
+      maxRetries: 0
+    },
+    callbacks: params.callbacks
+  });
 }
 
-class AzureAssistantChatOpenAI extends ChatOpenAICompletions {
-  private readonly tokenField: 'max_completion_tokens' | 'max_tokens';
-
-  constructor(
-    fields: NonNullable<ConstructorParameters<typeof ChatOpenAICompletions>[0]> & {
-      tokenField: 'max_completion_tokens' | 'max_tokens';
-    }
-  ) {
-    // Azure deployment compatibility uses max_completion_tokens first, regardless of model naming.
-    super(fields);
-    this.tokenField = fields.tokenField;
+/** Placeholder required by createAgent; the provider middleware always supplies the real model. */
+class UnresolvedAssistantChatModel extends BaseChatModel {
+  constructor() {
+    super({});
   }
 
-  invocationParams(options?: ChatOpenAICompletionsCallOptions, extra?: { streaming?: boolean }) {
-    const params = super.invocationParams(options, extra);
-    if (typeof this.maxTokens === 'number') {
-      delete params.max_tokens;
-      delete params.max_completion_tokens;
-      params[this.tokenField] = this.maxTokens;
-    }
-    return params;
+  _llmType() {
+    return 'mcplab-unresolved';
   }
-}
 
-function toAssistantOutput(message: AIMessage): AssistantModelOutput {
-  const text = contentToText(message.content).trim();
-  const toolCalls = message.tool_calls ?? [];
-  const invalidCalls = message.invalid_tool_calls ?? [];
-  if (toolCalls.length || invalidCalls.length) {
-    const ordered: Array<{
-      index: number;
-      call: { id?: string; name: string; args: unknown; validationError?: string };
-    }> = [];
-    const rawCalls: unknown = message.additional_kwargs.tool_calls;
-    const original: Array<Record<string, unknown>> = Array.isArray(rawCalls)
-      ? rawCalls.filter(isRecord)
-      : [];
-    const consumedRaw = new Set<number>();
-    const rawArguments = (item: Record<string, unknown>) => {
-      const fn = isRecord(item.function) ? item.function : undefined;
-      return typeof fn?.arguments === 'string'
-        ? fn.arguments
-        : typeof item.arguments === 'string'
-          ? item.arguments
-          : undefined;
-    };
-    const rawIndex = (id: string | undefined, name: string, args: unknown, rawArgs?: string) => {
-      const candidates = original.flatMap((item, position) => {
-        if (consumedRaw.has(position)) return [];
-        const fn = isRecord(item.function) ? item.function : undefined;
-        const rawName = typeof fn?.name === 'string' ? fn.name : item.name;
-        const matchesIdentity = (id === undefined || item.id === id) && rawName === name;
-        return matchesIdentity ? [{ item, position }] : [];
-      });
-      let candidate =
-        rawArgs === undefined
-          ? undefined
-          : candidates.find(({ item }) => rawArguments(item) === rawArgs);
-      if (!candidate && rawArgs === undefined) {
-        candidate = candidates.find(({ item }) => {
-          const raw = rawArguments(item);
-          if (raw === undefined) return false;
-          try {
-            return JSON.stringify(JSON.parse(raw)) === JSON.stringify(args);
-          } catch {
-            return false;
-          }
-        });
-      }
-      candidate ??= candidates[0];
-      const index = candidate?.position ?? -1;
-      if (index >= 0) consumedRaw.add(index);
-      return index;
-    };
-    for (const call of toolCalls) {
-      const index = rawIndex(call.id, call.name, call.args);
-      const objectArgs = isRecord(call.args);
-      ordered.push({
-        index,
-        call: {
-          id: call.id,
-          name: call.name,
-          args: objectArgs ? call.args : {},
-          ...(!objectArgs
-            ? {
-                validationError: `Invalid arguments for tool '${call.name}': expected a JSON object.`
-              }
-            : {})
-        }
-      });
-    }
-    for (const invalid of invalidCalls) {
-      const rawArgs = invalid.args ?? '';
-      const matchedRawIndex = rawIndex(invalid.id, invalid.name ?? 'unknown', undefined, rawArgs);
-      ordered.push({
-        index:
-          matchedRawIndex >= 0
-            ? matchedRawIndex
-            : Number(invalid.index ?? toolCalls.length + invalidCalls.indexOf(invalid)),
-        call: {
-          id: invalid.id,
-          name: invalid.name ?? 'unknown',
-          args: {},
-          validationError: `Invalid arguments for tool '${invalid.name ?? 'unknown'}': ${invalid.error ?? 'malformed tool arguments'}${rawArgs ? ` (raw: ${rawArgs})` : ''}`
-        }
-      });
-    }
-    return {
-      type: 'tool_call_request',
-      text: text || 'I need a tool to help answer.',
-      toolCalls: ordered
-        .sort((a, b) => a.index - b.index)
-        .map(({ call }) => ({
-          id: call.id,
-          name: call.name,
-          arguments: call.args,
-          ...(call.validationError ? { validationError: call.validationError } : {})
-        })),
-      nativeMessage: message as AIMessage
-    };
+  bindTools() {
+    return this as never;
   }
-  return { type: 'assistant_message', text, nativeMessage: message as AIMessage };
-}
 
-function asJsonSchema(schema: unknown): Record<string, unknown> {
-  if (isRecord(schema)) return { ...schema, type: schema.type ?? 'object' };
-  return { type: 'object', properties: {}, additionalProperties: true };
-}
-
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .filter(
-      (part): part is { type: 'text'; text: string } =>
-        isRecord(part) && part.type === 'text' && typeof part.text === 'string'
-    )
-    .map((part) => part.text)
-    .join('');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  async _generate(): Promise<ChatResult> {
+    throw new Error('Assistant model was not resolved by the provider middleware');
+  }
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isAnthropicModelNotFound(error: unknown): boolean {

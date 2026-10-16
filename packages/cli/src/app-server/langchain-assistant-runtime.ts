@@ -1,480 +1,790 @@
-import { HumanMessage } from '@langchain/core/messages';
-import { Command, MemorySaver } from '@langchain/langgraph';
 import { randomUUID } from 'node:crypto';
-import type {
-  AssistantRuntimeFactory,
-  AssistantRuntimeResponse,
-  AssistantRuntimeSession,
-  AssistantRuntimeSnapshot
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  type BaseMessage
+} from '@langchain/core/messages';
+import { tool, type StructuredToolInterface } from '@langchain/core/tools';
+import { Command, isGraphInterrupt, MemorySaver, type StateSnapshot } from '@langchain/langgraph';
+import {
+  createAgent,
+  createMiddleware,
+  humanInTheLoopMiddleware,
+  MiddlewareError,
+  modelCallLimitMiddleware
+} from 'langchain';
+import {
+  isAbortError,
+  type AssistantRuntimeDefinition,
+  type AssistantRuntimeEvent,
+  type AssistantRuntimeFactory,
+  type AssistantRuntimeMessage,
+  type AssistantRuntimeResponse,
+  type AssistantRuntimeSession,
+  type AssistantRuntimeSnapshot,
+  type AssistantRuntimeToolCall,
+  type AssistantToolCallDecision,
+  type ScenarioAssistantSuggestionBundle
 } from '@inspectr/mcplab-core';
-import { callAssistantModel, type AssistantModelCall } from './assistant-model.js';
-import { withAssistantTraceExportDisabled } from './assistant-tracing.js';
-import { createAssistantGraph } from './assistant-graph-nodes.js';
+import { createAssistantChatModel, type AssistantChatModelFactory } from './assistant-model.js';
+import { withAssistantTracing } from './assistant-tracing.js';
 import {
-  graphConfig,
-  terminalReasonFrom,
-  type GraphEvent,
-  type GraphState,
-  type TerminalReason
-} from './assistant-graph-state.js';
-import {
+  AssistantToolDecisionConflictError,
   AssistantTurnBudgetExceededError,
+  MAX_ASSISTANT_MODEL_CALLS,
+  mergeAssistantSuggestions,
+  resultPreview,
+  uniqueToolCallId,
   validateToolCallDecisions
 } from './assistant-runtime-policy.js';
 
+export interface LangChainAssistantRuntimeOptions {
+  /** Defaults to MCPlab's provider configuration on LangChain chat models. */
+  createChatModel?: AssistantChatModelFactory;
+}
+
+/** The slice of the compiled agent the runtime uses; createAgent's generics are not needed here. */
+interface AssistantAgent {
+  stream(input: unknown, options: Record<string, unknown>): Promise<AsyncIterable<unknown>>;
+  getState(config: { configurable: { thread_id: string } }): Promise<StateSnapshot>;
+  updateState(
+    config: { configurable: { thread_id: string } },
+    values: Record<string, unknown>,
+    asNode?: string
+  ): Promise<unknown>;
+}
+
+type SettleReason = 'superseded' | 'cancelled' | 'budget' | 'failure';
+
+interface ActiveTurn {
+  id: string;
+  proposals: ScenarioAssistantSuggestionBundle[];
+  /** Calls the user already decided; LangGraph keeps listing them until the batch settles. */
+  decided: Set<string>;
+  streaming?: { id: string; text: string; createdAt: string };
+  paused: boolean;
+}
+
+const TOOL_REQUEST_FALLBACK_TEXT = 'I need a tool to help answer.';
+const DENIED_RESULT = JSON.stringify({ denied: true, reason: 'User denied tool call' });
+// Each model round and tool batch is a few graph steps; the model-call budget is the real limit.
+const GRAPH_RECURSION_LIMIT = MAX_ASSISTANT_MODEL_CALLS * 10;
+
 export function createLangChainAssistantRuntimeFactory(
-  modelCall: AssistantModelCall = callAssistantModel
+  options: LangChainAssistantRuntimeOptions = {}
 ): AssistantRuntimeFactory {
   return {
     async create(definition) {
-      const saver = new MemorySaver();
-      const threadId = `assistant-${randomUUID()}`;
-      let projection: AssistantRuntimeSnapshot = {
-        revision: 0,
-        messages: structuredClone(definition.initialMessages ?? []),
-        pendingToolCalls: []
-      };
-      let graphState: GraphState | undefined;
-      let streamingMessage: AssistantRuntimeSnapshot['streamingMessage'];
-      let queuedEvents: GraphEvent[] = [];
-      let observerFailure: unknown;
-      let disposed = false;
-      let disposalPromise: Promise<void> | undefined;
-      // The service serializes mutations. This handle targets cancellation, disposal and observer failures.
-      let inFlight:
-        | {
-            controller: AbortController;
-            promise: Promise<AssistantRuntimeResponse>;
-            turnId?: string;
-          }
-        | undefined;
-      let cancellation: { turnId: string; promise: Promise<void> } | undefined;
-      let failedClosed = false;
-
-      const { graph, event, hasResult, cleanupUpdate } = createAssistantGraph(
-        definition,
-        modelCall,
-        saver
-      );
-
-      const config = graphConfig(threadId);
-      const derivedActiveTurnId = () => {
-        const current = graphState;
-        if (
-          !current?.turnId ||
-          current.terminal !== undefined ||
-          current.response?.type === 'assistant_message'
-        )
-          return undefined;
-        return current.batchIds.length || inFlight ? current.turnId : undefined;
-      };
-      const updateProjection = () => {
-        const activeTurnId = derivedActiveTurnId();
-        const next = {
-          messages: structuredClone(graphState?.uiMessages ?? projection.messages),
-          pendingToolCalls: structuredClone(graphState?.calls ?? projection.pendingToolCalls),
-          ...(activeTurnId ? { activeTurnId } : {}),
-          ...(streamingMessage ? { streamingMessage: structuredClone(streamingMessage) } : {})
-        };
-        projection = { ...next, revision: projection.revision + 1 };
-      };
-      const project = (current: GraphState) => {
-        graphState = structuredClone(current);
-        if (
-          streamingMessage &&
-          graphState.uiMessages.some((message) => message.id === streamingMessage?.id)
-        )
-          streamingMessage = undefined;
-        if (current.terminal !== undefined || current.response?.type === 'assistant_message')
-          streamingMessage = undefined;
-        updateProjection();
-      };
-      const publishDelta = (next: GraphEvent) => {
-        const payload = next.payload;
-        const turnId = typeof payload.turnId === 'string' ? payload.turnId : undefined;
-        const id = typeof payload.messageId === 'string' ? payload.messageId : undefined;
-        const delta = typeof payload.delta === 'string' ? payload.delta : '';
-        const offset = typeof payload.offset === 'number' ? payload.offset : -1;
-        const createdAt =
-          typeof payload.createdAt === 'string' ? payload.createdAt : new Date().toISOString();
-        if (!turnId || !id || !delta || offset < 0 || graphState?.turnId !== turnId) return;
-        if (!derivedActiveTurnId()) return;
-        const existing = streamingMessage?.id === id ? streamingMessage : undefined;
-        const text = existing?.text ?? '';
-        if (offset > text.length) return;
-        const suffix = offset < text.length ? delta.slice(text.length - offset) : delta;
-        if (!suffix) return;
-        streamingMessage = { id, turnId, text: text + suffix, createdAt };
-        updateProjection();
-        try {
-          definition.onEvent?.({
-            type: next.type,
-            ts: new Date().toISOString(),
-            payload: { ...structuredClone(next.payload), revision: projection.revision }
-          });
-        } catch (error) {
-          observerFailure = observerFailure ?? error;
-          inFlight?.controller.abort('observer-failure');
-        }
-      };
-      const deliverEvents = () => {
-        for (const next of queuedEvents) {
-          try {
-            definition.onEvent?.({
-              type: next.type,
-              ts: new Date().toISOString(),
-              payload: structuredClone(next.payload)
-            });
-          } catch (error) {
-            observerFailure = observerFailure ?? error;
-            inFlight?.controller.abort('observer-failure');
-          }
-        }
-        queuedEvents = [];
-      };
-      const publishSessionSnapshot = () => {
-        try {
-          definition.onEvent?.({
-            type: 'session_snapshot',
-            ts: new Date().toISOString(),
-            payload: {}
-          });
-        } catch (error) {
-          observerFailure = observerFailure ?? error;
-          inFlight?.controller.abort('observer-failure');
-        }
-      };
-      let recoverEngine: (error: unknown) => Promise<GraphState>;
-      const pump = async (
-        input: unknown,
-        requestSignal?: AbortSignal,
-        recovering = false
-      ): Promise<GraphState> => {
-        let last: GraphState | undefined;
-        try {
-          await withAssistantTraceExportDisabled(async () => {
-            for await (const chunk of await graph.stream(
-              input as never,
-              {
-                ...config,
-                // Keep the signal configurable so interrupted cancellation cleanup can checkpoint its terminal state.
-                configurable: { ...config.configurable, requestSignal },
-                streamMode: ['values', 'custom']
-              } as never
-            )) {
-              if (Array.isArray(chunk) && chunk[0] === 'custom') {
-                const next = chunk[1] as (typeof queuedEvents)[number];
-                if (next.type === 'assistant_message_delta') publishDelta(next);
-                else queuedEvents.push(next);
-                continue;
-              }
-              const value = Array.isArray(chunk) && chunk[0] === 'values' ? chunk[1] : chunk;
-              if (!value || typeof value !== 'object' || !('messages' in value)) continue;
-              last = value as GraphState;
-              const priorActiveTurnId = derivedActiveTurnId();
-              project(last);
-              if (priorActiveTurnId && !derivedActiveTurnId()) publishSessionSnapshot();
-              deliverEvents();
-            }
-          });
-          const result = last ?? ((await graph.getState(config)).values as GraphState);
-          // The consumer may receive an abort after the approval node has already paused.
-          if (requestSignal?.aborted && result.batchIds.length) {
-            const saved = await graph.getState(config);
-            if (saved.tasks.some((task) => task.interrupts.length)) {
-              const terminal = terminalReasonFrom(requestSignal);
-              return await pump(new Command({ resume: { terminal } }), undefined, recovering);
-            }
-          }
-          return result;
-        } catch (error) {
-          if (recovering) {
-            failedClosed = true;
-            throw error;
-          }
-          await recoverEngine(error);
-          throw error;
-        }
-      };
-      recoverEngine = async (error) => {
-        try {
-          const latest = await graph.getState(config);
-          if (latest.tasks.some((task) => task.interrupts.length)) {
-            return await pump(
-              new Command({
-                resume: {
-                  terminal: 'failure',
-                  error: error instanceof Error ? error.message : String(error)
-                }
-              }),
-              undefined,
-              true
-            );
-          }
-          // MemorySaver can retain a successful pending write when a later checkpoint put fails.
-          // Commit cleanup against those writes so recovery does not rerun a tool side effect.
-          await graph.updateState(
-            config,
-            (() => {
-              const update = cleanupUpdate(latest.values as GraphState, 'failure', error) as Record<
-                string,
-                unknown
-              >;
-              queuedEvents.push(...((update.events ?? []) as typeof queuedEvents));
-              delete update.events;
-              delete update.goto;
-              return update;
-            })(),
-            'cleanup'
-          );
-          return await pump(null, undefined, true);
-        } catch (recoveryError) {
-          failedClosed = true;
-          throw recoveryError;
-        }
-      };
-      const consumeObserverFailure = () => {
-        if (!observerFailure) return;
-        const error = observerFailure;
-        observerFailure = undefined;
-        throw error;
-      };
-      const checkpoint = async () => graph.getState(config);
-      const paused = async () =>
-        (await checkpoint()).tasks.some((task) => task.interrupts.length > 0);
-      const resumeTerminal = async (reason: TerminalReason, requestSignal?: AbortSignal) => {
-        const result = await pump(new Command({ resume: { terminal: reason } }), requestSignal);
-        consumeObserverFailure();
-        return result;
-      };
-      const trackOperation = (
-        fn: (signal: AbortSignal) => Promise<AssistantRuntimeResponse>,
-        externalSignal?: AbortSignal,
-        turnId?: string
-      ) => {
-        const controller = new AbortController();
-        const abort = () => controller.abort(externalSignal?.reason);
-        externalSignal?.addEventListener('abort', abort, { once: true });
-        if (externalSignal?.aborted) abort();
-        const promise = Promise.resolve()
-          .then(() => fn(controller.signal))
-          .finally(() => {
-            externalSignal?.removeEventListener('abort', abort);
-            if (inFlight?.promise === promise) inFlight = undefined;
-          });
-        inFlight = { controller, promise, turnId };
-        return promise;
-      };
-
-      try {
-        await withAssistantTraceExportDisabled(async () => {
-          await graph.updateState(config, {
-            uiMessages: structuredClone(definition.initialMessages ?? [])
-          });
-          project((await graph.getState(config)).values as GraphState);
-        });
-      } catch (error) {
-        await saver.deleteThread(threadId);
-        throw error;
-      }
-
-      return {
-        async sendMessage(text, signal, requestedTurnId) {
-          return withAssistantTraceExportDisabled(async () => {
-            if (disposed) throw new Error('Assistant session is disposed');
-            const turnId = requestedTurnId ?? randomUUID();
-            let operationTurnId: string | undefined;
-            const operation = trackOperation(
-              async (requestSignal) => {
-                if (disposed) throw new Error('Assistant session is disposed');
-                if (failedClosed)
-                  throw new Error('Assistant session is closed after a checkpoint failure');
-                if (requestSignal.aborted) throw new Error('Request aborted');
-                let latest;
-                try {
-                  latest = await checkpoint();
-                } catch (error) {
-                  await recoverEngine(error);
-                  throw error;
-                }
-                if (
-                  (latest.values as GraphState).uiMessages.some((message) => message.id === turnId)
-                ) {
-                  const error = new Error('Assistant turn ID has already been used') as Error & {
-                    statusCode: number;
-                  };
-                  error.statusCode = 409;
-                  throw error;
-                }
-                if (disposed || requestSignal.aborted) throw new Error('Request aborted');
-                if (latest.tasks.some((task) => task.interrupts.length))
-                  await resumeTerminal('superseded', requestSignal);
-                if (disposed) throw new Error('Assistant session is disposed');
-                if (requestSignal.aborted) throw new Error('Request aborted');
-                operationTurnId = turnId;
-                queuedEvents.push(event('turn_started'));
-                const result = await pump(
-                  {
-                    messages: [new HumanMessage({ content: text })],
-                    uiMessages: [
-                      { id: turnId, role: 'user', text, createdAt: new Date().toISOString() }
-                    ],
-                    rounds: 0,
-                    turnId,
-                    response: undefined,
-                    batchIds: [],
-                    results: {},
-                    proposals: [],
-                    terminal: undefined,
-                    error: undefined,
-                    budgetExceeded: false
-                  },
-                  requestSignal
-                );
-                if (observerFailure) {
-                  const error = observerFailure;
-                  observerFailure = undefined;
-                  throw error;
-                }
-                if (requestSignal.aborted) throw new Error('Request aborted');
-                if (result.budgetExceeded) throw new AssistantTurnBudgetExceededError();
-                if (result.terminal === 'failure')
-                  throw new Error(result.error ?? 'Assistant turn failed');
-                project(result);
-                return result.response ?? { type: 'assistant_message', text: '' };
-              },
-              signal,
-              turnId
-            );
-            return operation.finally(async () => {
-              if (!operationTurnId) return;
-              try {
-                const latest = await checkpoint();
-                project(latest.values as GraphState);
-              } catch {
-                streamingMessage = undefined;
-                updateProjection();
-              }
-            });
-          });
-        },
-        async resolveToolCalls(decisions, signal) {
-          return withAssistantTraceExportDisabled(async () => {
-            if (disposed) throw new Error('Assistant session is disposed');
-            if (failedClosed)
-              throw new Error('Assistant session is closed after a checkpoint failure');
-            return trackOperation(
-              async (requestSignal) => {
-                let latest;
-                try {
-                  latest = await checkpoint();
-                } catch (error) {
-                  await recoverEngine(error);
-                  throw error;
-                }
-                if (disposed || requestSignal.aborted) throw new Error('Request aborted');
-                const current = latest.values as GraphState;
-                project(current);
-                const pending = current.calls.filter((call) => current.batchIds.includes(call.id));
-                validateToolCallDecisions(decisions, pending, pending, (id) =>
-                  hasResult(current.results, id)
-                );
-                if (!latest.tasks.some((task) => task.interrupts.length))
-                  throw new Error('Tool batch is not pending');
-                if (disposed || requestSignal.aborted) throw new Error('Request aborted');
-                const result = await pump(new Command({ resume: decisions }), requestSignal);
-                consumeObserverFailure();
-                if (requestSignal.aborted) throw new Error('Request aborted');
-                if (result.batchIds.length)
-                  return (
-                    result.response ?? {
-                      type: 'tool_call_resolved',
-                      text: '',
-                      pendingToolCalls: result.calls.filter(
-                        (call) =>
-                          result.batchIds.includes(call.id) && !hasResult(result.results, call.id)
-                      )
-                    }
-                  );
-                if (result.budgetExceeded) throw new AssistantTurnBudgetExceededError();
-                if (result.terminal === 'failure')
-                  throw new Error(result.error ?? 'Assistant turn failed');
-                project(result);
-                return result.response ?? { type: 'assistant_message', text: '' };
-              },
-              signal,
-              graphState?.turnId
-            );
-          });
-        },
-        getSnapshot: () => structuredClone(projection),
-        async cancel(turnId) {
-          if (disposed || !turnId) return;
-          if (inFlight ? inFlight.turnId !== turnId : derivedActiveTurnId() !== turnId) return;
-          if (cancellation?.turnId === turnId) return cancellation.promise;
-          const promise = (async () => {
-            const running = inFlight;
-            if (running) {
-              running.controller.abort('cancelled');
-              try {
-                await running.promise;
-              } catch {
-                // Cancellation commits its terminal graph state before the turn rejects.
-              }
-              return;
-            }
-            if (failedClosed) return;
-            await trackOperation(
-              async () => {
-                const latest = await checkpoint();
-                if (
-                  latest.values.turnId !== turnId ||
-                  !latest.tasks.some((task) => task.interrupts.length)
-                )
-                  return { type: 'assistant_message' as const, text: '' };
-                await resumeTerminal('cancelled');
-                const settled = await checkpoint();
-                streamingMessage = undefined;
-                project(settled.values as GraphState);
-                return { type: 'assistant_message' as const, text: '' };
-              },
-              undefined,
-              turnId
-            );
-          })();
-          cancellation = { turnId, promise };
-          try {
-            await promise;
-          } finally {
-            if (cancellation?.promise === promise) cancellation = undefined;
-          }
-        },
-        async dispose() {
-          if (disposalPromise) return disposalPromise;
-          if (disposed) return;
-          disposed = true;
-          const running = inFlight;
-          disposalPromise = withAssistantTraceExportDisabled(async () => {
-            try {
-              if (running) {
-                running.controller.abort('disposed');
-                try {
-                  await running.promise;
-                } catch {
-                  /* terminal graph state is committed before rejection */
-                }
-              }
-              if (await paused()) await resumeTerminal('disposed');
-            } catch (error) {
-              failedClosed = true;
-              throw error;
-            } finally {
-              await saver.deleteThread(threadId);
-            }
-          });
-          return disposalPromise;
-        }
-      } satisfies AssistantRuntimeSession;
+      const runtime = new LangChainAssistantRuntime(definition);
+      await runtime.initialize(options.createChatModel ?? createAssistantChatModel);
+      return runtime.session();
     }
   };
+}
+
+class LangChainAssistantRuntime {
+  private readonly saver = new MemorySaver();
+  private readonly config = { configurable: { thread_id: `assistant-${randomUUID()}` } };
+  private agent!: AssistantAgent;
+  private readonly calls: AssistantRuntimeToolCall[] = [];
+  private readonly validationErrors = new Map<string, string>();
+  private readonly executing = new Set<string>();
+  /** Calls answered by settling; a late tool completion must not change them again. */
+  private readonly settled = new Set<string>();
+  private readonly suggestionsByMessageId = new Map<string, ScenarioAssistantSuggestionBundle>();
+  private readonly createdAt = new Map<string, string>();
+  private readonly turnIds = new Set<string>();
+  private history: BaseMessage[] = [];
+  private turn: ActiveTurn | undefined;
+  private running: Promise<unknown> | undefined;
+  private runController: AbortController | undefined;
+  private revision = 0;
+  private projection: AssistantRuntimeSnapshot;
+  private disposed = false;
+
+  constructor(private readonly definition: AssistantRuntimeDefinition) {
+    this.projection = {
+      revision: 0,
+      messages: structuredClone(definition.initialMessages ?? []),
+      pendingToolCalls: []
+    };
+  }
+
+  async initialize(createChatModel: AssistantChatModelFactory) {
+    const tokens = new TokenSink((token) => this.onToken(token));
+    const setup = await createChatModel(this.definition, {
+      callbacks: [tokens],
+      hasStreamedText: () => Boolean(this.turn?.streaming?.text)
+    });
+    const interruptOn = Object.fromEntries(
+      this.definition.tools
+        .filter((item) => this.definition.approvalPolicy(item.name) === 'approval_required')
+        .map((item) => [
+          item.name,
+          {
+            allowedDecisions: ['approve', 'edit', 'reject'] as Array<'approve' | 'edit' | 'reject'>
+          }
+        ])
+    );
+    this.agent = createAgent({
+      model: setup.model,
+      tools: this.definition.tools.map((item) => this.toLangChainTool(item)),
+      middleware: [
+        this.turnMiddleware(),
+        ...setup.middleware,
+        humanInTheLoopMiddleware({ interruptMode: 'per_call', interruptOn }),
+        modelCallLimitMiddleware({ runLimit: MAX_ASSISTANT_MODEL_CALLS, exitBehavior: 'error' })
+      ],
+      checkpointer: this.saver,
+      name: 'MCPLab Assistant'
+    }) as unknown as AssistantAgent;
+  }
+
+  session(): AssistantRuntimeSession {
+    return {
+      sendMessage: (text, signal, turnId) => this.track(this.sendMessage(text, signal, turnId)),
+      resolveToolCalls: (decisions, signal) => this.track(this.resolveToolCalls(decisions, signal)),
+      getSnapshot: () => structuredClone(this.projection),
+      cancel: (turnId) => this.cancel(turnId),
+      dispose: () => this.dispose()
+    };
+  }
+
+  // ---- Session operations (the service serializes them) ----
+
+  private async sendMessage(text: string, signal?: AbortSignal, requestedTurnId?: string) {
+    this.assertUsable();
+    const turnId = requestedTurnId ?? randomUUID();
+    if (this.turnIds.has(turnId))
+      throw Object.assign(new Error('Assistant turn ID has already been used'), {
+        statusCode: 409
+      });
+    // A new message replaces a paused batch; earlier interrupted runs may also have left calls open.
+    await this.settleOpenToolCalls(this.turn?.paused ? 'superseded' : 'cancelled');
+    await this.resetTurnBudget();
+    this.turnIds.add(turnId);
+    this.createdAt.set(turnId, new Date().toISOString());
+    this.turn = { id: turnId, proposals: [], decided: new Set(), paused: false };
+    this.publish();
+    this.emit('turn_started');
+    return this.run({ messages: [new HumanMessage({ id: turnId, content: text })] }, signal);
+  }
+
+  private async resolveToolCalls(decisions: AssistantToolCallDecision[], signal?: AbortSignal) {
+    this.assertUsable();
+    const turn = this.turn;
+    if (!turn?.paused) throw new AssistantToolDecisionConflictError();
+    const interrupts = await this.pendingInterrupts();
+    const pending = this.calls.filter((call) => interrupts.has(call.id));
+    const validated = validateToolCallDecisions(decisions, pending);
+    const resume: Record<string, unknown> = {};
+    for (const { decision, call } of validated) {
+      if (decision.decision === 'approve' && decision.arguments !== undefined) {
+        if (!isRecord(decision.arguments))
+          throw Object.assign(new Error('Edited tool arguments must be a JSON object'), {
+            statusCode: 400
+          });
+      }
+      turn.decided.add(call.id);
+      if (decision.decision === 'deny') {
+        this.updateCall(call.id, { status: 'denied', error: 'User denied tool call' });
+        this.emit('tool_call_denied', { pendingToolCallId: call.id });
+        resume[interrupts.get(call.id)!] = { type: 'reject', message: DENIED_RESULT };
+      } else {
+        const edited = decision.arguments !== undefined;
+        this.updateCall(call.id, {
+          status: 'approved',
+          ...(edited ? { arguments: decision.arguments } : {})
+        });
+        this.emit('tool_call_approved', { pendingToolCallId: call.id });
+        resume[interrupts.get(call.id)!] = edited
+          ? { type: 'edit', edited_action: { name: call.publicToolName, args: decision.arguments } }
+          : { type: 'approve' };
+      }
+    }
+    turn.paused = false;
+    return this.run(new Command({ resume }), signal);
+  }
+
+  private async cancel(turnId: string) {
+    if (this.disposed || this.turn?.id !== turnId) return;
+    if (this.running) {
+      // The service aborts the request signal; the run settles its own calls.
+      await this.running.catch(() => undefined);
+      return;
+    }
+    if (!this.turn.paused) return;
+    await this.settleOpenToolCalls('cancelled');
+    this.endTurn();
+    this.emit('session_snapshot');
+  }
+
+  private async dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.runController?.abort('disposed');
+    await this.running?.catch(() => undefined);
+    await this.saver.deleteThread(this.config.configurable.thread_id);
+  }
+
+  // ---- Agent execution ----
+
+  private async run(input: unknown, external?: AbortSignal): Promise<AssistantRuntimeResponse> {
+    // The runtime owns the run's signal so disposal can stop it without the service.
+    const controller = new AbortController();
+    const abort = () => controller.abort(external?.reason);
+    external?.addEventListener('abort', abort, { once: true });
+    if (external?.aborted) abort();
+    this.runController = controller;
+    const signal = controller.signal;
+    try {
+      await withAssistantTracing(async () => {
+        const stream = await this.agent.stream(input, {
+          ...this.config,
+          signal,
+          recursionLimit: GRAPH_RECURSION_LIMIT,
+          streamMode: 'values'
+        });
+        for await (const values of stream) this.onValues(values as { messages: BaseMessage[] });
+      });
+      if (signal.aborted) throw new Error('Request aborted');
+    } catch (error) {
+      return this.failTurn(error, signal);
+    } finally {
+      external?.removeEventListener('abort', abort);
+      if (this.runController === controller) this.runController = undefined;
+    }
+    return this.finishRun();
+  }
+
+  private async finishRun(): Promise<AssistantRuntimeResponse> {
+    const turn = this.turn!;
+    const interrupts = await this.pendingInterrupts();
+    if (interrupts.size) {
+      const waiting = this.calls.filter((call) => interrupts.has(call.id));
+      const firstPause = !turn.paused && turn.decided.size === 0;
+      turn.paused = true;
+      this.publish();
+      if (firstPause)
+        this.emit('tool_call_requested', {
+          pendingToolCalls: waiting,
+          pendingToolCallId: waiting[0]?.id
+        });
+      return {
+        type: firstPause ? 'tool_call_request' : 'tool_call_resolved',
+        text: firstPause ? this.lastAssistantText() : '',
+        pendingToolCalls: structuredClone(waiting)
+      };
+    }
+    const last = [...this.history].reverse().find((message) => AIMessage.isInstance(message));
+    const text = last ? messageText(last) : '';
+    const suggestions = mergeAssistantSuggestions(turn.proposals);
+    if (last?.id && suggestions) this.suggestionsByMessageId.set(last.id, suggestions);
+    this.endTurn();
+    this.emit('assistant_message_completed', { text, ...(suggestions ? { suggestions } : {}) });
+    return { type: 'assistant_message', text, ...(suggestions ? { suggestions } : {}) };
+  }
+
+  private async failTurn(wrapped: unknown, signal?: AbortSignal): Promise<never> {
+    const error = unwrapMiddlewareError(wrapped);
+    const cancelled = Boolean(signal?.aborted) || isAbortError(error);
+    const budget = error instanceof Error && error.name === 'ModelCallLimitMiddlewareError';
+    if (this.disposed) throw error;
+    try {
+      await this.settleOpenToolCalls(
+        cancelled ? 'cancelled' : budget ? 'budget' : 'failure',
+        error
+      );
+    } catch {
+      // Keep the original failure; the next message settles any remaining calls.
+    }
+    this.endTurn();
+    this.emit('session_snapshot');
+    if (budget) throw new AssistantTurnBudgetExceededError();
+    throw error;
+  }
+
+  /**
+   * Gives every unanswered tool call a result so the model history stays valid: calls that
+   * finished keep their result, the rest are skipped or cancelled. Pending writes from a
+   * partially resumed batch are committed first, so no call is answered twice.
+   */
+  private async settleOpenToolCalls(reason: SettleReason, error?: unknown) {
+    let state = await this.agent.getState(this.config);
+    if (state.tasks.length) {
+      await this.agent.updateState(this.config, { messages: [] }, 'tools');
+      state = await this.agent.getState(this.config);
+    }
+    const messages = (state.values as { messages?: BaseMessage[] }).messages ?? [];
+    const answered = new Set(
+      messages.filter((message) => ToolMessage.isInstance(message)).map((m) => m.tool_call_id)
+    );
+    const open = messages
+      .filter((message): message is AIMessage => AIMessage.isInstance(message))
+      .flatMap((message) => message.tool_calls ?? [])
+      .filter((call) => call.id && !answered.has(call.id));
+    if (open.length) {
+      const results = open.map((call) => {
+        const known = this.calls.find((item) => item.id === call.id);
+        // A call that finished before the interruption keeps its real result.
+        if (known?.status === 'approved' && known.resultPreview !== undefined)
+          return new ToolMessage({
+            content: known.resultPreview,
+            tool_call_id: call.id!,
+            name: call.name
+          });
+        this.settled.add(call.id!);
+        const feedback = settleFeedback(reason, this.executing.has(call.id!), error);
+        this.updateCall(call.id!, {
+          status: reason === 'superseded' && !this.executing.has(call.id!) ? 'denied' : 'error',
+          error: feedback
+        });
+        return new ToolMessage({
+          content: JSON.stringify({ error: feedback }),
+          tool_call_id: call.id!,
+          name: call.name,
+          status: 'error'
+        });
+      });
+      await this.agent.updateState(this.config, { messages: results }, 'tools');
+      state = await this.agent.getState(this.config);
+    }
+    this.executing.clear();
+    this.onValues(state.values as { messages: BaseMessage[] });
+  }
+
+  /**
+   * modelCallLimitMiddleware resets its run counter only when the agent finishes normally; a
+   * failed or cancelled run would otherwise carry its count into the next user turn.
+   */
+  private async resetTurnBudget() {
+    const state = await this.agent.getState(this.config);
+    if ((state.values as { runModelCallCount?: number }).runModelCallCount)
+      await this.agent.updateState(this.config, { runModelCallCount: 0 });
+  }
+
+  private async pendingInterrupts(): Promise<Map<string, string>> {
+    const state = await this.agent.getState(this.config);
+    const pending = new Map<string, string>();
+    for (const task of state.tasks) {
+      for (const item of task.interrupts) {
+        const callId = (item.value as { tool_call_id?: unknown } | undefined)?.tool_call_id;
+        if (typeof callId === 'string' && item.id && !this.turn?.decided.has(callId))
+          pending.set(callId, item.id);
+      }
+    }
+    return pending;
+  }
+
+  // ---- Middleware: MCPlab bookkeeping around standard model and tool calls ----
+
+  private turnMiddleware() {
+    return createMiddleware({
+      name: 'McplabAssistantTurn',
+      wrapModelCall: async (request, handler) => {
+        const id = `msg-${randomUUID()}`;
+        const createdAt = new Date().toISOString();
+        if (this.turn) this.turn.streaming = { id, text: '', createdAt };
+        this.createdAt.set(id, createdAt);
+        const response = await handler({
+          ...request,
+          systemMessage: new SystemMessage(this.definition.getSystemPrompt())
+        });
+        return this.normalizeModelResponse(response as AIMessage, id);
+      },
+      wrapToolCall: async (request, handler) => {
+        const call = request.toolCall;
+        const callId = call.id ?? '';
+        const validationError = this.validationErrors.get(callId);
+        if (validationError) {
+          this.updateCall(callId, { status: 'error', error: validationError });
+          return new ToolMessage({
+            content: JSON.stringify({ error: validationError }),
+            tool_call_id: callId,
+            name: call.name,
+            status: 'error'
+          });
+        }
+        let result: Awaited<ReturnType<typeof handler>>;
+        try {
+          result = await handler(request);
+        } catch (error) {
+          if (isGraphInterrupt(error) || isAbortError(error)) throw error;
+          // Tool failures are feedback for the model, not a failed turn.
+          result = new ToolMessage({
+            content: JSON.stringify({ error: errorText(error) }),
+            tool_call_id: callId,
+            name: call.name,
+            status: 'error'
+          });
+        }
+        if (!ToolMessage.isInstance(result)) return result;
+        const normalized = withJsonErrorContent(result);
+        this.recordToolResult(callId, normalized);
+        return normalized;
+      }
+    });
+  }
+
+  private normalizeModelResponse(response: AIMessage, id: string): AIMessage {
+    const usedIds = new Set(this.calls.map((call) => call.id));
+    const requested = [
+      ...(response.tool_calls ?? []).map((call) => ({
+        providerId: call.id,
+        name: call.name,
+        args: isRecord(call.args) ? call.args : {},
+        validationError: isRecord(call.args)
+          ? undefined
+          : `Invalid arguments for tool '${call.name}': expected a JSON object.`
+      })),
+      ...(response.invalid_tool_calls ?? []).map((call) => ({
+        providerId: call.id,
+        name: call.name ?? 'unknown',
+        args: {},
+        validationError: `Invalid arguments for tool '${call.name ?? 'unknown'}': ${
+          call.error ?? 'malformed tool arguments'
+        }${call.args ? ` (raw: ${call.args})` : ''}`
+      }))
+    ];
+    const toolCalls = requested.map((call) => {
+      const callId = uniqueToolCallId(call.providerId, usedIds);
+      const known = this.definition.tools.find((item) => item.name === call.name);
+      this.calls.push({
+        id: callId,
+        server: known?.server ?? 'unknown',
+        tool: known?.tool ?? call.name,
+        publicToolName: call.name,
+        arguments: call.args,
+        ...(call.validationError ? { validationError: call.validationError } : {}),
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+      if (call.validationError) this.validationErrors.set(callId, call.validationError);
+      return { id: callId, name: call.name, args: call.args, type: 'tool_call' as const };
+    });
+    const additionalKwargs = { ...response.additional_kwargs };
+    delete additionalKwargs.tool_calls;
+    return new AIMessage({
+      content: withNormalizedToolUseBlocks(response.content, toolCalls),
+      id,
+      additional_kwargs: additionalKwargs,
+      response_metadata: response.response_metadata,
+      usage_metadata: response.usage_metadata,
+      tool_calls: toolCalls,
+      invalid_tool_calls: []
+    });
+  }
+
+  private toLangChainTool(definitionTool: AssistantRuntimeDefinition['tools'][number]) {
+    return tool(
+      async (args: unknown, config?: { signal?: AbortSignal; toolCall?: { id?: string } }) => {
+        const callId = config?.toolCall?.id;
+        if (callId) {
+          this.executing.add(callId);
+          if (this.calls.find((call) => call.id === callId)?.status === 'pending') {
+            this.updateCall(callId, { status: 'approved' });
+            this.emit('tool_call_approved', { pendingToolCallId: callId });
+          }
+        }
+        try {
+          const value = await definitionTool.execute(args, config?.signal);
+          const proposal = definitionTool.extractProposal?.(value);
+          if (proposal) this.turn?.proposals.push(proposal);
+          return resultPreview(JSON.stringify(value));
+        } finally {
+          if (callId) this.executing.delete(callId);
+        }
+      },
+      {
+        name: definitionTool.name,
+        description: definitionTool.description ?? '',
+        schema: asJsonSchema(definitionTool.inputSchema)
+      }
+    ) as StructuredToolInterface;
+  }
+
+  private recordToolResult(callId: string, result: ToolMessage) {
+    const current = this.calls.find((call) => call.id === callId);
+    if (!current || this.settled.has(callId) || this.disposed) return;
+    const content = messageText(result);
+    if (current.status === 'denied') {
+      this.updateCall(callId, { resultPreview: resultPreview(content) });
+    } else if (result.status === 'error') {
+      this.updateCall(callId, {
+        status: 'error',
+        error: errorFromContent(content),
+        resultPreview: resultPreview(content)
+      });
+    } else {
+      this.updateCall(callId, { status: 'approved', resultPreview: content });
+    }
+    this.emit('tool_call_resolved', {
+      pendingToolCallId: callId,
+      pendingToolCall: this.calls.find((call) => call.id === callId)
+    });
+  }
+
+  // ---- Snapshot projection ----
+
+  private onToken(token: string) {
+    const streaming = this.turn?.streaming;
+    if (!streaming || !token) return;
+    const delta = streaming.text ? token : token.trimStart();
+    if (!delta) return;
+    const offset = streaming.text.length;
+    streaming.text += delta;
+    this.publish();
+    this.emit('assistant_message_delta', {
+      turnId: this.turn!.id,
+      messageId: streaming.id,
+      offset,
+      delta,
+      createdAt: streaming.createdAt,
+      revision: this.revision
+    });
+  }
+
+  private onValues(values: { messages?: BaseMessage[] }) {
+    // Interrupt chunks carry no state; keep the history from the last full update.
+    if (!Array.isArray(values.messages)) return;
+    this.history = values.messages;
+    const streaming = this.turn?.streaming;
+    if (streaming && this.history.some((message) => message.id === streaming.id))
+      this.turn!.streaming = undefined;
+    this.publish();
+  }
+
+  private publish() {
+    if (this.disposed) return;
+    this.revision += 1;
+    const turn = this.turn;
+    const active = turn && (this.running || turn.paused);
+    this.projection = {
+      revision: this.revision,
+      messages: [
+        ...structuredClone(this.definition.initialMessages ?? []),
+        ...this.history.flatMap((message) => this.toUiMessage(message))
+      ],
+      pendingToolCalls: structuredClone(this.calls),
+      ...(active ? { activeTurnId: turn.id } : {}),
+      ...(active && turn.streaming?.text
+        ? {
+            streamingMessage: {
+              id: turn.streaming.id,
+              turnId: turn.id,
+              text: turn.streaming.text,
+              createdAt: turn.streaming.createdAt
+            }
+          }
+        : {})
+    };
+  }
+
+  private toUiMessage(message: BaseMessage): AssistantRuntimeMessage[] {
+    const id = message.id ?? '';
+    const createdAt = this.createdAt.get(id) ?? new Date().toISOString();
+    if (HumanMessage.isInstance(message))
+      return [{ id, role: 'user', text: messageText(message), createdAt }];
+    if (AIMessage.isInstance(message)) {
+      const callIds = (message.tool_calls ?? []).map((call) => call.id ?? '');
+      const first = this.calls.find((call) => call.id === callIds[0]);
+      const suggestions = this.suggestionsByMessageId.get(id);
+      if (!callIds.length)
+        return [
+          {
+            id,
+            role: 'assistant',
+            text: messageText(message),
+            createdAt,
+            ...(suggestions ? { suggestions } : {})
+          }
+        ];
+      return [
+        {
+          id,
+          role: 'assistant',
+          text: messageText(message) || TOOL_REQUEST_FALLBACK_TEXT,
+          createdAt,
+          pendingToolCallId: callIds[0],
+          pendingToolCallIds: callIds,
+          toolRequestServer: first?.server,
+          toolRequestName: first?.tool,
+          toolRequestPublicName: first?.publicToolName
+        }
+      ];
+    }
+    if (ToolMessage.isInstance(message)) {
+      const call = this.calls.find((item) => item.id === message.tool_call_id);
+      const content = messageText(message);
+      const toolId = id || `msg-${message.tool_call_id}`;
+      if (!this.createdAt.has(toolId)) this.createdAt.set(toolId, new Date().toISOString());
+      return [
+        {
+          id: toolId,
+          role: 'tool',
+          text:
+            call?.error && message.status === 'error'
+              ? `Tool error (${call.server}::${call.tool}): ${call.error}`
+              : (call?.resultPreview ?? content),
+          createdAt: this.createdAt.get(toolId)!
+        }
+      ];
+    }
+    return [];
+  }
+
+  // ---- Helpers ----
+
+  private track<T>(operation: Promise<T>): Promise<T> {
+    const running = operation.finally(() => {
+      if (this.running === running) {
+        this.running = undefined;
+        this.publish();
+      }
+    });
+    this.running = running;
+    return running;
+  }
+
+  private endTurn() {
+    this.turn = undefined;
+    this.publish();
+  }
+
+  private lastAssistantText() {
+    const last = [...this.history].reverse().find((message) => AIMessage.isInstance(message));
+    return (last && messageText(last)) || TOOL_REQUEST_FALLBACK_TEXT;
+  }
+
+  private updateCall(id: string, update: Partial<AssistantRuntimeToolCall>) {
+    const index = this.calls.findIndex((call) => call.id === id);
+    if (index < 0) return;
+    this.calls[index] = { ...this.calls[index]!, ...update };
+    this.publish();
+  }
+
+  private emit(type: AssistantRuntimeEvent['type'], payload: Record<string, unknown> = {}) {
+    if (this.disposed) return;
+    try {
+      this.definition.onEvent?.({
+        type,
+        ts: new Date().toISOString(),
+        payload: structuredClone(payload)
+      });
+    } catch {
+      // Observers (SSE broadcast) must not break the conversation.
+    }
+  }
+
+  private assertUsable() {
+    if (this.disposed) throw new Error('Assistant session is disposed');
+  }
+}
+
+/** Receives model tokens in order; attached to each model so a token is delivered once. */
+class TokenSink extends BaseCallbackHandler {
+  name = 'mcplab_assistant_tokens';
+  awaitHandlers = true;
+  lc_prefer_streaming = true;
+
+  constructor(private readonly onToken: (token: string) => void) {
+    super();
+  }
+
+  handleLLMNewToken(token: string) {
+    this.onToken(token);
+  }
+}
+
+/** LangChain wraps errors raised in middleware; callers need the original (status codes, categories). */
+function unwrapMiddlewareError(error: unknown): unknown {
+  let current = error;
+  while (current instanceof MiddlewareError && current.cause !== undefined) current = current.cause;
+  return current;
+}
+
+/** Error results always reach the model as {"error": ...}, whichever layer produced them. */
+function withJsonErrorContent(result: ToolMessage): ToolMessage {
+  if (result.status !== 'error') return result;
+  const text = messageText(result);
+  try {
+    if (isRecord(JSON.parse(text))) return result;
+  } catch {
+    // Plain-text error from LangChain's tool node.
+  }
+  return new ToolMessage({
+    content: JSON.stringify({ error: text }),
+    tool_call_id: result.tool_call_id,
+    name: result.name,
+    status: 'error',
+    ...(result.id ? { id: result.id } : {})
+  });
+}
+
+function errorFromContent(content: string): string {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (isRecord(parsed) && typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    // Not JSON; use the text as-is.
+  }
+  return content;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function settleFeedback(reason: SettleReason, wasExecuting: boolean, error?: unknown): string {
+  if (reason === 'budget') return 'Assistant turn model-call budget exhausted';
+  if (reason === 'superseded')
+    return wasExecuting
+      ? 'Tool execution outcome unknown because a new user message superseded the turn'
+      : 'Tool call skipped because a new user message superseded the turn';
+  if (reason === 'cancelled')
+    return wasExecuting
+      ? 'Tool execution outcome unknown because cancellation interrupted the response'
+      : 'Tool call cancelled before execution';
+  const detail = error instanceof Error ? error.message : String(error ?? '');
+  return detail || 'Assistant turn failed before the tool call completed';
+}
+
+/** Anthropic replays tool_use content blocks, so their IDs must match the normalized calls. */
+function withNormalizedToolUseBlocks(
+  content: AIMessage['content'],
+  calls: Array<{ id: string; args: Record<string, unknown> }>
+): AIMessage['content'] {
+  if (!Array.isArray(content)) return content;
+  let index = 0;
+  return content.map((block) => {
+    if (!isRecord(block) || block.type !== 'tool_use') return block;
+    const call = calls[index++];
+    return call ? ({ ...block, id: call.id, input: call.args } as typeof block) : block;
+  });
+}
+
+function messageText(message: BaseMessage): string {
+  const content = message.content;
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter(
+      (part): part is { type: 'text'; text: string } =>
+        isRecord(part) && part.type === 'text' && typeof part.text === 'string'
+    )
+    .map((part) => part.text)
+    .join('')
+    .trim();
+}
+
+function asJsonSchema(schema: unknown): Record<string, unknown> {
+  if (isRecord(schema)) return { ...schema, type: schema.type ?? 'object' };
+  return { type: 'object', properties: {}, additionalProperties: true };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

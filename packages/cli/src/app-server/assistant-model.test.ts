@@ -1,24 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import {
   AgentConnectionError,
   type AssistantRuntimeDefinition,
-  type LlmAgentConfig,
-  type AssistantRuntimeTool
+  type AssistantRuntimeEvent,
+  type AssistantRuntimeTool,
+  type LlmAgentConfig
 } from '@inspectr/mcplab-core';
-import { callAssistantModel } from './assistant-model.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 
 type Provider = LlmAgentConfig['provider'];
+type WireRequest = { url: string; body: Record<string, unknown>; authorization: string };
 const PROVIDERS: Provider[] = ['openai', 'anthropic', 'azure_openai', 'azure_foundry'];
-type WireRequest = { url: string; body: Record<string, unknown> };
 
 function definition(
   provider: Provider,
   model = 'test-model',
-  execute = vi.fn(async () => 'unused')
+  overrides: Partial<AssistantRuntimeDefinition> = {}
 ): AssistantRuntimeDefinition {
-  const agent: LlmAgentConfig = { provider, model, temperature: 0.25, max_tokens: 321 };
   const tools: AssistantRuntimeTool[] = [
     {
       name: 'lookup',
@@ -26,248 +24,157 @@ function definition(
       tool: 'lookup',
       description: 'Look something up',
       inputSchema: { properties: { q: { type: 'string' } }, required: ['q'] },
-      execute
+      execute: vi.fn(async () => ({ found: true }))
     }
   ];
   return {
-    agent,
-    tools,
-    getSystemPrompt: () => 'one system prompt',
     assistant: 'result',
-    context: {
-      scenario: {
-        id: 'scenario-1',
-        prompt: 'prompt',
-        serverNames: [],
-        evalRules: [],
-        extractRules: []
-      }
-    },
-    approvalPolicy: () => 'approval_required'
+    agent: { provider, model, temperature: 0.25, max_tokens: 321 },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'one system prompt',
+    tools,
+    approvalPolicy: () => 'approval_required',
+    ...overrides
   };
 }
 
-const createInvokeAssistantRuntimeFactory = () =>
-  createLangChainAssistantRuntimeFactory((agentDefinition, messages, signal) =>
-    callAssistantModel(agentDefinition, messages, signal)
-  );
+/** Runs a turn through the production runtime: createAgent with real LangChain providers. */
+async function ask(agentDefinition: AssistantRuntimeDefinition, message = 'question') {
+  const events: AssistantRuntimeEvent[] = [];
+  const session = await createLangChainAssistantRuntimeFactory().create({
+    ...agentDefinition,
+    onEvent: (event) => events.push(event)
+  });
+  const response = session.sendMessage(message);
+  return { session, events, response };
+}
 
-function openAiResponse(content: string | null, toolCalls: unknown[] = []) {
+function sse(chunks: string[], { failAfter }: { failAfter?: string } = {}) {
+  const encoder = new TextEncoder();
   return new Response(
-    JSON.stringify({
-      id: 'chatcmpl-test',
-      object: 'chat.completion',
-      created: 1,
-      model: 'test-model',
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        // Fail after the first chunk has been delivered, like a connection dropping mid-answer.
+        if (failAfter) setTimeout(() => controller.error(new Error(failAfter)), 20);
+        else controller.close();
+      }
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } }
+  );
+}
+
+function openAiStream(
+  text: string,
+  toolCalls: Array<{ id: string; name: string; arguments: string }> = [],
+  options: { failAfter?: string } = {}
+) {
+  const events: unknown[] = [];
+  if (text)
+    events.push({
+      choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }]
+    });
+  toolCalls.forEach((call, index) =>
+    events.push({
       choices: [
         {
           index: 0,
-          finish_reason: toolCalls.length ? 'tool_calls' : 'stop',
-          message: {
-            role: 'assistant',
-            content,
-            ...(toolCalls.length ? { tool_calls: toolCalls } : {})
-          }
-        }
-      ],
-      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-    }),
-    { status: 200, headers: { 'content-type': 'application/json' } }
-  );
-}
-
-function anthropicResponse(content: unknown[]) {
-  return new Response(
-    JSON.stringify({
-      id: 'msg_test',
-      type: 'message',
-      role: 'assistant',
-      model: 'test-model',
-      content,
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: { input_tokens: 1, output_tokens: 1 }
-    }),
-    { status: 200, headers: { 'content-type': 'application/json' } }
-  );
-}
-
-function streamingResponse(provider: Provider) {
-  const encoder = new TextEncoder();
-  const openAiEvents = [
-    { choices: [{ index: 0, delta: { role: 'assistant', content: 'hel' }, finish_reason: null }] },
-    { choices: [{ index: 0, delta: { content: 'lo' }, finish_reason: null }] },
-    { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
-  ].map((event) => `data: ${JSON.stringify(event)}\n\n`);
-  const anthropicEvents = [
-    [
-      'message_start',
-      {
-        type: 'message_start',
-        message: {
-          id: 'msg_test',
-          type: 'message',
-          role: 'assistant',
-          model: 'test-model',
-          content: [],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: { input_tokens: 1, output_tokens: 0 }
-        }
-      }
-    ],
-    [
-      'content_block_start',
-      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }
-    ],
-    [
-      'content_block_delta',
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hel' } }
-    ],
-    [
-      'content_block_delta',
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'lo' } }
-    ],
-    ['content_block_stop', { type: 'content_block_stop', index: 0 }],
-    [
-      'message_delta',
-      {
-        type: 'message_delta',
-        delta: { stop_reason: 'end_turn', stop_sequence: null },
-        usage: { output_tokens: 2 }
-      }
-    ],
-    ['message_stop', { type: 'message_stop' }]
-  ].map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`);
-  const body = (
-    provider === 'anthropic' ? anthropicEvents : [...openAiEvents, 'data: [DONE]\n\n']
-  ).join('');
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(body));
-        controller.close();
-      }
-    }),
-    { status: 200, headers: { 'content-type': 'text/event-stream' } }
-  );
-}
-
-function streamingToolResponse(provider: 'openai' | 'anthropic') {
-  const encoder = new TextEncoder();
-  const body =
-    provider === 'openai'
-      ? [
-          {
-            choices: [
+          delta: {
+            ...(text ? {} : { role: 'assistant' }),
+            tool_calls: [
               {
-                index: 0,
-                delta: {
-                  role: 'assistant',
-                  tool_calls: [
-                    {
-                      index: 0,
-                      id: 'call-stream',
-                      type: 'function',
-                      function: { name: 'lookup', arguments: '{"q":' }
-                    }
-                  ]
-                },
-                finish_reason: null
+                index,
+                id: call.id,
+                type: 'function',
+                function: { name: call.name, arguments: call.arguments }
               }
             ]
           },
-          {
-            choices: [
-              {
-                index: 0,
-                delta: { tool_calls: [{ index: 0, function: { arguments: '"x"}' } }] },
-                finish_reason: null
-              }
-            ]
-          },
-          { choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }
-        ]
-          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
-          .join('') + 'data: [DONE]\n\n'
-      : [
-          [
-            'message_start',
-            {
-              type: 'message_start',
-              message: {
-                id: 'msg_tool',
-                type: 'message',
-                role: 'assistant',
-                model: 'test-model',
-                content: [],
-                stop_reason: null,
-                stop_sequence: null,
-                usage: { input_tokens: 1, output_tokens: 0 }
-              }
-            }
-          ],
-          [
-            'content_block_start',
-            {
-              type: 'content_block_start',
-              index: 0,
-              content_block: { type: 'tool_use', id: 'call-stream', name: 'lookup', input: {} }
-            }
-          ],
-          [
-            'content_block_delta',
-            {
-              type: 'content_block_delta',
-              index: 0,
-              delta: { type: 'input_json_delta', partial_json: '{"q":' }
-            }
-          ],
-          [
-            'content_block_delta',
-            {
-              type: 'content_block_delta',
-              index: 0,
-              delta: { type: 'input_json_delta', partial_json: '"x"}' }
-            }
-          ],
-          ['content_block_stop', { type: 'content_block_stop', index: 0 }],
-          [
-            'message_delta',
-            {
-              type: 'message_delta',
-              delta: { stop_reason: 'tool_use', stop_sequence: null },
-              usage: { output_tokens: 2 }
-            }
-          ],
-          ['message_stop', { type: 'message_stop' }]
-        ]
-          .map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`)
-          .join('');
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(body));
-        controller.close();
+          finish_reason: null
+        }
+      ]
+    })
+  );
+  if (!options.failAfter)
+    events.push({
+      choices: [{ index: 0, delta: {}, finish_reason: toolCalls.length ? 'tool_calls' : 'stop' }]
+    });
+  const chunks = events.map((event) => `data: ${JSON.stringify({ id: 'chatcmpl', ...event })}\n\n`);
+  return sse(options.failAfter ? chunks : [...chunks, 'data: [DONE]\n\n'], options);
+}
+
+function anthropicStream(text: string) {
+  const event = (name: string, data: unknown) =>
+    `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+  return sse([
+    event('message_start', {
+      type: 'message_start',
+      message: {
+        id: 'msg_test',
+        type: 'message',
+        role: 'assistant',
+        model: 'test-model',
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 }
       }
     }),
-    { status: 200, headers: { 'content-type': 'text/event-stream' } }
-  );
+    event('content_block_start', {
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'text', text: '' }
+    }),
+    event('content_block_delta', {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text }
+    }),
+    event('content_block_stop', { type: 'content_block_stop', index: 0 }),
+    event('message_delta', {
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn', stop_sequence: null },
+      usage: { output_tokens: 1 }
+    }),
+    event('message_stop', { type: 'message_stop' })
+  ]);
 }
+
+function jsonError(status: number, message: string, type = 'invalid_request_error') {
+  return new Response(JSON.stringify({ error: { type, message } }), {
+    status,
+    headers: { 'content-type': 'application/json' }
+  });
+}
+
+function captureFetch(respond: (request: WireRequest, index: number) => Response) {
+  const requests: WireRequest[] = [];
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = {
+      url: String(input),
+      body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
+      authorization: new Headers(init?.headers).get('authorization') ?? ''
+    };
+    requests.push(request);
+    return respond(request, requests.length - 1);
+  });
+  return requests;
+}
+
+beforeEach(() => {
+  vi.stubEnv('LANGSMITH_TRACING', 'false');
+  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
+  vi.stubEnv('LANGCHAIN_TRACING', 'false');
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
-beforeEach(() => {
-  vi.stubEnv('LANGCHAIN_TRACING', 'false');
-  vi.stubEnv('LANGCHAIN_TRACING_V2', 'false');
-});
-
-describe('native assistant model boundary', () => {
+describe('assistant chat models on the standard agent', () => {
   it.each(PROVIDERS)(
-    'sends %s requests through its LangChain provider with exactly one system prompt',
+    'streams a %s answer with one system prompt and MCPlab provider settings',
     async (provider) => {
       vi.stubEnv('OPENAI_API_KEY', 'openai-key');
       vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
@@ -276,45 +183,29 @@ describe('native assistant model boundary', () => {
       vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
       vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models/');
       vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
-      vi.stubEnv('LANGSMITH_TRACING', 'true');
-      vi.stubEnv('LANGCHAIN_TRACING_V2', 'true');
-      vi.stubEnv('LANGCHAIN_TRACING', 'true');
-      vi.stubEnv('LANGSMITH_ENDPOINT', 'https://assistant-export-leak.invalid');
-      const requests: WireRequest[] = [];
-      const traceRequests: string[] = [];
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.includes('assistant-export-leak.invalid') || url.includes('smith.langchain.com')) {
-          traceRequests.push(`${init?.method ?? 'GET'} ${url}`);
-          return new Response('{}', {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-        requests.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
-        return provider === 'anthropic'
-          ? anthropicResponse([{ type: 'text', text: ' answer ' }])
-          : openAiResponse(' answer ');
-      });
-
-      const result = await callAssistantModel(
-        definition(provider, provider === 'azure_foundry' ? ' foundry-deployment ' : 'test-model'),
-        [new HumanMessage('question')]
+      const requests = captureFetch(() =>
+        provider === 'anthropic' ? anthropicStream(' answer ') : openAiStream(' answer ')
       );
 
-      expect(result).toMatchObject({ type: 'assistant_message', text: 'answer' });
-      expect(traceRequests.filter((request) => request.includes('/runs'))).toEqual([]);
+      const { response, events, session } = await ask(
+        definition(provider, provider === 'azure_foundry' ? ' foundry-deployment ' : 'test-model')
+      );
+
+      await expect(response).resolves.toMatchObject({ type: 'assistant_message', text: 'answer' });
+      expect(events.filter((event) => event.type === 'assistant_message_delta')).not.toHaveLength(
+        0
+      );
       expect(requests).toHaveLength(1);
       const body = requests[0]!.body;
+      expect(body.stream).toBe(true);
       expect(body.temperature).toBe(0.25);
       if (provider === 'openai' || provider === 'anthropic') expect(body.max_tokens).toBe(321);
       else expect(body.max_completion_tokens).toBe(321);
-      const wireMessages = body.messages as Array<Record<string, unknown>> | undefined;
       const systemMessages =
         provider === 'anthropic'
-          ? [body.system]
-          : wireMessages
-              ?.filter((message) => message.role === 'system')
+          ? [body.system].flat().map((part: any) => (typeof part === 'string' ? part : part.text))
+          : (body.messages as Array<Record<string, unknown>>)
+              .filter((message) => message.role === 'system')
               .map((message) => message.content);
       expect(systemMessages).toEqual(['one system prompt']);
       const wireTools = body.tools as Array<Record<string, unknown>>;
@@ -325,461 +216,80 @@ describe('native assistant model boundary', () => {
           : { type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }
       );
       if (provider === 'azure_foundry') {
-        expect(requests[0]!.url).toContain('/openai/v1/chat/completions');
+        expect(requests[0]!.url).toBe('https://foundry.example/openai/v1/chat/completions');
         expect(body.model).toBe('foundry-deployment');
-        expect(requests[0]!.url).not.toContain('api-version');
       }
       if (provider === 'azure_openai') {
         expect(requests[0]!.url).toContain(
-          '/openai/deployments/global-deployment/chat/completions'
+          '/openai/deployments/global-deployment/chat/completions?api-version=2024-02-15-preview'
         );
-        expect(requests[0]!.url).toContain('api-version=2024-02-15-preview');
       }
+      await session.dispose();
     }
   );
 
-  it('preserves malformed tool call IDs and returns a corrective validation error', async () => {
+  it('runs an OpenAI tool call through approval and pairs its result in the next request', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const response = openAiResponse(null, [
-      { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{bad' } }
-    ]);
-    vi.stubGlobal('fetch', async () => response.clone());
+    const requests = captureFetch((_request, index) =>
+      index === 0
+        ? openAiStream('', [{ id: 'call-1', name: 'lookup', arguments: '{"q":"x"}' }])
+        : openAiStream('found it')
+    );
+    const agentDefinition = definition('openai');
+    const { session, response } = await ask(agentDefinition);
+    await expect(response).resolves.toMatchObject({
+      type: 'tool_call_request',
+      pendingToolCalls: [{ id: 'call-1', arguments: { q: 'x' } }]
+    });
     await expect(
-      callAssistantModel(definition('openai'), [new HumanMessage('question')])
-    ).resolves.toMatchObject({
-      type: 'tool_call_request',
-      toolCalls: [
-        { id: 'call-1', name: 'lookup', validationError: expect.stringContaining('{bad') }
-      ]
-    });
-  });
-
-  it('preserves provider order when malformed and valid native calls are mixed', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    vi.stubGlobal('fetch', async () =>
-      openAiResponse(null, [
-        { id: 'bad-first', type: 'function', function: { name: 'lookup', arguments: '{bad' } },
-        {
-          id: 'good-second',
-          type: 'function',
-          function: { name: 'lookup', arguments: '{"q":"ok"}' }
-        }
-      ])
+      session.resolveToolCalls([{ toolCallId: 'call-1', decision: 'approve' }])
+    ).resolves.toMatchObject({ type: 'assistant_message', text: 'found it' });
+    expect(agentDefinition.tools[0]!.execute).toHaveBeenCalledWith(
+      { q: 'x' },
+      expect.any(AbortSignal)
     );
-    const result = await callAssistantModel(definition('openai'), [new HumanMessage('question')]);
-    expect(result).toMatchObject({
-      type: 'tool_call_request',
-      toolCalls: [
-        { id: 'bad-first', validationError: expect.stringContaining('{bad') },
-        { id: 'good-second', arguments: { q: 'ok' } }
-      ]
-    });
-  });
-
-  it('returns an OpenAI corrective tool result and valid history after malformed JSON', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const requests: Array<Record<string, unknown>> = [];
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
-      requests.push(body);
-      return requests.length === 1
-        ? openAiResponse(' ', [
-            { id: 'bad-json', type: 'function', function: { name: 'lookup', arguments: '{bad' } }
-          ])
-        : openAiResponse('Corrected the tool input.');
-    });
-    const execute = vi.fn(async () => 'must not execute');
-    const session = await createInvokeAssistantRuntimeFactory().create({
-      ...definition('openai'),
-      tools: [
-        {
-          name: 'lookup',
-          server: 'example',
-          tool: 'lookup',
-          description: 'Lookup',
-          inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-          execute
-        }
-      ],
-      approvalPolicy: () => 'automatic'
-    });
-
-    await expect(session.sendMessage('Look it up')).resolves.toMatchObject({
-      type: 'assistant_message',
-      text: 'Corrected the tool input.'
-    });
-    expect(execute).not.toHaveBeenCalled();
-    const continuation = requests[1]!.messages as Array<{
-      role: string;
-      tool_calls?: Array<{ id: string; function: { arguments: string } }>;
-      tool_call_id?: string;
-    }>;
-    const assistantCall = continuation.find((message) => message.tool_calls?.length);
-    expect(assistantCall?.tool_calls).toMatchObject([
-      { id: 'bad-json', function: { arguments: '{}' } }
+    const followup = requests[1]!.body.messages as Array<Record<string, any>>;
+    expect(followup.find((message) => message.role === 'assistant')?.tool_calls).toMatchObject([
+      { id: 'call-1', function: { name: 'lookup' } }
     ]);
-    expect(continuation).toContainEqual(
-      expect.objectContaining({ role: 'tool', tool_call_id: 'bad-json' })
-    );
+    expect(followup.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call-1' });
+    await session.dispose();
   });
 
-  it('preserves raw order when malformed and valid calls share a duplicate provider ID', async () => {
+  it('answers malformed OpenAI arguments with an error result before the next request', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    vi.stubGlobal('fetch', async () =>
-      openAiResponse(null, [
-        { id: 'duplicate', type: 'function', function: { name: 'lookup', arguments: '{bad' } },
-        {
-          id: 'duplicate',
-          type: 'function',
-          function: { name: 'lookup', arguments: '{"q":"valid"}' }
-        }
-      ])
+    const requests = captureFetch((_request, index) =>
+      index === 0
+        ? openAiStream('', [{ id: 'broken', name: 'lookup', arguments: '{"q": not json}' }])
+        : openAiStream('recovered')
     );
-    const result = await callAssistantModel(definition('openai'), [new HumanMessage('question')]);
-    expect(result).toMatchObject({
-      type: 'tool_call_request',
-      toolCalls: [
-        { id: 'duplicate', validationError: expect.stringContaining('{bad') },
-        { id: 'duplicate', arguments: { q: 'valid' } }
-      ]
-    });
-  });
-
-  it('forwards tool history and result IDs and returns native tool calls without running callbacks', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    let requestBody: Record<string, unknown> | undefined;
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return openAiResponse(' ', [
-        { id: 'call-1', type: 'function', function: { name: 'lookup', arguments: '{"q":"x"}' } }
-      ]);
-    });
-    const history = [
-      new SystemMessage('old system must be replaced'),
-      new AIMessage({
-        content: '',
-        tool_calls: [{ id: 'call-old', name: 'lookup', args: { q: 'old' }, type: 'tool_call' }]
-      }),
-      new ToolMessage({ content: 'found', tool_call_id: 'call-old' }),
-      new HumanMessage('next')
-    ];
-    const execute = vi.fn(async () => 'must not execute');
-    const result = await callAssistantModel(definition('openai', 'test-model', execute), history);
-    const wireMessages = requestBody?.messages as Array<Record<string, unknown>>;
-    expect(wireMessages).toHaveLength(4);
-    expect(wireMessages[0]).toEqual({ role: 'system', content: 'one system prompt' });
-    expect(wireMessages[1]).toMatchObject({
-      role: 'assistant',
-      tool_calls: [{ id: 'call-old', function: { name: 'lookup', arguments: '{"q":"old"}' } }]
-    });
-    expect(wireMessages[2]).toMatchObject({
-      role: 'tool',
-      tool_call_id: 'call-old',
-      content: 'found'
-    });
-    expect(wireMessages.filter((message) => message.role === 'system')).toHaveLength(1);
-    expect(wireMessages.at(-1)).toMatchObject({ role: 'user', content: 'next' });
-    expect(execute).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      type: 'tool_call_request',
-      text: 'I need a tool to help answer.',
-      toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { q: 'x' } }]
-    });
-  });
-
-  it('does not send a request for a pre-aborted call', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
-    const controller = new AbortController();
-    controller.abort();
-    await expect(
-      callAssistantModel(definition('openai'), [new HumanMessage('question')], controller.signal)
-    ).rejects.toThrow();
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it('uses the OpenAI chat completions endpoint and token field selected by the native integration', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return openAiResponse('ok');
-    });
-    await callAssistantModel(definition('openai', 'o3-mini'), [new HumanMessage('question')]);
-    expect(requests[0]!.url).toContain('/chat/completions');
-    expect(requests[0]!.body.max_completion_tokens).toBe(321);
-    expect(requests[0]!.body).not.toHaveProperty('max_tokens');
-  });
-
-  it('streams text fragments to the callback while preserving the assembled model output', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    let requestBody: Record<string, unknown> | undefined;
-    let finishProviderStream!: () => void;
-    const encoder = new TextEncoder();
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      const chunks = [
-        {
-          choices: [{ index: 0, delta: { role: 'assistant', content: 'hel' }, finish_reason: null }]
-        },
-        { choices: [{ index: 0, delta: { content: 'lo' }, finish_reason: null }] },
-        { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
-      ];
-      const events = chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(encoder.encode(events[0]));
-            finishProviderStream = () => {
-              controller.enqueue(encoder.encode(events.slice(1).join('') + 'data: [DONE]\n\n'));
-              controller.close();
-            };
-          }
-        }),
-        { status: 200, headers: { 'content-type': 'text/event-stream' } }
-      );
-    });
-    const deltas: string[] = [];
-    const pending = callAssistantModel(
-      definition('openai'),
-      [new HumanMessage('question')],
-      undefined,
-      (delta) => deltas.push(delta)
-    );
-    let completed = false;
-    void pending.then(
-      () => {
-        completed = true;
-      },
-      () => {
-        completed = true;
-      }
-    );
-    try {
-      await vi.waitFor(() => expect(deltas).toEqual(['hel']));
-      expect(completed).toBe(false);
-    } finally {
-      finishProviderStream();
-    }
-    const result = await pending;
-    expect(requestBody?.stream).toBe(true);
-    expect(deltas).toEqual(['hel', 'lo']);
-    expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
-  });
-
-  it.each(PROVIDERS)(
-    '%s uses native streaming when a text callback is supplied',
-    async (provider) => {
-      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-      vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
-      vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
-      vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
-      vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models/');
-      vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
-      vi.stubEnv('LANGSMITH_TRACING', 'true');
-      vi.stubEnv('LANGCHAIN_TRACING_V2', 'true');
-      vi.stubEnv('LANGSMITH_ENDPOINT', 'https://assistant-stream-export-leak.invalid');
-      const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
-      const traceRequests: string[] = [];
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (
-          url.includes('assistant-stream-export-leak.invalid') ||
-          url.includes('smith.langchain.com')
-        ) {
-          traceRequests.push(url);
-          return new Response('{}', {
-            status: 200,
-            headers: { 'content-type': 'application/json' }
-          });
-        }
-        requests.push({
-          url,
-          body: JSON.parse(String(init?.body)) as Record<string, unknown>
-        });
-        return streamingResponse(provider);
-      });
-      const deltas: string[] = [];
-      const result = await callAssistantModel(
-        definition(provider),
-        [new HumanMessage('question')],
-        undefined,
-        (delta) => deltas.push(delta)
-      );
-      expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
-      expect(deltas).toEqual(['hel', 'lo']);
-      expect(requests[0]?.body.stream).toBe(true);
-      expect(traceRequests.filter((url) => url.includes('/runs'))).toEqual([]);
-    }
-  );
-
-  it.each(['openai', 'anthropic'] as const)(
-    '%s assembles fragmented native tool arguments while streaming',
-    async (provider) => {
-      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-      vi.stubGlobal('fetch', async () => streamingToolResponse(provider));
-      const deltas: string[] = [];
-      const result = await callAssistantModel(
-        definition(provider),
-        [new HumanMessage('question')],
-        undefined,
-        (delta) => deltas.push(delta)
-      );
-      expect(result).toMatchObject({
-        type: 'tool_call_request',
-        toolCalls: [{ id: 'call-stream', name: 'lookup', arguments: { q: 'x' } }],
-        nativeMessage: { tool_calls: [{ id: 'call-stream', args: { q: 'x' } }] }
-      });
-      expect(deltas).toEqual([]);
-    }
-  );
-
-  it.each([
-    ['anthropic', 'model not found after a partial response'],
-    ['azure_openai', 'max_completion_tokens is not supported after a partial response']
-  ] as const)(
-    '%s does not retry or fall back after emitting text',
-    async (provider, errorMessage) => {
-      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-      vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
-      vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
-      vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
-      let requests = 0;
-      vi.stubGlobal('fetch', async () => {
-        requests++;
-        const encoder = new TextEncoder();
-        const firstEvent =
-          provider === 'anthropic'
-            ? [
-                [
-                  'message_start',
-                  {
-                    type: 'message_start',
-                    message: {
-                      id: 'msg_test',
-                      type: 'message',
-                      role: 'assistant',
-                      model: 'claude-3-5-sonnet-20241022',
-                      content: [],
-                      stop_reason: null,
-                      stop_sequence: null,
-                      usage: { input_tokens: 1, output_tokens: 0 }
-                    }
-                  }
-                ],
-                [
-                  'content_block_start',
-                  {
-                    type: 'content_block_start',
-                    index: 0,
-                    content_block: { type: 'text', text: '' }
-                  }
-                ],
-                [
-                  'content_block_delta',
-                  {
-                    type: 'content_block_delta',
-                    index: 0,
-                    delta: { type: 'text_delta', text: 'partial' }
-                  }
-                ]
-              ]
-                .map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`)
-                .join('')
-            : `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null }] })}\n\n`;
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(encoder.encode(firstEvent));
-              setTimeout(() => controller.error(new Error(errorMessage)), 10);
-            }
-          }),
-          { status: 200, headers: { 'content-type': 'text/event-stream' } }
-        );
-      });
-      const deltas: string[] = [];
-      await expect(
-        callAssistantModel(
-          definition(
-            provider,
-            provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'test-model'
-          ),
-          [new HumanMessage('question')],
-          undefined,
-          (delta) => deltas.push(delta)
-        )
-      ).rejects.toThrow();
-      expect(deltas).toEqual(['partial']);
-      expect(requests).toBe(1);
-    }
-  );
-
-  it('allows provider compatibility fallbacks before the first streamed token', async () => {
-    vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
-    vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
-    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
-    const requests: Array<Record<string, unknown>> = [];
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return requests.length === 1
-        ? new Response(
-            JSON.stringify({ error: { message: 'max_completion_tokens is not supported' } }),
-            { status: 400 }
-          )
-        : streamingResponse('azure_openai');
-    });
-    const deltas: string[] = [];
-    const result = await callAssistantModel(
-      definition('azure_openai'),
-      [new HumanMessage('question')],
-      undefined,
-      (delta) => deltas.push(delta)
-    );
-    expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
-    expect(requests).toHaveLength(2);
-    expect(requests.map((request) => [request.max_completion_tokens, request.max_tokens])).toEqual([
-      [321, undefined],
-      [undefined, 321]
+    const agentDefinition = definition('openai');
+    const { session, response } = await ask(agentDefinition);
+    await expect(response).resolves.toMatchObject({ type: 'assistant_message', text: 'recovered' });
+    expect(agentDefinition.tools[0]!.execute).not.toHaveBeenCalled();
+    const followup = requests[1]!.body.messages as Array<Record<string, any>>;
+    expect(followup.find((message) => message.role === 'assistant')?.tool_calls).toMatchObject([
+      { id: 'broken' }
     ]);
-    expect(deltas).toEqual(['hel', 'lo']);
+    const result = followup.find((message) => message.role === 'tool');
+    expect(result).toMatchObject({ tool_call_id: 'broken' });
+    expect(JSON.parse(result!.content).error).toContain("Invalid arguments for tool 'lookup'");
+    await session.dispose();
   });
 
   it('uses one Azure compatibility retry for token and default-only temperature errors', async () => {
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
     vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
-    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', 'custom-deployment');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      if (requests.length === 1)
-        return new Response(
-          JSON.stringify({ error: { message: 'max_completion_tokens is not supported' } }),
-          { status: 400 }
-        );
-      if (requests.length === 2)
-        return new Response(
-          JSON.stringify({
-            error: { message: 'temperature is not supported. Only the default value is allowed' }
-          }),
-          { status: 400 }
-        );
-      return openAiResponse('ok');
-    });
-    await callAssistantModel(definition('azure_openai', 'custom-deployment'), [
-      new HumanMessage('question')
-    ]);
-    expect(requests).toHaveLength(3);
+    const requests = captureFetch((_request, index) =>
+      index === 0
+        ? jsonError(400, 'max_completion_tokens is not supported')
+        : index === 1
+          ? jsonError(400, 'temperature is not supported. Only the default value is allowed')
+          : openAiStream('ok')
+    );
+    const { response, session } = await ask(definition('azure_openai', 'custom-deployment'));
+    await expect(response).resolves.toMatchObject({ text: 'ok' });
     expect(requests.map((request) => request.body.max_completion_tokens)).toEqual([
       321,
       undefined,
@@ -790,441 +300,84 @@ describe('native assistant model boundary', () => {
     expect(requests.map((request) => request.url)).toEqual(
       Array(3).fill(expect.stringContaining('/deployments/custom-deployment/'))
     );
-    for (const request of requests) expect(request.body.tools).toHaveLength(1);
+    await session.dispose();
   });
 
-  it('does not retry unrelated Azure or Anthropic authentication failures', async () => {
-    const requests: WireRequest[] = [];
+  it('does not retry a compatibility error once text has been streamed', async () => {
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
     vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return new Response(JSON.stringify({ error: { message: 'invalid API key' } }), {
-        status: 401
-      });
-    });
-    await expect(
-      callAssistantModel(definition('azure_openai'), [new HumanMessage('x')])
-    ).rejects.toThrow('invalid API key');
-    expect(requests).toHaveLength(1);
-
-    requests.length = 0;
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    await expect(
-      callAssistantModel(definition('anthropic', 'claude-3-5-sonnet-20241022'), [
-        new HumanMessage('x')
-      ])
-    ).rejects.toThrow();
-    expect(requests).toHaveLength(1);
-  });
-
-  it('tries the dated Anthropic model then its latest alias only after model not found', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return requests.length === 1
-        ? new Response(
-            JSON.stringify({ error: { type: 'not_found_error', message: 'model not found' } }),
-            { status: 404 }
-          )
-        : anthropicResponse([{ type: 'text', text: 'latest works' }]);
-    });
-    const result = await callAssistantModel(definition('anthropic', 'claude-3-5-sonnet-20241022'), [
-      new HumanMessage('x')
-    ]);
-    expect(requests.map((request) => request.body.model)).toEqual([
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-sonnet-latest'
-    ]);
-    expect(result).toMatchObject({ type: 'assistant_message', text: 'latest works' });
-    expect(requests[0]!.body.max_tokens).toBe(321);
-  });
-
-  it('does not treat an unrelated Anthropic 404 as a model miss', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return new Response(
-        JSON.stringify({ error: { type: 'not_found_error', message: 'route/resource not found' } }),
-        { status: 404 }
-      );
-    });
-
-    await expect(
-      callAssistantModel(definition('anthropic', 'claude-3-5-sonnet-20241022'), [
-        new HumanMessage('x')
-      ])
-    ).rejects.toThrow('route/resource not found');
-    expect(requests).toHaveLength(1);
-  });
-
-  it('uses Anthropic default max_tokens and reports exhausted model candidates', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return new Response(
-        JSON.stringify({ error: { type: 'not_found_error', message: 'model not found' } }),
-        { status: 404 }
-      );
-    });
-    const agentDefinition = definition('anthropic', 'claude-3-5-sonnet-20241022');
-    agentDefinition.agent.max_tokens = undefined;
-    await expect(callAssistantModel(agentDefinition, [new HumanMessage('x')])).rejects.toThrow(
-      'tried: claude-3-5-sonnet-20241022, claude-3-5-sonnet-latest'
+    const requests = captureFetch(() =>
+      openAiStream('partial answer', [], { failAfter: 'max_completion_tokens is not supported' })
     );
-    expect(requests.map((request) => request.body.model)).toEqual([
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-sonnet-latest'
-    ]);
-    expect(requests[0]!.body.max_tokens).toBe(1024);
-  });
-
-  it('binds the local Scenario proposal schema without invoking its callback', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const execute = vi.fn(async () => 'proposal callback must be graph-owned');
-    let body: Record<string, unknown> | undefined;
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return openAiResponse('ready');
-    });
-    const agentDefinition = definition('openai');
-    agentDefinition.tools = [
-      {
-        name: 'propose_scenario_changes',
-        server: 'local',
-        tool: 'propose_scenario_changes',
-        description: 'Propose edits for review',
-        inputSchema: {
-          type: 'object',
-          properties: { prompt: { type: 'object' }, notes: { type: 'array' } },
-          required: ['prompt']
-        },
-        execute
-      }
-    ];
-    await callAssistantModel(agentDefinition, [new HumanMessage('suggest an edit')]);
-    const wireTools = body?.tools as Array<Record<string, unknown>>;
-    expect(wireTools[0]).toMatchObject({
-      function: {
-        name: 'propose_scenario_changes',
-        parameters: {
-          type: 'object',
-          properties: { prompt: { type: 'object' }, notes: { type: 'array' } },
-          required: ['prompt']
-        }
-      }
-    });
-    expect(execute).not.toHaveBeenCalled();
-  });
-
-  it('does not retry retryable provider failures when LangChain retries are disabled', async () => {
-    const requests: WireRequest[] = [];
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return new Response(JSON.stringify({ error: { message: 'temporary outage' } }), {
-        status: 503
-      });
-    });
-    await expect(
-      callAssistantModel(definition('openai'), [new HumanMessage('x')])
-    ).rejects.toThrow();
+    const { response, session } = await ask(definition('azure_openai'));
+    await expect(response).rejects.toThrow();
     expect(requests).toHaveLength(1);
-    requests.length = 0;
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    await expect(
-      callAssistantModel(definition('anthropic'), [new HumanMessage('x')])
-    ).rejects.toThrow();
-    expect(requests).toHaveLength(1);
+    await session.dispose();
   });
 
-  it('preserves missing credential and deployment failure categories', async () => {
+  it('does not retry retryable provider failures', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    const requests = captureFetch(() => jsonError(503, 'temporary outage', 'server_error'));
+    const { response, session } = await ask(definition('openai'));
+    await expect(response).rejects.toThrow();
+    expect(requests).toHaveLength(1);
+    await session.dispose();
+  });
+
+  it('reports missing credentials and deployments on the first message', async () => {
     vi.stubEnv('OPENAI_API_KEY', '');
-    await expect(
-      callAssistantModel(definition('openai'), [new HumanMessage('x')])
-    ).rejects.toMatchObject<Partial<AgentConnectionError>>({ failure: 'missing_credentials' });
+    const openai = await ask(definition('openai'));
+    await expect(openai.response).rejects.toMatchObject<Partial<AgentConnectionError>>({
+      failure: 'missing_credentials'
+    });
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
     vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', '');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', '');
-    await expect(
-      callAssistantModel(definition('azure_openai'), [new HumanMessage('x')])
-    ).rejects.toMatchObject<Partial<AgentConnectionError>>({ failure: 'deployment' });
+    const azure = await ask(definition('azure_openai'));
+    await expect(azure.response).rejects.toMatchObject<Partial<AgentConnectionError>>({
+      failure: 'deployment'
+    });
     vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example');
     vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
     vi.stubEnv('AZURE_OPENAI_API_KEY', '');
-    await expect(
-      callAssistantModel(definition('azure_foundry'), [new HumanMessage('x')])
-    ).rejects.toThrow('AZURE_FOUNDRY_API_KEY');
+    const foundry = await ask(definition('azure_foundry'));
+    await expect(foundry.response).rejects.toThrow('AZURE_FOUNDRY_API_KEY');
   });
 
   it('uses the Azure key alias for Foundry when the dedicated key is absent', async () => {
     vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models/');
     vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'dedicated-key');
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'shared-key');
-    const authorizations: string[] = [];
-    let requestUrl = '';
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes('smith.langchain.com'))
-        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
-      requestUrl = String(input);
-      authorizations.push(new Headers(init?.headers).get('authorization') ?? '');
-      return openAiResponse('ok');
-    });
-    await callAssistantModel(definition('azure_foundry', 'foundry-model'), [new HumanMessage('x')]);
+    const requests = captureFetch(() => openAiStream('ok'));
+    await (
+      await ask(definition('azure_foundry', 'foundry-model'))
+    ).response;
     vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
-    await callAssistantModel(definition('azure_foundry', 'foundry-model'), [new HumanMessage('x')]);
-    expect(requestUrl).toBe('https://foundry.example/openai/v1/chat/completions');
-    expect(authorizations[0]).toContain('dedicated-key');
-    expect(authorizations[1]).toContain('shared-key');
+    await (
+      await ask(definition('azure_foundry', 'foundry-model'))
+    ).response;
+    expect(requests.map((request) => request.url)).toEqual(
+      Array(2).fill('https://foundry.example/openai/v1/chat/completions')
+    );
+    expect(requests[0]!.authorization).toContain('dedicated-key');
+    expect(requests[1]!.authorization).toContain('shared-key');
   });
 
-  it('does not try Anthropic model aliases when the request becomes aborted', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const controller = new AbortController();
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      expect(init?.signal).toBe(controller.signal);
-      controller.abort();
-      return new Response(
-        JSON.stringify({ error: { type: 'not_found_error', message: 'model not found' } }),
-        { status: 404 }
-      );
-    });
-    await expect(
-      callAssistantModel(
-        definition('anthropic', 'claude-3-5-sonnet-20241022'),
-        [new HumanMessage('x')],
-        controller.signal
-      )
-    ).rejects.toThrow();
-    expect(requests).toHaveLength(1);
-  });
-
-  it('executes a native tool request through the real graph and preserves the result call ID', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    const requests: WireRequest[] = [];
-    const execute = vi.fn(async () => ({ value: 'from tool' }));
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return requests.length === 1
-        ? openAiResponse(null, [
-            {
-              id: 'graph-call-1',
-              type: 'function',
-              function: { name: 'lookup', arguments: '{"q":"x"}' }
-            }
-          ])
-        : openAiResponse('The tool found it.');
-    });
-    const session = await createInvokeAssistantRuntimeFactory().create({
-      ...definition('openai'),
-      assistant: 'scenario',
-      context: {
-        scenario: {
-          id: 'scenario-1',
-          prompt: 'prompt',
-          serverNames: [],
-          evalRules: [],
-          extractRules: []
-        }
-      },
-      tools: [
-        {
-          name: 'lookup',
-          server: 'example',
-          tool: 'lookup',
-          inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-          execute
-        }
-      ],
-      approvalPolicy: () => 'automatic'
-    });
-    const result = await session.sendMessage('Find x');
-    expect(result).toMatchObject({ type: 'assistant_message', text: 'The tool found it.' });
-    expect(execute).toHaveBeenCalledTimes(1);
-    const messages = requests[1]!.body.messages as Array<Record<string, unknown>>;
-    expect(messages.at(-2)).toMatchObject({
-      role: 'assistant',
-      tool_calls: [{ id: 'graph-call-1' }]
-    });
-    expect(messages.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'graph-call-1' });
-    expect(messages.at(-1)?.content).toContain('from tool');
-  });
-
-  it('runs an Anthropic tool cycle through the default graph with adjacent matched tool results', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const requests: WireRequest[] = [];
-    const executeLookup = vi.fn(async () => ({ value: 'lookup result' }));
-    const executeRead = vi.fn(async () => ({ value: 'read result' }));
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return requests.length === 1
-        ? anthropicResponse([
-            { type: 'tool_use', id: 'anthro-lookup-1', name: 'lookup', input: { q: 'x' } },
-            { type: 'tool_use', id: 'anthro-read-1', name: 'read', input: { id: 'x' } }
-          ])
-        : anthropicResponse([{ type: 'text', text: 'Both tools found the answer.' }]);
-    });
-    const session = await createInvokeAssistantRuntimeFactory().create({
-      ...definition('anthropic'),
-      assistant: 'scenario',
-      tools: [
-        {
-          name: 'lookup',
-          server: 'example',
-          tool: 'lookup',
-          description: 'Lookup by query',
-          inputSchema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
-          execute: executeLookup
-        },
-        {
-          name: 'read',
-          server: 'example',
-          tool: 'read',
-          description: 'Read by id',
-          inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-          execute: executeRead
-        }
-      ],
-      approvalPolicy: () => 'automatic'
-    });
-
-    const result = await session.sendMessage('Find x');
-
-    expect(result).toMatchObject({
-      type: 'assistant_message',
-      text: 'Both tools found the answer.'
-    });
-    expect(executeLookup).toHaveBeenCalledTimes(1);
-    expect(executeRead).toHaveBeenCalledTimes(1);
-    const firstTools = requests[0]!.body.tools as Array<Record<string, unknown>>;
-    expect(firstTools).toMatchObject([
-      {
-        name: 'lookup',
-        input_schema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] }
-      },
-      {
-        name: 'read',
-        input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] }
-      }
-    ]);
-    const messages = requests[1]!.body.messages as Array<Record<string, unknown>>;
-    const assistantIndex = messages.findIndex((message) => message.role === 'assistant');
-    expect(messages[assistantIndex]).toMatchObject({
-      role: 'assistant',
-      content: [
-        { type: 'tool_use', id: 'anthro-lookup-1', name: 'lookup', input: { q: 'x' } },
-        { type: 'tool_use', id: 'anthro-read-1', name: 'read', input: { id: 'x' } }
-      ]
-    });
-    expect(messages[assistantIndex + 1]).toMatchObject({
-      role: 'user',
-      content: [
-        { type: 'tool_result', tool_use_id: 'anthro-lookup-1' },
-        { type: 'tool_result', tool_use_id: 'anthro-read-1' }
-      ]
-    });
-    expect(messages[assistantIndex + 1]?.content).not.toContain('Find x');
-  });
-
-  it('repairs a non-object Anthropic tool input before sending corrective history', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
-    const requests: Array<Record<string, unknown>> = [];
-    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
-      requests.push(body);
-      return requests.length === 1
-        ? anthropicResponse([
-            { type: 'tool_use', id: 'bad-input', name: 'lookup', input: ['not', 'an', 'object'] }
-          ])
-        : anthropicResponse([{ type: 'text', text: 'Corrected the tool input.' }]);
-    });
-    const execute = vi.fn(async () => 'must not execute');
-    const session = await createInvokeAssistantRuntimeFactory().create({
-      ...definition('anthropic'),
-      tools: [
-        {
-          name: 'lookup',
-          server: 'example',
-          tool: 'lookup',
-          description: 'Lookup',
-          inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
-          execute
-        }
-      ],
-      approvalPolicy: () => 'automatic'
-    });
-
-    await expect(session.sendMessage('Look it up')).resolves.toMatchObject({
-      type: 'assistant_message',
-      text: 'Corrected the tool input.'
-    });
-    expect(execute).not.toHaveBeenCalled();
-    const continuation = requests[1]!.messages as Array<{ role: string; content: any }>;
-    expect(continuation).toContainEqual({
-      role: 'assistant',
-      content: [{ type: 'tool_use', id: 'bad-input', name: 'lookup', input: {} }]
-    });
-    expect(continuation).toContainEqual({
-      role: 'user',
-      content: [
-        {
-          type: 'tool_result',
-          tool_use_id: 'bad-input',
-          content: expect.stringContaining('expected a JSON object')
-        }
-      ]
-    });
-  });
-
-  it('honors the legacy Azure API-version override and selects configured agent deployments independently', async () => {
+  it('honors the Azure API-version override and selects each agent deployment', async () => {
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
     vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
     vi.stubEnv('AZURE_OPENAI_API_VERSION', '2025-01-01-preview');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
     vi.stubEnv('AZURE_OPENAI_DEPLOYMENTS', 'assistant-a,assistant-b');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return openAiResponse('ok');
-    });
-
-    await callAssistantModel(definition('azure_openai', 'assistant-a'), [new HumanMessage('a')]);
-    await callAssistantModel(definition('azure_openai', 'assistant-b'), [new HumanMessage('b')]);
-
+    const requests = captureFetch(() => openAiStream('ok'));
+    await (
+      await ask(definition('azure_openai', 'assistant-a'))
+    ).response;
+    await (
+      await ask(definition('azure_openai', 'assistant-b'))
+    ).response;
     expect(requests.map((request) => request.url)).toEqual([
       expect.stringContaining(
         '/deployments/assistant-a/chat/completions?api-version=2025-01-01-preview'
@@ -1233,29 +386,46 @@ describe('native assistant model boundary', () => {
         '/deployments/assistant-b/chat/completions?api-version=2025-01-01-preview'
       )
     ]);
-    expect(requests.map((request) => request.body.model)).toEqual(['assistant-a', 'assistant-b']);
   });
 
-  it('keeps Foundry deployments isolated to each agent model name', async () => {
-    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models/');
-    vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
-    const requests: WireRequest[] = [];
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({
-        url: String(input),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>
-      });
-      return openAiResponse('ok');
-    });
-
-    await callAssistantModel(definition('azure_foundry', 'foundry-a'), [new HumanMessage('a')]);
-    await callAssistantModel(definition('azure_foundry', 'foundry-b'), [new HumanMessage('b')]);
-
-    expect(requests.map((request) => request.url)).toEqual([
-      'https://foundry.example/openai/v1/chat/completions',
-      'https://foundry.example/openai/v1/chat/completions'
+  it('tries the dated Anthropic model then its latest alias only after model not found', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    const requests = captureFetch((_request, index) =>
+      index === 0
+        ? jsonError(404, 'model not found', 'not_found_error')
+        : anthropicStream('latest works')
+    );
+    const { response } = await ask(definition('anthropic', 'claude-3-5-sonnet-20241022'));
+    await expect(response).resolves.toMatchObject({ text: 'latest works' });
+    expect(requests.map((request) => request.body.model)).toEqual([
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-sonnet-latest'
     ]);
-    expect(requests.map((request) => request.body.model)).toEqual(['foundry-a', 'foundry-b']);
-    for (const request of requests) expect(request.url).not.toContain('api-version');
+  });
+
+  it('does not treat an unrelated Anthropic 404 as a model miss', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    const requests = captureFetch(() =>
+      jsonError(404, 'route/resource not found', 'not_found_error')
+    );
+    const { response } = await ask(definition('anthropic', 'claude-3-5-sonnet-20241022'));
+    await expect(response).rejects.toThrow('route/resource not found');
+    expect(requests).toHaveLength(1);
+  });
+
+  it('uses Anthropic default max_tokens and reports exhausted model candidates', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    const requests = captureFetch(() => jsonError(404, 'model not found', 'not_found_error'));
+    const agentDefinition = definition('anthropic', 'claude-3-5-sonnet-20241022');
+    agentDefinition.agent.max_tokens = undefined;
+    const { response } = await ask(agentDefinition);
+    await expect(response).rejects.toThrow(
+      'tried: claude-3-5-sonnet-20241022, claude-3-5-sonnet-latest'
+    );
+    expect(requests.map((request) => request.body.model)).toEqual([
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-sonnet-latest'
+    ]);
+    expect(requests[0]!.body.max_tokens).toBe(1024);
   });
 });

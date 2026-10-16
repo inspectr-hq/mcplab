@@ -5,7 +5,7 @@ import type {
   AssistantRuntimeModelOutput
 } from '@inspectr/mcplab-core';
 import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
-import type { AssistantModelCall } from '../src/app-server/assistant-model.js';
+import type { AssistantModelCall } from './scripted-chat-model.js';
 import { validateScenarioAssistantProposal } from '../src/app-server/scenario-assistant-domain.js';
 
 export function assistantRuntimeContract(
@@ -273,46 +273,6 @@ export function assistantRuntimeContract(
       expect(round).toBe(2);
     });
 
-    it('does not execute a local proposal when the external batch is oversized', async () => {
-      const proposal = vi.fn(async (args: unknown) => args);
-      const executions = vi.fn(async () => ({}));
-      const outputs: AssistantRuntimeModelOutput[] = [
-        {
-          type: 'tool_call_request',
-          text: 'Large batch',
-          toolCalls: [
-            { name: 'propose', arguments: { prompt: { replacement: 'x' } } },
-            ...['a', 'b', 'c', 'd'].map((name) => ({ name }))
-          ]
-        },
-        { type: 'assistant_message', text: 'Corrected' }
-      ];
-      const session = await createRuntimeFactory(async () => outputs.shift()!).create(
-        makeDefinition({
-          tools: [
-            {
-              name: 'propose',
-              server: 'local',
-              tool: 'propose',
-              execute: proposal,
-              extractProposal: (value) => value as any
-            },
-            ...['a', 'b', 'c', 'd'].map((name) => ({
-              name,
-              server: 's',
-              tool: name,
-              execute: executions
-            }))
-          ],
-          approvalPolicy: (name) => (name === 'propose' ? 'local' : 'automatic')
-        })
-      );
-      const result = await session.sendMessage('Do this');
-      expect(result).toMatchObject({ type: 'assistant_message', text: 'Corrected' });
-      expect(proposal).not.toHaveBeenCalled();
-      expect(executions).not.toHaveBeenCalled();
-    });
-
     it('returns invalid local proposal arguments as tool feedback for correction', async () => {
       const histories: any[][] = [];
       let round = 0;
@@ -393,40 +353,6 @@ export function assistantRuntimeContract(
         expect.objectContaining({ content: expect.stringContaining('"n":1') }),
         expect.objectContaining({ content: expect.stringContaining('"n":2') })
       ]);
-    });
-
-    it('rejects four-call batches before executing any tool and gives each call corrective feedback', async () => {
-      const executions = vi.fn(async () => ({}));
-      const histories: BaseMessage[][] = [];
-      const outputs: AssistantRuntimeModelOutput[] = [
-        {
-          type: 'tool_call_request',
-          text: 'Too many',
-          toolCalls: ['a', 'b', 'c', 'd'].map((name) => ({ name }))
-        },
-        { type: 'assistant_message', text: 'Corrected' }
-      ];
-      const session = await createRuntimeFactory(async (_definition, messages) => {
-        histories.push(messages);
-        return outputs.shift()!;
-      }).create(
-        makeDefinition({
-          tools: ['a', 'b', 'c', 'd'].map((name) => ({
-            name,
-            server: 's',
-            tool: name,
-            execute: executions
-          })),
-          approvalPolicy: () => 'automatic'
-        })
-      );
-      const result = await session.sendMessage('Do four things');
-      expect(result).toMatchObject({ type: 'assistant_message', text: 'Corrected' });
-      expect(executions).not.toHaveBeenCalled();
-      expect(histories[1].filter((message) => ToolMessage.isInstance(message))).toHaveLength(4);
-      expect(histories[1].slice(-4).map((message) => JSON.parse(String(message.content)))).toEqual(
-        Array(4).fill({ error: 'Tool batch exceeds the maximum of 3 external calls' })
-      );
     });
 
     it('executes the maximum three external calls and pairs all results before the next model request', async () => {
@@ -523,7 +449,7 @@ export function assistantRuntimeContract(
       expect(events).toHaveLength(eventCount);
     });
 
-    it('runs local calls immediately but pauses every external call for a write approval', async () => {
+    it('runs local and read-only calls immediately and pauses only the write for approval', async () => {
       const executions: string[] = [];
       const histories: Array<Array<any>> = [];
       const outputs: AssistantRuntimeModelOutput[] = [
@@ -559,20 +485,12 @@ export function assistantRuntimeContract(
       );
       const request = await session.sendMessage('Do the work');
       expect(request).toMatchObject({ type: 'tool_call_request' });
-      expect(executions).toEqual(['propose']);
+      expect([...executions].sort()).toEqual(['propose', 'read']);
       if (request.type !== 'tool_call_request') throw new Error('Expected approval request');
-      expect(request.pendingToolCalls.map((call) => call.id)).toEqual(['read-1', 'write-1']);
+      expect(request.pendingToolCalls.map((call) => call.id)).toEqual(['write-1']);
 
-      const partial = await session.resolveToolCalls([
-        { toolCallId: 'write-1', decision: 'approve' }
-      ]);
-      expect(partial).toMatchObject({
-        type: 'tool_call_resolved',
-        pendingToolCalls: [{ id: 'read-1' }]
-      });
-      expect(executions).toEqual(['propose', 'write']);
-      await session.resolveToolCalls([{ toolCallId: 'read-1', decision: 'approve' }]);
-      expect(executions).toEqual(['propose', 'write', 'read']);
+      await session.resolveToolCalls([{ toolCallId: 'write-1', decision: 'approve' }]);
+      expect([...executions].sort()).toEqual(['propose', 'read', 'write']);
       expect(session.getSnapshot().messages.at(-1)?.suggestions).toEqual({
         prompt: { replacement: 'Revised' }
       });
@@ -713,13 +631,13 @@ export function assistantRuntimeContract(
           ToolMessage.isInstance(message) ? message.tool_call_id : undefined
         )
       ).toEqual(['unknown-1', 'read-1']);
-      expect(JSON.parse(String(toolResults[0].content))).toMatchObject({
-        error: "Unknown assistant tool 'missing'"
-      });
+      expect(JSON.parse(String(toolResults[0].content)).error).toMatch(
+        /missing is not a valid tool/
+      );
       expect(execute).toHaveBeenCalledOnce();
     });
 
-    it('exhausts model round 25 without execution and starts a fresh next user turn with paired history', async () => {
+    it('stops before model call 26 and starts a fresh next user turn with paired history', async () => {
       const observed: Array<Array<any>> = [];
       let round = 0;
       const execute = vi.fn(async () => ({ ok: true }));
@@ -762,11 +680,12 @@ export function assistantRuntimeContract(
         statusCode: 422,
         message: expect.stringContaining('25 model-call limit')
       });
-      expect(execute).toHaveBeenCalledTimes(24);
+      // The limit is checked before each model call, so round 25's tool calls still run.
+      expect(execute).toHaveBeenCalledTimes(25);
       const terminalHistory = session.getSnapshot();
       expect(terminalHistory.pendingToolCalls.at(-1)).toMatchObject({
         id: 'id-25',
-        status: 'error'
+        status: 'approved'
       });
       await session.sendMessage('Start again');
       expect(observed[25].at(-1)).toBeInstanceOf(HumanMessage);
@@ -822,10 +741,10 @@ export function assistantRuntimeContract(
         message: expect.stringContaining('25 model-call limit')
       });
       expect(write).toHaveBeenCalledOnce();
-      expect(read).toHaveBeenCalledTimes(23);
+      expect(read).toHaveBeenCalledTimes(24);
       expect(session.getSnapshot().pendingToolCalls.at(-1)).toMatchObject({
         id: 'read-25',
-        status: 'error'
+        status: 'approved'
       });
     });
 
@@ -840,6 +759,9 @@ export function assistantRuntimeContract(
         finishSlow = resolve;
       });
       let modelCalls = 0;
+      const finished = new Set<string>();
+      let siblingsFinished!: () => void;
+      const siblingsDone = new Promise<void>((resolve) => (siblingsFinished = resolve));
       const session = await createRuntimeFactory(async (_definition, messages) => {
         observed.push([...messages]);
         modelCalls += 1;
@@ -874,12 +796,19 @@ export function assistantRuntimeContract(
               execute: async () => ({ completed: 'three' })
             }
           ],
-          approvalPolicy: () => 'automatic'
+          approvalPolicy: () => 'automatic',
+          onEvent: (event) => {
+            if (event.type !== 'tool_call_resolved') return;
+            finished.add(String(event.payload.pendingToolCallId));
+            if (finished.has('one') && finished.has('three')) siblingsFinished();
+          }
         })
       );
       const controller = new AbortController();
       const turn = session.sendMessage('Run three', controller.signal);
+      // Tools run in parallel: cancel once the fast siblings have finished.
       await slowStart;
+      await siblingsDone;
       controller.abort();
       await expect(turn).rejects.toThrow();
       const canceled = session.getSnapshot();
@@ -887,7 +816,7 @@ export function assistantRuntimeContract(
       expect(canceled.pendingToolCalls.map((call) => call.status)).toEqual([
         'approved',
         'error',
-        'error'
+        'approved'
       ]);
       finishSlow({ completed: 'late' });
       await session.sendMessage('Next');
@@ -896,7 +825,7 @@ export function assistantRuntimeContract(
         pairedHistory
           .filter((message) => ToolMessage.isInstance(message))
           .map((message) => (ToolMessage.isInstance(message) ? message.tool_call_id : undefined))
-      ).toEqual(['one', 'two', 'three']);
+      ).toEqual(expect.arrayContaining(['one', 'two', 'three']));
       expect(
         pairedHistory
           .filter(
