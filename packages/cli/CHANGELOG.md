@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.31.1
+
+### Patch Changes
+
+- fix: stop ResultDetail refetch loop caused by unstable assistant callbacks
+
 ## 1.31.0
 
 ### Minor Changes
