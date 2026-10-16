@@ -259,7 +259,7 @@ describe('buildScenarioRequestId', () => {
     expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:claude-sonnet-46:run1');
   });
 
-  it('uses scenario_exec_id when provided', () => {
+  it('omits scenario_exec_id when it only repeats the scenario and agent slug', () => {
     const requestId = buildScenarioRequestId({
       runId: '20260303-120509',
       scenarioId: 'batch-quality',
@@ -268,9 +268,24 @@ describe('buildScenarioRequestId', () => {
       runIndex: 1
     });
 
-    expect(requestId).toBe(
-      'mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:batch-quality-azure-gpt-52-chat-run2'
+    expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:run2');
+  });
+
+  it('keeps scenario_exec_id when agents share a slug', () => {
+    const ids = ['Claude', 'claude'].map((agentName) =>
+      buildScenarioRequestId({
+        runId: '20260303-120509',
+        scenarioId: 'batch-quality',
+        agentName,
+        scenarioExecId: `batch-quality-${agentName}`,
+        runIndex: 0
+      })
     );
+
+    expect(ids).toEqual([
+      'mcplab-run:20260303-120509:batch-quality:claude:batch-quality-Claude-run1',
+      'mcplab-run:20260303-120509:batch-quality:claude:run1'
+    ]);
   });
 
   it('sanitizes agent names and falls back for missing scenario id', () => {

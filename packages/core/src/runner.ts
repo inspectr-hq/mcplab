@@ -612,7 +612,10 @@ export function buildScenarioRequestId(params: {
   const agentSlug = slugifyAgentName(params.agentName ?? 'unknown-agent');
   const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
   const execBase = normalizeRequestIdPart(params.scenarioExecId, '');
-  const execSuffix = execBase ? `${execBase}-${runSuffix}` : runSuffix;
+  // scenario_exec_id is `<scenario>-<agent>`: only repeat it when slugifying lost part of the
+  // agent name, so distinct agents with the same slug keep distinct IDs.
+  const execSuffix =
+    execBase && execBase !== `${scenarioId}-${agentSlug}` ? `${execBase}-${runSuffix}` : runSuffix;
   return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`, {
     requiredSuffix: `:${agentSlug}:${execSuffix}`
   });
