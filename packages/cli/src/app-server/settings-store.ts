@@ -47,8 +47,7 @@ export function applySettingsOverrides(settings: AppSettings): void {
   settings.defaultQueueWorkers = normalizeQueueWorkerCount(overrides.default_queue_workers);
   const envQueueWorkers = resolveEnvQueueWorkers();
   if (envQueueWorkers !== undefined) settings.defaultQueueWorkers = envQueueWorkers;
-  settings.scenarioAssistantAgentName =
-    overrides.scenario_assistant_agent_name?.trim() || undefined;
+  settings.assistantAgentName = overrides.assistant_agent_name?.trim() || undefined;
   settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
   settings.evaluationDecision = overrides.evaluation_decision;
 }
@@ -88,9 +87,7 @@ export function applyEvaluationSettingsPatch(
 export function persistSettingsOverrides(settings: AppSettings): void {
   const payload: WorkspaceSettingsOverrides = {
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
-    ...(settings.scenarioAssistantAgentName
-      ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
-      : {}),
+    ...(settings.assistantAgentName ? { assistant_agent_name: settings.assistantAgentName } : {}),
     ...(settings.evaluationJudgeAgentName
       ? { evaluation_judge_agent_name: settings.evaluationJudgeAgentName }
       : {}),

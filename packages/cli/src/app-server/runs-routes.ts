@@ -631,7 +631,7 @@ export async function handleRunsRoutes(params: {
     const libraries = readLibraries(settings.librariesDir);
     const selectedAgentName = pickDefaultAssistantAgentName({
       requested: String(body.selectedAgentName ?? '').trim(),
-      settingsDefault: settings.scenarioAssistantAgentName,
+      settingsDefault: settings.assistantAgentName,
       agentNames: Object.keys(libraries.agents)
     });
     if (!selectedAgentName) {

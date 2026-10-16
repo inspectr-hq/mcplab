@@ -324,4 +324,38 @@ describe('applySettingsOverrides', () => {
 
     expect(settings.evaluationJudgeAgentName).toBe('judge-1');
   });
+
+  it('reads the assistant agent saved under its old key and saves it under the new one', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-settings-'));
+    roots.push(root);
+    const settings = {
+      workspaceRoot: root,
+      evalsDir: join(root, 'evals'),
+      runsDir: join(root, 'runs'),
+      toolAnalysisResultsDir: join(root, 'analysis'),
+      librariesDir: join(root, 'libs')
+    } as AppSettings;
+    mkdirSync(settings.librariesDir, { recursive: true });
+    const file = join(settings.librariesDir, '.mcplab-app-settings.yaml');
+    writeFileSync(file, 'scenario_assistant_agent_name: legacy-agent\n', 'utf8');
+
+    applySettingsOverrides(settings);
+    expect(settings.assistantAgentName).toBe('legacy-agent');
+
+    persistSettingsOverrides(settings);
+    const saved = readFileSync(file, 'utf8');
+    expect(saved).toContain('assistant_agent_name: legacy-agent');
+    expect(saved).not.toContain('scenario_assistant_agent_name');
+  });
+
+  it('prefers the new assistant agent key when both are present', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-settings-'));
+    roots.push(root);
+    writeFileSync(
+      join(root, '.mcplab-app-settings.yaml'),
+      'scenario_assistant_agent_name: old\nassistant_agent_name: new\n',
+      'utf8'
+    );
+    expect(loadWorkspaceSettingsOverrides(root).assistant_agent_name).toBe('new');
+  });
 });

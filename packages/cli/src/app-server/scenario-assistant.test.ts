@@ -97,7 +97,7 @@ async function callCreateSessionRoute(params?: {
     settings: {
       evalsDir: '/tmp/evals',
       librariesDir: '/tmp/libraries',
-      scenarioAssistantAgentName: 'assistant-1'
+      assistantAgentName: 'assistant-1'
     } as any,
     assistantSessions,
     oauthSessionManager: oauthSessionManager as any,
@@ -615,7 +615,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
       settings: {
         evalsDir: '/tmp/evals',
         librariesDir: '/tmp/libraries',
-        scenarioAssistantAgentName: 'assistant-1'
+        assistantAgentName: 'assistant-1'
       } as any,
       assistantSessions,
       oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,

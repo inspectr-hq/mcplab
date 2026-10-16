@@ -178,7 +178,7 @@ const ToolAnalysisPage = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
+        setSettingsAssistantAgentName(settings.assistantAgentName ?? '');
       })
       .catch(() => {
         if (active) setSettingsAssistantAgentName('');

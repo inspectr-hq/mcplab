@@ -506,9 +506,14 @@ export async function startAppServer(options: AppServerOptions) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
           return;
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
-          candidate.scenarioAssistantAgentName =
-            String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
+        // Older clients send the setting under its previous name.
+        const assistantAgentKey = Object.prototype.hasOwnProperty.call(body, 'assistantAgentName')
+          ? 'assistantAgentName'
+          : Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')
+            ? 'scenarioAssistantAgentName'
+            : undefined;
+        if (assistantAgentKey) {
+          candidate.assistantAgentName = String(body[assistantAgentKey] ?? '').trim() || undefined;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
           candidate.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
@@ -520,6 +525,7 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
         }
         const settingsChanged = [
+          'assistantAgentName',
           'scenarioAssistantAgentName',
           'evaluationJudgeAgentName',
           'evaluationDecision',

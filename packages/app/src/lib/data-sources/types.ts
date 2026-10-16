@@ -226,7 +226,7 @@ export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
   runsDir: string;
   librariesDir: string;
   defaultQueueWorkers: number;
-  scenarioAssistantAgentName?: string;
+  assistantAgentName?: string;
 }
 
 export interface StartRunResponse {

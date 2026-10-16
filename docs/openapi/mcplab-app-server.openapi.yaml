@@ -144,7 +144,7 @@ paths:
                 evalsDir: { type: string }
                 runsDir: { type: string }
                 librariesDir: { type: string }
-                scenarioAssistantAgentName:
+                assistantAgentName:
                   oneOf:
                     - type: string
                     - type: "null"
@@ -1827,7 +1827,7 @@ components:
         runsDir: { type: string }
         librariesDir: { type: string }
         toolAnalysisResultsDir: { type: string }
-        scenarioAssistantAgentName: { type: string }
+        assistantAgentName: { type: string }
         evaluationJudgeAgentName: { type: string }
         evaluationDecision:
           $ref: "#/components/schemas/EvaluationDecisionConfig"

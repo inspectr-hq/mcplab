@@ -137,7 +137,7 @@ export async function handleScenarioAssistantRoutes(params: {
       const libraries = readLibraries(settings.librariesDir);
       selectedAssistantAgentName = pickDefaultAssistantAgentName({
         requested: requestedAssistantAgentName,
-        settingsDefault: settings.scenarioAssistantAgentName,
+        settingsDefault: settings.assistantAgentName,
         agentNames: Object.keys(libraries.agents)
       });
       if (!selectedAssistantAgentName) {

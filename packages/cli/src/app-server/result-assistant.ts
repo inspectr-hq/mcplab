@@ -83,7 +83,7 @@ export async function handleResultAssistantRoutes(params: {
     const results = scope === 'run' ? getRunResults(runId, settings.runsDir) : null;
     const libraries = readLibraries(settings.librariesDir);
     const assistantAgentName = pickDefaultAssistantAgentName({
-      settingsDefault: settings.scenarioAssistantAgentName,
+      settingsDefault: settings.assistantAgentName,
       agentNames: Object.keys(libraries.agents)
     });
     if (!assistantAgentName) {

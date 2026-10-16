@@ -643,7 +643,7 @@ export async function runToolAnalysisJob(params: {
   const libraries = readLibraries(settings.librariesDir);
   const selectedAssistantAgentName = pickDefaultAssistantAgentName({
     requested: params.requestedAssistantAgentName,
-    settingsDefault: settings.scenarioAssistantAgentName,
+    settingsDefault: settings.assistantAgentName,
     agentNames: Object.keys(libraries.agents)
   });
   if (!selectedAssistantAgentName) {
