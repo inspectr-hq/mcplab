@@ -400,6 +400,26 @@ describe('Results', () => {
     expect(refreshedCall.until).not.toBe(initialCall.until);
   });
 
+  it('shows and hides the MCP Lab Assistant from the header button', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('Results');
+    const toggle = screen.getByRole('button', { name: 'MCP Lab Assistant' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument();
+  });
+
   it('toggles MCP Lab Assistant expand mode in results', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 

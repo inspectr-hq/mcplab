@@ -723,7 +723,11 @@ const Results = () => {
     return map;
   }, [sorted]);
 
-  const openGlobalAssistant = () => {
+  const toggleGlobalAssistant = () => {
+    if (assistantOpen) {
+      setAssistantOpen(false);
+      return;
+    }
     setAssistantOpen(true);
     ensureIntroMessage(
       'Ask me to compare runs, explain regressions over time, or summarize historical drift patterns.'
@@ -982,7 +986,13 @@ const Results = () => {
           <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
             Next
           </Button>
-          <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5"
+            aria-pressed={assistantOpen}
+            onClick={toggleGlobalAssistant}
+          >
             <Sparkles className="h-4 w-4 text-amber-500" />
             MCP Lab Assistant
           </Button>
