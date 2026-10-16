@@ -27,7 +27,7 @@ export function useResultAssistant(params: {
     recreateExpiredOnSend: true,
     onSession: onSessionSync
   });
-  // The hook returns a fresh object each render; depend on its stable callbacks instead.
+  // The session object is new every render; depend on its stable callbacks instead.
   const { send, cancel, reset } = assistant;
   const [assistantInput, setAssistantInput] = useState('');
   const [introMessage, setIntroMessage] =
