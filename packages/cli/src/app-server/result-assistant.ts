@@ -5,7 +5,8 @@ import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   setupResultAssistantSession,
   type ResultAssistantReferenceReport,
-  type ResultAssistantSession
+  type ResultAssistantSession,
+  type ResultAssistantSessionInitializer
 } from './result-assistant-domain.js';
 import {
   cleanupResultAssistantSessions,
@@ -94,7 +95,7 @@ export async function handleResultAssistantRoutes(params: {
       return true;
     }
     const agentConfig = resolveAssistantAgentFromLibraries(libraries, assistantAgentName);
-    const session: ResultAssistantSession = {
+    const sessionInitializer: ResultAssistantSessionInitializer = {
       id: `ras-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       scope,
       runId: scope === 'run' ? runId : null,
@@ -109,7 +110,7 @@ export async function handleResultAssistantRoutes(params: {
       events: [],
       clients: new Set()
     };
-    session.initialMessages.push({
+    sessionInitializer.initialMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'system',
       text:
@@ -118,19 +119,19 @@ export async function handleResultAssistantRoutes(params: {
           : 'Result Assistant session created.',
       createdAt: new Date().toISOString()
     });
-    await setupResultAssistantSession({
-      session,
+    const session = await setupResultAssistantSession({
+      session: sessionInitializer,
       agentConfig,
       resultSummary: results,
       referenceReportsForRun: listReferenceReportsForRun(scope === 'run' ? runId : null),
       mcpServerUrl: localMcplabMcpUrl(),
-      refreshReports: () => listReferenceReportsForRun(session.runId),
+      refreshReports: () => listReferenceReportsForRun(sessionInitializer.runId),
       assistantRuntimeFactory,
-      onEvent: (event) => {
-        touchResultAssistantSession(session);
-        publishSessionEvent(session, event.type, event.payload);
+      onEvent: (event, readySession) => {
+        touchResultAssistantSession(readySession);
+        publishSessionEvent(readySession, event.type, event.payload);
       },
-      onActivity: () => touchResultAssistantSession(session)
+      onActivity: touchResultAssistantSession
     });
     resultAssistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');

@@ -121,6 +121,38 @@ async function callCreateSessionRoute(params?: {
 }
 
 describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
+  it('stores factory-time events with a ready session before session_started', async () => {
+    const startupEvent = {
+      type: 'session_warning' as const,
+      ts: new Date().toISOString(),
+      payload: { warning: 'factory startup' }
+    };
+    const assistantRuntimeFactory = {
+      create: vi.fn(async (definition: any) => {
+        definition.onEvent?.(startupEvent);
+        return {
+          sendMessage: vi.fn(),
+          resolveToolCalls: vi.fn(),
+          getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+          isBusy: () => false,
+          dispose: vi.fn()
+        };
+      })
+    };
+    const { assistantSessions } = await callCreateSessionRoute({ assistantRuntimeFactory });
+    const session = Array.from(assistantSessions.values())[0];
+    if (!session) throw new Error('Scenario Assistant session was not created');
+    expect(session.runtime).toBeDefined();
+    expect(session.events.map((event) => event.type)).toEqual([
+      'session_warning',
+      'session_started'
+    ]);
+    expect(session.events[0]?.payload.session).toMatchObject({
+      id: session.id,
+      messages: []
+    });
+  });
+
   it('creates session for non-OAuth servers without auth headers', async () => {
     const {
       handled,
@@ -298,10 +330,10 @@ describe('Scenario Assistant stateful alternative runtime acceptance', () => {
       { message: 'Plan' },
       Object.assign(new EventEmitter(), { writableEnded: false })
     );
-    const first = session.runtime!.getSnapshot().pendingToolCalls[0]!;
-    const second = session.runtime!.getSnapshot().pendingToolCalls[1]!;
+    const first = session.runtime.getSnapshot().pendingToolCalls[0]!;
+    const second = session.runtime.getSnapshot().pendingToolCalls[1]!;
     expect([first.id, second.id]).toEqual(['fake-call-1', 'fake-call-2']);
-    expect(session.runtime!.getSnapshot().messages.at(-1)).toMatchObject({
+    expect(session.runtime.getSnapshot().messages.at(-1)).toMatchObject({
       role: 'assistant',
       pendingToolCallId: first.id,
       pendingToolCallIds: [first.id, second.id]

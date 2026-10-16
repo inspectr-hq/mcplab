@@ -50,8 +50,10 @@ export interface ResultAssistantSession {
   initialMessages: ResultAssistantChatMessage[];
   events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
-  runtime?: AssistantRuntimeSession;
+  runtime: AssistantRuntimeSession;
 }
+
+export type ResultAssistantSessionInitializer = Omit<ResultAssistantSession, 'runtime'>;
 
 interface ResultAssistantResources {
   agentConfig: LlmAgentConfig;
@@ -87,7 +89,7 @@ export function cleanupResultAssistantSessions(
   now = Date.now()
 ): void {
   cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, (session) => {
-    void Promise.resolve(session.runtime?.dispose()).catch(() => {});
+    void Promise.resolve(session.runtime.dispose()).catch(() => {});
     endAssistantSseClients(session);
   });
 }
@@ -97,7 +99,7 @@ export function touchResultAssistantSession(session: ResultAssistantSession): vo
 }
 
 export function resultAssistantSessionView(session: ResultAssistantSession) {
-  const runtimeSnapshot = session.runtime?.getSnapshot();
+  const runtimeSnapshot = session.runtime.getSnapshot();
   return {
     id: session.id,
     scope: session.scope,
@@ -109,13 +111,13 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
     provider: session.provider,
     toolsLoaded: session.toolsLoaded,
     toolServers: session.toolServers,
-    messages: runtimeSnapshot?.messages ?? session.initialMessages,
-    pendingToolCalls: runtimeSnapshot?.pendingToolCalls ?? []
+    messages: runtimeSnapshot.messages,
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls
   };
 }
 
 function createResultAssistantSetup(
-  session: ResultAssistantSession,
+  session: ResultAssistantSessionInitializer,
   agentConfig: LlmAgentConfig,
   resultSummary: ResultsJson | null,
   referenceReportsForRun: ResultAssistantResources['referenceReportsForRun'],
@@ -207,15 +209,15 @@ function createResultAssistantSetup(
 }
 
 export async function setupResultAssistantSession(params: {
-  session: ResultAssistantSession;
+  session: ResultAssistantSessionInitializer;
   agentConfig: LlmAgentConfig;
   resultSummary: ResultsJson | null;
   referenceReportsForRun: ResultAssistantResources['referenceReportsForRun'];
   mcpServerUrl: string;
   refreshReports: () => ResultAssistantResources['referenceReportsForRun'];
   assistantRuntimeFactory: AssistantRuntimeFactory;
-  onEvent(event: AssistantRuntimeEvent): void;
-  onActivity(): void;
+  onEvent(event: AssistantRuntimeEvent, session: ResultAssistantSession): void;
+  onActivity(session: ResultAssistantSession): void;
 }): Promise<ResultAssistantSession> {
   const setup = createResultAssistantSetup(
     params.session,
@@ -224,6 +226,8 @@ export async function setupResultAssistantSession(params: {
     params.referenceReportsForRun,
     params.refreshReports
   );
+  let readySession: ResultAssistantSession | undefined;
+  let startupEvents: AssistantRuntimeEvent[] = [];
   try {
     try {
       await setup.preload(params.mcpServerUrl);
@@ -235,28 +239,37 @@ export async function setupResultAssistantSession(params: {
         text: `Warning: could not preload MCPLab MCP tools: ${message}`,
         createdAt: new Date().toISOString()
       });
-      params.onEvent({
+      startupEvents.push({
         type: 'session_warning',
         ts: new Date().toISOString(),
         payload: { warning: message }
       });
     }
     const definition = setup.createRuntimeDefinition();
-    definition.onEvent = params.onEvent;
-    params.session.runtime = await createAssistantRuntimeService(
+    definition.onEvent = (event) => {
+      if (!readySession) startupEvents.push(event);
+      else params.onEvent(event, readySession);
+    };
+    const runtime = await createAssistantRuntimeService(
       params.assistantRuntimeFactory,
       definition,
-      params.onActivity
+      () => {
+        if (readySession) params.onActivity(readySession);
+      }
     );
-    return params.session;
+    readySession = Object.assign(params.session, { runtime });
+    for (const event of startupEvents) params.onEvent(event, readySession);
+    startupEvents = [];
+    return readySession;
   } catch (error) {
-    await setup.dispose().catch(() => {});
+    if (readySession) await Promise.resolve(readySession.runtime.dispose()).catch(() => {});
+    else await setup.dispose().catch(() => {});
     throw error;
   }
 }
 
 function resultAssistantSystemPrompt(
-  session: ResultAssistantSession,
+  session: ResultAssistantSessionInitializer,
   state: ResultAssistantResources
 ): string {
   if (state.systemPromptCache) return state.systemPromptCache;

@@ -7,7 +7,8 @@ import { McpClientManager, type AssistantRuntimeDefinition } from '@inspectr/mcp
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import {
   setupResultAssistantSession,
-  type ResultAssistantSession
+  type ResultAssistantSession,
+  type ResultAssistantSessionInitializer
 } from './result-assistant-domain.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
@@ -25,7 +26,7 @@ async function createResultDefinition(params: {
   const listTools = vi
     .spyOn(McpClientManager.prototype, 'listTools')
     .mockResolvedValue(params.tools as any);
-  const session: ResultAssistantSession = {
+  const session: ResultAssistantSessionInitializer = {
     id: 'ras-test',
     scope: params.scope ?? 'all_runs',
     runId: params.runId ?? null,
@@ -69,6 +70,130 @@ async function createResultDefinition(params: {
     listTools.mockRestore();
   }
 }
+
+it('publishes factory-time Result events with a finalized runtime session', async () => {
+  vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+  const observed: Array<{ type: string; session: ResultAssistantSession }> = [];
+  const initializer: ResultAssistantSessionInitializer = {
+    id: 'ras-startup',
+    scope: 'all_runs',
+    runId: null,
+    createdAt: Date.now(),
+    lastTouchedAt: Date.now(),
+    selectedAssistantAgentName: 'assistant',
+    model: 'test',
+    provider: 'openai',
+    toolsLoaded: 0,
+    toolServers: [],
+    initialMessages: [],
+    events: [],
+    clients: new Set()
+  };
+  let emitLateEvent: NonNullable<AssistantRuntimeDefinition['onEvent']> | undefined;
+  try {
+    const session = await setupResultAssistantSession({
+      session: initializer,
+      agentConfig: { provider: 'openai', model: 'test' },
+      resultSummary: null,
+      referenceReportsForRun: [],
+      mcpServerUrl: 'http://mcplab.test/mcp',
+      refreshReports: () => [],
+      assistantRuntimeFactory: {
+        create: async (definition) => {
+          emitLateEvent = definition.onEvent;
+          definition.onEvent?.({
+            type: 'session_warning',
+            ts: new Date().toISOString(),
+            payload: { warning: 'startup' }
+          });
+          return {
+            sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+            resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            isBusy: () => false,
+            dispose: async () => {}
+          };
+        }
+      },
+      onEvent: (event, readySession) => {
+        observed.push({ type: event.type, session: readySession });
+      },
+      onActivity: () => {}
+    });
+    expect(session).toBe(initializer);
+    expect(observed).toEqual([{ type: 'session_warning', session }]);
+    emitLateEvent?.({
+      type: 'session_warning',
+      ts: new Date().toISOString(),
+      payload: { warning: 'later' }
+    });
+    expect(observed).toEqual([
+      { type: 'session_warning', session },
+      { type: 'session_warning', session }
+    ]);
+    expect(session.runtime.getSnapshot()).toEqual({ messages: [], pendingToolCalls: [] });
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it('disposes the Result runtime and MCP client when a startup observer throws', async () => {
+  vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+  vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+  const disconnectAll = vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+  const runtimeDispose = vi.fn();
+  try {
+    await expect(
+      setupResultAssistantSession({
+        session: {
+          id: 'ras-observer-failure',
+          scope: 'all_runs',
+          runId: null,
+          createdAt: Date.now(),
+          lastTouchedAt: Date.now(),
+          selectedAssistantAgentName: 'assistant',
+          model: 'test',
+          provider: 'openai',
+          toolsLoaded: 0,
+          toolServers: [],
+          initialMessages: [],
+          events: [],
+          clients: new Set()
+        },
+        agentConfig: { provider: 'openai', model: 'test' },
+        resultSummary: null,
+        referenceReportsForRun: [],
+        mcpServerUrl: 'http://mcplab.test/mcp',
+        refreshReports: () => [],
+        assistantRuntimeFactory: {
+          create: async (definition) => {
+            definition.onEvent?.({
+              type: 'session_warning',
+              ts: new Date().toISOString(),
+              payload: { warning: 'startup' }
+            });
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              isBusy: () => false,
+              dispose: runtimeDispose
+            };
+          }
+        },
+        onEvent: () => {
+          throw new Error('observer failed');
+        },
+        onActivity: () => {}
+      })
+    ).rejects.toThrow('observer failed');
+    expect(runtimeDispose).toHaveBeenCalledOnce();
+    expect(disconnectAll).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
 
 describe('GET /api/result-assistant/sessions/:id/events', () => {
   it('streams existing assistant events', async () => {
@@ -312,7 +437,7 @@ describe('Result Assistant discovered tool approvals', () => {
     let modelRound = 0;
     const histories: any[][] = [];
     try {
-      const session: ResultAssistantSession = {
+      const session: ResultAssistantSessionInitializer = {
         id: 'ras-test',
         scope: 'all_runs',
         runId: null,
@@ -531,7 +656,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       status: 200,
       body: { response: { type: 'tool_call_request' } }
     });
-    const [read, write] = session.runtime!.getSnapshot().pendingToolCalls;
+    const [read, write] = session.runtime.getSnapshot().pendingToolCalls;
     expect([read!.id, write!.id]).toEqual(['read-id', 'write-id']);
 
     await route(
@@ -575,7 +700,7 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
       }
     });
     expect(callTool).toHaveBeenCalledTimes(1);
-    expect(session.runtime!.getSnapshot().pendingToolCalls).toMatchObject([
+    expect(session.runtime.getSnapshot().pendingToolCalls).toMatchObject([
       { id: 'read-id', status: 'approved', arguments: { path: 'edited' } },
       { id: 'write-id', status: 'denied' }
     ]);
@@ -717,8 +842,8 @@ describe('Result Assistant runtime factory', () => {
       { message: 'Plan' },
       Object.assign(new EventEmitter(), { writableEnded: false })
     );
-    const [first, second] = session.runtime!.getSnapshot().pendingToolCalls;
-    expect(session.runtime!.getSnapshot().messages.at(-1)).toMatchObject({
+    const [first, second] = session.runtime.getSnapshot().pendingToolCalls;
+    expect(session.runtime.getSnapshot().messages.at(-1)).toMatchObject({
       role: 'assistant',
       pendingToolCallId: first!.id,
       pendingToolCallIds: [first!.id, second!.id]

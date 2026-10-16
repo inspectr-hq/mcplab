@@ -43,8 +43,10 @@ export interface ScenarioAssistantSession {
   warnings: string[];
   events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
-  runtime?: AssistantRuntimeSession;
+  runtime: AssistantRuntimeSession;
 }
+
+export type ScenarioAssistantSessionInitializer = Omit<ScenarioAssistantSession, 'runtime'>;
 
 interface ScenarioAssistantResources {
   agentConfig: LlmAgentConfig;
@@ -76,7 +78,7 @@ export function cleanupScenarioAssistantSessions(
   now = Date.now()
 ): void {
   cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, (session) => {
-    void Promise.resolve(session.runtime?.dispose()).catch(() => {});
+    void Promise.resolve(session.runtime.dispose()).catch(() => {});
     endAssistantSseClients(session);
   });
 }
@@ -86,7 +88,7 @@ export function touchScenarioAssistantSession(session: ScenarioAssistantSession)
 }
 
 export function scenarioAssistantSessionView(session: ScenarioAssistantSession) {
-  const runtimeSnapshot = session.runtime?.getSnapshot?.();
+  const runtimeSnapshot = session.runtime.getSnapshot();
   return {
     id: session.id,
     createdAt: new Date(session.createdAt).toISOString(),
@@ -97,13 +99,13 @@ export function scenarioAssistantSessionView(session: ScenarioAssistantSession) 
     warnings: session.warnings,
     toolsLoaded: session.toolsLoaded,
     toolServers: session.toolServers,
-    messages: runtimeSnapshot?.messages ?? session.initialMessages,
-    pendingToolCalls: runtimeSnapshot?.pendingToolCalls ?? []
+    messages: runtimeSnapshot.messages,
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls
   };
 }
 
 function assistantSystemPrompt(
-  session: ScenarioAssistantSession,
+  session: ScenarioAssistantSessionInitializer,
   state: ScenarioAssistantResources
 ): string {
   if (state.systemPromptCache) return state.systemPromptCache;
@@ -176,7 +178,7 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
 }
 
 function createScenarioAssistantSetup(
-  session: ScenarioAssistantSession,
+  session: ScenarioAssistantSessionInitializer,
   agentConfig: LlmAgentConfig,
   context: ScenarioAssistantContextInput
 ) {
@@ -273,31 +275,48 @@ function createScenarioAssistantSetup(
 }
 
 export async function setupScenarioAssistantSession(params: {
-  session: ScenarioAssistantSession;
+  session: ScenarioAssistantSessionInitializer;
   agentConfig: LlmAgentConfig;
   context: ScenarioAssistantContextInput;
   serversByName: Record<string, EvalConfig['servers'][string]>;
   selectedServerNames: string[];
   serverAuthHeaders?: Record<string, Record<string, string>>;
+  initialEvents?: import('@inspectr/mcplab-core').AssistantRuntimeEvent[];
   assistantRuntimeFactory: AssistantRuntimeFactory;
-  onEvent(event: import('@inspectr/mcplab-core').AssistantRuntimeEvent): void;
-  onActivity(): void;
+  onEvent(
+    event: import('@inspectr/mcplab-core').AssistantRuntimeEvent,
+    session: ScenarioAssistantSession
+  ): void;
+  onActivity(session: ScenarioAssistantSession): void;
 }): Promise<ScenarioAssistantSession> {
   const setup = createScenarioAssistantSetup(params.session, params.agentConfig, params.context);
+  let readySession: ScenarioAssistantSession | undefined;
+  let startupEvents: import('@inspectr/mcplab-core').AssistantRuntimeEvent[] = [
+    ...(params.initialEvents ?? [])
+  ];
   try {
     await setup.preload(params.serversByName, params.selectedServerNames, {
       serverAuthHeaders: params.serverAuthHeaders
     });
     const definition = setup.createRuntimeDefinition();
-    definition.onEvent = params.onEvent;
-    params.session.runtime = await createAssistantRuntimeService(
+    definition.onEvent = (event) => {
+      if (!readySession) startupEvents.push(event);
+      else params.onEvent(event, readySession);
+    };
+    const runtime = await createAssistantRuntimeService(
       params.assistantRuntimeFactory,
       definition,
-      params.onActivity
+      () => {
+        if (readySession) params.onActivity(readySession);
+      }
     );
-    return params.session;
+    readySession = Object.assign(params.session, { runtime });
+    for (const event of startupEvents) params.onEvent(event, readySession);
+    startupEvents = [];
+    return readySession;
   } catch (error) {
-    await setup.dispose().catch(() => {});
+    if (readySession) await Promise.resolve(readySession.runtime.dispose()).catch(() => {});
+    else await setup.dispose().catch(() => {});
     throw error;
   }
 }

@@ -1,14 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import {
   setupScenarioAssistantSession,
   normalizeScenarioAssistantEvalRules,
   validateScenarioAssistantProposal,
-  type ScenarioAssistantSession
+  type ScenarioAssistantSessionInitializer
 } from './scenario-assistant-domain.js';
 import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
+import { McpClientManager } from '@inspectr/mcplab-core';
 
-function baseSession(): ScenarioAssistantSession {
+function baseSession(): ScenarioAssistantSessionInitializer {
   return {
     id: 'sas-1',
     createdAt: Date.now(),
@@ -59,6 +60,108 @@ async function createDefinition(): Promise<AssistantRuntimeDefinition> {
   });
   return definition!;
 }
+
+it('publishes factory-time Scenario events with a finalized runtime session', async () => {
+  const observed: Array<{ type: string; session: ScenarioAssistantSessionInitializer }> = [];
+  const initializer = baseSession();
+  let emitLateEvent: NonNullable<AssistantRuntimeDefinition['onEvent']> | undefined;
+  const session = await setupScenarioAssistantSession({
+    session: initializer,
+    agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+    context: {
+      scenario: {
+        id: 'scn-1',
+        prompt: 'Prompt',
+        serverNames: [],
+        evalRules: [],
+        extractRules: []
+      }
+    },
+    serversByName: {},
+    selectedServerNames: [],
+    assistantRuntimeFactory: {
+      create: async (definition) => {
+        emitLateEvent = definition.onEvent;
+        definition.onEvent?.({
+          type: 'session_warning',
+          ts: new Date().toISOString(),
+          payload: { warning: 'startup' }
+        });
+        return {
+          sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+          resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+          getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+          isBusy: () => false,
+          dispose: async () => {}
+        };
+      }
+    },
+    onEvent: (event, readySession) => {
+      observed.push({ type: event.type, session: readySession });
+    },
+    onActivity: () => {}
+  });
+  expect(session).toBe(initializer);
+  expect(observed).toEqual([{ type: 'session_warning', session }]);
+  emitLateEvent?.({
+    type: 'session_warning',
+    ts: new Date().toISOString(),
+    payload: { warning: 'later' }
+  });
+  expect(observed).toEqual([
+    { type: 'session_warning', session },
+    { type: 'session_warning', session }
+  ]);
+  expect(session.runtime.getSnapshot()).toEqual({ messages: [], pendingToolCalls: [] });
+});
+
+it('disposes the Scenario runtime and MCP client when a startup observer throws', async () => {
+  const runtimeDispose = vi.fn();
+  const disconnectAll = vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+  try {
+    await expect(
+      setupScenarioAssistantSession({
+        session: baseSession(),
+        agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+        context: {
+          scenario: {
+            id: 'scn-1',
+            prompt: 'Prompt',
+            serverNames: [],
+            evalRules: [],
+            extractRules: []
+          }
+        },
+        serversByName: {},
+        selectedServerNames: [],
+        assistantRuntimeFactory: {
+          create: async (definition) => {
+            definition.onEvent?.({
+              type: 'session_warning',
+              ts: new Date().toISOString(),
+              payload: { warning: 'startup' }
+            });
+            return {
+              sendMessage: async () => ({ type: 'assistant_message', text: '' }),
+              resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
+              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              isBusy: () => false,
+              dispose: runtimeDispose
+            };
+          }
+        },
+        onEvent: () => {
+          throw new Error('observer failed');
+        },
+        onActivity: () => {}
+      })
+    ).rejects.toThrow('observer failed');
+    expect(runtimeDispose).toHaveBeenCalledOnce();
+    expect(disconnectAll).toHaveBeenCalledOnce();
+  } finally {
+    disconnectAll.mockRestore();
+  }
+});
 
 describe('normalizeScenarioAssistantEvalRules', () => {
   it('converts simple regex to response_contains', () => {

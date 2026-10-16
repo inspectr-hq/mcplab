@@ -11,6 +11,7 @@ import {
   setupScenarioAssistantSession,
   type ScenarioAssistantContextInput,
   type ScenarioAssistantSession,
+  type ScenarioAssistantSessionInitializer,
   cleanupScenarioAssistantSessions,
   touchScenarioAssistantSession,
   scenarioAssistantSessionView
@@ -147,7 +148,7 @@ export async function handleScenarioAssistantRoutes(params: {
       agentConfig = resolveAssistantAgentFromLibraries(libraries, selectedAssistantAgentName);
       serversByName = libraries.servers;
     }
-    const session: ScenarioAssistantSession = {
+    const sessionInitializer: ScenarioAssistantSessionInitializer = {
       id: `sas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
       lastTouchedAt: Date.now(),
@@ -162,7 +163,7 @@ export async function handleScenarioAssistantRoutes(params: {
       events: [],
       clients: new Set()
     };
-    session.initialMessages.push({
+    sessionInitializer.initialMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'system',
       text: 'Scenario Assistant session created.',
@@ -194,22 +195,25 @@ export async function handleScenarioAssistantRoutes(params: {
         return true;
       }
     }
-    for (const warning of warnings) {
-      publishSessionEvent(session, 'session_warning', { warning });
-    }
-    await setupScenarioAssistantSession({
-      session,
+    const initialEvents = warnings.map((warning) => ({
+      type: 'session_warning' as const,
+      ts: new Date().toISOString(),
+      payload: { warning }
+    }));
+    const session = await setupScenarioAssistantSession({
+      session: sessionInitializer,
       agentConfig,
       context,
       serversByName,
       selectedServerNames,
       serverAuthHeaders,
+      initialEvents,
       assistantRuntimeFactory,
-      onEvent: (event) => {
-        touchScenarioAssistantSession(session);
-        publishSessionEvent(session, event.type, event.payload);
+      onEvent: (event, readySession) => {
+        touchScenarioAssistantSession(readySession);
+        publishSessionEvent(readySession, event.type, event.payload);
       },
-      onActivity: () => touchScenarioAssistantSession(session)
+      onActivity: touchScenarioAssistantSession
     });
     assistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');

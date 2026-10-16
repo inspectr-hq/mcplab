@@ -110,13 +110,13 @@ describe.each([
             once: true
           });
         });
-      if (action === '/messages') session.runtime!.sendMessage = vi.fn(waitForAbort);
-      else session.runtime!.resolveToolCalls = vi.fn(waitForAbort);
+      if (action === '/messages') session.runtime.sendMessage = vi.fn(waitForAbort);
+      else session.runtime.resolveToolCalls = vi.fn(waitForAbort);
 
       const route = handleAssistantSessionRoutes(options);
       await vi.waitFor(() => {
         expect(
-          action === '/messages' ? session.runtime!.sendMessage : session.runtime!.resolveToolCalls
+          action === '/messages' ? session.runtime.sendMessage : session.runtime.resolveToolCalls
         ).toHaveBeenCalledOnce();
       });
       res.emit('close');
@@ -138,7 +138,7 @@ describe.each([
       res.writableEnded = true;
       res.emit('close');
     });
-    session.runtime!.sendMessage = vi.fn(async (_message: string, passedSignal?: AbortSignal) => {
+    session.runtime.sendMessage = vi.fn(async (_message: string, passedSignal?: AbortSignal) => {
       signal = passedSignal;
       return { type: 'assistant_message' as const, text: 'done' };
     });
@@ -154,11 +154,11 @@ describe.each([
     options.pathname = `/api/assistant/sessions/${session.id}`;
     options.method = 'DELETE';
     let finishDispose!: () => void;
-    session.runtime!.dispose = vi.fn(
+    session.runtime.dispose = vi.fn(
       () => new Promise<void>((resolve) => (finishDispose = resolve))
     );
     const route = handleAssistantSessionRoutes(options);
-    await vi.waitFor(() => expect(session.runtime!.dispose).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(session.runtime.dispose).toHaveBeenCalledOnce());
     res.emit('close');
     finishDispose();
     await expect(route).resolves.toBe(true);
@@ -182,7 +182,7 @@ describe.each([
       const handled = await handleAssistantSessionRoutes(options);
       expect(handled).toBe(true);
       expect(
-        session.runtime![operation as 'sendMessage' | 'resolveToolCalls']
+        session.runtime[operation as 'sendMessage' | 'resolveToolCalls']
       ).not.toHaveBeenCalled();
       expect(asJson).not.toHaveBeenCalled();
       expect(res.listenerCount('close')).toBe(0);
@@ -204,7 +204,7 @@ describe.each([
       const handled = await handleAssistantSessionRoutes(options);
       expect(handled).toBe(true);
       expect(
-        session.runtime![operation as 'sendMessage' | 'resolveToolCalls']
+        session.runtime[operation as 'sendMessage' | 'resolveToolCalls']
       ).not.toHaveBeenCalled();
       expect(asJson).not.toHaveBeenCalled();
       expect(res.listenerCount('close')).toBe(0);
@@ -215,6 +215,20 @@ describe.each([
     const { options } = makeOptions('/messages/extra', makeSession(), supportsApproveAll);
     await expect(handleAssistantSessionRoutes(options)).resolves.toBe(false);
     expect(options.cleanup).not.toHaveBeenCalled();
+  });
+
+  it('does not write a validation response when the request disconnects during body parsing', async () => {
+    const { options, session, res, asJson } = makeOptions('/messages', makeSession());
+    let finishParse!: (body: unknown) => void;
+    options.parseBody = vi.fn(() => new Promise((resolve) => (finishParse = resolve)));
+    const route = handleAssistantSessionRoutes(options);
+    await vi.waitFor(() => expect(finishParse).toBeTypeOf('function'));
+    res.emit('close');
+    finishParse({ message: '' });
+    await expect(route).resolves.toBe(true);
+    expect(asJson).not.toHaveBeenCalled();
+    expect(session.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(res.listenerCount('close')).toBe(0);
   });
 });
 
@@ -228,7 +242,7 @@ describe('shared assistant session route behavior', () => {
         { id: 'tool-2', status: 'pending', publicToolName: 'send_email' }
       ];
       const response = { type, text: 'keep this response', pendingToolCalls };
-      session.runtime!.sendMessage = vi.fn().mockResolvedValue(response);
+      session.runtime.sendMessage = vi.fn().mockResolvedValue(response);
 
       await handleAssistantSessionRoutes(options);
 
@@ -247,7 +261,7 @@ describe('shared assistant session route behavior', () => {
       await handleAssistantSessionRoutes(options);
 
       expect(asJson).toHaveBeenCalledWith(expect.anything(), 400, { error: 'message is required' });
-      expect(session.runtime!.sendMessage).not.toHaveBeenCalled();
+      expect(session.runtime.sendMessage).not.toHaveBeenCalled();
     }
   );
 
@@ -257,7 +271,7 @@ describe('shared assistant session route behavior', () => {
 
     await handleAssistantSessionRoutes(options);
 
-    expect(session.runtime!.resolveToolCalls).toHaveBeenCalledWith(
+    expect(session.runtime.resolveToolCalls).toHaveBeenCalledWith(
       [{ toolCallId: 'tool-1', decision: 'approve', arguments: null }],
       expect.any(AbortSignal)
     );
@@ -269,7 +283,7 @@ describe('shared assistant session route behavior', () => {
 
     await handleAssistantSessionRoutes(options);
 
-    expect(session.runtime!.resolveToolCalls).toHaveBeenCalledOnce();
+    expect(session.runtime.resolveToolCalls).toHaveBeenCalledOnce();
     expect(asJson).toHaveBeenCalledWith(expect.anything(), 200, expect.any(Object));
   });
 
@@ -284,7 +298,7 @@ describe('shared assistant session route behavior', () => {
       expect(asJson).toHaveBeenCalledWith(expect.anything(), 400, {
         error: 'Invalid request body'
       });
-      expect(session.runtime!.resolveToolCalls).not.toHaveBeenCalled();
+      expect(session.runtime.resolveToolCalls).not.toHaveBeenCalled();
     }
   );
 

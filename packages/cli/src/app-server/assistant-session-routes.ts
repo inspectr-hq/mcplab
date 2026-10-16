@@ -10,7 +10,7 @@ import {
 
 export interface AssistantHttpSession extends AssistantSseSessionState {
   id: string;
-  runtime?: AssistantRuntimeSession;
+  runtime: AssistantRuntimeSession;
 }
 
 export interface AssistantSessionRouteOptions<TSession extends AssistantHttpSession> {
@@ -38,7 +38,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
   if (!pathname.startsWith(`${prefix}/`)) return false;
   const parts = pathname.slice(prefix.length + 1).split('/');
   const sessionId = parts[0] ?? '';
-  const isEvents = parts[1] === 'events' && parts.length === 2;
+  const isEvents = method === 'GET' && parts[1] === 'events' && parts.length === 2;
   const isSessionRead = method === 'GET' && parts.length === 1;
   const isSessionDelete = method === 'DELETE' && parts.length === 1;
   const isMessage = method === 'POST' && parts[1] === 'messages' && parts.length === 2;
@@ -55,7 +55,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     parts.length === 3;
   if (
     !sessionId ||
-    (!(isEvents && method === 'GET') &&
+    (!isEvents &&
       !isSessionRead &&
       !isSessionDelete &&
       !isMessage &&
@@ -66,7 +66,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
   }
   if (res.destroyed || res.writableEnded) return true;
   options.cleanup();
-  if (isEvents && method === 'GET') {
+  if (isEvents) {
     const session = sessions.get(sessionId);
     if (!session) asJson(res, 404, { error: missingSessionMessage });
     else serveAssistantSseStream(req, res, session);
@@ -80,7 +80,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     try {
       if (session) {
         try {
-          await session.runtime?.dispose();
+          await session.runtime.dispose();
         } catch (error) {
           disposeError = error;
         } finally {
@@ -104,56 +104,50 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     return true;
   }
   if (!session) {
-    if (
-      isSessionRead ||
-      isMessage ||
-      isToolDecision ||
-      isApproveAll ||
-      (isEvents && method === 'GET')
-    ) {
-      asJson(res, 404, { error: missingSessionMessage });
-      return true;
-    }
-    return false;
+    asJson(res, 404, { error: missingSessionMessage });
+    return true;
   }
   if (isSessionRead) {
     options.touch(session);
     asJson(res, 200, { session: options.view(session) });
     return true;
   }
-  if (isMessage) {
+  const respondWithRuntime = async (
+    operation: (signal: AbortSignal) => Promise<AssistantRuntimeResponse | undefined>
+  ) => {
     const abort = createAssistantRequestAbortController(res);
     try {
       throwIfAborted(abort.signal);
-      const body = await options.parseBody(req);
+      const response = await operation(abort.signal);
       throwIfAborted(abort.signal);
-      if (!isPlainObject(body) || typeof body.message !== 'string' || !body.message.trim()) {
-        asJson(res, 400, { error: 'message is required' });
-        return true;
+      if (response !== undefined) {
+        asJson(res, 200, {
+          session: options.view(session),
+          response: formatAssistantRuntimeResponse(response)
+        });
       }
-      const message = body.message.trim();
-      const response = await session.runtime!.sendMessage(message, abort.signal);
-      throwIfAborted(abort.signal);
-      asJson(res, 200, {
-        session: options.view(session),
-        response: formatAssistantRuntimeResponse(response)
-      });
     } catch (error) {
       if (!abort.signal.aborted) throw error;
     } finally {
       abort.dispose();
     }
+  };
+  if (isMessage) {
+    await respondWithRuntime(async (signal) => {
+      const body = await options.parseBody(req);
+      throwIfAborted(signal);
+      if (!isPlainObject(body) || typeof body.message !== 'string' || !body.message.trim()) {
+        asJson(res, 400, { error: 'message is required' });
+        return undefined;
+      }
+      return session.runtime.sendMessage(body.message.trim(), signal);
+    });
     return true;
   }
-  if (
-    method === 'POST' &&
-    parts[1] === 'tool-calls' &&
-    parts.length === 4 &&
-    ['approve', 'deny'].includes(parts[3]!)
-  ) {
+  if (isToolDecision) {
     const callId = parts[2]!;
-    const pending = session
-      .runtime!.getSnapshot()
+    const pending = session.runtime
+      .getSnapshot()
       .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, {
@@ -166,16 +160,14 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
       return true;
     }
     const decision = parts[3] as 'approve' | 'deny';
-    const abort = createAssistantRequestAbortController(res);
-    try {
-      throwIfAborted(abort.signal);
+    await respondWithRuntime(async (signal) => {
       const body = decision === 'approve' ? await options.parseBody(req) : {};
-      throwIfAborted(abort.signal);
+      throwIfAborted(signal);
       if (!isPlainObject(body)) {
         asJson(res, 400, { error: 'Invalid request body' });
-        return true;
+        return undefined;
       }
-      const response = await session.runtime!.resolveToolCalls(
+      return session.runtime.resolveToolCalls(
         [
           {
             toolCallId: pending.id,
@@ -186,45 +178,25 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
               : {})
           }
         ],
-        abort.signal
+        signal
       );
-      throwIfAborted(abort.signal);
-      asJson(res, 200, {
-        session: options.view(session),
-        response: formatAssistantRuntimeResponse(response)
-      });
-    } catch (error) {
-      if (!abort.signal.aborted) throw error;
-    } finally {
-      abort.dispose();
-    }
+    });
     return true;
   }
   if (isApproveAll) {
-    const pending = session
-      .runtime!.getSnapshot()
+    const pending = session.runtime
+      .getSnapshot()
       .pendingToolCalls.filter((call) => call.status === 'pending');
     if (!pending.length) {
       asJson(res, 409, { error: 'No pending tool calls to approve' });
       return true;
     }
-    const abort = createAssistantRequestAbortController(res);
-    try {
-      throwIfAborted(abort.signal);
-      const response = await session.runtime!.resolveToolCalls(
+    await respondWithRuntime((signal) =>
+      session.runtime.resolveToolCalls(
         pending.map((call) => ({ toolCallId: call.id, decision: 'approve' as const })),
-        abort.signal
-      );
-      throwIfAborted(abort.signal);
-      asJson(res, 200, {
-        session: options.view(session),
-        response: formatAssistantRuntimeResponse(response)
-      });
-    } catch (error) {
-      if (!abort.signal.aborted) throw error;
-    } finally {
-      abort.dispose();
-    }
+        signal
+      )
+    );
     return true;
   }
   return false;
