@@ -7,7 +7,10 @@ import type {
   AssistantRuntimeDefinition,
   AssistantRuntimeModelOutput
 } from '@inspectr/mcplab-core';
-import { createLangChainAssistantRuntimeFactory } from '../src/app-server/langchain-assistant-runtime.js';
+import {
+  createLangChainAssistantRuntimeFactory,
+  type LangChainAssistantRuntimeOptions
+} from '../src/app-server/langchain-assistant-runtime.js';
 
 export type AssistantModelOutput = AssistantRuntimeModelOutput & { nativeMessage?: AIMessage };
 
@@ -55,17 +58,21 @@ export class ScriptedChatModel extends BaseChatModel {
   }
 }
 
-export function createScriptedRuntimeFactory(modelCall?: AssistantModelCall) {
-  return createLangChainAssistantRuntimeFactory(
-    modelCall
+export function createScriptedRuntimeFactory(
+  modelCall?: AssistantModelCall,
+  options: Omit<LangChainAssistantRuntimeOptions, 'createChatModel'> = {}
+) {
+  return createLangChainAssistantRuntimeFactory({
+    ...options,
+    ...(modelCall
       ? {
           createChatModel: (definition, { callbacks }) => ({
             model: new ScriptedChatModel(definition, modelCall, callbacks),
             middleware: []
           })
         }
-      : {}
-  );
+      : {})
+  });
 }
 
 function toAIMessage(output: AssistantModelOutput): AIMessage {

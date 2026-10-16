@@ -1,20 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-  ToolMessage,
-  type BaseMessage
-} from '@langchain/core/messages';
+import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { tool, type StructuredToolInterface } from '@langchain/core/tools';
-import { Command, isGraphInterrupt, MemorySaver, type StateSnapshot } from '@langchain/langgraph';
+import {
+  Command,
+  MemorySaver,
+  type BaseCheckpointSaver,
+  type StateSnapshot
+} from '@langchain/langgraph';
 import {
   createAgent,
   createMiddleware,
+  dynamicSystemPromptMiddleware,
   humanInTheLoopMiddleware,
+  isToolApprovalInterrupt,
   MiddlewareError,
-  modelCallLimitMiddleware
+  modelCallLimitMiddleware,
+  toolErrorMiddleware
 } from 'langchain';
 import {
   isAbortError,
@@ -44,6 +46,8 @@ import {
 export interface LangChainAssistantRuntimeOptions {
   /** Defaults to MCPlab's provider configuration on LangChain chat models. */
   createChatModel?: AssistantChatModelFactory;
+  /** One checkpointer for all sessions, one thread per session. Defaults to in-memory. */
+  checkpointer?: BaseCheckpointSaver;
 }
 
 /** The slice of the compiled agent the runtime uses; createAgent's generics are not needed here. */
@@ -76,9 +80,10 @@ const GRAPH_RECURSION_LIMIT = MAX_ASSISTANT_MODEL_CALLS * 10;
 export function createLangChainAssistantRuntimeFactory(
   options: LangChainAssistantRuntimeOptions = {}
 ): AssistantRuntimeFactory {
+  const checkpointer = options.checkpointer ?? new MemorySaver();
   return {
     async create(definition) {
-      const runtime = new LangChainAssistantRuntime(definition);
+      const runtime = new LangChainAssistantRuntime(definition, checkpointer);
       await runtime.initialize(options.createChatModel ?? createAssistantChatModel);
       return runtime.session();
     }
@@ -86,7 +91,6 @@ export function createLangChainAssistantRuntimeFactory(
 }
 
 class LangChainAssistantRuntime {
-  private readonly saver = new MemorySaver();
   private readonly config = { configurable: { thread_id: `assistant-${randomUUID()}` } };
   private agent!: AssistantAgent;
   private readonly calls: AssistantRuntimeToolCall[] = [];
@@ -105,7 +109,10 @@ class LangChainAssistantRuntime {
   private projection: AssistantRuntimeSnapshot;
   private disposed = false;
 
-  constructor(private readonly definition: AssistantRuntimeDefinition) {
+  constructor(
+    private readonly definition: AssistantRuntimeDefinition,
+    private readonly checkpointer: BaseCheckpointSaver
+  ) {
     this.projection = {
       revision: 0,
       messages: structuredClone(definition.initialMessages ?? []),
@@ -134,11 +141,17 @@ class LangChainAssistantRuntime {
       tools: this.definition.tools.map((item) => this.toLangChainTool(item)),
       middleware: [
         this.turnMiddleware(),
+        // Tool failures are feedback for the model, not a failed turn.
+        toolErrorMiddleware({
+          onError: (error) =>
+            isAbortError(error) ? undefined : JSON.stringify({ error: errorText(error) })
+        }),
+        dynamicSystemPromptMiddleware(() => this.definition.getSystemPrompt()),
         ...setup.middleware,
         humanInTheLoopMiddleware({ interruptMode: 'per_call', interruptOn }),
         modelCallLimitMiddleware({ runLimit: MAX_ASSISTANT_MODEL_CALLS, exitBehavior: 'error' })
       ],
-      checkpointer: this.saver,
+      checkpointer: this.checkpointer,
       name: 'MCPLab Assistant'
     }) as unknown as AssistantAgent;
   }
@@ -227,7 +240,7 @@ class LangChainAssistantRuntime {
     this.disposed = true;
     this.runController?.abort('disposed');
     await this.running?.catch(() => undefined);
-    await this.saver.deleteThread(this.config.configurable.thread_id);
+    await this.checkpointer.deleteThread(this.config.configurable.thread_id);
   }
 
   // ---- Agent execution ----
@@ -371,9 +384,11 @@ class LangChainAssistantRuntime {
     const pending = new Map<string, string>();
     for (const task of state.tasks) {
       for (const item of task.interrupts) {
-        const callId = (item.value as { tool_call_id?: unknown } | undefined)?.tool_call_id;
-        if (typeof callId === 'string' && item.id && !this.turn?.decided.has(callId))
-          pending.set(callId, item.id);
+        if (!item.id) continue;
+        const approval = { id: item.id, value: item.value as unknown };
+        if (!isToolApprovalInterrupt(approval)) continue;
+        const callId = approval.value!.tool_call_id;
+        if (!this.turn?.decided.has(callId)) pending.set(callId, approval.id);
       }
     }
     return pending;
@@ -389,10 +404,7 @@ class LangChainAssistantRuntime {
         const createdAt = new Date().toISOString();
         if (this.turn) this.turn.streaming = { id, text: '', createdAt };
         this.createdAt.set(id, createdAt);
-        const response = await handler({
-          ...request,
-          systemMessage: new SystemMessage(this.definition.getSystemPrompt())
-        });
+        const response = await handler(request);
         return this.normalizeModelResponse(response as AIMessage, id);
       },
       wrapToolCall: async (request, handler) => {
@@ -408,19 +420,7 @@ class LangChainAssistantRuntime {
             status: 'error'
           });
         }
-        let result: Awaited<ReturnType<typeof handler>>;
-        try {
-          result = await handler(request);
-        } catch (error) {
-          if (isGraphInterrupt(error) || isAbortError(error)) throw error;
-          // Tool failures are feedback for the model, not a failed turn.
-          result = new ToolMessage({
-            content: JSON.stringify({ error: errorText(error) }),
-            tool_call_id: callId,
-            name: call.name,
-            status: 'error'
-          });
-        }
+        const result = await handler(request);
         if (!ToolMessage.isInstance(result)) return result;
         const normalized = withJsonErrorContent(result);
         this.recordToolResult(callId, normalized);

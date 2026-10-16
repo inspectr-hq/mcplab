@@ -3,6 +3,7 @@ import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langcha
 import { Client, RunTree } from 'langsmith';
 import { withRunTree, getCurrentRunTree } from 'langsmith/traceable';
 import { awaitAllCallbacks } from '@langchain/core/callbacks/promises';
+import { MemorySaver } from '@langchain/langgraph';
 import { assistantRuntimeContract } from '../../test-support/assistant-runtime-contract.js';
 import type {
   AssistantRuntimeDefinition,
@@ -492,4 +493,27 @@ it('exports assistant traces only when MCPLAB_ASSISTANT_TRACING opts in', async 
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   }
+});
+
+it('keeps every session on its own thread of one shared checkpointer', async () => {
+  const checkpointer = new MemorySaver();
+  const factory = createScriptedRuntimeFactory(
+    async (_definition, messages) => ({
+      type: 'assistant_message',
+      text: `seen ${messages.length}`
+    }),
+    { checkpointer }
+  );
+  const first = await factory.create(definitionWith());
+  const second = await factory.create(definitionWith());
+  await first.sendMessage('one');
+  await first.sendMessage('two');
+  await expect(second.sendMessage('alone')).resolves.toMatchObject({ text: 'seen 1' });
+  const threads = () => new Set(Object.keys((checkpointer as any).storage));
+  expect(threads().size).toBe(2);
+  await first.dispose();
+  expect(threads().size).toBe(1);
+  await expect(second.sendMessage('still here')).resolves.toMatchObject({ text: 'seen 3' });
+  await second.dispose();
+  expect(threads().size).toBe(0);
 });
