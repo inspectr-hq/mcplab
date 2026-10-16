@@ -517,3 +517,154 @@ it('keeps every session on its own thread of one shared checkpointer', async () 
   await second.dispose();
   expect(threads().size).toBe(0);
 });
+
+it('drops tokens from an abandoned model run while a newer turn is streaming', async () => {
+  let emitOld!: (delta: string) => void;
+  let oldStarted!: () => void;
+  const oldReady = new Promise<void>((resolve) => (oldStarted = resolve));
+  let releaseNew!: () => void;
+  let newStreaming!: () => void;
+  const newReady = new Promise<void>((resolve) => (newStreaming = resolve));
+  const newGate = new Promise<void>((resolve) => (releaseNew = resolve));
+  let calls = 0;
+  const events: AssistantRuntimeEvent[] = [];
+  const session = await createScriptedRuntimeFactory(
+    async (_definition, _messages, _signal, onText) => {
+      calls += 1;
+      if (calls === 1) {
+        emitOld = onText!;
+        oldStarted();
+        return new Promise(() => undefined); // ignores abort, never settles
+      }
+      onText?.('new');
+      newStreaming();
+      await newGate;
+      return { type: 'assistant_message', text: 'new answer' };
+    }
+  ).create(definitionWith({ onEvent: (event) => events.push(event) }));
+  const controller = new AbortController();
+  const oldTurn = session.sendMessage('old', controller.signal);
+  await oldReady;
+  controller.abort();
+  await expect(oldTurn).rejects.toThrow();
+  const newTurn = session.sendMessage('new');
+  await newReady;
+  emitOld(' OLD LEAK');
+  await Promise.resolve();
+  expect(session.getSnapshot().streamingMessage?.text).toBe('new');
+  releaseNew();
+  await expect(newTurn).resolves.toMatchObject({ text: 'new answer' });
+  const streamed = events
+    .filter((event) => event.type === 'assistant_message_delta')
+    .map((event) => event.payload.delta)
+    .join('');
+  expect(streamed).not.toContain('OLD LEAK');
+  await session.dispose();
+});
+
+it('does not attach a cancelled turn’s late proposal to the next answer', async () => {
+  let finishProposal!: (value: unknown) => void;
+  let proposalStarted!: () => void;
+  const started = new Promise<void>((resolve) => (proposalStarted = resolve));
+  let round = 0;
+  let secondModelStarted!: () => void;
+  const secondStarted = new Promise<void>((resolve) => (secondModelStarted = resolve));
+  let releaseSecond!: () => void;
+  const secondGate = new Promise<void>((resolve) => (releaseSecond = resolve));
+  const session = await createScriptedRuntimeFactory(async () => {
+    round += 1;
+    if (round === 1)
+      return {
+        type: 'tool_call_request',
+        text: 'Proposing',
+        toolCalls: [{ id: 'late-proposal', name: 'propose', arguments: {} }]
+      };
+    secondModelStarted();
+    await secondGate;
+    return { type: 'assistant_message', text: 'Unrelated answer' };
+  }).create(
+    definitionWith({
+      tools: [
+        {
+          name: 'propose',
+          server: 'local',
+          tool: 'propose',
+          execute: () => {
+            proposalStarted();
+            return new Promise((resolve) => (finishProposal = resolve));
+          },
+          extractProposal: (value) => value as any
+        }
+      ],
+      approvalPolicy: () => 'local'
+    })
+  );
+  const controller = new AbortController();
+  const first = session.sendMessage('propose', controller.signal);
+  await started;
+  controller.abort();
+  await expect(first).rejects.toThrow();
+  const second = session.sendMessage('something else');
+  // The cancelled tool finishes while the new turn is in progress.
+  await secondStarted;
+  finishProposal({ prompt: { replacement: 'leaked' } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  releaseSecond();
+  await expect(second).resolves.not.toHaveProperty('suggestions');
+  expect(session.getSnapshot().messages.at(-1)).not.toHaveProperty('suggestions');
+  await session.dispose();
+});
+
+it('rejects a decision batch with invalid edited arguments without changing any call', async () => {
+  const execute = vi.fn(async () => ({ ok: true }));
+  let round = 0;
+  const session = await createScriptedRuntimeFactory(async () => {
+    round += 1;
+    return round === 1
+      ? {
+          type: 'tool_call_request',
+          text: 'Two writes',
+          toolCalls: [
+            { id: 'a', name: 'write', arguments: {} },
+            { id: 'b', name: 'write', arguments: {} }
+          ]
+        }
+      : { type: 'assistant_message', text: 'Done' };
+  }).create(definitionWith({ tools: [{ name: 'write', server: 's', tool: 'write', execute }] }));
+  await session.sendMessage('write');
+  await expect(
+    session.resolveToolCalls([
+      { toolCallId: 'a', decision: 'approve' },
+      { toolCallId: 'b', decision: 'approve', arguments: 'not an object' }
+    ])
+  ).rejects.toMatchObject({ statusCode: 400 });
+  expect(session.getSnapshot().pendingToolCalls.map((call) => call.status)).toEqual([
+    'pending',
+    'pending'
+  ]);
+  expect(execute).not.toHaveBeenCalled();
+  await expect(
+    session.resolveToolCalls([{ toolCallId: 'a', decision: 'approve' }])
+  ).resolves.toMatchObject({ type: 'tool_call_resolved', pendingToolCalls: [{ id: 'b' }] });
+  expect(execute).toHaveBeenCalledOnce();
+  await session.dispose();
+});
+
+it('cancels a running turn directly, without the service aborting it', async () => {
+  let modelStarted!: () => void;
+  const started = new Promise<void>((resolve) => (modelStarted = resolve));
+  const session = await createScriptedRuntimeFactory(async (_definition, _messages, signal) => {
+    modelStarted();
+    return new Promise((_resolve, reject) =>
+      signal?.addEventListener('abort', () => reject(new Error('aborted by cancel')), {
+        once: true
+      })
+    );
+  }).create(definitionWith());
+  const turn = session.sendMessage('blocked', undefined, 'direct-cancel');
+  await started;
+  await session.cancel('direct-cancel');
+  await expect(turn).rejects.toThrow();
+  expect(session.getSnapshot()).not.toHaveProperty('activeTurnId');
+  await session.dispose();
+});

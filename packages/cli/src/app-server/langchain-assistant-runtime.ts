@@ -101,6 +101,8 @@ class LangChainAssistantRuntime {
   private readonly suggestionsByMessageId = new Map<string, ScenarioAssistantSuggestionBundle>();
   private readonly createdAt = new Map<string, string>();
   private readonly turnIds = new Set<string>();
+  /** Which turn and streamed message each model run started for; late tokens are matched against it. */
+  private readonly modelRuns = new Map<string, { turn: ActiveTurn; messageId: string }>();
   private history: BaseMessage[] = [];
   private turn: ActiveTurn | undefined;
   private running: Promise<unknown> | undefined;
@@ -121,7 +123,10 @@ class LangChainAssistantRuntime {
   }
 
   async initialize(createChatModel: AssistantChatModelFactory) {
-    const tokens = new TokenSink((token) => this.onToken(token));
+    const tokens = new TokenSink(
+      (runId) => this.onModelRunStart(runId),
+      (token, runId) => this.onToken(token, runId)
+    );
     const setup = await createChatModel(this.definition, {
       callbacks: [tokens],
       hasStreamedText: () => Boolean(this.turn?.streaming?.text)
@@ -193,14 +198,20 @@ class LangChainAssistantRuntime {
     const interrupts = await this.pendingInterrupts();
     const pending = this.calls.filter((call) => interrupts.has(call.id));
     const validated = validateToolCallDecisions(decisions, pending);
+    // Validate the whole batch before recording any decision, so a rejected request changes nothing.
+    if (
+      validated.some(
+        ({ decision }) =>
+          decision.decision === 'approve' &&
+          decision.arguments !== undefined &&
+          !isRecord(decision.arguments)
+      )
+    )
+      throw Object.assign(new Error('Edited tool arguments must be a JSON object'), {
+        statusCode: 400
+      });
     const resume: Record<string, unknown> = {};
     for (const { decision, call } of validated) {
-      if (decision.decision === 'approve' && decision.arguments !== undefined) {
-        if (!isRecord(decision.arguments))
-          throw Object.assign(new Error('Edited tool arguments must be a JSON object'), {
-            statusCode: 400
-          });
-      }
       turn.decided.add(call.id);
       if (decision.decision === 'deny') {
         this.updateCall(call.id, { status: 'denied', error: 'User denied tool call' });
@@ -225,7 +236,8 @@ class LangChainAssistantRuntime {
   private async cancel(turnId: string) {
     if (this.disposed || this.turn?.id !== turnId) return;
     if (this.running) {
-      // The service aborts the request signal; the run settles its own calls.
+      // Abort the run directly; it settles its own calls before rejecting.
+      this.runController?.abort('cancelled');
       await this.running.catch(() => undefined);
       return;
     }
@@ -482,6 +494,7 @@ class LangChainAssistantRuntime {
     return tool(
       async (args: unknown, config?: { signal?: AbortSignal; toolCall?: { id?: string } }) => {
         const callId = config?.toolCall?.id;
+        const turn = this.turn;
         if (callId) {
           this.executing.add(callId);
           if (this.calls.find((call) => call.id === callId)?.status === 'pending') {
@@ -492,7 +505,8 @@ class LangChainAssistantRuntime {
         try {
           const value = await definitionTool.execute(args, config?.signal);
           const proposal = definitionTool.extractProposal?.(value);
-          if (proposal) this.turn?.proposals.push(proposal);
+          const stillCurrent = turn && this.turn === turn && !(callId && this.settled.has(callId));
+          if (proposal && stillCurrent) turn.proposals.push(proposal);
           return resultPreview(JSON.stringify(value));
         } finally {
           if (callId) this.executing.delete(callId);
@@ -529,9 +543,19 @@ class LangChainAssistantRuntime {
 
   // ---- Snapshot projection ----
 
-  private onToken(token: string) {
+  private onModelRunStart(runId: string) {
     const streaming = this.turn?.streaming;
-    if (!streaming || !token) return;
+    if (this.turn && streaming)
+      this.modelRuns.set(runId, { turn: this.turn, messageId: streaming.id });
+  }
+
+  private onToken(token: string, runId: string) {
+    const origin = this.modelRuns.get(runId);
+    const streaming = this.turn?.streaming;
+    // A run abandoned by cancellation can keep emitting; only the current turn's message accepts text.
+    if (!origin || origin.turn !== this.turn || !streaming || streaming.id !== origin.messageId)
+      return;
+    if (!token) return;
     const delta = streaming.text ? token : token.trimStart();
     if (!delta) return;
     const offset = streaming.text.length;
@@ -650,6 +674,7 @@ class LangChainAssistantRuntime {
   }
 
   private endTurn() {
+    this.modelRuns.clear();
     this.turn = undefined;
     this.publish();
   }
@@ -690,12 +715,19 @@ class TokenSink extends BaseCallbackHandler {
   awaitHandlers = true;
   lc_prefer_streaming = true;
 
-  constructor(private readonly onToken: (token: string) => void) {
+  constructor(
+    private readonly onStart: (runId: string) => void,
+    private readonly onToken: (token: string, runId: string) => void
+  ) {
     super();
   }
 
-  handleLLMNewToken(token: string) {
-    this.onToken(token);
+  handleChatModelStart(_llm: unknown, _messages: unknown, runId: string) {
+    this.onStart(runId);
+  }
+
+  handleLLMNewToken(token: string, _index: unknown, runId: string) {
+    this.onToken(token, runId);
   }
 }
 
