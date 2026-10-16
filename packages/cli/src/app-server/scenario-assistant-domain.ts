@@ -19,7 +19,6 @@ import {
   truncateJson,
   withTimeout
 } from './assistant-common.js';
-import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
 import { setupAssistantRuntimeSession } from './assistant-service.js';
 import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
@@ -42,7 +41,6 @@ export interface ScenarioAssistantSession {
   toolServers: string[];
   initialMessages: AssistantChatMessage[];
   warnings: string[];
-  events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
   runtime: AssistantRuntimeSession;
 }
@@ -100,8 +98,11 @@ export function scenarioAssistantSessionView(session: ScenarioAssistantSession) 
     warnings: session.warnings,
     toolsLoaded: session.toolsLoaded,
     toolServers: session.toolServers,
+    revision: runtimeSnapshot.revision,
     messages: runtimeSnapshot.messages,
-    pendingToolCalls: runtimeSnapshot.pendingToolCalls
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls,
+    activeTurnId: runtimeSnapshot.activeTurnId,
+    streamingMessage: runtimeSnapshot.streamingMessage
   };
 }
 

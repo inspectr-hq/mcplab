@@ -42,6 +42,8 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
   const isSessionRead = method === 'GET' && parts.length === 1;
   const isSessionDelete = method === 'DELETE' && parts.length === 1;
   const isMessage = method === 'POST' && parts[1] === 'messages' && parts.length === 2;
+  const isCancel =
+    method === 'POST' && parts[1] === 'turns' && parts[3] === 'cancel' && parts.length === 4;
   const isToolDecision =
     method === 'POST' &&
     parts[1] === 'tool-calls' &&
@@ -59,6 +61,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
       !isSessionRead &&
       !isSessionDelete &&
       !isMessage &&
+      !isCancel &&
       !isToolDecision &&
       !isApproveAll)
   ) {
@@ -69,7 +72,11 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
   if (isEvents) {
     const session = sessions.get(sessionId);
     if (!session) asJson(res, 404, { error: missingSessionMessage });
-    else serveAssistantSseStream(req, res, session);
+    else
+      serveAssistantSseStream(req, res, session, {
+        sessionId: session.id,
+        session: options.view(session)
+      });
     return true;
   }
 
@@ -112,6 +119,12 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     asJson(res, 200, { session: options.view(session) });
     return true;
   }
+  if (isCancel) {
+    await session.runtime.cancel(parts[2]!);
+    options.touch(session);
+    if (!res.destroyed && !res.writableEnded) asJson(res, 200, { ok: true });
+    return true;
+  }
   const respondWithRuntime = async (
     operation: (signal: AbortSignal) => Promise<AssistantRuntimeResponse | undefined>
   ) => {
@@ -140,7 +153,18 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
         asJson(res, 400, { error: 'message is required' });
         return undefined;
       }
-      return session.runtime.sendMessage(body.message.trim(), signal);
+      if (
+        body.turnId !== undefined &&
+        (typeof body.turnId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(body.turnId))
+      ) {
+        asJson(res, 400, {
+          error: 'turnId must be a non-empty identifier of at most 128 characters'
+        });
+        return undefined;
+      }
+      return body.turnId === undefined
+        ? session.runtime.sendMessage(body.message.trim(), signal)
+        : session.runtime.sendMessage(body.message.trim(), signal, body.turnId as string);
     });
     return true;
   }

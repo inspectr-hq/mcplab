@@ -13,6 +13,21 @@ export function assistantRuntimeContract(
   createRuntimeFactory: (modelCall?: AssistantModelCall) => AssistantRuntimeFactory
 ) {
   describe(name, () => {
+    it('keeps snapshot revisions monotonic across changed turns', async () => {
+      const session = await createRuntimeFactory(async () => ({
+        type: 'assistant_message',
+        text: 'Done'
+      })).create(makeDefinition());
+      const initialRevision = session.getSnapshot().revision;
+      await session.sendMessage('first');
+      const firstRevision = session.getSnapshot().revision;
+      expect(firstRevision).toBeGreaterThan(initialRevision);
+      expect(session.getSnapshot().revision).toBe(firstRevision);
+      await session.sendMessage('second');
+      expect(session.getSnapshot().revision).toBeGreaterThan(firstRevision);
+      await session.dispose();
+    });
+
     it('keeps initial system notices in the snapshot and out of model history', async () => {
       const observed: any[][] = [];
       const definition = makeDefinition({

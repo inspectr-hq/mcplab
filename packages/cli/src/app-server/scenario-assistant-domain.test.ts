@@ -19,7 +19,7 @@ function baseSession(): ScenarioAssistantSessionInitializer {
     provider: 'openai',
     toolsLoaded: 0,
     toolServers: [],
-    events: [],
+
     clients: new Set(),
     initialMessages: [],
     warnings: []
@@ -49,7 +49,8 @@ async function createDefinition(): Promise<AssistantRuntimeDefinition> {
         return {
           sendMessage: async () => ({ type: 'assistant_message', text: '' }),
           resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-          getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+          cancel: vi.fn().mockResolvedValue(undefined),
+          getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
           isBusy: () => false,
           dispose: async () => {}
         };
@@ -90,7 +91,8 @@ it('publishes factory-time Scenario events with a finalized runtime session', as
         return {
           sendMessage: async () => ({ type: 'assistant_message', text: '' }),
           resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-          getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+          cancel: vi.fn().mockResolvedValue(undefined),
+          getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
           isBusy: () => false,
           dispose: async () => {}
         };
@@ -112,7 +114,11 @@ it('publishes factory-time Scenario events with a finalized runtime session', as
     { type: 'session_warning', session },
     { type: 'session_warning', session }
   ]);
-  expect(session.runtime.getSnapshot()).toEqual({ messages: [], pendingToolCalls: [] });
+  expect(session.runtime.getSnapshot()).toEqual({
+    revision: 0,
+    messages: [],
+    pendingToolCalls: []
+  });
 });
 
 it('disposes the Scenario runtime and MCP client when a startup observer throws', async () => {
@@ -144,7 +150,8 @@ it('disposes the Scenario runtime and MCP client when a startup observer throws'
             return {
               sendMessage: async () => ({ type: 'assistant_message', text: '' }),
               resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
               isBusy: () => false,
               dispose: runtimeDispose
             };

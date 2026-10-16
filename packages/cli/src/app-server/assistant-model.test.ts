@@ -47,6 +47,11 @@ function definition(
   };
 }
 
+const createInvokeAssistantRuntimeFactory = () =>
+  createLangChainAssistantRuntimeFactory((agentDefinition, messages, signal) =>
+    callAssistantModel(agentDefinition, messages, signal)
+  );
+
 function openAiResponse(content: string | null, toolCalls: unknown[] = []) {
   return new Response(
     JSON.stringify({
@@ -84,6 +89,169 @@ function anthropicResponse(content: unknown[]) {
       usage: { input_tokens: 1, output_tokens: 1 }
     }),
     { status: 200, headers: { 'content-type': 'application/json' } }
+  );
+}
+
+function streamingResponse(provider: Provider) {
+  const encoder = new TextEncoder();
+  const openAiEvents = [
+    { choices: [{ index: 0, delta: { role: 'assistant', content: 'hel' }, finish_reason: null }] },
+    { choices: [{ index: 0, delta: { content: 'lo' }, finish_reason: null }] },
+    { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`);
+  const anthropicEvents = [
+    [
+      'message_start',
+      {
+        type: 'message_start',
+        message: {
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          model: 'test-model',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 0 }
+        }
+      }
+    ],
+    [
+      'content_block_start',
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }
+    ],
+    [
+      'content_block_delta',
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hel' } }
+    ],
+    [
+      'content_block_delta',
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'lo' } }
+    ],
+    ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+    [
+      'message_delta',
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: { output_tokens: 2 }
+      }
+    ],
+    ['message_stop', { type: 'message_stop' }]
+  ].map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`);
+  const body = (
+    provider === 'anthropic' ? anthropicEvents : [...openAiEvents, 'data: [DONE]\n\n']
+  ).join('');
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(body));
+        controller.close();
+      }
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } }
+  );
+}
+
+function streamingToolResponse(provider: 'openai' | 'anthropic') {
+  const encoder = new TextEncoder();
+  const body =
+    provider === 'openai'
+      ? [
+          {
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  role: 'assistant',
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-stream',
+                      type: 'function',
+                      function: { name: 'lookup', arguments: '{"q":' }
+                    }
+                  ]
+                },
+                finish_reason: null
+              }
+            ]
+          },
+          {
+            choices: [
+              {
+                index: 0,
+                delta: { tool_calls: [{ index: 0, function: { arguments: '"x"}' } }] },
+                finish_reason: null
+              }
+            ]
+          },
+          { choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }
+        ]
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join('') + 'data: [DONE]\n\n'
+      : [
+          [
+            'message_start',
+            {
+              type: 'message_start',
+              message: {
+                id: 'msg_tool',
+                type: 'message',
+                role: 'assistant',
+                model: 'test-model',
+                content: [],
+                stop_reason: null,
+                stop_sequence: null,
+                usage: { input_tokens: 1, output_tokens: 0 }
+              }
+            }
+          ],
+          [
+            'content_block_start',
+            {
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'tool_use', id: 'call-stream', name: 'lookup', input: {} }
+            }
+          ],
+          [
+            'content_block_delta',
+            {
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'input_json_delta', partial_json: '{"q":' }
+            }
+          ],
+          [
+            'content_block_delta',
+            {
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'input_json_delta', partial_json: '"x"}' }
+            }
+          ],
+          ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+          [
+            'message_delta',
+            {
+              type: 'message_delta',
+              delta: { stop_reason: 'tool_use', stop_sequence: null },
+              usage: { output_tokens: 2 }
+            }
+          ],
+          ['message_stop', { type: 'message_stop' }]
+        ]
+          .map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`)
+          .join('');
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(body));
+        controller.close();
+      }
+    }),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } }
   );
 }
 
@@ -221,7 +389,7 @@ describe('native assistant model boundary', () => {
         : openAiResponse('Corrected the tool input.');
     });
     const execute = vi.fn(async () => 'must not execute');
-    const session = await createLangChainAssistantRuntimeFactory().create({
+    const session = await createInvokeAssistantRuntimeFactory().create({
       ...definition('openai'),
       tools: [
         {
@@ -345,6 +513,242 @@ describe('native assistant model boundary', () => {
     expect(requests[0]!.url).toContain('/chat/completions');
     expect(requests[0]!.body.max_completion_tokens).toBe(321);
     expect(requests[0]!.body).not.toHaveProperty('max_tokens');
+  });
+
+  it('streams text fragments to the callback while preserving the assembled model output', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    let requestBody: Record<string, unknown> | undefined;
+    let finishProviderStream!: () => void;
+    const encoder = new TextEncoder();
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const chunks = [
+        {
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'hel' }, finish_reason: null }]
+        },
+        { choices: [{ index: 0, delta: { content: 'lo' }, finish_reason: null }] },
+        { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
+      ];
+      const events = chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(events[0]));
+            finishProviderStream = () => {
+              controller.enqueue(encoder.encode(events.slice(1).join('') + 'data: [DONE]\n\n'));
+              controller.close();
+            };
+          }
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } }
+      );
+    });
+    const deltas: string[] = [];
+    const pending = callAssistantModel(
+      definition('openai'),
+      [new HumanMessage('question')],
+      undefined,
+      (delta) => deltas.push(delta)
+    );
+    let completed = false;
+    void pending.then(
+      () => {
+        completed = true;
+      },
+      () => {
+        completed = true;
+      }
+    );
+    try {
+      await vi.waitFor(() => expect(deltas).toEqual(['hel']));
+      expect(completed).toBe(false);
+    } finally {
+      finishProviderStream();
+    }
+    const result = await pending;
+    expect(requestBody?.stream).toBe(true);
+    expect(deltas).toEqual(['hel', 'lo']);
+    expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
+  });
+
+  it.each(PROVIDERS)(
+    '%s uses native streaming when a text callback is supplied',
+    async (provider) => {
+      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+      vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
+      vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
+      vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
+      vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', 'https://foundry.example/models/');
+      vi.stubEnv('AZURE_FOUNDRY_API_KEY', 'foundry-key');
+      vi.stubEnv('LANGSMITH_TRACING', 'true');
+      vi.stubEnv('LANGCHAIN_TRACING_V2', 'true');
+      vi.stubEnv('LANGSMITH_ENDPOINT', 'https://assistant-stream-export-leak.invalid');
+      const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+      const traceRequests: string[] = [];
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (
+          url.includes('assistant-stream-export-leak.invalid') ||
+          url.includes('smith.langchain.com')
+        ) {
+          traceRequests.push(url);
+          return new Response('{}', {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+        requests.push({
+          url,
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>
+        });
+        return streamingResponse(provider);
+      });
+      const deltas: string[] = [];
+      const result = await callAssistantModel(
+        definition(provider),
+        [new HumanMessage('question')],
+        undefined,
+        (delta) => deltas.push(delta)
+      );
+      expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
+      expect(deltas).toEqual(['hel', 'lo']);
+      expect(requests[0]?.body.stream).toBe(true);
+      expect(traceRequests.filter((url) => url.includes('/runs'))).toEqual([]);
+    }
+  );
+
+  it.each(['openai', 'anthropic'] as const)(
+    '%s assembles fragmented native tool arguments while streaming',
+    async (provider) => {
+      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+      vi.stubGlobal('fetch', async () => streamingToolResponse(provider));
+      const deltas: string[] = [];
+      const result = await callAssistantModel(
+        definition(provider),
+        [new HumanMessage('question')],
+        undefined,
+        (delta) => deltas.push(delta)
+      );
+      expect(result).toMatchObject({
+        type: 'tool_call_request',
+        toolCalls: [{ id: 'call-stream', name: 'lookup', arguments: { q: 'x' } }],
+        nativeMessage: { tool_calls: [{ id: 'call-stream', args: { q: 'x' } }] }
+      });
+      expect(deltas).toEqual([]);
+    }
+  );
+
+  it.each([
+    ['anthropic', 'model not found after a partial response'],
+    ['azure_openai', 'max_completion_tokens is not supported after a partial response']
+  ] as const)(
+    '%s does not retry or fall back after emitting text',
+    async (provider, errorMessage) => {
+      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+      vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
+      vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
+      vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
+      let requests = 0;
+      vi.stubGlobal('fetch', async () => {
+        requests++;
+        const encoder = new TextEncoder();
+        const firstEvent =
+          provider === 'anthropic'
+            ? [
+                [
+                  'message_start',
+                  {
+                    type: 'message_start',
+                    message: {
+                      id: 'msg_test',
+                      type: 'message',
+                      role: 'assistant',
+                      model: 'claude-3-5-sonnet-20241022',
+                      content: [],
+                      stop_reason: null,
+                      stop_sequence: null,
+                      usage: { input_tokens: 1, output_tokens: 0 }
+                    }
+                  }
+                ],
+                [
+                  'content_block_start',
+                  {
+                    type: 'content_block_start',
+                    index: 0,
+                    content_block: { type: 'text', text: '' }
+                  }
+                ],
+                [
+                  'content_block_delta',
+                  {
+                    type: 'content_block_delta',
+                    index: 0,
+                    delta: { type: 'text_delta', text: 'partial' }
+                  }
+                ]
+              ]
+                .map(([name, event]) => `event: ${name}\ndata: ${JSON.stringify(event)}\n\n`)
+                .join('')
+            : `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null }] })}\n\n`;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(firstEvent));
+              setTimeout(() => controller.error(new Error(errorMessage)), 10);
+            }
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } }
+        );
+      });
+      const deltas: string[] = [];
+      await expect(
+        callAssistantModel(
+          definition(
+            provider,
+            provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'test-model'
+          ),
+          [new HumanMessage('question')],
+          undefined,
+          (delta) => deltas.push(delta)
+        )
+      ).rejects.toThrow();
+      expect(deltas).toEqual(['partial']);
+      expect(requests).toBe(1);
+    }
+  );
+
+  it('allows provider compatibility fallbacks before the first streamed token', async () => {
+    vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
+    vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');
+    vi.stubEnv('AZURE_OPENAI_DEPLOYMENT', 'global-deployment');
+    const requests: Array<Record<string, unknown>> = [];
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return requests.length === 1
+        ? new Response(
+            JSON.stringify({ error: { message: 'max_completion_tokens is not supported' } }),
+            { status: 400 }
+          )
+        : streamingResponse('azure_openai');
+    });
+    const deltas: string[] = [];
+    const result = await callAssistantModel(
+      definition('azure_openai'),
+      [new HumanMessage('question')],
+      undefined,
+      (delta) => deltas.push(delta)
+    );
+    expect(result).toMatchObject({ type: 'assistant_message', text: 'hello' });
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => [request.max_completion_tokens, request.max_tokens])).toEqual([
+      [321, undefined],
+      [undefined, 321]
+    ]);
+    expect(deltas).toEqual(['hel', 'lo']);
   });
 
   it('uses one Azure compatibility retry for token and default-only temperature errors', async () => {
@@ -639,7 +1043,7 @@ describe('native assistant model boundary', () => {
           ])
         : openAiResponse('The tool found it.');
     });
-    const session = await createLangChainAssistantRuntimeFactory().create({
+    const session = await createInvokeAssistantRuntimeFactory().create({
       ...definition('openai'),
       assistant: 'scenario',
       context: {
@@ -691,7 +1095,7 @@ describe('native assistant model boundary', () => {
           ])
         : anthropicResponse([{ type: 'text', text: 'Both tools found the answer.' }]);
     });
-    const session = await createLangChainAssistantRuntimeFactory().create({
+    const session = await createInvokeAssistantRuntimeFactory().create({
       ...definition('anthropic'),
       assistant: 'scenario',
       tools: [
@@ -766,7 +1170,7 @@ describe('native assistant model boundary', () => {
         : anthropicResponse([{ type: 'text', text: 'Corrected the tool input.' }]);
     });
     const execute = vi.fn(async () => 'must not execute');
-    const session = await createLangChainAssistantRuntimeFactory().create({
+    const session = await createInvokeAssistantRuntimeFactory().create({
       ...definition('anthropic'),
       tools: [
         {

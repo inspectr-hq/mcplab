@@ -8,6 +8,7 @@ import type {
   AssistantRuntimeToolCall,
   AssistantToolCallDecision
 } from '@inspectr/mcplab-core';
+import { randomUUID } from 'node:crypto';
 
 /** Stateful, deterministic alternative runtime for route acceptance tests. */
 export function createStatefulAssistantRuntimeHarness() {
@@ -19,25 +20,56 @@ export function createStatefulAssistantRuntimeHarness() {
       let remembered = '';
       let nextCallId = 0;
       let disposed = false;
+      let revision = 0;
+      let activeTurnId: string | undefined;
+      const usedTurnIds = new Set<string>();
       const emit = (type: AssistantRuntimeEvent['type'], payload: Record<string, unknown> = {}) => {
         if (!disposed) definition.onEvent?.({ type, ts: new Date().toISOString(), payload });
       };
-      const snapshot = () => structuredClone({ messages, pendingToolCalls: pending });
-      const addMessage = (role: AssistantRuntimeMessage['role'], text: string) => {
+      const snapshot = () =>
+        structuredClone({
+          revision,
+          messages,
+          pendingToolCalls: pending,
+          ...(activeTurnId ? { activeTurnId } : {})
+        });
+      const changed = () => {
+        revision += 1;
+      };
+      const addMessage = (
+        role: AssistantRuntimeMessage['role'],
+        text: string,
+        id = `fake-${messages.length}`
+      ) => {
         messages.push({
-          id: `fake-${messages.length}`,
+          id,
           role,
           text,
           createdAt: new Date().toISOString()
         });
+        changed();
       };
       const finish: AssistantRuntimeResponse = { type: 'assistant_message', text: '' };
 
       return {
-        async sendMessage(message: string): Promise<AssistantRuntimeResponse> {
+        async sendMessage(
+          message: string,
+          _signal?: AbortSignal,
+          requestedTurnId?: string
+        ): Promise<AssistantRuntimeResponse> {
           if (disposed) throw new Error('Assistant session is disposed');
-          addMessage('user', message);
+          const turnId = requestedTurnId ?? randomUUID();
+          if (usedTurnIds.has(turnId)) {
+            const error = new Error('Assistant turn ID has already been used') as Error & {
+              statusCode: number;
+            };
+            error.statusCode = 409;
+            throw error;
+          }
+          usedTurnIds.add(turnId);
+          addMessage('user', message, turnId);
           if (nextCallId === 0) {
+            activeTurnId = turnId;
             for (const name of ['first', 'second']) {
               nextCallId += 1;
               pending.push({
@@ -50,6 +82,7 @@ export function createStatefulAssistantRuntimeHarness() {
                 createdAt: new Date().toISOString()
               });
             }
+            changed();
             messages.push({
               id: `fake-${messages.length}`,
               role: 'assistant',
@@ -58,6 +91,7 @@ export function createStatefulAssistantRuntimeHarness() {
               pendingToolCallId: pending[0]?.id,
               pendingToolCallIds: pending.map(({ id }) => id)
             });
+            changed();
             emit('turn_started');
             emit('tool_call_requested', { pendingToolCalls: pending });
             return {
@@ -68,6 +102,8 @@ export function createStatefulAssistantRuntimeHarness() {
           }
           const text = `Remembered ${remembered}; received ${message}`;
           addMessage('assistant', text);
+          activeTurnId = undefined;
+          changed();
           emit('assistant_message_completed');
           return { ...finish, text };
         },
@@ -89,6 +125,7 @@ export function createStatefulAssistantRuntimeHarness() {
                   : {};
               remembered = String(args.value ?? 'approved');
             }
+            changed();
             emit('tool_call_resolved', { pendingToolCallId: call.id, pendingToolCall: call });
           }
           const unresolved = pending.some(({ status }) => status === 'pending');
@@ -101,8 +138,18 @@ export function createStatefulAssistantRuntimeHarness() {
           }
           const text = `Remembered ${remembered}; second call denied.`;
           addMessage('assistant', text);
+          activeTurnId = undefined;
+          changed();
           emit('assistant_message_completed');
           return { ...finish, text };
+        },
+        async cancel(turnId: string): Promise<void> {
+          if (disposed || activeTurnId !== turnId) return;
+          for (const call of pending) {
+            if (call.status === 'pending') call.status = 'error';
+          }
+          activeTurnId = undefined;
+          changed();
         },
         getSnapshot: snapshot,
         dispose: async () => {

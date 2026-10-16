@@ -111,8 +111,17 @@ export interface AssistantRuntimeToolCall {
 }
 
 export interface AssistantRuntimeSnapshot {
+  /** Monotonic within a session, including transient text updates. Reads do not advance it. */
+  revision: number;
   messages: AssistantRuntimeMessage[];
   pendingToolCalls: AssistantRuntimeToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: {
+    id: string;
+    turnId: string;
+    text: string;
+    createdAt: string;
+  };
 }
 
 export type ScenarioAssistantMessage = AssistantRuntimeMessage;
@@ -121,6 +130,7 @@ export type ResultAssistantSessionMessage = AssistantRuntimeMessage;
 export type ResultAssistantPendingToolCall = AssistantRuntimeToolCall;
 
 export interface ScenarioAssistantSessionView {
+  revision: number;
   id: string;
   createdAt: string;
   updatedAt: string;
@@ -132,9 +142,12 @@ export interface ScenarioAssistantSessionView {
   toolServers: string[];
   messages: ScenarioAssistantMessage[];
   pendingToolCalls: ScenarioAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
 }
 
 export interface ResultAssistantSessionView {
+  revision: number;
   id: string;
   scope: 'run' | 'all_runs';
   runId: string | null;
@@ -145,13 +158,30 @@ export interface ResultAssistantSessionView {
   provider: string;
   messages: ResultAssistantSessionMessage[];
   pendingToolCalls: ResultAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
 }
 
-export interface AssistantSessionEvent<TSession = unknown> {
-  type: AssistantRuntimeEvent['type'];
-  ts: string;
-  payload: Record<string, unknown> & { sessionId: string; session: TSession };
-}
+export type AssistantSessionEvent<TSession = unknown> =
+  | {
+      type: 'assistant_message_delta';
+      ts: string;
+      payload: Record<string, unknown> & {
+        sessionId: string;
+        session?: TSession;
+        turnId: string;
+        messageId: string;
+        offset: number;
+        delta: string;
+        createdAt: string;
+        revision: number;
+      };
+    }
+  | {
+      type: Exclude<AssistantRuntimeEvent['type'], 'assistant_message_delta'>;
+      ts: string;
+      payload: Record<string, unknown> & { sessionId: string; session: TSession };
+    };
 
 export type ScenarioAssistantTurnResponse = AssistantRuntimeResponse;
 export type ResultAssistantTurnResponse = AssistantRuntimeResponse;
@@ -164,7 +194,9 @@ export interface AssistantRuntimeEvent {
     | 'tool_call_approved'
     | 'tool_call_denied'
     | 'tool_call_resolved'
+    | 'assistant_message_delta'
     | 'assistant_message_completed'
+    | 'session_snapshot'
     | 'session_warning'
     | 'session_error'
     | 'session_finished';
@@ -227,12 +259,19 @@ export interface AssistantRuntimeTool {
 }
 
 export interface AssistantRuntimeSession {
-  sendMessage(message: string, signal?: AbortSignal): Promise<AssistantRuntimeResponse>;
+  /** A supplied turnId also identifies the user message. Reusing an accepted ID is a conflict. */
+  sendMessage(
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ): Promise<AssistantRuntimeResponse>;
   resolveToolCalls(
     decisions: AssistantToolCallDecision[],
     signal?: AbortSignal
   ): Promise<AssistantRuntimeResponse>;
   getSnapshot(): AssistantRuntimeSnapshot;
+  /** Idempotent for completed or unknown IDs, and never cancels a different in-flight turn. */
+  cancel(turnId: string): Promise<void>;
   isBusy?(): boolean;
   dispose(): Promise<void> | void;
 }

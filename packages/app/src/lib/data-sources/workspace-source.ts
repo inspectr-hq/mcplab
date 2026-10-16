@@ -195,8 +195,11 @@ export const workspaceSource: EvalDataSource = {
   async getResultAssistantSession(sessionId) {
     return workspaceApiClient.getResultAssistantSession(sessionId);
   },
-  async sendResultAssistantMessage(sessionId, message, signal) {
-    return workspaceApiClient.sendResultAssistantMessage(sessionId, message, signal);
+  async sendResultAssistantMessage(sessionId, message, signal, turnId) {
+    return workspaceApiClient.sendResultAssistantMessage(sessionId, message, signal, turnId);
+  },
+  async cancelResultAssistantTurn(sessionId, turnId) {
+    return workspaceApiClient.cancelResultAssistantTurn(sessionId, turnId);
   },
   async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
     return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
@@ -238,8 +241,11 @@ export const workspaceSource: EvalDataSource = {
   async getScenarioAssistantSession(sessionId) {
     return workspaceApiClient.getScenarioAssistantSession(sessionId);
   },
-  async sendScenarioAssistantMessage(sessionId, message, signal) {
-    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message, signal);
+  async sendScenarioAssistantMessage(sessionId, message, signal, turnId) {
+    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message, signal, turnId);
+  },
+  async cancelScenarioAssistantTurn(sessionId, turnId) {
+    return workspaceApiClient.cancelScenarioAssistantTurn(sessionId, turnId);
   },
   async approveScenarioAssistantToolCall(sessionId, callId) {
     return workspaceApiClient.approveScenarioAssistantToolCall(sessionId, callId);

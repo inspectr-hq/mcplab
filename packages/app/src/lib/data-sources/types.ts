@@ -721,8 +721,10 @@ export interface EvalDataSource {
   sendResultAssistantMessage: (
     sessionId: string,
     message: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    turnId?: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
+  cancelResultAssistantTurn?: (sessionId: string, turnId: string) => Promise<{ ok: boolean }>;
   approveResultAssistantToolCall: (
     sessionId: string,
     callId: string,
@@ -788,8 +790,10 @@ export interface EvalDataSource {
   sendScenarioAssistantMessage: (
     sessionId: string,
     message: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    turnId?: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  cancelScenarioAssistantTurn?: (sessionId: string, turnId: string) => Promise<{ ok: boolean }>;
   approveScenarioAssistantToolCall: (
     sessionId: string,
     callId: string

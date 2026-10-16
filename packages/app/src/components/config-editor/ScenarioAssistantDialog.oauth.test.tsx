@@ -7,8 +7,10 @@ import type { ScenarioAssistantSessionView } from '@/lib/data-sources/types';
 
 const mockSource = {
   createScenarioAssistantSession: vi.fn(),
+  getScenarioAssistantSession: vi.fn(),
   closeScenarioAssistantSession: vi.fn().mockResolvedValue(undefined),
   sendScenarioAssistantMessage: vi.fn(),
+  cancelScenarioAssistantTurn: vi.fn().mockResolvedValue({ ok: true }),
   approveScenarioAssistantToolCall: vi.fn(),
   denyScenarioAssistantToolCall: vi.fn(),
   approveAllScenarioAssistantToolCalls: vi.fn(),
@@ -63,8 +65,11 @@ const servers: ServerConfig[] = [
   }
 ];
 
+let nextAssistantRevision = 0;
+
 function makeAssistantSession(): ScenarioAssistantSessionView {
   return {
+    revision: nextAssistantRevision++,
     id: 'sas-1',
     selectedAssistantAgentName: 'assistant-1',
     model: 'gpt-4o-mini',
@@ -82,6 +87,7 @@ function makeAssistantSession(): ScenarioAssistantSessionView {
 describe('ScenarioAssistantDialog OAuth startup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nextAssistantRevision = 0;
     vi.spyOn(window, 'open').mockImplementation(() => null);
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -220,6 +226,10 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
 
   it('cancels a pending scenario assistant prompt locally', async () => {
     let capturedSignal: AbortSignal | undefined;
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: { ...makeAssistantSession(), activeTurnId: 'turn-1' }
+    });
     mockSource.sendScenarioAssistantMessage.mockImplementation(
       async (_sessionId: string, _message: string, signal?: AbortSignal) => {
         capturedSignal = signal;
@@ -270,6 +280,11 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel assistant message' }));
 
     await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+    expect(mockSource.cancelScenarioAssistantTurn).toHaveBeenCalledWith(
+      'sas-1',
+      mockSource.sendScenarioAssistantMessage.mock.calls[0]?.[3]
+    );
+    expect(mockSource.getScenarioAssistantSession).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByDisplayValue('Draft a better scenario')).toBeInTheDocument()
     );
@@ -759,6 +774,7 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
           sessionId: 'sas-1',
           session: {
             ...makeAssistantSession(),
+            revision: 4,
             messages: [
               {
                 id: 'msg-1',
@@ -773,6 +789,109 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     });
 
     expect(await screen.findByText('Live update from SSE')).toBeInTheDocument();
+  });
+
+  it('renders scenario assistant deltas once and replaces them from a reconnect snapshot', async () => {
+    let onScenarioEvent: ((event: unknown) => void) | undefined;
+    mockSource.subscribeScenarioAssistantSessionEvents.mockImplementation(
+      (_sessionId: string, onEvent: typeof onScenarioEvent) => {
+        onScenarioEvent = onEvent;
+        return () => undefined;
+      }
+    );
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: makeAssistantSession()
+    });
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+    await waitFor(() =>
+      expect(mockSource.subscribeScenarioAssistantSessionEvents).toHaveBeenCalled()
+    );
+
+    act(() =>
+      onScenarioEvent?.({
+        type: 'turn_started',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: { ...makeAssistantSession(), revision: 2, activeTurnId: 'turn-1' }
+        }
+      })
+    );
+    const delta = (offset: number, text: string) => ({
+      type: 'assistant_message_delta',
+      ts: new Date().toISOString(),
+      payload: {
+        sessionId: 'sas-1',
+        turnId: 'turn-1',
+        messageId: 'reply-1',
+        revision: offset === 0 && text === 'Hello' ? 3 : offset === 0 ? 3 : 4,
+        offset,
+        delta: text,
+        createdAt: '2026-10-16T10:00:00.000Z'
+      }
+    });
+    act(() => onScenarioEvent?.(delta(0, 'Hello')));
+    act(() => onScenarioEvent?.(delta(0, 'Hello')));
+    act(() => onScenarioEvent?.(delta(5, ' there')));
+    expect(await screen.findByText('Hello there')).toBeInTheDocument();
+
+    act(() =>
+      onScenarioEvent?.({
+        type: 'session_snapshot',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: {
+            ...makeAssistantSession(),
+            revision: 5,
+            updatedAt: '2026-10-16T10:01:00.000Z',
+            messages: [
+              {
+                id: 'reply-2',
+                role: 'assistant',
+                text: 'Snapshot answer',
+                createdAt: '2026-10-16T10:01:00.000Z'
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(await screen.findByText('Snapshot answer')).toBeInTheDocument();
+    expect(screen.queryByText('Hello there')).not.toBeInTheDocument();
+    act(() =>
+      onScenarioEvent?.({
+        type: 'session_snapshot',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: {
+            ...makeAssistantSession(),
+            revision: 3,
+            messages: [
+              {
+                id: 'stale-reply',
+                role: 'assistant',
+                text: 'Stale answer',
+                createdAt: '2026-10-16T10:02:00.000Z'
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(screen.getByText('Snapshot answer')).toBeInTheDocument();
+    expect(screen.queryByText('Stale answer')).not.toBeInTheDocument();
   });
 
   it('approves all pending scenario assistant tool calls', async () => {

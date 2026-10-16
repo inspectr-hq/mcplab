@@ -5,7 +5,6 @@ import type {
   AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
   AssistantRuntimeSession,
-  AssistantRuntimeToolCall,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
@@ -17,7 +16,6 @@ import {
   truncateJson,
   withTimeout
 } from './assistant-common.js';
-import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
 import { setupAssistantRuntimeSession } from './assistant-service.js';
 import type { AssistantRuntimeFactory } from '@inspectr/mcplab-core';
@@ -26,7 +24,6 @@ import {
   isResultAssistantAutoApprovedTool
 } from './result-assistant-tools.js';
 
-type ResultAssistantPendingToolCall = AssistantRuntimeToolCall;
 type ResultAssistantChatMessage = AssistantRuntimeMessage;
 
 export interface ResultAssistantReferenceReport {
@@ -49,7 +46,6 @@ export interface ResultAssistantSession {
   toolsLoaded: number;
   toolServers: string[];
   initialMessages: ResultAssistantChatMessage[];
-  events: AssistantSseEvent[];
   clients: Set<ServerResponse>;
   runtime: AssistantRuntimeSession;
 }
@@ -112,8 +108,11 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
     provider: session.provider,
     toolsLoaded: session.toolsLoaded,
     toolServers: session.toolServers,
+    revision: runtimeSnapshot.revision,
     messages: runtimeSnapshot.messages,
-    pendingToolCalls: runtimeSnapshot.pendingToolCalls
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls,
+    activeTurnId: runtimeSnapshot.activeTurnId,
+    streamingMessage: runtimeSnapshot.streamingMessage
   };
 }
 

@@ -84,6 +84,60 @@ function harness(
 afterEach(() => vi.restoreAllMocks());
 
 describe('Scenario Assistant LangGraph HTTP runtime', () => {
+  it('streams deltas before completion and reconnects with the current text snapshot', async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const firstDelta = new Promise<void>((resolve) => (started = resolve));
+    const { invoke, sessions } = harness(async (_definition, _messages, _signal, onText) => {
+      onText?.('Hello');
+      started();
+      await gate;
+      onText?.(' world');
+      return { type: 'assistant_message', text: 'Hello world' };
+    });
+    await invoke('POST', '/api/scenario-assistant/sessions');
+    const id = [...sessions.keys()][0]!;
+    const stream = await invoke('GET', `/api/scenario-assistant/sessions/${id}/events`);
+    const turn = invoke('POST', `/api/scenario-assistant/sessions/${id}/messages`, {
+      message: 'Hello'
+    });
+    await firstDelta;
+    await vi.waitFor(() =>
+      expect(
+        parseSse(stream.res.chunks.join('')).some(
+          (event) => event.type === 'assistant_message_delta'
+        )
+      ).toBe(true)
+    );
+    const delta = parseSse(stream.res.chunks.join('')).find(
+      (event) => event.type === 'assistant_message_delta'
+    );
+    if (!delta) throw new Error('Expected streamed text before model completion');
+    const beforeCompletion = parseSse(stream.res.chunks.join(''));
+    const startedIndex = beforeCompletion.findIndex((event) => event.type === 'turn_started');
+    const deltaIndex = beforeCompletion.findIndex(
+      (event) => event.type === 'assistant_message_delta'
+    );
+    expect(startedIndex).toBeGreaterThanOrEqual(0);
+    expect(startedIndex).toBeLessThan(deltaIndex);
+    expect(beforeCompletion[startedIndex].payload.session.activeTurnId).toBe(delta.payload.turnId);
+    expect(delta.payload).toMatchObject({ sessionId: id, delta: 'Hello', offset: 0 });
+    expect(delta.payload).not.toHaveProperty('session');
+    stream.res.emit('close');
+    const reconnect = await invoke('GET', `/api/scenario-assistant/sessions/${id}/events`);
+    const snapshot = parseSse(reconnect.res.chunks.join(''));
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0].type).toBe('session_snapshot');
+    expect(snapshot[0].payload.session.streamingMessage).toMatchObject({ text: 'Hello' });
+    release();
+    const completed = await turn;
+    const message = completed.result?.body.session.messages.at(-1);
+    expect(message).toMatchObject({ id: delta.payload.messageId, text: 'Hello world' });
+    expect(completed.result?.body.session.streamingMessage).toBeUndefined();
+    await invoke('DELETE', `/api/scenario-assistant/sessions/${id}`);
+  });
+
   it.each([
     ['alone', false],
     ['with a read-only tool', true]

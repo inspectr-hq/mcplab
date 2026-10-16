@@ -823,6 +823,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  /api/result-assistant/sessions/{sessionId}/events:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [Result Assistant]
+      summary: Subscribe to assistant snapshots and text deltas
+      operationId: streamResultAssistantSession
+      description: >-
+        Every connection starts with session_snapshot containing the current session,
+        including any streamingMessage. Live assistant_message_delta events contain
+        sessionId, turnId, messageId, offset, delta, createdAt and revision, without a session.
+        Offset is the UTF-16 text length before the delta. Deltas are not replayed;
+        reconnect restores current text from the snapshot. Completed messages replace
+        transient text using the same message ID. Session and delta revisions increase
+        monotonically; ignore snapshots whose revision is not higher than the current one.
+        Closing this SSE subscription does
+        not cancel a turn; abort the mutation request or call the cancel endpoint.
+      responses:
+        "200":
+          description: Named Server-Sent Events with JSON event envelopes
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/result-assistant/sessions/{sessionId}/turns/{turnId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - name: turnId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Result Assistant]
+      summary: Cancel a running or paused assistant turn
+      operationId: cancelResultAssistantTurn
+      description: >-
+        Idempotent for completed, unknown and already cancelled turn IDs. Safe to
+        call alongside aborting the mutation request. Completed tool results remain;
+        cancellation does not reverse tool side effects. Unfinished proposals are discarded.
+      responses:
+        "200":
+          description: Cancellation acknowledged, including already finished turns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          $ref: "#/components/responses/Error404"
+
   /api/result-assistant/sessions/{sessionId}/messages:
     parameters:
       - $ref: "#/components/parameters/SessionId"
@@ -840,6 +891,10 @@ paths:
               properties:
                 message:
                   type: string
+                turnId:
+                  type: string
+                  pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'
+                  description: Client-generated logical turn ID, also used for the user message ID. Generate a fresh ID for each message; reuse returns 409.
       responses:
         "200":
           description: Updated session + assistant turn response
@@ -956,6 +1011,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  /api/scenario-assistant/sessions/{sessionId}/events:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [Scenario Assistant]
+      summary: Subscribe to assistant snapshots and text deltas
+      operationId: streamScenarioAssistantSession
+      description: >-
+        Every connection starts with session_snapshot containing the current session,
+        including any streamingMessage. Live assistant_message_delta events contain
+        sessionId, turnId, messageId, offset, delta, createdAt and revision, without a session.
+        Offset is the UTF-16 text length before the delta. Deltas are not replayed;
+        reconnect restores current text from the snapshot. Completed messages replace
+        transient text using the same message ID. Session and delta revisions increase
+        monotonically; ignore snapshots whose revision is not higher than the current one.
+        Closing this SSE subscription does
+        not cancel a turn; abort the mutation request or call the cancel endpoint.
+      responses:
+        "200":
+          description: Named Server-Sent Events with JSON event envelopes
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/scenario-assistant/sessions/{sessionId}/turns/{turnId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - name: turnId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Scenario Assistant]
+      summary: Cancel a running or paused assistant turn
+      operationId: cancelScenarioAssistantTurn
+      description: >-
+        Idempotent for completed, unknown and already cancelled turn IDs. Safe to
+        call alongside aborting the mutation request. Completed tool results remain;
+        cancellation does not reverse tool side effects. Unfinished proposals are discarded.
+      responses:
+        "200":
+          description: Cancellation acknowledged, including already finished turns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          $ref: "#/components/responses/Error404"
+
   /api/scenario-assistant/sessions/{sessionId}/messages:
     parameters:
       - $ref: "#/components/parameters/SessionId"
@@ -973,6 +1079,10 @@ paths:
               properties:
                 message:
                   type: string
+                turnId:
+                  type: string
+                  pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'
+                  description: Client-generated logical turn ID, also used for the user message ID. Generate a fresh ID for each message; reuse returns 409.
       responses:
         "200":
           description: Updated session + assistant turn response
@@ -1861,6 +1971,14 @@ components:
           type: object
           additionalProperties: true
       additionalProperties: true
+    AssistantStreamingMessage:
+      type: object
+      required: [id, turnId, text, createdAt]
+      properties:
+        id: { type: string }
+        turnId: { type: string }
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
     ResultAssistantSessionEnvelope:
       type: object
       required: [sessionId, session]
@@ -1870,8 +1988,9 @@ components:
           $ref: "#/components/schemas/ResultAssistantSessionView"
     ResultAssistantSessionView:
       type: object
-      required: [id, runId, createdAt, updatedAt, selectedAssistantAgentName, model, provider, messages, pendingToolCalls]
+      required: [revision, id, runId, createdAt, updatedAt, selectedAssistantAgentName, model, provider, messages, pendingToolCalls]
       properties:
+        revision: { type: integer, minimum: 0 }
         id: { type: string }
         runId: { type: string }
         createdAt: { type: string, format: date-time }
@@ -1879,6 +1998,9 @@ components:
         selectedAssistantAgentName: { type: string }
         model: { type: string }
         provider: { type: string }
+        activeTurnId: { type: string }
+        streamingMessage:
+          $ref: "#/components/schemas/AssistantStreamingMessage"
         messages:
           type: array
           items:
@@ -2004,8 +2126,9 @@ components:
           $ref: "#/components/schemas/ScenarioAssistantSessionView"
     ScenarioAssistantSessionView:
       type: object
-      required: [id, createdAt, updatedAt, selectedAssistantAgentName, model, provider, warnings, toolsLoaded, toolServers, messages, pendingToolCalls]
+      required: [revision, id, createdAt, updatedAt, selectedAssistantAgentName, model, provider, warnings, toolsLoaded, toolServers, messages, pendingToolCalls]
       properties:
+        revision: { type: integer, minimum: 0 }
         id: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -2020,6 +2143,9 @@ components:
         toolServers:
           type: array
           items: { type: string }
+        activeTurnId: { type: string }
+        streamingMessage:
+          $ref: "#/components/schemas/AssistantStreamingMessage"
         messages:
           type: array
           items:

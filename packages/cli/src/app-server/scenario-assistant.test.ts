@@ -36,7 +36,8 @@ function makeDeps(options?: {
   const runtime = {
     sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake response' }),
     resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
-    getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+    cancel: vi.fn().mockResolvedValue(undefined),
+    getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
     dispose: vi.fn()
   };
   const assistantRuntimeFactory = options?.assistantRuntimeFactory ?? {
@@ -121,19 +122,22 @@ async function callCreateSessionRoute(params?: {
 }
 
 describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
-  it('stores factory-time events with a ready session before session_started', async () => {
+  it('publishes live notifications with a ready session without retaining a replay buffer', async () => {
     const startupEvent = {
       type: 'session_warning' as const,
       ts: new Date().toISOString(),
       payload: { warning: 'factory startup' }
     };
+    let emit!: (event: typeof startupEvent) => void;
     const assistantRuntimeFactory = {
       create: vi.fn(async (definition: any) => {
+        emit = definition.onEvent;
         definition.onEvent?.(startupEvent);
         return {
           sendMessage: vi.fn(),
           resolveToolCalls: vi.fn(),
-          getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+          cancel: vi.fn().mockResolvedValue(undefined),
+          getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
           isBusy: () => false,
           dispose: vi.fn()
         };
@@ -143,14 +147,14 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     const session = Array.from(assistantSessions.values())[0];
     if (!session) throw new Error('Scenario Assistant session was not created');
     expect(session.runtime).toBeDefined();
-    expect(session.events.map((event) => event.type)).toEqual([
-      'session_warning',
-      'session_started'
-    ]);
-    expect(session.events[0]?.payload.session).toMatchObject({
-      id: session.id,
-      messages: []
-    });
+    expect(session).not.toHaveProperty('events');
+    const client = { write: vi.fn() };
+    session.clients.add(client as any);
+    emit(startupEvent);
+    expect(client.write).toHaveBeenCalledWith(
+      expect.stringContaining(`"sessionId":"${session.id}"`)
+    );
+    expect(client.write).toHaveBeenCalledWith(expect.stringContaining('"messages":[]'));
   });
 
   it('creates session for non-OAuth servers without auth headers', async () => {
@@ -448,6 +452,7 @@ describe('Scenario Assistant runtime factory', () => {
     const runtime = {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'fake response' }),
       resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
+      cancel: vi.fn().mockResolvedValue(undefined),
       getSnapshot: vi.fn(() => snapshot),
       dispose: vi.fn()
     };
@@ -473,7 +478,11 @@ describe('Scenario Assistant runtime factory', () => {
     );
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('mcp');
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('llmMessages');
-    expect(runtime.sendMessage).toHaveBeenCalledWith('hello runtime', expect.any(AbortSignal));
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      'hello runtime',
+      expect.any(AbortSignal),
+      expect.any(String)
+    );
 
     deps.parseBody.mockResolvedValueOnce({});
     await handleScenarioAssistantRoutes({
@@ -531,7 +540,7 @@ describe('DELETE /api/scenario-assistant/sessions/:id', () => {
       toolsLoaded: 0,
       toolServers: [],
       initialMessages: [],
-      events: [],
+
       clients: new Set([client]),
       runtime: { dispose }
     } as any;
@@ -585,11 +594,14 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
           runtime: {
             sendMessage: vi.fn().mockReturnValue(turnPromise),
             resolveToolCalls: vi.fn(),
-            getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            getSnapshot: vi
+              .fn()
+              .mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
             dispose: vi.fn()
           },
           warnings: [],
-          events: [],
+
           clients: new Set()
         }
       ]
@@ -631,6 +643,10 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
     await expect(handlerPromise).resolves.toBe(true);
     expect(asJson).not.toHaveBeenCalled();
     const session = assistantSessions.get('sas-1');
-    expect(session?.runtime?.getSnapshot()).toMatchObject({ messages: [], pendingToolCalls: [] });
+    expect(session?.runtime?.getSnapshot()).toMatchObject({
+      revision: 0,
+      messages: [],
+      pendingToolCalls: []
+    });
   });
 });

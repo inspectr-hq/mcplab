@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { ApiError } from '@/lib/data-sources/workspace-api-client';
 import { isAbortError } from '@/lib/abort';
@@ -8,6 +8,11 @@ import type {
   ResultAssistantSessionView,
   ResultAssistantTurnResponse
 } from '@/lib/data-sources/types';
+import {
+  assistantMessagesWithStreaming,
+  type AssistantStreamingMessage
+} from '@/lib/assistant-streaming';
+import { useAssistantStream } from '@/hooks/use-assistant-stream';
 
 type ResultAssistantTurnPayload = {
   session: ResultAssistantSessionView;
@@ -30,6 +35,7 @@ export function useResultAssistant(params: {
   const [assistantMessages, setAssistantMessages] = useState<
     ResultAssistantSessionView['messages']
   >([]);
+  const [streamingMessage, setStreamingMessage] = useState<AssistantStreamingMessage>();
   const [assistantPendingToolCalls, setAssistantPendingToolCalls] = useState<
     ResultAssistantPendingToolCall[]
   >([]);
@@ -37,10 +43,14 @@ export function useResultAssistant(params: {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantTurnCancelable, setAssistantTurnCancelable] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
+  const latestSessionRef = useRef<ResultAssistantSessionView | null>(null);
+  const optimisticMessageIdsRef = useRef(new Set<string>());
   const assistantTurnRef = useRef<{
     id: number;
     controller: AbortController;
     prompt: string;
+    clientTurnId: string;
+    sessionId?: string;
   } | null>(null);
   const assistantTurnCounterRef = useRef(0);
   const sourceRef = useRef(source);
@@ -60,31 +70,72 @@ export function useResultAssistant(params: {
     onSessionSyncRef.current = onSessionSync;
   }, [onSessionSync]);
 
+  const onStreamSession = useCallback((session: ResultAssistantSessionView) => {
+    latestSessionRef.current = session;
+    setAssistantSessionId(session.id);
+    assistantSessionIdRef.current = session.id;
+    if (assistantTurnRef.current) {
+      assistantTurnRef.current.sessionId = session.id;
+    }
+    const committedIds = new Set(session.messages.map((message) => message.id));
+    for (const id of committedIds) optimisticMessageIdsRef.current.delete(id);
+    setAssistantMessages((previous) => [
+      ...session.messages,
+      ...previous.filter(
+        (message) =>
+          message.id &&
+          optimisticMessageIdsRef.current.has(message.id) &&
+          !committedIds.has(message.id)
+      )
+    ]);
+    setStreamingMessage(session.streamingMessage ?? undefined);
+    setAssistantPendingToolCalls(session.pendingToolCalls);
+    setAssistantTurnCancelable(Boolean(session.activeTurnId));
+    onSessionSyncRef.current?.(session);
+  }, []);
+
+  const subscribeResultEvents = useCallback(
+    (
+      sessionId: string,
+      onEvent: Parameters<EvalDataSource['subscribeResultAssistantSessionEvents']>[1]
+    ) => sourceRef.current.subscribeResultAssistantSessionEvents(sessionId, onEvent),
+    []
+  );
+  const cancelRemoteTurn = useCallback(
+    (sessionId: string, turnId: string) =>
+      sourceRef.current.cancelResultAssistantTurn?.(sessionId, turnId) ??
+      Promise.resolve(undefined),
+    []
+  );
+  const { applySnapshot, cancelActiveTurn } = useAssistantStream({
+    open,
+    sessionId: assistantSessionId,
+    sessionRef: latestSessionRef,
+    subscribe: subscribeResultEvents,
+    onSession: onStreamSession,
+    cancelTurn: cancelRemoteTurn
+  });
+
   const abortActiveAssistantTurn = useCallback(() => {
     const activeTurn = assistantTurnRef.current;
     if (!activeTurn) return;
     activeTurn.controller.abort();
-    // Don't null assistantTurnRef here — the finally block in askAssistant
+    // Don't null assistantTurnRef here, the finally block in askAssistant
     // guards on the turn ID to perform cleanup, and nulling the ref would
     // cause that guard to fail, bypassing setAssistantLoading(false).
   }, []);
 
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
-      setAssistantSessionId(sessionIdOverride ?? session.id);
-      setAssistantMessages((prev) => {
-        if (prev.length > session.messages.length) return prev;
-        return session.messages;
-      });
-      setAssistantPendingToolCalls(session.pendingToolCalls);
-      onSessionSyncRef.current?.(session);
+      applySnapshot(session, sessionIdOverride ?? session.id);
     },
-    []
+    [applySnapshot]
   );
 
   const syncAndContinueAssistantTurn = useCallback(
     async (sessionId: string, payload: ResultAssistantTurnPayload) => {
       const activeSessionId = payload.session.id || sessionId;
+      if (assistantSessionIdRef.current !== activeSessionId) return;
       syncResultAssistantSession(payload.session, activeSessionId);
     },
     [syncResultAssistantSession]
@@ -92,12 +143,17 @@ export function useResultAssistant(params: {
 
   const cancelAssistantTurn = useCallback(() => {
     const activeTurn = assistantTurnRef.current;
-    if (!activeTurn) return;
-    abortActiveAssistantTurn();
-    setAssistantInput(activeTurn.prompt);
+    const sessionId = activeTurn?.sessionId ?? assistantSessionIdRef.current;
+    const backendTurnId = activeTurn?.clientTurnId ?? latestSessionRef.current?.activeTurnId;
+    if (!activeTurn && !backendTurnId) return;
+    cancelActiveTurn(sessionId, backendTurnId);
+    if (activeTurn) {
+      abortActiveAssistantTurn();
+      setAssistantInput(activeTurn.prompt);
+    }
     setAssistantLoading(false);
     setAssistantTurnCancelable(false);
-  }, [abortActiveAssistantTurn]);
+  }, [abortActiveAssistantTurn, cancelActiveTurn]);
 
   const askAssistant = useCallback(async () => {
     const question = assistantInput.trim();
@@ -105,14 +161,22 @@ export function useResultAssistant(params: {
     if (scope === 'run' && !runId) return;
     const turnId = ++assistantTurnCounterRef.current;
     const controller = new AbortController();
-    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const clientTurnId = crypto.randomUUID();
+    const optimisticMessageId = clientTurnId;
+    optimisticMessageIdsRef.current.add(optimisticMessageId);
     const optimisticMessage = {
       id: optimisticMessageId,
       role: 'user' as const,
       text: question,
       createdAt: new Date().toISOString()
     };
-    assistantTurnRef.current = { id: turnId, controller, prompt: question };
+    assistantTurnRef.current = {
+      id: turnId,
+      controller,
+      prompt: question,
+      clientTurnId,
+      sessionId: assistantSessionId ?? undefined
+    };
     setAssistantTurnCancelable(true);
     setAssistantInput('');
     setAssistantMessages((prev) => [...prev, optimisticMessage]);
@@ -137,7 +201,8 @@ export function useResultAssistant(params: {
         const response = await source.sendResultAssistantMessage(
           sessionId,
           question,
-          controller.signal
+          controller.signal,
+          clientTurnId
         );
         if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         await syncAndContinueAssistantTurn(sessionId, response);
@@ -165,7 +230,8 @@ export function useResultAssistant(params: {
         const retry = await source.sendResultAssistantMessage(
           recoveredSessionId,
           question,
-          controller.signal
+          controller.signal,
+          clientTurnId
         );
         if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         await syncAndContinueAssistantTurn(recoveredSessionId, retry);
@@ -178,6 +244,7 @@ export function useResultAssistant(params: {
       )
         return;
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
+      optimisticMessageIdsRef.current.delete(optimisticMessageId);
       toast({
         title: 'MCP Lab Assistant error',
         description: error instanceof Error ? error.message : String(error),
@@ -203,14 +270,17 @@ export function useResultAssistant(params: {
   const approveResultAssistantToolCall = useCallback(
     async (callId: string) => {
       if (!assistantSessionId) return;
-      setAssistantTurnCancelable(false);
+      setAssistantTurnCancelable(Boolean(latestSessionRef.current?.activeTurnId));
       setAssistantLoading(true);
       try {
         const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
         await syncAndContinueAssistantTurn(assistantSessionId, response);
       } catch (error: unknown) {
+        if (assistantSessionIdRef.current !== assistantSessionId) return;
         if (isSessionNotFoundError(error)) {
           setAssistantSessionId(null);
+          assistantSessionIdRef.current = null;
+          latestSessionRef.current = null;
           setAssistantPendingToolCalls([]);
         }
         toast({
@@ -223,7 +293,7 @@ export function useResultAssistant(params: {
           variant: 'destructive'
         });
       } finally {
-        setAssistantLoading(false);
+        if (assistantSessionIdRef.current === assistantSessionId) setAssistantLoading(false);
       }
     },
     [assistantSessionId, source, syncAndContinueAssistantTurn]
@@ -232,14 +302,17 @@ export function useResultAssistant(params: {
   const denyResultAssistantToolCall = useCallback(
     async (callId: string) => {
       if (!assistantSessionId) return;
-      setAssistantTurnCancelable(false);
+      setAssistantTurnCancelable(Boolean(latestSessionRef.current?.activeTurnId));
       setAssistantLoading(true);
       try {
         const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
         await syncAndContinueAssistantTurn(assistantSessionId, response);
       } catch (error: unknown) {
+        if (assistantSessionIdRef.current !== assistantSessionId) return;
         if (isSessionNotFoundError(error)) {
           setAssistantSessionId(null);
+          assistantSessionIdRef.current = null;
+          latestSessionRef.current = null;
           setAssistantPendingToolCalls([]);
         }
         toast({
@@ -252,7 +325,7 @@ export function useResultAssistant(params: {
           variant: 'destructive'
         });
       } finally {
-        setAssistantLoading(false);
+        if (assistantSessionIdRef.current === assistantSessionId) setAssistantLoading(false);
       }
     },
     [assistantSessionId, source, syncAndContinueAssistantTurn]
@@ -265,8 +338,11 @@ export function useResultAssistant(params: {
       void source.closeResultAssistantSession(previousSessionId).catch(() => undefined);
     }
     assistantSessionIdRef.current = null;
+    latestSessionRef.current = null;
+    optimisticMessageIdsRef.current.clear();
     setAssistantSessionId(null);
     setAssistantMessages([]);
+    setStreamingMessage(undefined);
     setAssistantPendingToolCalls([]);
     setAssistantInput('');
     setAssistantTurnCancelable(false);
@@ -297,7 +373,7 @@ export function useResultAssistant(params: {
       assistantChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 0);
     return () => window.clearTimeout(t);
-  }, [open, assistantMessages.length, assistantLoading]);
+  }, [open, assistantMessages.length, streamingMessage?.text, assistantLoading]);
 
   useEffect(() => {
     const el = assistantInputRef.current;
@@ -308,13 +384,6 @@ export function useResultAssistant(params: {
   }, [assistantInput, open]);
 
   useEffect(() => {
-    if (!open || !assistantSessionId) return;
-    return sourceRef.current.subscribeResultAssistantSessionEvents(assistantSessionId, (event) => {
-      syncResultAssistantSession(event.payload.session, event.payload.sessionId);
-    });
-  }, [open, assistantSessionId, syncResultAssistantSession]);
-
-  useEffect(() => {
     return () => {
       abortActiveAssistantTurn();
       const sessionId = assistantSessionIdRef.current;
@@ -323,9 +392,14 @@ export function useResultAssistant(params: {
     };
   }, [abortActiveAssistantTurn]);
 
+  const visibleAssistantMessages = useMemo(
+    () => assistantMessagesWithStreaming(assistantMessages, streamingMessage),
+    [assistantMessages, streamingMessage]
+  );
+
   return {
     assistantSessionId,
-    assistantMessages,
+    assistantMessages: visibleAssistantMessages,
     assistantPendingToolCalls,
     assistantInput,
     assistantLoading,

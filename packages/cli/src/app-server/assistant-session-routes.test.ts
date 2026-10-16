@@ -40,11 +40,12 @@ function makeRuntimeDefinition(
 function makeSession() {
   const session: AssistantHttpSession = {
     id: 'assistant-1',
-    events: [],
+
     clients: new Set(),
     runtime: {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'done' }),
       resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'done' }),
+      cancel: vi.fn().mockResolvedValue(undefined),
       getSnapshot: vi.fn().mockReturnValue({
         messages: [],
         pendingToolCalls: [{ id: 'tool-1', status: 'pending', publicToolName: 'write_report' }]
@@ -233,6 +234,58 @@ describe.each([
 });
 
 describe('shared assistant session route behavior', () => {
+  it('passes a client-generated turn identifier to the runtime', async () => {
+    const { options, session } = makeOptions('/messages');
+    options.parseBody.mockResolvedValue({
+      message: 'repeatable question',
+      turnId: 'client-turn-1'
+    });
+    await handleAssistantSessionRoutes(options);
+    expect(session.runtime.sendMessage).toHaveBeenCalledWith(
+      'repeatable question',
+      expect.any(AbortSignal),
+      'client-turn-1'
+    );
+  });
+
+  it.each([null, '', ' ', {}, 'path/segment', 'x'.repeat(129)])(
+    'rejects invalid client turn ID %j before executing the runtime',
+    async (turnId) => {
+      const { options, session, asJson } = makeOptions('/messages');
+      options.parseBody.mockResolvedValue({ message: 'hello', turnId });
+      await handleAssistantSessionRoutes(options);
+      expect(asJson).toHaveBeenCalledWith(
+        expect.anything(),
+        400,
+        expect.objectContaining({
+          error: expect.stringContaining('turnId')
+        })
+      );
+      expect(session.runtime.sendMessage).not.toHaveBeenCalled();
+    }
+  );
+
+  it('accepts repeated turn cancellation without running another mutation', async () => {
+    const { options, session, asJson } = makeOptions('/turns/turn-1/cancel');
+    session.runtime.cancel = vi.fn().mockResolvedValue(undefined);
+    await handleAssistantSessionRoutes(options);
+    await handleAssistantSessionRoutes(options);
+    expect(session.runtime.cancel).toHaveBeenNthCalledWith(1, 'turn-1');
+    expect(session.runtime.cancel).toHaveBeenNthCalledWith(2, 'turn-1');
+    expect(asJson).toHaveBeenCalledTimes(2);
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 200, { ok: true });
+    expect(session.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when cancelling a missing session', async () => {
+    const { options, asJson } = makeOptions('/turns/finished/cancel');
+    options.sessions.clear();
+    await handleAssistantSessionRoutes(options);
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 404, {
+      error: 'Assistant session not found'
+    });
+  });
+
   it.each(['tool_call_request', 'tool_call_resolved'] as const)(
     'adds the first pending tool call alias to %s responses',
     async (type) => {

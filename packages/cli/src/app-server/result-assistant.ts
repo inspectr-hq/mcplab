@@ -63,7 +63,9 @@ export async function handleResultAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        session: resultAssistantSessionView(session),
+        ...(type === 'assistant_message_delta'
+          ? {}
+          : { session: resultAssistantSessionView(session) }),
         ...payload
       })
     );
@@ -107,7 +109,6 @@ export async function handleResultAssistantRoutes(params: {
       toolsLoaded: 0,
       toolServers: [],
       initialMessages: [],
-      events: [],
       clients: new Set()
     };
     sessionInitializer.initialMessages.push({

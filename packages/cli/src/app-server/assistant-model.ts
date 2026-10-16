@@ -1,5 +1,10 @@
 import { ChatAnthropic } from '@langchain/anthropic';
-import { AIMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  AIMessageChunk,
+  SystemMessage,
+  type BaseMessage
+} from '@langchain/core/messages';
 import { ChatOpenAICompletions, type ChatOpenAICompletionsCallOptions } from '@langchain/openai';
 import {
   AgentConnectionError,
@@ -17,12 +22,13 @@ import { withAssistantTraceExportDisabled } from './assistant-tracing.js';
 export type AssistantModelCall = (
   definition: AssistantRuntimeDefinition,
   messages: BaseMessage[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onText?: (delta: string) => void
 ) => Promise<AssistantModelOutput>;
 
 export type AssistantModelOutput = AssistantRuntimeModelOutput & { nativeMessage?: AIMessage };
 
-export const callAssistantModel: AssistantModelCall = (definition, messages, signal) =>
+export const callAssistantModel: AssistantModelCall = (definition, messages, signal, onText) =>
   withAssistantTraceExportDisabled(async () => {
     signal?.throwIfAborted();
     const history = [
@@ -44,7 +50,7 @@ export const callAssistantModel: AssistantModelCall = (definition, messages, sig
         maxRetries: 0,
         configuration: { maxRetries: 0 }
       });
-      response = await invoke(model, tools, history, signal);
+      response = await invoke(model, tools, history, signal, onText);
     } else if (agent.provider === 'anthropic') {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey)
@@ -62,11 +68,12 @@ export const callAssistantModel: AssistantModelCall = (definition, messages, sig
           clientOptions: { maxRetries: 0 }
         });
         try {
-          response = await invoke(model, tools, history, signal);
+          response = await invoke(model, tools, history, signal, onText);
           break;
         } catch (error) {
           lastError = error;
           if (signal?.aborted || !isAnthropicModelNotFound(error)) throw error;
+          if (onText && wasTextEmitted(error)) throw error;
           if (candidate === candidates.at(-1))
             throw anthropicModelNotFound(agent.model, candidates);
         }
@@ -98,7 +105,8 @@ export const callAssistantModel: AssistantModelCall = (definition, messages, sig
         },
         tools,
         history,
-        signal
+        signal,
+        onText
       );
     } else if (agent.provider === 'azure_foundry') {
       const deployment = agent.model.trim();
@@ -114,7 +122,8 @@ export const callAssistantModel: AssistantModelCall = (definition, messages, sig
         },
         tools,
         history,
-        signal
+        signal,
+        onText
       );
     } else {
       throw new Error(`Unsupported provider: ${agent.provider}`);
@@ -127,10 +136,72 @@ async function invoke(
   model: ChatOpenAICompletions | ChatAnthropic,
   tools: ReturnType<typeof assistantTools>,
   messages: BaseMessage[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onText?: (delta: string) => void
 ) {
   const bound = bindTools(model, tools);
-  return bound.invoke(messages, { signal, maxRetries: 0 });
+  return onText
+    ? streamModel(bound as Parameters<typeof streamModel>[0], messages, signal, onText)
+    : bound.invoke(messages, { signal, maxRetries: 0 });
+}
+
+async function streamModel(
+  model: {
+    stream(
+      messages: BaseMessage[],
+      options: { signal?: AbortSignal; maxRetries: number }
+    ): Promise<AsyncIterable<AIMessageChunk>>;
+  },
+  messages: BaseMessage[],
+  signal: AbortSignal | undefined,
+  onText: (delta: string) => void
+): Promise<AIMessage> {
+  let aggregate: AIMessageChunk | undefined;
+  let started = false;
+  let pendingWhitespace = '';
+  try {
+    for await (const chunk of await model.stream(messages, { signal, maxRetries: 0 })) {
+      signal?.throwIfAborted();
+      const next = chunk as AIMessageChunk;
+      aggregate = aggregate ? aggregate.concat(next) : next;
+      const text = contentToText(next.content);
+      if (!text) continue;
+      if (!started) {
+        const visible = text.trimStart();
+        if (!visible) continue;
+        started = true;
+        const ready = visible.trimEnd();
+        pendingWhitespace = visible.slice(ready.length);
+        if (ready) onText(ready);
+      } else {
+        const combined = pendingWhitespace + text;
+        const ready = combined.trimEnd();
+        pendingWhitespace = combined.slice(ready.length);
+        if (ready) onText(ready);
+      }
+    }
+  } catch (error) {
+    if (started)
+      throw Object.assign(new Error(errorMessage(error), { cause: error }), {
+        assistantTextEmitted: true
+      });
+    throw error;
+  }
+  if (!aggregate) throw new Error('Assistant model stream returned no message');
+  return new AIMessage({
+    content: aggregate.content,
+    ...(aggregate.id ? { id: aggregate.id } : {}),
+    ...(aggregate.name ? { name: aggregate.name } : {}),
+    additional_kwargs: aggregate.additional_kwargs,
+    response_metadata: aggregate.response_metadata,
+    tool_calls: aggregate.tool_calls,
+    invalid_tool_calls: aggregate.invalid_tool_calls,
+    usage_metadata: aggregate.usage_metadata
+  });
+}
+
+function wasTextEmitted(error: unknown): boolean {
+  return isRecord(error) && error.assistantTextEmitted === true;
 }
 
 function bindTools(
@@ -165,7 +236,8 @@ async function invokeAzure(
   },
   tools: ReturnType<typeof assistantTools>,
   messages: BaseMessage[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onText?: (delta: string) => void
 ) {
   let tokenField: 'max_completion_tokens' | 'max_tokens' = 'max_completion_tokens';
   let includeTemperature = typeof params.temperature === 'number';
@@ -186,9 +258,12 @@ async function invokeAzure(
     });
     try {
       const bound = bindTools(model, tools);
-      return await bound.invoke(messages, { signal, maxRetries: 0 });
+      return onText
+        ? await streamModel(bound as Parameters<typeof streamModel>[0], messages, signal, onText)
+        : await bound.invoke(messages, { signal, maxRetries: 0 });
     } catch (error) {
       if (signal?.aborted) throw error;
+      if (wasTextEmitted(error)) throw error;
       const message = errorMessage(error).toLowerCase();
       if (
         tokenField === 'max_completion_tokens' &&

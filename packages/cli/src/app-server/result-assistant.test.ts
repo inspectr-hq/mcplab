@@ -38,7 +38,7 @@ async function createResultDefinition(params: {
     toolsLoaded: 0,
     toolServers: [],
     initialMessages: [],
-    events: [],
+
     clients: new Set()
   };
   try {
@@ -55,7 +55,8 @@ async function createResultDefinition(params: {
           return {
             sendMessage: async () => ({ type: 'assistant_message', text: '' }),
             resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
             isBusy: () => false,
             dispose: async () => {}
           };
@@ -87,7 +88,7 @@ it('publishes factory-time Result events with a finalized runtime session', asyn
     toolsLoaded: 0,
     toolServers: [],
     initialMessages: [],
-    events: [],
+
     clients: new Set()
   };
   let emitLateEvent: NonNullable<AssistantRuntimeDefinition['onEvent']> | undefined;
@@ -110,7 +111,8 @@ it('publishes factory-time Result events with a finalized runtime session', asyn
           return {
             sendMessage: async () => ({ type: 'assistant_message', text: '' }),
             resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
             isBusy: () => false,
             dispose: async () => {}
           };
@@ -132,7 +134,11 @@ it('publishes factory-time Result events with a finalized runtime session', asyn
       { type: 'session_warning', session },
       { type: 'session_warning', session }
     ]);
-    expect(session.runtime.getSnapshot()).toEqual({ messages: [], pendingToolCalls: [] });
+    expect(session.runtime.getSnapshot()).toEqual({
+      revision: 0,
+      messages: [],
+      pendingToolCalls: []
+    });
   } finally {
     vi.restoreAllMocks();
   }
@@ -153,7 +159,7 @@ it('publishes preload warnings before factory-time Result events', async () => {
     toolsLoaded: 0,
     toolServers: [],
     initialMessages: [],
-    events: [],
+
     clients: new Set()
   };
   try {
@@ -174,7 +180,8 @@ it('publishes preload warnings before factory-time Result events', async () => {
           return {
             sendMessage: async () => ({ type: 'assistant_message', text: '' }),
             resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-            getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
             isBusy: () => false,
             dispose: async () => {}
           };
@@ -216,7 +223,7 @@ it('disposes the Result runtime and MCP client when a startup observer throws', 
           toolsLoaded: 0,
           toolServers: [],
           initialMessages: [],
-          events: [],
+
           clients: new Set()
         },
         agentConfig: { provider: 'openai', model: 'test' },
@@ -234,7 +241,8 @@ it('disposes the Result runtime and MCP client when a startup observer throws', 
             return {
               sendMessage: async () => ({ type: 'assistant_message', text: '' }),
               resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
               isBusy: () => false,
               dispose: runtimeDispose
             };
@@ -254,7 +262,7 @@ it('disposes the Result runtime and MCP client when a startup observer throws', 
 });
 
 describe('GET /api/result-assistant/sessions/:id/events', () => {
-  it('streams existing assistant events', async () => {
+  it('streams a current snapshot instead of replaying stale events', async () => {
     const writes: string[] = [];
     const ends: number[] = [];
     const resultAssistantSessions = new Map([
@@ -262,18 +270,9 @@ describe('GET /api/result-assistant/sessions/:id/events', () => {
         'ras-1',
         {
           id: 'ras-1',
-          events: [
-            {
-              type: 'session_started',
-              ts: '2026-04-27T10:00:00.000Z',
-              payload: { sessionId: 'ras-1', session: { id: 'ras-1' } }
-            },
-            {
-              type: 'turn_started',
-              ts: '2026-04-27T10:00:01.000Z',
-              payload: { sessionId: 'ras-1', session: { id: 'ras-1' } }
-            }
-          ],
+          createdAt: 0,
+          lastTouchedAt: Date.now(),
+          runtime: { getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }) },
           clients: new Set()
         }
       ]
@@ -303,8 +302,9 @@ describe('GET /api/result-assistant/sessions/:id/events', () => {
     });
 
     expect(handled).toBe(true);
-    expect(writes.join('')).toContain('event: session_started');
-    expect(writes.join('')).toContain('event: turn_started');
+    expect(writes.join('')).toContain('event: session_snapshot');
+    expect(writes.join('')).not.toContain('event: session_started');
+    expect(writes.join('')).not.toContain('event: turn_started');
     expect(ends).toHaveLength(0);
     expect(resultAssistantSessions.get('ras-1')?.clients.size).toBe(1);
   });
@@ -325,11 +325,12 @@ describe('DELETE /api/result-assistant/sessions/:id', () => {
       toolsLoaded: 0,
       toolServers: [],
       initialMessages: [],
-      events: [],
+
       clients: new Set([client]),
       runtime: {
         dispose,
-        getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] })
+        cancel: vi.fn().mockResolvedValue(undefined),
+        getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] })
       }
     } as any;
     const sessions = new Map([[session.id, session]]);
@@ -440,7 +441,10 @@ describe('Result Assistant report refresh', () => {
               return {
                 sendMessage: vi.fn(),
                 resolveToolCalls: vi.fn(),
-                getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+                cancel: vi.fn().mockResolvedValue(undefined),
+                getSnapshot: vi
+                  .fn()
+                  .mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
                 dispose: vi.fn()
               };
             }
@@ -507,7 +511,7 @@ describe('Result Assistant discovered tool approvals', () => {
         toolsLoaded: 0,
         toolServers: [],
         initialMessages: [],
-        events: [],
+
         clients: new Set()
       };
       let definition!: AssistantRuntimeDefinition;
@@ -524,7 +528,8 @@ describe('Result Assistant discovered tool approvals', () => {
             return {
               sendMessage: async () => ({ type: 'assistant_message', text: '' }),
               resolveToolCalls: async () => ({ type: 'assistant_message', text: '' }),
-              getSnapshot: () => ({ messages: [], pendingToolCalls: [] }),
+              cancel: vi.fn().mockResolvedValue(undefined),
+              getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [] }),
               isBusy: () => false,
               dispose: async () => {}
             };
@@ -798,11 +803,13 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
           runtime: {
             sendMessage: vi.fn().mockReturnValue(turnPromise),
             resolveToolCalls: vi.fn(),
-            getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            getSnapshot: vi
+              .fn()
+              .mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
             dispose: vi.fn()
           },
-          clients: new Set(),
-          events: []
+          clients: new Set()
         }
       ]
     ]) as any;
@@ -836,7 +843,11 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
     await expect(handlerPromise).resolves.toBe(true);
     expect(asJson).not.toHaveBeenCalled();
     const session = resultAssistantSessions.get('ras-1');
-    expect(session?.runtime?.getSnapshot()).toMatchObject({ messages: [], pendingToolCalls: [] });
+    expect(session?.runtime?.getSnapshot()).toMatchObject({
+      revision: 0,
+      messages: [],
+      pendingToolCalls: []
+    });
   });
 });
 
@@ -990,6 +1001,7 @@ describe('Result Assistant runtime factory', () => {
           }
         ]
       }),
+      cancel: vi.fn().mockResolvedValue(undefined),
       getSnapshot: vi.fn().mockReturnValue(snapshot),
       dispose: vi.fn()
     };
@@ -1044,7 +1056,11 @@ describe('Result Assistant runtime factory', () => {
     );
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('mcp');
     expect(assistantRuntimeFactory.create.mock.calls[0][0]).not.toHaveProperty('llmMessages');
-    expect(runtime.sendMessage).toHaveBeenCalledWith('hello', expect.any(AbortSignal));
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      'hello',
+      expect.any(AbortSignal),
+      expect.any(String)
+    );
     await handleResultAssistantRoutes({
       req: { headers: {} } as any,
       res: {} as any,

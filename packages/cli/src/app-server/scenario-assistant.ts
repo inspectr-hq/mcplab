@@ -72,7 +72,9 @@ export async function handleScenarioAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        session: scenarioAssistantSessionView(session),
+        ...(type === 'assistant_message_delta'
+          ? {}
+          : { session: scenarioAssistantSessionView(session) }),
         ...payload
       })
     );
@@ -160,7 +162,6 @@ export async function handleScenarioAssistantRoutes(params: {
       toolServers: [],
       initialMessages: [],
       warnings,
-      events: [],
       clients: new Set()
     };
     sessionInitializer.initialMessages.push({

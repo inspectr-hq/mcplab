@@ -12,14 +12,15 @@ describe('assistant session TTL', () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn(),
       resolveToolCalls: vi.fn(),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
       isBusy: () => false,
       dispose: vi.fn()
     };
     const session = {
       id: 'active',
       lastTouchedAt: 0,
-      events: [],
+
       clients: new Set([client]),
       runtime
     };
@@ -40,7 +41,8 @@ describe('assistant session TTL', () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn(),
       resolveToolCalls: vi.fn(),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
       isBusy: () => true,
       dispose: vi.fn()
     };

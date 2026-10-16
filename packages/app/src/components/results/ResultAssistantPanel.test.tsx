@@ -1,12 +1,136 @@
 import { createRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ResultAssistantPanel,
   type ResultAssistantMessageRenderContext
 } from './ResultAssistantPanel';
+import { useResultAssistant } from '@/hooks/use-result-assistant';
+import type { EvalDataSource, ResultAssistantSessionView } from '@/lib/data-sources/types';
+
+function makeSession(
+  overrides: Partial<ResultAssistantSessionView> = {}
+): ResultAssistantSessionView {
+  return {
+    revision: 0,
+    id: 'session-1',
+    scope: 'run',
+    runId: 'run-1',
+    createdAt: '2026-10-16T10:00:00.000Z',
+    updatedAt: '2026-10-16T10:00:00.000Z',
+    selectedAssistantAgentName: 'assistant-1',
+    model: 'gpt-4o-mini',
+    provider: 'openai',
+    messages: [],
+    pendingToolCalls: [],
+    ...overrides
+  };
+}
 
 describe('ResultAssistantPanel', () => {
+  it('renders SSE text while the message POST is still pending', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn()
+    });
+    let onEvent: ((event: unknown) => void) | undefined;
+    const sendResultAssistantMessageMock = vi.fn(
+      (_sessionId: string, _message: string, _signal?: AbortSignal, _turnId?: string) =>
+        new Promise<never>(() => undefined)
+    );
+    const source = {
+      createResultAssistantSession: vi.fn().mockResolvedValue({
+        sessionId: 'session-1',
+        session: makeSession()
+      }),
+      sendResultAssistantMessage: sendResultAssistantMessageMock,
+      closeResultAssistantSession: vi.fn().mockResolvedValue(undefined),
+      subscribeResultAssistantSessionEvents: vi.fn(
+        (_sessionId: string, callback: typeof onEvent) => {
+          onEvent = callback;
+          return () => undefined;
+        }
+      )
+    } as unknown as EvalDataSource;
+
+    function AssistantPanelHarness() {
+      const assistant = useResultAssistant({
+        source,
+        open: true,
+        scope: 'run',
+        runId: 'run-1'
+      });
+      return (
+        <ResultAssistantPanel
+          title="Assistant"
+          description="Test streaming"
+          expanded={false}
+          onToggleExpanded={vi.fn()}
+          onHide={vi.fn()}
+          messages={assistant.assistantMessages}
+          pendingToolCalls={assistant.assistantPendingToolCalls}
+          loading={assistant.assistantLoading}
+          input={assistant.assistantInput}
+          onInputChange={assistant.setAssistantInput}
+          onSend={() => void assistant.askAssistant()}
+          inputPlaceholder="Ask the assistant"
+          snippets={[]}
+          onSnippetSelect={vi.fn()}
+          chatEndRef={assistant.assistantChatEndRef}
+          inputRef={assistant.assistantInputRef}
+        />
+      );
+    }
+
+    render(<AssistantPanelHarness />);
+    fireEvent.change(screen.getByPlaceholderText('Ask the assistant'), {
+      target: { value: 'Explain this result' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+    await waitFor(() => expect(sendResultAssistantMessageMock).toHaveBeenCalledTimes(1));
+
+    const turnId = sendResultAssistantMessageMock.mock.calls[0]?.[3];
+    act(() =>
+      onEvent?.({
+        type: 'turn_started',
+        ts: '2026-10-16T10:00:01.000Z',
+        payload: {
+          sessionId: 'session-1',
+          session: makeSession({
+            revision: 1,
+            activeTurnId: turnId,
+            messages: [
+              {
+                id: turnId,
+                role: 'user',
+                text: 'Explain this result',
+                createdAt: '2026-10-16T10:00:01.000Z'
+              }
+            ]
+          })
+        }
+      })
+    );
+    act(() =>
+      onEvent?.({
+        type: 'assistant_message_delta',
+        ts: '2026-10-16T10:00:02.000Z',
+        payload: {
+          sessionId: 'session-1',
+          turnId,
+          messageId: 'assistant-1',
+          revision: 2,
+          offset: 0,
+          delta: 'Streaming answer',
+          createdAt: '2026-10-16T10:00:02.000Z'
+        }
+      })
+    );
+
+    expect(await screen.findByText('Streaming answer')).toBeInTheDocument();
+    expect(sendResultAssistantMessageMock).toHaveBeenCalledTimes(1);
+  });
+
   it('renders pending tool call approval actions', () => {
     const onApprove = vi.fn();
     const onDeny = vi.fn();

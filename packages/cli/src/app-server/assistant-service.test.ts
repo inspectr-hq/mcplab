@@ -3,6 +3,7 @@ import type {
   AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
   AssistantRuntimeModelOutput,
+  AssistantRuntimeResponse,
   AssistantRuntimeSession
 } from '@inspectr/mcplab-core';
 import { createAssistantRuntimeService } from './assistant-service.js';
@@ -15,7 +16,8 @@ describe('assistant runtime service', () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn(),
       resolveToolCalls: vi.fn(),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn(),
       dispose: vi.fn()
     };
     const definition = { onEvent } as unknown as AssistantRuntimeDefinition;
@@ -88,7 +90,8 @@ describe('assistant runtime service', () => {
         return Promise.resolve({ type: 'assistant_message' as const, text: 'new' });
       }),
       resolveToolCalls: vi.fn(),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn(),
       dispose: vi.fn()
     };
     const service = await createAssistantRuntimeService(
@@ -113,7 +116,14 @@ describe('assistant runtime service', () => {
     expect(onEvent).not.toHaveBeenCalled();
     finishOld({ type: 'assistant_message', text: 'late' });
     await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
-    expect(await service.sendMessage('new')).toMatchObject({ text: 'new' });
+    expect(await service.sendMessage('new', undefined, 'client-turn')).toMatchObject({
+      text: 'new'
+    });
+    expect(runtime.sendMessage).toHaveBeenLastCalledWith(
+      'new',
+      expect.any(AbortSignal),
+      'client-turn'
+    );
     await service.dispose();
   });
   it('publishes one settled cancellation snapshot after partial tool execution', async () => {
@@ -196,7 +206,8 @@ describe('assistant runtime service', () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'ok' }),
       resolveToolCalls: vi.fn(),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn(),
       dispose: vi.fn()
     };
     const service = await createAssistantRuntimeService(
@@ -211,6 +222,115 @@ describe('assistant runtime service', () => {
     await expect(service.sendMessage('next')).resolves.toMatchObject({ text: 'ok' });
     await service.dispose();
   });
+  it('routes matching busy cancellation through the runtime and serializes paused cancellation', async () => {
+    let activeTurnId: string | undefined;
+    let requestSignal: AbortSignal | undefined;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => (markStarted = resolve));
+    const cancel = vi.fn(async (turnId: string) => {
+      if (turnId === activeTurnId) activeTurnId = undefined;
+    });
+    const runtime: AssistantRuntimeSession = {
+      sendMessage: vi.fn((_message, signal) => {
+        requestSignal = signal;
+        markStarted();
+        return new Promise<AssistantRuntimeResponse>((_, reject) =>
+          signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+        );
+      }),
+      resolveToolCalls: vi.fn(),
+      getSnapshot: () => ({ revision: 0, messages: [], pendingToolCalls: [], activeTurnId }),
+      cancel,
+      dispose: vi.fn()
+    };
+    const service = await createAssistantRuntimeService(
+      { create: async () => runtime },
+      {} as AssistantRuntimeDefinition
+    );
+    const send = service.sendMessage('question', undefined, 'running-turn');
+    await started;
+    await service.cancel('stale-turn');
+    expect(requestSignal?.aborted).toBe(false);
+    await service.cancel('running-turn');
+    await expect(send).rejects.toThrow('aborted');
+    await vi.waitFor(() => expect(service.isBusy?.()).toBe(false));
+    expect(requestSignal?.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledWith('running-turn');
+
+    activeTurnId = 'paused-turn';
+    let markPausedStarted!: () => void;
+    let releasePausedCancel!: () => void;
+    const pausedStarted = new Promise<void>((resolve) => (markPausedStarted = resolve));
+    const pausedCancel = new Promise<void>((resolve) => (releasePausedCancel = resolve));
+    cancel.mockImplementation(async (turnId) => {
+      expect(service.isBusy?.()).toBe(true);
+      markPausedStarted();
+      await pausedCancel;
+      if (turnId === activeTurnId) activeTurnId = undefined;
+    });
+    const cancelling = service.cancel('paused-turn');
+    await pausedStarted;
+    expect(service.isBusy?.()).toBe(true);
+    releasePausedCancel();
+    await cancelling;
+    expect(service.isBusy?.()).toBe(false);
+    await service.dispose();
+  });
+  it('does not cancel a new send while the old paused graph state is still projected', async () => {
+    let activeTurnId: string | undefined;
+    let secondSignal: AbortSignal | undefined;
+    let releaseSecond!: (value: AssistantRuntimeResponse) => void;
+    let markSecondStarted!: () => void;
+    const secondStarted = new Promise<void>((resolve) => (markSecondStarted = resolve));
+    const secondResult = new Promise<AssistantRuntimeResponse>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const runtime: AssistantRuntimeSession = {
+      sendMessage: vi.fn((message, signal, turnId) => {
+        if (message === 'old request') {
+          activeTurnId = turnId;
+          return Promise.resolve({
+            type: 'tool_call_request' as const,
+            text: 'Old batch paused',
+            pendingToolCalls: []
+          });
+        }
+        secondSignal = signal;
+        markSecondStarted();
+        return secondResult;
+      }),
+      resolveToolCalls: vi.fn(),
+      getSnapshot: () => ({
+        revision: 1,
+        messages: [],
+        pendingToolCalls: [],
+        activeTurnId
+      }),
+      cancel: vi.fn(async (turnId) => {
+        if (turnId === activeTurnId) activeTurnId = undefined;
+      }),
+      dispose: vi.fn()
+    };
+    const service = await createAssistantRuntimeService(
+      { create: async () => runtime },
+      {} as AssistantRuntimeDefinition
+    );
+
+    await service.sendMessage('old request', undefined, 'old-turn');
+    const newTurn = service.sendMessage('new request', undefined, 'new-turn');
+    await secondStarted;
+    await service.cancel('old-turn');
+    expect(secondSignal?.aborted).toBe(false);
+    expect(runtime.cancel).not.toHaveBeenCalled();
+    releaseSecond({ type: 'assistant_message', text: 'New answer' });
+    await expect(newTurn).resolves.toMatchObject({ text: 'New answer' });
+    expect(runtime.sendMessage).toHaveBeenLastCalledWith(
+      'new request',
+      expect.any(AbortSignal),
+      'new-turn'
+    );
+    await service.dispose();
+  });
   it('serializes operations and disposes an opaque runtime that settles only during cleanup', async () => {
     let finish!: (value: { type: 'assistant_message'; text: string }) => void;
     const inFlight = new Promise<{ type: 'assistant_message'; text: string }>((resolve) => {
@@ -219,7 +339,8 @@ describe('assistant runtime service', () => {
     const runtime: AssistantRuntimeSession = {
       sendMessage: vi.fn(() => inFlight),
       resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'resolved' }),
-      getSnapshot: vi.fn().mockReturnValue({ messages: [], pendingToolCalls: [] }),
+      getSnapshot: vi.fn().mockReturnValue({ revision: 0, messages: [], pendingToolCalls: [] }),
+      cancel: vi.fn(),
       dispose: vi.fn(() => {
         finish({ type: 'assistant_message', text: 'done' });
       })

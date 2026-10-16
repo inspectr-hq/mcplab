@@ -178,6 +178,49 @@ describe('workspaceApiClient SSE subscriptions', () => {
   });
 });
 
+describe('workspaceApiClient assistant turns', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('sends the client turn ID with result and scenario messages', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session: {}, response: {} })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session: {}, response: {} })));
+    vi.stubGlobal('fetch', fetchMock);
+    const signal = new AbortController().signal;
+
+    await workspaceApiClient.sendResultAssistantMessage('result-1', 'same text', signal, 'turn-1');
+    await workspaceApiClient.sendScenarioAssistantMessage(
+      'scenario-1',
+      'same text',
+      signal,
+      'turn-2'
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/result-assistant/sessions/result-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ message: 'same text', turnId: 'turn-1' }),
+        signal
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/scenario-assistant/sessions/scenario-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ message: 'same text', turnId: 'turn-2' }),
+        signal
+      })
+    );
+  });
+});
+
 describe('workspaceApiClient assistant request cancellation', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

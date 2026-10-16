@@ -140,19 +140,37 @@ export function createAssistantGraph(
           return cleanupUpdate({ ...state, executingId: undefined }, state.terminal ?? 'cancelled');
         if (state.rounds >= MAX_ASSISTANT_MODEL_CALLS) return cleanupUpdate(state, 'budget');
         const rounds = state.rounds + 1;
+        const assistantMessageId = messageId();
+        const createdAt = new Date().toISOString();
+        let textOffset = 0;
         try {
           const output = await raceAssistantAbort(
-            modelCall(definition, [...state.messages], signal),
+            modelCall(definition, [...state.messages], signal, (delta) => {
+              if (delta && !signal?.aborted) {
+                config.writer?.({
+                  id: randomUUID(),
+                  type: 'assistant_message_delta',
+                  payload: {
+                    turnId: state.turnId,
+                    messageId: assistantMessageId,
+                    offset: textOffset,
+                    delta,
+                    createdAt
+                  }
+                });
+                textOffset += delta.length;
+              }
+            }),
             signal
           );
           if (signal?.aborted) return cleanupUpdate(state, 'cancelled');
           if (output.type === 'assistant_message') {
             const suggestions = mergeAssistantSuggestions(state.proposals);
             const ui: AssistantRuntimeMessage = {
-              id: messageId(),
+              id: assistantMessageId,
               role: 'assistant',
               text: output.text,
-              createdAt: new Date().toISOString(),
+              createdAt,
               ...(suggestions ? { suggestions } : {})
             };
             const ai = output.nativeMessage ?? new AIMessage({ content: output.text });
@@ -187,10 +205,10 @@ export function createAssistantGraph(
           );
           const persisted = persistNativeMessage(incoming, state.messages);
           const ui: AssistantRuntimeMessage = {
-            id: messageId(),
+            id: assistantMessageId,
             role: 'assistant',
             text: output.text,
-            createdAt: new Date().toISOString(),
+            createdAt,
             pendingToolCallId: calls[0]?.id,
             pendingToolCallIds: calls.map((call) => call.id),
             toolRequestServer: calls[0]?.server,

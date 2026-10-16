@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   AssistantRuntimeDefinition,
   AssistantRuntimeEvent,
@@ -63,6 +64,9 @@ export async function createAssistantRuntimeService(
   let disposed = false;
   let suppressRuntimeEvents = false;
   let activeController: AbortController | undefined;
+  let activeOperationKind: 'turn' | 'cancel' | undefined;
+  // The mutation target can differ from the projected turn while superseding a paused batch.
+  let activeOperationTurnId: string | undefined;
   let cleanupPromise: Promise<void> | undefined;
   const onRuntimeEvent = definition.onEvent;
   definition.onEvent = (event) => {
@@ -83,18 +87,22 @@ export async function createAssistantRuntimeService(
 
   const run = async (
     operation: (signal: AbortSignal) => Promise<AssistantRuntimeResponse>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    operationKind: 'turn' | 'cancel' = 'turn',
+    operationTurnId?: string
   ) => {
     if (disposed) throw new Error('Assistant session is disposed');
     if (busy) throw new AssistantSessionBusyError();
     busy = true;
+    activeOperationKind = operationKind;
+    activeOperationTurnId = operationTurnId;
     onActivity?.();
     const controller = new AbortController();
     activeController = controller;
     let operationSettled = false;
     let operationStarted = false;
     const abort = () => {
-      controller.abort();
+      controller.abort(signal?.reason);
       if (!operationSettled) suppressRuntimeEvents = true;
     };
     signal?.addEventListener('abort', abort, { once: true });
@@ -116,6 +124,8 @@ export async function createAssistantRuntimeService(
       }
       busy = false;
       activeController = undefined;
+      activeOperationKind = undefined;
+      activeOperationTurnId = undefined;
       suppressRuntimeEvents = false;
       if (!disposed) onActivity?.();
     };
@@ -152,12 +162,45 @@ export async function createAssistantRuntimeService(
   };
 
   return {
-    sendMessage: (message, signal) =>
-      run((activeSignal) => runtime.sendMessage(message, activeSignal), signal),
+    sendMessage: (message, signal, requestedTurnId) => {
+      const turnId = requestedTurnId ?? randomUUID();
+      return run(
+        (activeSignal) => runtime.sendMessage(message, activeSignal, turnId),
+        signal,
+        'turn',
+        turnId
+      );
+    },
     resolveToolCalls: (decisions: AssistantToolCallDecision[], signal) =>
-      run((activeSignal) => runtime.resolveToolCalls(decisions, activeSignal), signal),
+      run(
+        (activeSignal) => runtime.resolveToolCalls(decisions, activeSignal),
+        signal,
+        'turn',
+        runtime.getSnapshot().activeTurnId
+      ),
     getSnapshot: () => runtime.getSnapshot(),
     isBusy: () => busy,
+    cancel: async (turnId) => {
+      if (disposed) return;
+      if (busy) {
+        if (activeOperationTurnId !== turnId) return;
+        if (activeOperationKind !== 'cancel') {
+          activeController?.abort('cancelled');
+        }
+        await runtime.cancel(turnId);
+        return;
+      }
+      if (runtime.getSnapshot().activeTurnId !== turnId) return;
+      await run(
+        async () => {
+          await runtime.cancel(turnId);
+          return { type: 'assistant_message', text: '' };
+        },
+        undefined,
+        'cancel',
+        turnId
+      );
+    },
     dispose: async () => {
       if (cleanupPromise) return cleanupPromise;
       disposed = true;

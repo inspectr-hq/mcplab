@@ -16,17 +16,21 @@ assistantRuntimeContract('LangGraph assistant runtime', createLangChainAssistant
 
 it('fences an abort-ignoring old model completion from a newer turn', async () => {
   let releaseOld!: (value: { type: 'assistant_message'; text: string }) => void;
+  let emitOldText!: (delta: string) => void;
   let started!: () => void;
   const oldStarted = new Promise<void>((resolve) => (started = resolve));
   let calls = 0;
-  const session = await createLangChainAssistantRuntimeFactory(async () => {
-    calls++;
-    if (calls === 1) {
-      started();
-      return new Promise((resolve) => (releaseOld = resolve));
+  const session = await createLangChainAssistantRuntimeFactory(
+    async (_definition, _messages, _signal, onText) => {
+      calls++;
+      if (calls === 1) {
+        started();
+        emitOldText = onText!;
+        return new Promise((resolve) => (releaseOld = resolve));
+      }
+      return { type: 'assistant_message', text: 'new answer' };
     }
-    return { type: 'assistant_message', text: 'new answer' };
-  }).create({
+  ).create({
     assistant: 'result',
     agent: { provider: 'openai', model: 'test' },
     context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
@@ -42,8 +46,185 @@ it('fences an abort-ignoring old model completion from a newer turn', async () =
   await expect(session.sendMessage('new request')).resolves.toMatchObject({ text: 'new answer' });
   const current = session.getSnapshot();
   releaseOld({ type: 'assistant_message', text: 'late old answer' });
+  emitOldText('late old token');
   await Promise.resolve();
   expect(session.getSnapshot()).toEqual(current);
+});
+
+it('publishes each streamed fragment with a live snapshot and reuses its message ID', async () => {
+  const observed: Array<{
+    event: AssistantRuntimeEvent;
+    snapshot: AssistantRuntimeSession['getSnapshot'] extends () => infer S ? S : never;
+  }> = [];
+  let session!: AssistantRuntimeSession;
+  session = await createLangChainAssistantRuntimeFactory(
+    async (_definition, _messages, _signal, onText) => {
+      onText?.('hel');
+      onText?.('lo');
+      return { type: 'assistant_message', text: 'hello' };
+    }
+  ).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [],
+    approvalPolicy: () => 'approval_required',
+    onEvent: (event) => observed.push({ event, snapshot: session.getSnapshot() })
+  } satisfies AssistantRuntimeDefinition);
+
+  await expect(session.sendMessage('question')).resolves.toMatchObject({
+    type: 'assistant_message',
+    text: 'hello'
+  });
+  const deltas = observed.filter(({ event }) => event.type === 'assistant_message_delta');
+  expect(deltas.map(({ event }) => event.payload)).toMatchObject([
+    { offset: 0, delta: 'hel', revision: expect.any(Number) },
+    { offset: 3, delta: 'lo', revision: expect.any(Number) }
+  ]);
+  expect(deltas.map(({ snapshot }) => snapshot.streamingMessage?.text)).toEqual(['hel', 'hello']);
+  expect(deltas.every(({ snapshot }) => snapshot.activeTurnId)).toBe(true);
+  expect(deltas.map(({ event }) => event.payload.revision)).toEqual(
+    deltas.map(({ snapshot }) => snapshot.revision)
+  );
+  expect(deltas[1]!.snapshot.revision).toBeGreaterThan(deltas[0]!.snapshot.revision);
+  expect(deltas[0]?.event.payload.messageId).toBe(
+    session.getSnapshot().messages.find((message) => message.role === 'assistant')?.id
+  );
+  expect(session.getSnapshot()).not.toHaveProperty('streamingMessage');
+  expect(session.getSnapshot()).not.toHaveProperty('activeTurnId');
+  await session.dispose();
+});
+
+it('uses the supplied logical turn ID and rejects reusing it', async () => {
+  const session = await createLangChainAssistantRuntimeFactory(async () => ({
+    type: 'tool_call_request',
+    text: 'Need approval',
+    toolCalls: [{ id: 'pending-call', name: 'write', arguments: {} }]
+  })).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [{ name: 'write', server: 's', tool: 'write', execute: async () => ({ ok: true }) }],
+    approvalPolicy: () => 'approval_required'
+  } satisfies AssistantRuntimeDefinition);
+
+  await session.sendMessage('write', undefined, 'client-turn-1');
+  expect(session.getSnapshot().activeTurnId).toBe('client-turn-1');
+  expect(session.getSnapshot().messages).toContainEqual(
+    expect.objectContaining({ id: 'client-turn-1', role: 'user', text: 'write' })
+  );
+  await expect(session.sendMessage('again', undefined, 'client-turn-1')).rejects.toMatchObject({
+    statusCode: 409
+  });
+  await session.cancel('client-turn-1');
+  await expect(session.sendMessage('new', undefined, 'client-turn-2')).resolves.toBeDefined();
+  expect(session.getSnapshot().activeTurnId).toBe('client-turn-2');
+  await session.cancel('client-turn-1');
+  expect(session.getSnapshot().activeTurnId).toBe('client-turn-2');
+  await session.cancel('client-turn-2');
+  expect(session.getSnapshot()).not.toHaveProperty('activeTurnId');
+  await session.dispose();
+});
+
+it('reuses the streamed message ID when that model round requests tools', async () => {
+  const events: AssistantRuntimeEvent[] = [];
+  const session = await createLangChainAssistantRuntimeFactory(
+    async (_definition, _messages, _signal, onText) => {
+      onText?.('Looking it up');
+      return {
+        type: 'tool_call_request',
+        text: 'Looking it up',
+        toolCalls: [{ id: 'lookup-call', name: 'lookup', arguments: {} }]
+      };
+    }
+  ).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [{ name: 'lookup', server: 's', tool: 'lookup', execute: async () => 'unused' }],
+    approvalPolicy: () => 'approval_required',
+    onEvent: (event) => events.push(event)
+  } satisfies AssistantRuntimeDefinition);
+
+  await session.sendMessage('lookup');
+  const streamedId = events.find((event) => event.type === 'assistant_message_delta')?.payload
+    .messageId;
+  expect(
+    session.getSnapshot().messages.find((message) => message.role === 'assistant')
+  ).toMatchObject({
+    id: streamedId,
+    text: 'Looking it up',
+    pendingToolCallId: 'lookup-call'
+  });
+  expect(session.getSnapshot()).not.toHaveProperty('streamingMessage');
+  expect(session.getSnapshot().activeTurnId).toBeTruthy();
+  await session.dispose();
+});
+
+it('cancels a paused batch by logical turn ID and ignores stale IDs', async () => {
+  const session = await createLangChainAssistantRuntimeFactory(async () => ({
+    type: 'tool_call_request',
+    text: 'Need approval',
+    toolCalls: [{ id: 'pending-call', name: 'write', arguments: {} }]
+  })).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [{ name: 'write', server: 's', tool: 'write', execute: async () => ({ ok: true }) }],
+    approvalPolicy: () => 'approval_required'
+  } satisfies AssistantRuntimeDefinition);
+
+  await session.sendMessage('write');
+  const turnId = session.getSnapshot().activeTurnId!;
+  expect(session.getSnapshot().pendingToolCalls[0]?.status).toBe('pending');
+  await session.cancel('stale-turn');
+  expect(session.getSnapshot().activeTurnId).toBe(turnId);
+  await session.cancel(turnId);
+  expect(session.getSnapshot()).not.toHaveProperty('activeTurnId');
+  expect(session.getSnapshot()).not.toHaveProperty('streamingMessage');
+  expect(session.getSnapshot().pendingToolCalls[0]).toMatchObject({
+    id: 'pending-call',
+    status: 'error'
+  });
+  await session.cancel(turnId);
+  expect(session.getSnapshot().pendingToolCalls[0]?.status).toBe('error');
+  await session.dispose();
+});
+
+it('publishes a cleared snapshot after a streamed model failure', async () => {
+  let session!: AssistantRuntimeSession;
+  const observations: Array<{
+    type: string;
+    snapshot: ReturnType<AssistantRuntimeSession['getSnapshot']>;
+  }> = [];
+  session = await createLangChainAssistantRuntimeFactory(
+    async (_definition, _messages, _signal, onText) => {
+      onText?.('partial');
+      throw new Error('provider stream broke');
+    }
+  ).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [],
+    approvalPolicy: () => 'approval_required',
+    onEvent: (event) => observations.push({ type: event.type, snapshot: session.getSnapshot() })
+  } satisfies AssistantRuntimeDefinition);
+
+  await expect(session.sendMessage('question')).rejects.toThrow('provider stream broke');
+  const terminal = observations.find(({ type }) => type === 'session_snapshot');
+  expect(terminal?.snapshot).not.toHaveProperty('streamingMessage');
+  expect(terminal?.snapshot).not.toHaveProperty('activeTurnId');
+  expect(observations.map(({ type }) => type)).toContain('assistant_message_delta');
+  const delta = observations.find(({ type }) => type === 'assistant_message_delta')?.snapshot;
+  expect(delta?.revision).toBeGreaterThan(0);
+  expect(terminal?.snapshot.revision).toBeGreaterThan(delta?.revision ?? 0);
+  await session.dispose();
 });
 
 it('keeps UI message IDs unique when the provider repeats its native response ID', async () => {
@@ -117,6 +298,45 @@ it('retains repeated native IDs across three messages and isolates sessions from
   await second.sendMessage('still isolated');
   expect(histories[4]?.filter((message) => AIMessage.isInstance(message))).toHaveLength(1);
   await Promise.all([second.dispose(), second.dispose()]);
+});
+
+it('cancels a client turn during checkpoint preflight before its first snapshot', async () => {
+  const modelCall = vi.fn(async () => ({ type: 'assistant_message' as const, text: 'unused' }));
+  const session = await createLangChainAssistantRuntimeFactory(modelCall).create({
+    assistant: 'result',
+    agent: { provider: 'openai', model: 'test' },
+    context: { scope: 'all_runs', runId: null, resultSummary: null, referenceReportsForRun: [] },
+    getSystemPrompt: () => 'Prompt',
+    tools: [],
+    approvalPolicy: () => 'automatic'
+  });
+  const originalRead = MemorySaver.prototype.getTuple;
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => (enter = resolve));
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const read = vi.spyOn(MemorySaver.prototype, 'getTuple').mockImplementationOnce(async function (
+    this: MemorySaver,
+    config: Parameters<MemorySaver['getTuple']>[0]
+  ) {
+    enter();
+    await gate;
+    return originalRead.call(this, config);
+  });
+  try {
+    const turn = session.sendMessage('question', undefined, 'client-preflight');
+    const outcome = expect(turn).rejects.toThrow('aborted');
+    await entered;
+    expect(session.getSnapshot().activeTurnId).toBeUndefined();
+    const cancelling = session.cancel('client-preflight');
+    release();
+    await cancelling;
+    await outcome;
+    expect(modelCall).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+    await session.dispose();
+  }
 });
 
 it('settles checkpoint preflight before disposal deletes its thread', async () => {

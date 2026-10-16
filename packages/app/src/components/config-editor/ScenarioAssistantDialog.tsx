@@ -24,10 +24,13 @@ import { formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from '@/types/eval';
 import type {
+  EvalDataSource,
   ScenarioAssistantSessionView,
   ScenarioAssistantSuggestionBundle,
   ScenarioAssistantPendingToolCall
 } from '@/lib/data-sources/types';
+import { assistantMessagesWithStreaming } from '@/lib/assistant-streaming';
+import { useAssistantStream } from '@/hooks/use-assistant-stream';
 
 const SCENARIO_ASSISTANT_SNIPPETS = [
   {
@@ -149,6 +152,10 @@ export function ScenarioAssistantDialog({
   const { source } = useDataSource();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
+  const sessionRef = useRef<ScenarioAssistantSessionView | null>(null);
+  const syncScenarioAssistantSessionRef = useRef<
+    ((session: ScenarioAssistantSessionView) => void) | null
+  >(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [turnCancelable, setTurnCancelable] = useState(false);
@@ -160,8 +167,13 @@ export function ScenarioAssistantDialog({
     id: number;
     controller: AbortController;
     prompt: string;
+    clientTurnId: string;
+    sessionId?: string;
   } | null>(null);
   const assistantTurnCounterRef = useRef(0);
+  const optimisticMessagesRef = useRef(
+    new Map<string, ScenarioAssistantSessionView['messages'][number]>()
+  );
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
   const resolvedAssistantAgentName = defaultAssistantAgentName || agents[0]?.id || '';
@@ -218,7 +230,7 @@ export function ScenarioAssistantDialog({
       });
       if (cancelled) return;
       setSessionId(resp.sessionId);
-      syncScenarioAssistantSession(resp.session);
+      syncScenarioAssistantSessionRef.current?.(resp.session);
       setLoading(false);
     };
     void bootstrap()
@@ -251,29 +263,77 @@ export function ScenarioAssistantDialog({
   const resetLocalSessionState = () => {
     abortActiveAssistantTurn();
     setSessionId(null);
+    sessionRef.current = null;
+    optimisticMessagesRef.current.clear();
     setSession(null);
     setInput('');
     setAppliedSuggestionKeys(new Set());
     initialMessageSentRef.current = null;
   };
 
-  const syncScenarioAssistantSession = useCallback((nextSession: ScenarioAssistantSessionView) => {
-    setSession((prev) => {
-      if (prev && prev.messages.length > nextSession.messages.length) {
-        return prev;
-      }
-      return nextSession;
+  const onStreamSession = useCallback((nextSession: ScenarioAssistantSessionView) => {
+    sessionRef.current = nextSession;
+    if (assistantTurnRef.current) {
+      assistantTurnRef.current.sessionId = nextSession.id;
+    }
+    setTurnCancelable(Boolean(nextSession.activeTurnId));
+    const committedIds = new Set(nextSession.messages.map((message) => message.id));
+    for (const id of committedIds) {
+      optimisticMessagesRef.current.delete(id);
+    }
+    setSession({
+      ...nextSession,
+      messages: [
+        ...nextSession.messages,
+        ...Array.from(optimisticMessagesRef.current.values()).filter(
+          (message) => !committedIds.has(message.id)
+        )
+      ]
     });
   }, []);
+  const subscribeScenarioEvents = useCallback(
+    (
+      activeSessionId: string,
+      onEvent: Parameters<EvalDataSource['subscribeScenarioAssistantSessionEvents']>[1]
+    ) => source.subscribeScenarioAssistantSessionEvents(activeSessionId, onEvent),
+    [source]
+  );
+  const cancelRemoteTurn = useCallback(
+    (activeSessionId: string, turnId: string) =>
+      source.cancelScenarioAssistantTurn?.(activeSessionId, turnId) ?? Promise.resolve(undefined),
+    [source]
+  );
+  const { applySnapshot, cancelActiveTurn } = useAssistantStream({
+    open,
+    sessionId,
+    sessionRef,
+    subscribe: subscribeScenarioEvents,
+    onSession: onStreamSession,
+    cancelTurn: cancelRemoteTurn
+  });
+
+  const syncScenarioAssistantSession = useCallback(
+    (nextSession: ScenarioAssistantSessionView, expectedSessionId?: string) => {
+      if (expectedSessionId && sessionRef.current?.id !== expectedSessionId) return;
+      applySnapshot(nextSession, expectedSessionId ?? nextSession.id);
+    },
+    [applySnapshot]
+  );
+  syncScenarioAssistantSessionRef.current = syncScenarioAssistantSession;
 
   const cancelAssistantTurn = useCallback(() => {
     const activeTurn = assistantTurnRef.current;
-    if (!activeTurn) return;
-    abortActiveAssistantTurn();
-    setInput(activeTurn.prompt);
+    const activeSessionId = activeTurn?.sessionId ?? sessionId;
+    const backendTurnId = activeTurn?.clientTurnId ?? sessionRef.current?.activeTurnId;
+    if (!activeTurn && !backendTurnId) return;
+    cancelActiveTurn(activeSessionId, backendTurnId);
+    if (activeTurn) {
+      abortActiveAssistantTurn();
+      setInput(activeTurn.prompt);
+    }
     setLoading(false);
     setTurnCancelable(false);
-  }, [abortActiveAssistantTurn]);
+  }, [abortActiveAssistantTurn, cancelActiveTurn, sessionId]);
 
   const closeScenarioAssistantSession = (id: string) => {
     resetLocalSessionState();
@@ -312,6 +372,7 @@ export function ScenarioAssistantDialog({
     open,
     loading,
     session?.messages.length,
+    session?.streamingMessage?.text,
     session?.pendingToolCalls.length,
     session?.warnings.length
   ]);
@@ -333,14 +394,22 @@ export function ScenarioAssistantDialog({
     if (!trimmed) return;
     const turnId = ++assistantTurnCounterRef.current;
     const controller = new AbortController();
-    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const clientTurnId = crypto.randomUUID();
+    const optimisticMessageId = clientTurnId;
     const optimisticMessage: ScenarioAssistantSessionView['messages'][number] = {
       id: optimisticMessageId,
       role: 'user',
       text: trimmed,
       createdAt: new Date().toISOString()
     };
-    assistantTurnRef.current = { id: turnId, controller, prompt: trimmed };
+    optimisticMessagesRef.current.set(optimisticMessageId, optimisticMessage);
+    assistantTurnRef.current = {
+      id: turnId,
+      controller,
+      prompt: trimmed,
+      clientTurnId,
+      sessionId
+    };
     setTurnCancelable(true);
     setSession((prev) =>
       prev
@@ -353,9 +422,14 @@ export function ScenarioAssistantDialog({
     setInput('');
     setLoading(true);
     try {
-      const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed, controller.signal);
+      const resp = await source.sendScenarioAssistantMessage(
+        sessionId,
+        trimmed,
+        controller.signal,
+        clientTurnId
+      );
       if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
-      syncScenarioAssistantSession(resp.session);
+      syncScenarioAssistantSession(resp.session, sessionId);
     } catch (error: unknown) {
       if (
         isAbortError(error) ||
@@ -371,6 +445,7 @@ export function ScenarioAssistantDialog({
             }
           : prev
       );
+      optimisticMessagesRef.current.delete(optimisticMessageId);
       setInput((prev) => (prev.trim() ? prev : trimmed));
       toast({
         title: 'Scenario Assistant error',
@@ -404,27 +479,21 @@ export function ScenarioAssistantDialog({
     void sendMessage(handoffMessage);
   }, [open, sessionId, session, canUseAssistant, initialUserMessage]);
 
-  useEffect(() => {
-    if (!open || !sessionId || !session) return;
-    return source.subscribeScenarioAssistantSessionEvents(sessionId, (event) => {
-      syncScenarioAssistantSession(event.payload.session);
-    });
-  }, [open, sessionId, source, syncScenarioAssistantSession]);
-
   const handleApprove = async (callId: string) => {
     if (!sessionId) return;
     setLoading(true);
     try {
       const resp = await source.approveScenarioAssistantToolCall(sessionId, callId);
-      syncScenarioAssistantSession(resp.session);
+      syncScenarioAssistantSession(resp.session, sessionId);
     } catch (error: unknown) {
+      if (sessionRef.current?.id !== sessionId) return;
       toast({
         title: 'Tool call failed',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
-      setLoading(false);
+      if (sessionRef.current?.id === sessionId) setLoading(false);
     }
   };
 
@@ -433,15 +502,16 @@ export function ScenarioAssistantDialog({
     setLoading(true);
     try {
       const resp = await source.denyScenarioAssistantToolCall(sessionId, callId);
-      syncScenarioAssistantSession(resp.session);
+      syncScenarioAssistantSession(resp.session, sessionId);
     } catch (error: unknown) {
+      if (sessionRef.current?.id !== sessionId) return;
       toast({
         title: 'Could not deny tool call',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
-      setLoading(false);
+      if (sessionRef.current?.id === sessionId) setLoading(false);
     }
   };
 
@@ -450,15 +520,16 @@ export function ScenarioAssistantDialog({
     setLoading(true);
     try {
       const resp = await source.approveAllScenarioAssistantToolCalls(sessionId);
-      syncScenarioAssistantSession(resp.session);
+      syncScenarioAssistantSession(resp.session, sessionId);
     } catch (error: unknown) {
+      if (sessionRef.current?.id !== sessionId) return;
       toast({
         title: 'Could not approve all tool calls',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
-      setLoading(false);
+      if (sessionRef.current?.id === sessionId) setLoading(false);
     }
   };
 
@@ -556,6 +627,10 @@ export function ScenarioAssistantDialog({
     if (sessionId) closeScenarioAssistantSession(sessionId);
   };
 
+  const displayedMessages = session
+    ? assistantMessagesWithStreaming(session.messages, session.streamingMessage ?? undefined)
+    : [];
+
   return (
     <>
       {!open && sessionId && (
@@ -642,7 +717,7 @@ export function ScenarioAssistantDialog({
                       {warning}
                     </div>
                   ))}
-                  {session?.messages.map((message) => (
+                  {displayedMessages.map((message) => (
                     <Fragment key={message.id}>
                       {(() => {
                         const toolCallIds =

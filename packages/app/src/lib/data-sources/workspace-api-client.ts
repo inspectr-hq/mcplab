@@ -103,7 +103,9 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
     'tool_call_approved',
     'tool_call_denied',
     'tool_call_resolved',
+    'assistant_message_delta',
     'assistant_message_completed',
+    'session_snapshot',
     'session_warning',
     'session_error',
     'session_finished'
@@ -302,14 +304,24 @@ export const workspaceApiClient = {
     ),
   getResultAssistantSession: (sessionId: string) =>
     request<{ session: ResultAssistantSessionView }>(`/api/result-assistant/sessions/${sessionId}`),
-  sendResultAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendResultAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
+    ),
+  cancelResultAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/result-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
     ),
   approveResultAssistantToolCall: (
     sessionId: string,
@@ -413,14 +425,24 @@ export const workspaceApiClient = {
     request<{ session: ScenarioAssistantSessionView }>(
       `/api/scenario-assistant/sessions/${sessionId}`
     ),
-  sendScenarioAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendScenarioAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
+    ),
+  cancelScenarioAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/scenario-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
     ),
   approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
