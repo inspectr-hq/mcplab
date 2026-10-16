@@ -24,7 +24,7 @@ const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
         runsDir: '/tmp/runs',
         librariesDir: '/tmp/libs',
         defaultQueueWorkers: 3,
-        scenarioAssistantAgentName: 'assistant-1',
+        assistantAgentName: 'assistant-1',
         evaluationJudgeAgentName: 'assistant-1'
       }),
       updateWorkspaceSettings: vi.fn().mockResolvedValue({
@@ -33,7 +33,7 @@ const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
         runsDir: '/tmp/runs',
         librariesDir: '/tmp/libs',
         defaultQueueWorkers: 4,
-        scenarioAssistantAgentName: 'assistant-1',
+        assistantAgentName: 'assistant-1',
         evaluationJudgeAgentName: 'assistant-1'
       })
     }

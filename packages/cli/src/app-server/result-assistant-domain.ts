@@ -1,58 +1,44 @@
 import type { ServerResponse } from 'node:http';
 import type {
-  AgentConfig,
   LlmAgentConfig,
-  LlmMessage,
+  AssistantRuntimeMessage,
+  AssistantRuntimeEvent,
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
-import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
+import { McpClientManager } from '@inspectr/mcplab-core';
 import {
+  ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+  assistantToolDisplay,
+  ASSISTANT_TOOL_TIMEOUT_MS,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
-  formatAssistantToolName,
-  newAssistantEntityId,
   touchSession,
-  throwIfAborted,
   truncateJson,
   withTimeout
 } from './assistant-common.js';
-import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
-import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
+import { setupAssistantRuntimeSession } from './assistant-service.js';
+import {
+  isResultAssistantAllowedTool,
+  isResultAssistantAutoApprovedTool
+} from './result-assistant-tools.js';
+import type {
+  AssistantRuntimeDefinition,
+  AssistantToolDisplay,
+  AssistantRuntimeFactory,
+  AssistantRuntimeSession
+} from './assistant-runtime-contract.js';
+import { APPROVAL_GUIDANCE } from './assistant-runtime-policy.js';
 
-interface ParsedAssistantToolCall {
+type ResultAssistantChatMessage = AssistantRuntimeMessage;
+
+export interface ResultAssistantReferenceReport {
+  path: string;
+  relativePath: string;
   name: string;
-  arguments?: unknown;
-}
-
-interface ParsedModelOutput {
-  type: 'assistant_message' | 'tool_call_request';
-  text: string;
-  toolCall?: ParsedAssistantToolCall;
-}
-
-interface ResultAssistantPendingToolCall {
-  id: string;
-  server: string;
-  tool: string;
-  publicToolName: string;
-  arguments: unknown;
-  status: 'pending' | 'approved' | 'denied' | 'error';
-  createdAt: string;
-  resultPreview?: string;
-  error?: string;
-}
-
-interface ResultAssistantChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool' | 'system';
-  text: string;
-  createdAt: string;
-  pendingToolCallId?: string;
-  toolRequestServer?: string;
-  toolRequestName?: string;
-  toolRequestPublicName?: string;
+  sizeBytes: number;
+  mtime: string;
 }
 
 export interface ResultAssistantSession {
@@ -62,36 +48,54 @@ export interface ResultAssistantSession {
   createdAt: number;
   lastTouchedAt: number;
   selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  toolsLoaded: number;
+  toolServers: string[];
+  initialMessages: ResultAssistantChatMessage[];
+  clients: Set<ServerResponse>;
+  runtime: AssistantRuntimeSession;
+}
+
+export type ResultAssistantSessionInitializer = Omit<ResultAssistantSession, 'runtime'>;
+
+interface ResultAssistantResources {
   agentConfig: LlmAgentConfig;
   resultSummary: ResultsJson | null;
-  referenceReportsForRun: Array<{
-    path: string;
-    relativePath: string;
-    name: string;
-    sizeBytes: number;
-    mtime: string;
-  }>;
+  referenceReportsForRun: ResultAssistantReferenceReport[];
   mcp: McpClientManager;
   tools: ToolDef[];
-  toolPublicMap: Map<string, { server: string; tool: string }>;
-  pendingToolCalls: ResultAssistantPendingToolCall[];
-  chatMessages: ResultAssistantChatMessage[];
-  llmMessages: LlmMessage[];
+  toolPublicMap: Map<string, { server: string; tool: string; display?: AssistantToolDisplay }>;
   systemPromptCache?: string;
-  events: AssistantSseEvent[];
-  clients: Set<ServerResponse>;
+}
+
+function createResultAssistantResources(
+  agentConfig: LlmAgentConfig,
+  resultSummary: ResultsJson | null,
+  referenceReportsForRun: ResultAssistantReferenceReport[]
+): ResultAssistantResources {
+  return {
+    agentConfig,
+    mcp: new McpClientManager(),
+    tools: [],
+    toolPublicMap: new Map(),
+    resultSummary,
+    referenceReportsForRun
+  };
 }
 
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
-const RESULT_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
-const RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS = 3;
 const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
 
+// The hard TTL also aborts work in abandoned sessions; active operations refresh lastTouchedAt.
 export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
+  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, (session) => {
+    void Promise.resolve(session.runtime.dispose()).catch(() => {});
+    endAssistantSseClients(session);
+  });
 }
 
 export function touchResultAssistantSession(session: ResultAssistantSession): void {
@@ -99,6 +103,7 @@ export function touchResultAssistantSession(session: ResultAssistantSession): vo
 }
 
 export function resultAssistantSessionView(session: ResultAssistantSession) {
+  const runtimeSnapshot = session.runtime.getSnapshot();
   return {
     id: session.id,
     scope: session.scope,
@@ -106,159 +111,176 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
     createdAt: new Date(session.createdAt).toISOString(),
     updatedAt: new Date(session.lastTouchedAt).toISOString(),
     selectedAssistantAgentName: session.selectedAssistantAgentName,
-    model: session.agentConfig.model,
-    provider: session.agentConfig.provider,
-    messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls
+    model: session.model,
+    provider: session.provider,
+    toolsLoaded: session.toolsLoaded,
+    toolServers: session.toolServers,
+    revision: runtimeSnapshot.revision,
+    messages: runtimeSnapshot.messages,
+    pendingToolCalls: runtimeSnapshot.pendingToolCalls,
+    activeTurnId: runtimeSnapshot.activeTurnId,
+    streamingMessage: runtimeSnapshot.streamingMessage
   };
 }
 
-export async function preloadResultAssistantTools(
-  session: ResultAssistantSession,
-  mcpServerUrl: string
-): Promise<void> {
-  await session.mcp.connectAll({
-    [RESULT_ASSISTANT_MCP_SERVER_NAME]: {
-      transport: 'http',
-      url: mcpServerUrl
-    }
-  });
-  const discovered = await session.mcp.listTools(RESULT_ASSISTANT_MCP_SERVER_NAME);
-  const usedNames = new Set<string>();
-  for (const tool of discovered) {
-    if (!isResultAssistantAllowedTool(tool.name)) continue;
-    const publicName = makeAssistantToolPublicName(
-      RESULT_ASSISTANT_MCP_SERVER_NAME,
-      tool.name,
-      usedNames
-    );
-    session.toolPublicMap.set(publicName, {
-      server: RESULT_ASSISTANT_MCP_SERVER_NAME,
-      tool: tool.name
-    });
-    session.tools.push({
-      ...tool,
-      name: publicName,
-      description: `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${
-        tool.name
-      }]`.trim()
-    });
-  }
-}
-
-export async function continueResultAssistantTurn(
-  session: ResultAssistantSession,
-  signal?: AbortSignal
-): Promise<{
-  session: ReturnType<typeof resultAssistantSessionView>;
-  response: {
-    type: 'assistant_message' | 'tool_call_request';
-    text: string;
-    pendingToolCall?: ResultAssistantPendingToolCall;
+function createResultAssistantSetup(
+  session: ResultAssistantSessionInitializer,
+  agentConfig: LlmAgentConfig,
+  resultSummary: ResultsJson | null,
+  referenceReportsForRun: ResultAssistantResources['referenceReportsForRun'],
+  refreshReports: () => ResultAssistantResources['referenceReportsForRun']
+) {
+  const state = createResultAssistantResources(agentConfig, resultSummary, referenceReportsForRun);
+  let disposePromise: Promise<void> | undefined;
+  const dispose = () => {
+    disposePromise ??= Promise.resolve().then(() => state.mcp.disconnectAll());
+    return disposePromise;
   };
-}> {
-  const pendingCount = session.pendingToolCalls.filter((c) => c.status === 'pending').length;
-  if (pendingCount > RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS) {
-    throw new Error('Result Assistant exceeded maximum pending tool calls for this turn');
-  }
-  const modelOutput = await resultAssistantChatModel(session, signal);
-  throwIfAborted(signal);
-  if (modelOutput.type === 'tool_call_request') {
-    const requested = modelOutput.toolCall!;
-    const mapping = session.toolPublicMap.get(requested.name);
-    if (!mapping) {
-      throw new Error(
-        `Result Assistant requested unknown tool '${
-          requested.name
-        }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
-      );
-    }
-    const pending: ResultAssistantPendingToolCall = {
-      id: newAssistantEntityId('ratc'),
-      server: mapping.server,
-      tool: mapping.tool,
-      publicToolName: requested.name,
-      arguments: requested.arguments ?? {},
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    const toolRequestText = `I need to call '${formatAssistantToolName(
-      pending.publicToolName
-    )}' to help with this request.`;
-    throwIfAborted(signal);
-    session.pendingToolCalls.push(pending);
-    session.chatMessages.push({
-      id: newAssistantEntityId('msg'),
-      role: 'assistant',
-      text: toolRequestText,
-      createdAt: new Date().toISOString(),
-      pendingToolCallId: pending.id,
-      toolRequestServer: pending.server,
-      toolRequestName: pending.tool,
-      toolRequestPublicName: pending.publicToolName
-    });
-    session.llmMessages.push({
-      role: 'assistant',
-      content: toolRequestText,
-      tool_calls: [{ id: pending.id, name: pending.publicToolName, arguments: pending.arguments }]
-    });
-    touchResultAssistantSession(session);
-    return {
-      session: resultAssistantSessionView(session),
-      response: { type: 'tool_call_request', text: toolRequestText, pendingToolCall: pending }
-    };
-  }
-
-  session.chatMessages.push({
-    id: newAssistantEntityId('msg'),
-    role: 'assistant',
-    text: modelOutput.text,
-    createdAt: new Date().toISOString()
-  });
-  session.llmMessages.push({ role: 'assistant', content: modelOutput.text });
-  touchResultAssistantSession(session);
   return {
-    session: resultAssistantSessionView(session),
-    response: { type: 'assistant_message', text: modelOutput.text }
+    dispose,
+    async preload(mcpServerUrl: string): Promise<void> {
+      await state.mcp.connectAll({
+        [RESULT_ASSISTANT_MCP_SERVER_NAME]: { transport: 'http', url: mcpServerUrl }
+      });
+      const discovered = await state.mcp.listTools(RESULT_ASSISTANT_MCP_SERVER_NAME);
+      const usedNames = new Set<string>();
+      for (const tool of discovered) {
+        if (!isResultAssistantAllowedTool(tool.name)) continue;
+        const publicName = makeAssistantToolPublicName(
+          RESULT_ASSISTANT_MCP_SERVER_NAME,
+          tool.name,
+          usedNames
+        );
+        state.toolPublicMap.set(publicName, {
+          server: RESULT_ASSISTANT_MCP_SERVER_NAME,
+          tool: tool.name,
+          display: assistantToolDisplay(tool)
+        });
+        state.tools.push({
+          ...tool,
+          name: publicName,
+          description:
+            `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${tool.name}]`.trim()
+        });
+      }
+      session.toolsLoaded = state.tools.length;
+      session.toolServers = Array.from(
+        new Set(state.tools.map((tool) => tool.name.split('__')[0]))
+      );
+    },
+    createRuntimeDefinition(): AssistantRuntimeDefinition {
+      return {
+        assistant: 'result',
+        agent: state.agentConfig,
+        context: {
+          scope: session.scope,
+          runId: session.runId,
+          resultSummary: state.resultSummary,
+          referenceReportsForRun: state.referenceReportsForRun
+        },
+        initialMessages: session.initialMessages,
+        dispose,
+        getSystemPrompt: () => resultAssistantSystemPrompt(session, state),
+        tools: state.tools.map((tool) => {
+          const mapping = state.toolPublicMap.get(tool.name)!;
+          return {
+            name: tool.name,
+            server: mapping.server,
+            tool: mapping.tool,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            display: mapping.display,
+            execute: async (arguments_, signal) => {
+              const result = await withTimeout(
+                () => state.mcp.callTool(mapping.server, mapping.tool, arguments_, { signal }),
+                ASSISTANT_TOOL_TIMEOUT_MS,
+                ASSISTANT_TOOL_TIMEOUT_MESSAGE,
+                signal
+              );
+              if (mapping.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
+                state.referenceReportsForRun = refreshReports();
+                state.systemPromptCache = undefined;
+              }
+              return result;
+            }
+          };
+        }),
+        approvalPolicy: (name) => {
+          const rawName = state.toolPublicMap.get(name)?.tool;
+          if (!rawName) return 'approval_required';
+          return isResultAssistantAllowedTool(rawName) && isResultAssistantAutoApprovedTool(rawName)
+            ? 'automatic'
+            : 'approval_required';
+        }
+      };
+    }
   };
 }
 
-export async function executeResultAssistantToolCall(
-  session: ResultAssistantSession,
-  pending: ResultAssistantPendingToolCall,
-  signal?: AbortSignal
-): Promise<unknown> {
-  const timeoutMs = 30_000;
-  return withTimeout(
-    () =>
-      session.mcp.callTool(pending.server, pending.tool, pending.arguments, {
-        signal
-      }),
-    timeoutMs,
-    `Tool call timed out after ${timeoutMs}ms`,
-    signal
+export async function setupResultAssistantSession(params: {
+  session: ResultAssistantSessionInitializer;
+  agentConfig: LlmAgentConfig;
+  resultSummary: ResultsJson | null;
+  referenceReportsForRun: ResultAssistantResources['referenceReportsForRun'];
+  mcpServerUrl: string;
+  refreshReports: () => ResultAssistantResources['referenceReportsForRun'];
+  assistantRuntimeFactory: AssistantRuntimeFactory;
+  onEvent(event: AssistantRuntimeEvent, session: ResultAssistantSession): void;
+  onActivity(session: ResultAssistantSession): void;
+}): Promise<ResultAssistantSession> {
+  const setup = createResultAssistantSetup(
+    params.session,
+    params.agentConfig,
+    params.resultSummary,
+    params.referenceReportsForRun,
+    params.refreshReports
   );
+  return setupAssistantRuntimeSession({
+    session: params.session,
+    factory: params.assistantRuntimeFactory,
+    disposeSetup: setup.dispose,
+    prepare: async (emitInitialEvent) => {
+      try {
+        await setup.preload(params.mcpServerUrl);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        params.session.initialMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'system',
+          text: `Warning: could not preload MCPLab MCP tools: ${message}`,
+          createdAt: new Date().toISOString()
+        });
+        emitInitialEvent({
+          type: 'session_warning',
+          ts: new Date().toISOString(),
+          payload: { warning: message }
+        });
+      }
+      return setup.createRuntimeDefinition();
+    },
+    onEvent: params.onEvent,
+    onActivity: params.onActivity
+  });
 }
 
-export function summarizeToolResultForResultAssistant(result: unknown): string {
-  return truncateJson(result, RESULT_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
-}
-
-function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
-  if (session.systemPromptCache) return session.systemPromptCache;
+function resultAssistantSystemPrompt(
+  session: ResultAssistantSessionInitializer,
+  state: ResultAssistantResources
+): string {
+  if (state.systemPromptCache) return state.systemPromptCache;
   const scenarioLimit = 30;
-  const totalScenarioCount = session.resultSummary?.scenarios.length ?? 0;
+  const totalScenarioCount = state.resultSummary?.scenarios.length ?? 0;
   const omittedScenarioCount = Math.max(0, totalScenarioCount - scenarioLimit);
   const scenarioSummaries =
-    session.resultSummary?.scenarios.slice(0, scenarioLimit).map((sc) => ({
+    state.resultSummary?.scenarios.slice(0, scenarioLimit).map((sc) => ({
       scenario_id: sc.scenario_id,
       agent: sc.agent,
       pass_rate: sc.pass_rate,
       run_count: sc.runs.length,
       sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
     })) ?? [];
-  const toolLines = session.tools.map((tool) => {
-    const mapping = session.toolPublicMap.get(tool.name);
+  const toolLines = state.tools.map((tool) => {
+    const mapping = state.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
     return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${
       mapping?.tool ?? tool.name
@@ -270,7 +292,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
-    'If you need a tool, request exactly one tool call and wait for approval.',
+    APPROVAL_GUIDANCE,
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
       ? 'Scope: all historical runs. Use mcplab_results_search for broad retrieval, mcplab_results_context for focused excerpts, and mcplab_read_run_artifact only for raw fallback reads.'
@@ -280,16 +302,16 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     session.scope === 'all_runs'
       ? 'Run result context: none preloaded. You can inspect any run from history using available tools.'
       : `Run result context: ${JSON.stringify({
-          run_id: session.resultSummary?.metadata.run_id,
-          timestamp: session.resultSummary?.metadata.timestamp,
-          run_note: session.resultSummary?.metadata.run_note ?? null,
-          config_hash: session.resultSummary?.metadata.config_hash,
-          summary: session.resultSummary?.summary,
+          run_id: state.resultSummary?.metadata.run_id,
+          timestamp: state.resultSummary?.metadata.timestamp,
+          run_note: state.resultSummary?.metadata.run_note ?? null,
+          config_hash: state.resultSummary?.metadata.config_hash,
+          summary: state.resultSummary?.summary,
           scenario_count_total: totalScenarioCount,
           scenario_count_included: scenarioSummaries.length,
           scenario_count_omitted: omittedScenarioCount,
           scenarios: scenarioSummaries,
-          linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
+          linked_custom_reports: state.referenceReportsForRun.slice(0, 20)
         })}`,
     session.scope === 'all_runs'
       ? 'For custom markdown reports across runs, use mcplab_search_markdown_reports (no query needed for full listing, or filter by run_id/name). Then read selected files with mcplab_read_markdown_report.'
@@ -298,31 +320,6 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'
   ].join('\n');
-  session.systemPromptCache = prompt;
+  state.systemPromptCache = prompt;
   return prompt;
-}
-
-async function resultAssistantChatModel(
-  session: ResultAssistantSession,
-  signal?: AbortSignal
-): Promise<ParsedModelOutput> {
-  const response = await chatWithAgent({
-    agent: session.agentConfig,
-    messages: session.llmMessages,
-    tools: session.tools,
-    system: resultAssistantSystemPrompt(session),
-    signal
-  });
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    const [first] = response.tool_calls;
-    const baseText =
-      response.content?.trim() ||
-      `I need to call '${formatAssistantToolName(first.name)}' to help with this request.`;
-    return {
-      type: 'tool_call_request',
-      text: baseText,
-      toolCall: { name: first.name, arguments: first.arguments ?? {} }
-    };
-  }
-  return { type: 'assistant_message', text: response.content?.trim() ?? '' };
 }

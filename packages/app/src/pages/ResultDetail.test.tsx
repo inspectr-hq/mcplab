@@ -783,7 +783,7 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByText('Scenario 2')).not.toBeInTheDocument();
   });
 
-  it('shows resolved assistant tool calls as completed without approval actions', async () => {
+  it('renders every assistant tool call with its custom status and matching approval actions', async () => {
     const result = makeResult();
     getResultMock.mockResolvedValue(result);
     mockResultAssistantState.assistantMessages = [
@@ -793,6 +793,7 @@ describe('ResultDetail conversation toggle', () => {
         text: 'I need to inspect the tags.',
         createdAt: '2026-02-08T10:00:00.000Z',
         pendingToolCallId: 'call-1',
+        pendingToolCallIds: ['call-1', 'call-2'],
         toolRequestName: 'search_tags',
         toolRequestPublicName: 'mcplab__search_tags'
       }
@@ -807,6 +808,15 @@ describe('ResultDetail conversation toggle', () => {
         status: 'approved',
         createdAt: '2026-02-08T10:00:01.000Z',
         resultPreview: 'Approved'
+      },
+      {
+        id: 'call-2',
+        server: 'mcplab',
+        tool: 'list_tags',
+        publicToolName: 'mcplab__list_tags',
+        arguments: {},
+        status: 'pending',
+        createdAt: '2026-02-08T10:00:02.000Z'
       }
     ];
 
@@ -821,10 +831,16 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
 
-    expect(await screen.findByText('Tool call search tags')).toBeInTheDocument();
+    expect(await screen.findByText('Search tags')).toBeInTheDocument();
+    expect(screen.getByText('List tags')).toBeInTheDocument();
     expect(screen.getByText('Completed')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
+    expect(screen.getByText('Needs approval')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Deny' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(mockResultAssistantState.approveResultAssistantToolCall).toHaveBeenCalledWith('call-2');
+    expect(mockResultAssistantState.denyResultAssistantToolCall).toHaveBeenCalledWith('call-2');
   });
 
   it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {

@@ -21,7 +21,6 @@ tsconfig.tsbuildinfo
 .npm-cache
 packages/app/.vite
 docs/plans
-.changeset
 skills-lock.json
 .code-review-graph/
 .mcp.json

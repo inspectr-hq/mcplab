@@ -43,7 +43,7 @@ const ManageTestCases = () => {
     'name'
   );
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
+  const [assistantAgentName, setAssistantAgentName] = useState<string>('');
   const [draftScenario, setDraftScenario] = useState<Scenario | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>(
     'idle'
@@ -264,11 +264,11 @@ const ManageTestCases = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setScenarioAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
+        setAssistantAgentName(settings.assistantAgentName ?? '');
       })
       .catch(() => {
         if (!active) return;
-        setScenarioAssistantAgentName('');
+        setAssistantAgentName('');
       });
     return () => {
       active = false;
@@ -360,7 +360,7 @@ const ManageTestCases = () => {
     };
   }, []);
 
-  const effectiveAssistantAgentName = scenarioAssistantAgentName || agents[0]?.name || '';
+  const effectiveAssistantAgentName = assistantAgentName || agents[0]?.name || '';
 
   return (
     <div className="space-y-6">

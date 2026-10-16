@@ -6,7 +6,7 @@ vi.mock('@inspectr/mcplab-core', async () => ({
   chatWithAgent: chatWithAgentMock
 }));
 
-import { chatWithJsonRetry, parseJsonFromAssistantText } from './assistant-common.js';
+import { chatWithJsonRetry, parseJsonFromAssistantText } from './one-shot-json.js';
 
 it('uses the caller response schema when retrying invalid JSON', async () => {
   chatWithAgentMock

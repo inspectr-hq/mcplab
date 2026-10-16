@@ -178,7 +178,7 @@ const ToolAnalysisPage = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
+        setSettingsAssistantAgentName(settings.assistantAgentName ?? '');
       })
       .catch(() => {
         if (active) setSettingsAssistantAgentName('');
@@ -626,7 +626,7 @@ const ToolAnalysisPage = () => {
                   <Link to="/libraries/agents" className="underline">
                     Agents
                   </Link>{' '}
-                  and optionally set the default Scenario Assistant Agent in{' '}
+                  and optionally set the default Assistant Agent in{' '}
                   <Link to="/settings" className="underline">
                     Settings
                   </Link>

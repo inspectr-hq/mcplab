@@ -1,11 +1,6 @@
-import { Fragment, useCallback, useEffect, useState, useRef } from 'react';
-import { Bot, CheckCircle2, Copy, Loader2, Minimize2, Sparkles, Wrench, X } from 'lucide-react';
-import {
-  AssistantComposer,
-  AssistantMessageRow,
-  AssistantToolCallCard,
-  AssistantTypingIndicator
-} from '@/components/assistant/AssistantChat';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { Minimize2, Sparkles, Wrench, X } from 'lucide-react';
+import { AssistantConversation } from '@/components/assistant/AssistantConversation';
 import {
   Dialog,
   DialogContent,
@@ -14,20 +9,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDataSource } from '@/contexts/DataSourceContext';
-import { toast } from '@/hooks/use-toast';
-import { isAbortError } from '@/lib/abort';
-import { formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import type { AgentConfig, EvalRule, Scenario, ServerConfig } from '@/types/eval';
-import type {
-  ScenarioAssistantSessionView,
-  ScenarioAssistantSuggestionBundle,
-  ScenarioAssistantPendingToolCall
-} from '@/lib/data-sources/types';
+import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
+import { createScenarioAssistantApi } from '@/lib/assistant-session-api';
+import { useAssistantSession } from '@/hooks/use-assistant-session';
+import { ScenarioSuggestions } from './scenario-suggestions/ScenarioSuggestions';
 
 const SCENARIO_ASSISTANT_SNIPPETS = [
   {
@@ -46,10 +34,8 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     label: 'Generate Structured Updates',
     description: 'Return apply-ready Checks and Value Capture suggestions.',
     prompt: [
-      'Propose concrete scenario updates and include structured suggestions that can be applied directly.',
-      'Return ONLY valid JSON envelope and no markdown.',
-      'Required shape:',
-      '{"type":"assistant_message","text":"short rationale","suggestions":{"evalRules":{"replacement":[...]}, "extractRules":{"replacement":[...]}}}',
+      'Propose concrete scenario updates and submit them with the local propose_scenario_changes tool so they can be applied directly.',
+      'Then explain the proposal in ordinary prose.',
       'If tool usage is clear, include at least one required_tool check.',
       'For argument validation, use tool_input_contains with tool and value, tool_input_regex with tool and value, or tool_input_jsonpath with tool and path plus optional equals.',
       'Prefer deterministic checks and concise capture patterns.'
@@ -59,7 +45,7 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     label: 'Improve Prompt Determinism',
     description: 'Reduce ambiguity and improve reproducibility.',
     prompt:
-      "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
+      "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic, without changing the intent of what is being tested."
   },
   {
     label: 'Generate Scenario Draft',
@@ -68,56 +54,6 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
       'Based on the current tool configuration and context, generate a complete scenario draft. Include a clear prompt, realistic expected tool calls with arguments, meaningful checks that validate the core behavior, and at least one value capture rule. Explain your choices so I can adjust them.'
   }
 ] as const;
-
-type SuggestedEvalRule = NonNullable<
-  ScenarioAssistantSuggestionBundle['evalRules']
->['replacement'][number];
-type SuggestedExtractRule = NonNullable<
-  ScenarioAssistantSuggestionBundle['extractRules']
->['replacement'][number];
-
-function sequenceFromSuggestedRule(rule: SuggestedEvalRule): string[] {
-  if (Array.isArray(rule.sequence)) {
-    return rule.sequence.map((toolName) => toolName.trim()).filter(Boolean);
-  }
-  const value = typeof rule.value === 'string' ? rule.value.trim() : '';
-  if (!value || value.toLowerCase() === 'tool sequence') return [];
-  return value
-    .split(/\s*(?:->|,|\n)\s*/)
-    .map((toolName) => toolName.trim())
-    .filter(Boolean);
-}
-
-function normalizeSuggestedEvalRules(rules: SuggestedEvalRule[]): {
-  rules: EvalRule[];
-  skippedToolSequences: number;
-} {
-  const normalized: EvalRule[] = [];
-  let skippedToolSequences = 0;
-  for (const rule of rules) {
-    if (rule.type === 'tool_sequence') {
-      const sequence = sequenceFromSuggestedRule(rule);
-      if (sequence.length > 0) {
-        normalized.push({ type: 'tool_sequence', sequence });
-      } else {
-        skippedToolSequences += 1;
-      }
-      continue;
-    }
-    normalized.push(rule);
-  }
-  return { rules: normalized, skippedToolSequences };
-}
-
-function formatSuggestedEvalRuleLabel(rule: SuggestedEvalRule): string {
-  if (rule.type === 'tool_sequence') {
-    const sequence = sequenceFromSuggestedRule(rule);
-    return sequence.length > 0
-      ? `Tool sequence · ${sequence.join(' -> ')}`
-      : 'Tool sequence · No tool steps';
-  }
-  return formatEvalRuleLabel(rule);
-}
 
 interface ScenarioAssistantDialogProps {
   open: boolean;
@@ -149,154 +85,85 @@ export function ScenarioAssistantDialog({
   onApplyPatch
 }: ScenarioAssistantDialogProps) {
   const { source } = useDataSource();
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [turnCancelable, setTurnCancelable] = useState(false);
   const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const initialMessageSentRef = useRef<string | null>(null);
-  const assistantTurnRef = useRef<{
-    id: number;
-    controller: AbortController;
-    prompt: string;
-  } | null>(null);
-  const assistantTurnCounterRef = useRef(0);
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
   const resolvedAssistantAgentName = defaultAssistantAgentName || agents[0]?.id || '';
+  const canUseAssistant =
+    agents.length > 0 && scenario.serverIds.length > 0 && Boolean(resolvedAssistantAgentName);
 
-  const abortActiveAssistantTurn = useCallback(() => {
-    const activeTurn = assistantTurnRef.current;
-    if (!activeTurn) return;
-    activeTurn.controller.abort();
-    // Don't null assistantTurnRef here — the finally block in sendMessage
-    // guards on the turn ID to perform cleanup, and nulling the ref would
-    // cause that guard to fail, bypassing setLoading(false).
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!resolvedAssistantAgentName || sessionId) return;
-    let cancelled = false;
-    setLoading(true);
-    const bootstrap = async () => {
-      const selectedOauthServers = Array.from(
-        new Set(
-          scenario.serverIds.filter((serverId) => {
-            const server = servers.find((entry) => entry.id === serverId);
-            return server?.authType === 'oauth2';
-          })
-        )
-      );
-      await ensureOAuthForServers({ serverNames: selectedOauthServers, source });
-
-      const resp = await source.createScenarioAssistantSession({
-        configId,
-        configPath,
-        scenarioId: scenario.id,
-        selectedAssistantAgentName: resolvedAssistantAgentName,
-        context: {
-          scenario: {
-            id: scenario.id,
-            name: scenario.name,
-            prompt: scenario.prompt,
-            serverNames: scenario.serverIds,
-            evalRules: scenario.evalRules,
-            extractRules: scenario.extractRules
-          },
-          availableServers: servers.map((server) => ({
-            name: server.name || server.id,
-            url: server.url
-          })),
-          availableAgents: agents.map((agent) => ({
-            name: agent.name || agent.id,
-            provider: agent.provider,
-            model: agent.model
-          }))
-        }
-      });
-      if (cancelled) return;
-      setSessionId(resp.sessionId);
-      syncScenarioAssistantSession(resp.session);
-      setLoading(false);
-    };
-    void bootstrap()
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        toast({
-          title: 'Could not start Scenario Assistant',
-          description: error instanceof Error ? error.message : String(error),
-          variant: 'destructive'
-        });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  const createSession = useCallback(async () => {
+    const selectedOauthServers = Array.from(
+      new Set(
+        scenario.serverIds.filter((serverId) => {
+          const server = servers.find((entry) => entry.id === serverId);
+          return server?.authType === 'oauth2';
+        })
+      )
+    );
+    await ensureOAuthForServers({ serverNames: selectedOauthServers, source });
+    return source.createScenarioAssistantSession({
+      configId,
+      configPath,
+      scenarioId: scenario.id,
+      selectedAssistantAgentName: resolvedAssistantAgentName,
+      context: {
+        scenario: {
+          id: scenario.id,
+          name: scenario.name,
+          prompt: scenario.prompt,
+          serverNames: scenario.serverIds,
+          evalRules: scenario.evalRules,
+          extractRules: scenario.extractRules
+        },
+        availableServers: servers.map((server) => ({
+          name: server.name || server.id,
+          url: server.url
+        })),
+        availableAgents: agents.map((agent) => ({
+          name: agent.name || agent.id,
+          provider: agent.provider,
+          model: agent.model
+        }))
+      }
+    });
+  }, [source, configId, configPath, scenario, agents, servers, resolvedAssistantAgentName]);
+  const api = useMemo(
+    () => createScenarioAssistantApi(source, createSession),
+    [source, createSession]
+  );
+  const assistant = useAssistantSession({
+    api,
     open,
-    source,
-    sessionId,
-    configId,
-    configPath,
-    scenario,
-    agents,
-    servers,
-    resolvedAssistantAgentName
-  ]);
+    label: 'Scenario Assistant',
+    autoStart: canUseAssistant
+  });
+  const { sessionId, session } = assistant;
+  const loading = assistant.busy || assistant.starting;
+  const turnCancelable = assistant.cancelable;
 
-  const resetLocalSessionState = () => {
-    abortActiveAssistantTurn();
-    setSessionId(null);
-    setSession(null);
+  const closeScenarioAssistantSession = () => {
+    assistant.reset();
     setInput('');
     setAppliedSuggestionKeys(new Set());
     initialMessageSentRef.current = null;
   };
 
-  const syncScenarioAssistantSession = useCallback((nextSession: ScenarioAssistantSessionView) => {
-    setSession((prev) => {
-      if (prev && prev.messages.length > nextSession.messages.length) {
-        return prev;
-      }
-      return nextSession;
-    });
-  }, []);
-
-  const cancelAssistantTurn = useCallback(() => {
-    const activeTurn = assistantTurnRef.current;
-    if (!activeTurn) return;
-    abortActiveAssistantTurn();
-    setInput(activeTurn.prompt);
-    setLoading(false);
-    setTurnCancelable(false);
-  }, [abortActiveAssistantTurn]);
-
-  const closeScenarioAssistantSession = (id: string) => {
-    resetLocalSessionState();
-    void source.closeScenarioAssistantSession(id).catch(() => {});
+  const cancelAssistantTurn = () => {
+    const prompt = assistant.cancel();
+    if (prompt !== undefined) setInput(prompt);
   };
 
   useEffect(() => {
-    if (open) return;
-    if (!sessionId) return;
+    if (open || !sessionId) return;
     if (preserveSessionOnCloseRef.current || preserveSessionOnClose) return;
-    closeScenarioAssistantSession(sessionId);
-  }, [open, sessionId, source, preserveSessionOnClose]);
-
-  useEffect(() => {
-    return () => {
-      abortActiveAssistantTurn();
-      if (sessionId) {
-        void source.closeScenarioAssistantSession(sessionId).catch(() => {});
-      }
-    };
-  }, [abortActiveAssistantTurn, sessionId, source]);
+    closeScenarioAssistantSession();
+    // closeScenarioAssistantSession only touches state setters and the stable session hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sessionId, preserveSessionOnClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -306,17 +173,7 @@ export function ScenarioAssistantDialog({
     if (preserveSessionOnCloseRef.current) {
       preserveSessionOnCloseRef.current = false;
     }
-    const timeout = window.setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [
-    open,
-    loading,
-    session?.messages.length,
-    session?.pendingToolCalls.length,
-    session?.warnings.length
-  ]);
+  }, [open, preserveSessionOnClose]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -326,68 +183,13 @@ export function ScenarioAssistantDialog({
     el.style.height = `${Math.max(40, next)}px`;
   }, [input, open]);
 
-  const canUseAssistant =
-    agents.length > 0 && scenario.serverIds.length > 0 && Boolean(resolvedAssistantAgentName);
-
   const sendMessage = async (message: string) => {
     if (!sessionId) return;
     const trimmed = message.trim();
     if (!trimmed) return;
-    const turnId = ++assistantTurnCounterRef.current;
-    const controller = new AbortController();
-    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const optimisticMessage: ScenarioAssistantSessionView['messages'][number] = {
-      id: optimisticMessageId,
-      role: 'user',
-      text: trimmed,
-      createdAt: new Date().toISOString()
-    };
-    assistantTurnRef.current = { id: turnId, controller, prompt: trimmed };
-    setTurnCancelable(true);
-    setSession((prev) =>
-      prev
-        ? {
-            ...prev,
-            messages: [...prev.messages, optimisticMessage]
-          }
-        : prev
-    );
     setInput('');
-    setLoading(true);
-    try {
-      const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed, controller.signal);
-      if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
-      syncScenarioAssistantSession(resp.session);
-    } catch (error: unknown) {
-      if (
-        isAbortError(error) ||
-        controller.signal.aborted ||
-        assistantTurnRef.current?.id !== turnId
-      )
-        return;
-      setSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              messages: prev.messages.filter((m) => m.id !== optimisticMessageId)
-            }
-          : prev
-      );
-      setInput((prev) => (prev.trim() ? prev : trimmed));
-      toast({
-        title: 'Scenario Assistant error',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      // cancelAssistantTurn() clears the ref synchronously, so only the active turn
-      // should reset loading state here.
-      if (assistantTurnRef.current?.id === turnId) {
-        assistantTurnRef.current = null;
-        setLoading(false);
-        setTurnCancelable(false);
-      }
-    }
+    const outcome = await assistant.send(trimmed);
+    if (outcome === 'failed') setInput((previous) => (previous.trim() ? previous : trimmed));
   };
 
   const applyScenarioSnippet = (snippet: string) => {
@@ -397,136 +199,20 @@ export function ScenarioAssistantDialog({
 
   useEffect(() => {
     if (!open || !sessionId || !session) return;
-    if (!canUseAssistant) return;
-    if (assistantTurnRef.current) return;
+    if (!canUseAssistant || assistant.busy) return;
     const handoffMessage = String(initialUserMessage ?? '').trim();
     if (!handoffMessage) return;
     if (initialMessageSentRef.current === handoffMessage) return;
     initialMessageSentRef.current = handoffMessage;
     void sendMessage(handoffMessage);
+    // sendMessage is recreated each render; the guard above makes this run once per handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sessionId, session, canUseAssistant, initialUserMessage]);
 
-  useEffect(() => {
-    if (!open || !sessionId || !session) return;
-    return source.subscribeScenarioAssistantSessionEvents(sessionId, (event) => {
-      syncScenarioAssistantSession(event.payload.session);
-    });
-  }, [open, sessionId, source, syncScenarioAssistantSession]);
-
-  const handleApprove = async (callId: string) => {
-    if (!sessionId) return;
-    setLoading(true);
-    try {
-      const resp = await source.approveScenarioAssistantToolCall(sessionId, callId);
-      syncScenarioAssistantSession(resp.session);
-    } catch (error: unknown) {
-      toast({
-        title: 'Tool call failed',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeny = async (callId: string) => {
-    if (!sessionId) return;
-    setLoading(true);
-    try {
-      const resp = await source.denyScenarioAssistantToolCall(sessionId, callId);
-      syncScenarioAssistantSession(resp.session);
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not deny tool call',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApproveAll = async () => {
-    if (!sessionId) return;
-    setLoading(true);
-    try {
-      const resp = await source.approveAllScenarioAssistantToolCalls(sessionId);
-      syncScenarioAssistantSession(resp.session);
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not approve all tool calls',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applySuggestions = (
-    messageId: string | undefined,
-    suggestions: ScenarioAssistantSuggestionBundle | undefined,
-    key: 'prompt' | 'evalRules' | 'extractRules',
-    selectedEvalRules?: SuggestedEvalRule[],
-    evalRuleMode: 'replace' | 'append' = 'replace'
-  ) => {
-    if (!suggestions) return;
-    if (key === 'prompt' && suggestions.prompt) {
-      onApplyPatch({ prompt: suggestions.prompt.replacement });
-    }
-    if (key === 'evalRules' && suggestions.evalRules) {
-      const normalized = normalizeSuggestedEvalRules(
-        selectedEvalRules ?? suggestions.evalRules.replacement
-      );
-      onApplyPatch({
-        evalRules:
-          evalRuleMode === 'append'
-            ? [...scenario.evalRules, ...normalized.rules]
-            : normalized.rules
-      });
-      if (normalized.skippedToolSequences > 0) {
-        toast({
-          title: 'Skipped invalid tool sequence',
-          description: 'The assistant suggested a sequence check without any tool steps.',
-          variant: 'destructive'
-        });
-      }
-    }
-    if (key === 'extractRules' && suggestions.extractRules) {
-      onApplyPatch({ extractRules: suggestions.extractRules.replacement });
-    }
-    if (messageId) {
-      const composite = `${messageId}:${key}`;
-      setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
-    }
-    const labelByKey: Record<typeof key, string> = {
-      prompt: 'Prompt',
-      evalRules: 'Checks',
-      extractRules: 'Value Capture Rules'
-    };
-    toast({ title: 'Applied suggestion', description: `Updated ${labelByKey[key]}` });
-  };
-
-  const applyExtractRuleSuggestions = (
-    messageId: string | undefined,
-    suggestions: ScenarioAssistantSuggestionBundle | undefined,
-    selectedExtractRules: SuggestedExtractRule[],
-    mode: 'replace' | 'append'
-  ) => {
-    if (!suggestions?.extractRules) return;
-    onApplyPatch({
-      extractRules:
-        mode === 'append'
-          ? [...scenario.extractRules, ...selectedExtractRules]
-          : selectedExtractRules
-    });
-    if (messageId) {
-      const composite = `${messageId}:extractRules`;
-      setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
-    }
-    toast({ title: 'Applied suggestion', description: 'Updated Value Capture Rules' });
-  };
+  const handleApprove = (callId: string, argumentsOverride?: unknown) =>
+    assistant.approve(callId, argumentsOverride);
+  const handleDeny = (callId: string, message?: string) => assistant.deny(callId, message);
+  const handleApproveAll = () => assistant.approveAll?.();
 
   const blurActiveElement = () => {
     const activeElement = document.activeElement;
@@ -555,8 +241,10 @@ export function ScenarioAssistantDialog({
     blurActiveElement();
     preserveSessionOnCloseRef.current = false;
     setPreserveSessionOnClose(false);
-    if (sessionId) closeScenarioAssistantSession(sessionId);
+    if (sessionId) closeScenarioAssistantSession();
   };
+
+  const displayedMessages = assistant.messages;
 
   return (
     <>
@@ -634,550 +322,59 @@ export function ScenarioAssistantDialog({
                 </div>
               </div>
 
-              <ScrollArea className="min-h-0 flex-1 rounded-md border p-3">
-                <div className="space-y-3">
-                  {session?.warnings?.map((warning, index) => (
-                    <div
-                      key={`${warning}-${index}`}
-                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-                    >
-                      {warning}
-                    </div>
-                  ))}
-                  {session?.messages.map((message) => (
-                    <Fragment key={message.id}>
-                      {(() => {
-                        const toolCallIds =
-                          message.pendingToolCallIds ??
-                          (message.pendingToolCallId ? [message.pendingToolCallId] : []);
-                        const linkedPendingToolCalls = toolCallIds
-                          .map((id) =>
-                            (session?.pendingToolCalls ?? []).find((call) => call.id === id)
-                          )
-                          .filter((call): call is ScenarioAssistantPendingToolCall =>
-                            Boolean(call)
-                          );
-                        const allToolCalls = toolCallIds
-                          .map(
-                            (id) =>
-                              session.pendingToolCalls.find((c) => c.id === id) ??
-                              session.pendingToolCalls.find((c) => c.id === id)
-                          )
-                          .filter(Boolean) as ScenarioAssistantPendingToolCall[];
-                        const isAssistantToolRequest =
-                          message.role === 'assistant' && toolCallIds.length > 0;
-                        if (!isAssistantToolRequest) {
-                          return (
-                            <div className="space-y-2">
-                              <ScenarioAssistantMessageRow message={message} />
-                            </div>
-                          );
-                        }
-                        const pendingCount = linkedPendingToolCalls.length;
-                        const resolvedCount = allToolCalls.length - pendingCount;
-                        return (
-                          <div className="flex items-start gap-2">
-                            <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                              <Bot className="h-3 w-3" />
-                            </div>
-                            <div className="w-full max-w-[92%] space-y-2">
-                              {allToolCalls.length > 1 && pendingCount > 0 && (
-                                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-1.5">
-                                  <span className="text-xs text-amber-900">
-                                    {resolvedCount} of {allToolCalls.length} tool calls resolved
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={pendingCount === 0}
-                                    onClick={() => void handleApproveAll()}
-                                  >
-                                    Approve All ({pendingCount})
-                                  </Button>
-                                </div>
-                              )}
-                              {allToolCalls.map((call, idx) => (
-                                <AssistantToolCallCard
-                                  key={call.id}
-                                  call={call}
-                                  loading={loading}
-                                  description={idx === 0 ? message.text : undefined}
-                                  onApprove={(callId) => void handleApprove(callId)}
-                                  onDeny={(callId) => void handleDeny(callId)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {message.suggestions && (
-                        <div className="ml-0 space-y-3 rounded-md border border-dashed bg-muted/10 p-3">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <Sparkles className="h-3.5 w-3.5" />
-                            Structured Suggestions
-                          </div>
-                          {message.suggestions.prompt && (
-                            <SuggestionCard
-                              title="Prompt"
-                              rationale={message.suggestions.prompt.rationale}
-                              preview={message.suggestions.prompt.replacement}
-                              applied={appliedSuggestionKeys.has(`${message.id}:prompt`)}
-                              onApply={() =>
-                                applySuggestions(message.id, message.suggestions, 'prompt')
-                              }
-                            />
-                          )}
-                          {message.suggestions.evalRules && (
-                            <EvalRulesSuggestionCard
-                              rationale={message.suggestions.evalRules.rationale}
-                              rules={message.suggestions.evalRules.replacement}
-                              applied={appliedSuggestionKeys.has(`${message.id}:evalRules`)}
-                              onApply={(selectedRules) =>
-                                applySuggestions(
-                                  message.id,
-                                  message.suggestions,
-                                  'evalRules',
-                                  selectedRules,
-                                  'append'
-                                )
-                              }
-                              onReplace={(selectedRules) =>
-                                applySuggestions(
-                                  message.id,
-                                  message.suggestions,
-                                  'evalRules',
-                                  selectedRules,
-                                  'replace'
-                                )
-                              }
-                            />
-                          )}
-                          {message.suggestions.extractRules && (
-                            <ExtractRulesSuggestionCard
-                              rationale={message.suggestions.extractRules.rationale}
-                              rules={message.suggestions.extractRules.replacement}
-                              applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
-                              onApply={(selectedRules) =>
-                                applyExtractRuleSuggestions(
-                                  message.id,
-                                  message.suggestions,
-                                  selectedRules,
-                                  'append'
-                                )
-                              }
-                              onReplace={(selectedRules) =>
-                                applyExtractRuleSuggestions(
-                                  message.id,
-                                  message.suggestions,
-                                  selectedRules,
-                                  'replace'
-                                )
-                              }
-                            />
-                          )}
-                          {(() => {
-                            const rawNotes = message.suggestions?.notes;
-                            const notes = Array.isArray(rawNotes)
-                              ? rawNotes
-                              : typeof rawNotes === 'string'
-                                ? [rawNotes]
-                                : [];
-                            if (notes.length === 0) return null;
-                            return (
-                              <div className="space-y-2 rounded-md border p-3">
-                                <h5 className="text-sm font-medium">Notes</h5>
-                                <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                                  {notes.map((note, index) => (
-                                    <li key={`${message.id}-note-${index}`}>{note}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </Fragment>
-                  ))}
-                  {(session?.pendingToolCalls ?? [])
-                    .filter(
-                      (call) =>
-                        !(session?.messages ?? []).some(
-                          (m) =>
-                            m.pendingToolCallId === call.id ||
-                            m.pendingToolCallIds?.includes(call.id)
-                        )
-                    )
-                    .map((call) => (
-                      <AssistantToolCallCard
-                        key={call.id}
-                        call={call}
-                        loading={loading}
-                        onApprove={(callId) => void handleApprove(callId)}
-                        onDeny={(callId) => void handleDeny(callId)}
-                      />
-                    ))}
-                  {!session && loading && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting assistant session...
-                    </div>
-                  )}
-                  {session && loading && <AssistantTypingIndicator />}
-                  <div ref={chatEndRef} />
-                </div>
-              </ScrollArea>
-
-              <AssistantComposer
-                input={input}
-                onInputChange={setInput}
-                onSend={() => void sendMessage(input)}
-                onCancel={sessionId && turnCancelable ? cancelAssistantTurn : undefined}
-                inputPlaceholder="Get assistance with creating or refining this scenario ..."
-                snippets={SCENARIO_ASSISTANT_SNIPPETS}
-                snippetsLabel="Scenario Assistant Snippets"
-                onSnippetSelect={applyScenarioSnippet}
-                loading={loading}
-                disabled={!sessionId}
-                inputRef={inputRef}
-                snippetContentClassName="w-[320px]"
+              <AssistantConversation
+                messages={displayedMessages}
+                toolCalls={session?.pendingToolCalls ?? []}
+                busy={assistant.busy}
+                starting={assistant.starting}
+                expired={assistant.expired}
+                onApprove={(callId, argumentsOverride) =>
+                  void handleApprove(callId, argumentsOverride)
+                }
+                onDeny={(callId, message) => void handleDeny(callId, message)}
+                onApproveAll={assistant.approveAll ? () => void handleApproveAll() : undefined}
+                notices={session?.warnings?.map((warning, index) => (
+                  <div
+                    key={`${warning}-${index}`}
+                    className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                  >
+                    {warning}
+                  </div>
+                ))}
+                renderMessageAddon={(message) =>
+                  message.suggestions ? (
+                    <ScenarioSuggestions
+                      messageId={message.id}
+                      suggestions={message.suggestions}
+                      scenario={scenario}
+                      onApplyPatch={onApplyPatch}
+                      appliedKeys={appliedSuggestionKeys}
+                      onApplied={(key) =>
+                        setAppliedSuggestionKeys((previous) => new Set([...previous, key]))
+                      }
+                    />
+                  ) : null
+                }
+                scrollClassName="rounded-md border p-3"
+                composer={{
+                  input,
+                  onInputChange: setInput,
+                  onSend: () => void sendMessage(input),
+                  onCancel: sessionId && turnCancelable ? cancelAssistantTurn : undefined,
+                  inputPlaceholder: 'Get assistance with creating or refining this scenario ...',
+                  snippets: SCENARIO_ASSISTANT_SNIPPETS,
+                  snippetsLabel: 'Scenario Assistant Snippets',
+                  onSnippetSelect: applyScenarioSnippet,
+                  loading,
+                  disabled: !sessionId,
+                  inputRef,
+                  snippetContentClassName: 'w-[320px]'
+                }}
               />
             </div>
           )}
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function SuggestionCard({
-  title,
-  rationale,
-  preview,
-  applied = false,
-  onApply
-}: {
-  title: string;
-  rationale?: string;
-  preview: string;
-  applied?: boolean;
-  onApply: () => void;
-}) {
-  return (
-    <div
-      className={`space-y-2 rounded-md border p-3 ${
-        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h5 className="text-sm font-medium">{title}</h5>
-      </div>
-      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
-      <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
-        {preview}
-      </pre>
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          className="h-8"
-          variant={applied ? 'secondary' : 'default'}
-          onClick={onApply}
-          disabled={applied}
-        >
-          {applied ? (
-            <>
-              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-              Applied
-            </>
-          ) : (
-            'Apply'
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function EvalRulesSuggestionCard({
-  rationale,
-  rules,
-  applied = false,
-  onApply,
-  onReplace
-}: {
-  rationale?: string;
-  rules: SuggestedEvalRule[];
-  applied?: boolean;
-  onApply: (selectedRules: SuggestedEvalRule[]) => void;
-  onReplace: (selectedRules: SuggestedEvalRule[]) => void;
-}) {
-  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
-    () => new Set(rules.map((_, index) => index))
-  );
-  const selectedCount = selectedIndexes.size;
-  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
-  const allSelected = selectedCount === rules.length;
-
-  const toggleRule = (index: number, checked: boolean) => {
-    setSelectedIndexes((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(index);
-      } else {
-        next.delete(index);
-      }
-      return next;
-    });
-  };
-
-  return (
-    <div
-      className={`space-y-2 rounded-md border p-3 ${
-        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h5 className="text-sm font-medium">Checks</h5>
-      </div>
-      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
-      <div className="space-y-2 rounded bg-muted/60 p-2">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <span className="text-[11px] text-muted-foreground">
-            {selectedCount} of {rules.length} selected
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px]"
-            disabled={applied || rules.length === 0}
-            onClick={() =>
-              setSelectedIndexes(allSelected ? new Set() : new Set(rules.map((_, index) => index)))
-            }
-          >
-            {allSelected ? 'Unselect all' : 'Select all'}
-          </Button>
-        </div>
-        {rules.map((rule, index) => {
-          const label = formatSuggestedEvalRuleLabel(rule);
-          const checkboxId = `scenario-assistant-check-${index}-${rule.type}`;
-          return (
-            <div
-              key={`${rule.type}-${index}`}
-              className="flex items-start gap-2 rounded bg-background p-2"
-            >
-              <Checkbox
-                id={checkboxId}
-                checked={selectedIndexes.has(index)}
-                disabled={applied}
-                onCheckedChange={(checked) => toggleRule(index, checked === true)}
-                aria-label={`Select ${label}`}
-              />
-              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
-                <span className="block text-xs font-medium">{label}</span>
-                <code className="block wrap-break-word rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
-                  {JSON.stringify(rule)}
-                </code>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex justify-end gap-2">
-        {applied ? (
-          <Button type="button" size="sm" variant="secondary" disabled>
-            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-            Applied
-          </Button>
-        ) : (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              variant="outline"
-              onClick={() => onReplace(selectedRules)}
-              disabled={selectedCount === 0}
-            >
-              Replace all
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              onClick={() => onApply(selectedRules)}
-              disabled={selectedCount === 0}
-            >
-              Add selected
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ExtractRulesSuggestionCard({
-  rationale,
-  rules,
-  applied = false,
-  onApply,
-  onReplace
-}: {
-  rationale?: string;
-  rules: SuggestedExtractRule[];
-  applied?: boolean;
-  onApply: (selectedRules: SuggestedExtractRule[]) => void;
-  onReplace: (selectedRules: SuggestedExtractRule[]) => void;
-}) {
-  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
-    () => new Set(rules.map((_, index) => index))
-  );
-  const selectedCount = selectedIndexes.size;
-  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
-  const allSelected = selectedCount === rules.length;
-
-  const toggleRule = (index: number, checked: boolean) => {
-    setSelectedIndexes((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(index);
-      } else {
-        next.delete(index);
-      }
-      return next;
-    });
-  };
-
-  return (
-    <div
-      className={`space-y-2 rounded-md border p-3 ${
-        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h5 className="text-sm font-medium">Value Capture Rules</h5>
-      </div>
-      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
-      <div className="space-y-2 rounded bg-muted/60 p-2">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <span className="text-[11px] text-muted-foreground">
-            {selectedCount} of {rules.length} selected
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px]"
-            disabled={applied || rules.length === 0}
-            onClick={() =>
-              setSelectedIndexes(allSelected ? new Set() : new Set(rules.map((_, index) => index)))
-            }
-          >
-            {allSelected ? 'Unselect all' : 'Select all'}
-          </Button>
-        </div>
-        {rules.map((rule, index) => {
-          const label = `${rule.name} · ${rule.pattern}`;
-          const checkboxId = `scenario-assistant-extract-${index}-${rule.name}`;
-          return (
-            <div
-              key={`${rule.name}-${index}`}
-              className="flex items-start gap-2 rounded bg-background p-2"
-            >
-              <Checkbox
-                id={checkboxId}
-                checked={selectedIndexes.has(index)}
-                disabled={applied}
-                onCheckedChange={(checked) => toggleRule(index, checked === true)}
-                aria-label={`Select ${label}`}
-              />
-              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
-                <span className="block text-xs font-medium">{label}</span>
-                <code className="block wrap-break-word rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
-                  {JSON.stringify(rule)}
-                </code>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex justify-end gap-2">
-        {applied ? (
-          <Button type="button" size="sm" variant="secondary" disabled>
-            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-            Applied
-          </Button>
-        ) : (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              variant="outline"
-              onClick={() => onReplace(selectedRules)}
-              disabled={selectedCount === 0}
-            >
-              Replace all
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              onClick={() => onApply(selectedRules)}
-              disabled={selectedCount === 0}
-            >
-              Add selected
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ScenarioAssistantMessageRow({
-  message
-}: {
-  message: ScenarioAssistantSessionView['messages'][number];
-}) {
-  const copyMessageText = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not copy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const showCopyButton = message.role === 'user' || message.role === 'assistant';
-  const isUser = message.role === 'user';
-  return (
-    <AssistantMessageRow
-      message={message}
-      assistantLabel={message.role === 'assistant' ? 'Assistant' : undefined}
-      renderActions={
-        showCopyButton ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={`absolute bottom-1 h-6 w-6 text-muted-foreground ${
-              isUser ? '-left-8' : '-right-8'
-            }`}
-            onClick={() => void copyMessageText(message.text)}
-            aria-label="Copy message"
-            title="Copy message"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        ) : undefined
-      }
-    />
   );
 }

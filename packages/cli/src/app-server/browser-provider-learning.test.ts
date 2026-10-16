@@ -4,8 +4,8 @@ const { chatWithJsonRetryMock } = vi.hoisted(() => ({
   chatWithJsonRetryMock: vi.fn()
 }));
 
-vi.mock('./assistant-common.js', async () => ({
-  ...(await vi.importActual<typeof import('./assistant-common.js')>('./assistant-common.js')),
+vi.mock('./one-shot-json.js', async () => ({
+  ...(await vi.importActual<typeof import('./one-shot-json.js')>('./one-shot-json.js')),
   chatWithJsonRetry: chatWithJsonRetryMock
 }));
 

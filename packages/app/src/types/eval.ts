@@ -274,3 +274,25 @@ export interface AppState {
   configs: EvalConfig[];
   results: EvalResult[];
 }
+export type {
+  AssistantKind,
+  AssistantSessionEvent,
+  AssistantRuntimeEvent,
+  AssistantRuntimeMessage,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule
+} from '@/lib/data-sources/types';

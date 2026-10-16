@@ -18,12 +18,13 @@ export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceS
   try {
     const parsed = parseYaml(readFileSync(filePath, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const { scenario_assistant_agent_name: legacyAssistantAgentName, ...current } = parsed;
+    // Workspaces saved before the rename keep their assistant agent until settings are saved again.
+    const assistantAgentName = current.assistant_agent_name ?? legacyAssistantAgentName;
     return {
-      ...parsed,
-      scenario_assistant_agent_name:
-        typeof parsed.scenario_assistant_agent_name === 'string'
-          ? parsed.scenario_assistant_agent_name.trim() || undefined
-          : undefined,
+      ...current,
+      assistant_agent_name:
+        typeof assistantAgentName === 'string' ? assistantAgentName.trim() || undefined : undefined,
       evaluation_judge_agent_name:
         typeof parsed.evaluation_judge_agent_name === 'string'
           ? parsed.evaluation_judge_agent_name.trim() || undefined

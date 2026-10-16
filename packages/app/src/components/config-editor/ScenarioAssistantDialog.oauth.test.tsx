@@ -7,8 +7,10 @@ import type { ScenarioAssistantSessionView } from '@/lib/data-sources/types';
 
 const mockSource = {
   createScenarioAssistantSession: vi.fn(),
+  getScenarioAssistantSession: vi.fn(),
   closeScenarioAssistantSession: vi.fn().mockResolvedValue(undefined),
   sendScenarioAssistantMessage: vi.fn(),
+  cancelScenarioAssistantTurn: vi.fn().mockResolvedValue({ ok: true }),
   approveScenarioAssistantToolCall: vi.fn(),
   denyScenarioAssistantToolCall: vi.fn(),
   approveAllScenarioAssistantToolCalls: vi.fn(),
@@ -63,8 +65,11 @@ const servers: ServerConfig[] = [
   }
 ];
 
+let nextAssistantRevision = 0;
+
 function makeAssistantSession(): ScenarioAssistantSessionView {
   return {
+    revision: nextAssistantRevision++,
     id: 'sas-1',
     selectedAssistantAgentName: 'assistant-1',
     model: 'gpt-4o-mini',
@@ -82,6 +87,7 @@ function makeAssistantSession(): ScenarioAssistantSessionView {
 describe('ScenarioAssistantDialog OAuth startup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nextAssistantRevision = 0;
     vi.spyOn(window, 'open').mockImplementation(() => null);
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -220,6 +226,10 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
 
   it('cancels a pending scenario assistant prompt locally', async () => {
     let capturedSignal: AbortSignal | undefined;
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: { ...makeAssistantSession(), activeTurnId: 'turn-1' }
+    });
     mockSource.sendScenarioAssistantMessage.mockImplementation(
       async (_sessionId: string, _message: string, signal?: AbortSignal) => {
         capturedSignal = signal;
@@ -270,6 +280,11 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel assistant message' }));
 
     await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+    expect(mockSource.cancelScenarioAssistantTurn).toHaveBeenCalledWith(
+      'sas-1',
+      mockSource.sendScenarioAssistantMessage.mock.calls[0]?.[3]
+    );
+    expect(mockSource.getScenarioAssistantSession).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByDisplayValue('Draft a better scenario')).toBeInTheDocument()
     );
@@ -314,6 +329,145 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
     expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exactly the asset tags.' });
+  });
+
+  it('shows the final proposal after a pending write is approved, then applies its patch', async () => {
+    const onApplyPatch = vi.fn();
+    const proposal = {
+      prompt: {
+        replacement: 'Return exact asset tags.',
+        rationale: 'Makes the result deterministic.'
+      }
+    };
+    mockSource.sendScenarioAssistantMessage.mockResolvedValueOnce({
+      response: { type: 'tool_call_request', text: 'I have a proposal and need to write.' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'pending-write-message',
+            role: 'assistant',
+            text: 'I have a proposal and need to write.',
+            createdAt: new Date().toISOString(),
+            pendingToolCallId: 'write-1',
+            pendingToolCallIds: ['write-1']
+          }
+        ],
+        pendingToolCalls: [
+          {
+            id: 'write-1',
+            server: 'server',
+            tool: 'write_report',
+            publicToolName: 'server__write_report',
+            arguments: {},
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: {
+        type: 'assistant_message',
+        text: 'Here is the final proposal.',
+        suggestions: proposal
+      },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'final-proposal',
+            role: 'assistant',
+            text: 'Here is the final proposal.',
+            createdAt: new Date().toISOString(),
+            suggestions: proposal
+          }
+        ],
+        pendingToolCalls: []
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+    await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
+    fireEvent.change(
+      screen.getByPlaceholderText('Get assistance with creating or refining this scenario ...'),
+      { target: { value: 'Propose and write' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+    await screen.findByRole('button', { name: 'Approve' });
+    expect(screen.queryByText('Structured Suggestions')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exact asset tags.' });
+  });
+
+  it('sends edited tool arguments to the Scenario approve endpoint', async () => {
+    mockSource.sendScenarioAssistantMessage.mockResolvedValueOnce({
+      response: { type: 'tool_call_request', text: 'I need to write.' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'write-request',
+            role: 'assistant',
+            text: 'I need to write.',
+            createdAt: new Date().toISOString(),
+            pendingToolCallIds: ['write-1']
+          }
+        ],
+        pendingToolCalls: [
+          {
+            id: 'write-1',
+            server: 'server',
+            tool: 'write_report',
+            publicToolName: 'server__write_report',
+            arguments: { path: 'draft.md' },
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: { type: 'assistant_message', text: 'Written.' },
+      session: { ...makeAssistantSession(), messages: [], pendingToolCalls: [] }
+    });
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
+    fireEvent.change(
+      screen.getByPlaceholderText('Get assistance with creating or refining this scenario ...'),
+      { target: { value: 'Write the report' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit arguments' }));
+    fireEvent.change(screen.getByLabelText('Edit tool call arguments'), {
+      target: { value: '{"path":"final.md"}' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve with edits' }));
+    await waitFor(() =>
+      expect(mockSource.approveScenarioAssistantToolCall).toHaveBeenCalledWith('sas-1', 'write-1', {
+        path: 'final.md'
+      })
+    );
   });
 
   it('applies structured tool_sequence suggestions with sequence data', async () => {
@@ -679,6 +833,7 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
           sessionId: 'sas-1',
           session: {
             ...makeAssistantSession(),
+            revision: 4,
             messages: [
               {
                 id: 'msg-1',
@@ -693,6 +848,109 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     });
 
     expect(await screen.findByText('Live update from SSE')).toBeInTheDocument();
+  });
+
+  it('renders scenario assistant deltas once and replaces them from a reconnect snapshot', async () => {
+    let onScenarioEvent: ((event: unknown) => void) | undefined;
+    mockSource.subscribeScenarioAssistantSessionEvents.mockImplementation(
+      (_sessionId: string, onEvent: typeof onScenarioEvent) => {
+        onScenarioEvent = onEvent;
+        return () => undefined;
+      }
+    );
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: makeAssistantSession()
+    });
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+    await waitFor(() =>
+      expect(mockSource.subscribeScenarioAssistantSessionEvents).toHaveBeenCalled()
+    );
+
+    act(() =>
+      onScenarioEvent?.({
+        type: 'turn_started',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: { ...makeAssistantSession(), revision: 2, activeTurnId: 'turn-1' }
+        }
+      })
+    );
+    const delta = (offset: number, text: string) => ({
+      type: 'assistant_message_delta',
+      ts: new Date().toISOString(),
+      payload: {
+        sessionId: 'sas-1',
+        turnId: 'turn-1',
+        messageId: 'reply-1',
+        revision: offset === 0 && text === 'Hello' ? 3 : offset === 0 ? 3 : 4,
+        offset,
+        delta: text,
+        createdAt: '2026-10-16T10:00:00.000Z'
+      }
+    });
+    act(() => onScenarioEvent?.(delta(0, 'Hello')));
+    act(() => onScenarioEvent?.(delta(0, 'Hello')));
+    act(() => onScenarioEvent?.(delta(5, ' there')));
+    expect(await screen.findByText('Hello there')).toBeInTheDocument();
+
+    act(() =>
+      onScenarioEvent?.({
+        type: 'session_snapshot',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: {
+            ...makeAssistantSession(),
+            revision: 5,
+            updatedAt: '2026-10-16T10:01:00.000Z',
+            messages: [
+              {
+                id: 'reply-2',
+                role: 'assistant',
+                text: 'Snapshot answer',
+                createdAt: '2026-10-16T10:01:00.000Z'
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(await screen.findByText('Snapshot answer')).toBeInTheDocument();
+    expect(screen.queryByText('Hello there')).not.toBeInTheDocument();
+    act(() =>
+      onScenarioEvent?.({
+        type: 'session_snapshot',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: {
+            ...makeAssistantSession(),
+            revision: 3,
+            messages: [
+              {
+                id: 'stale-reply',
+                role: 'assistant',
+                text: 'Stale answer',
+                createdAt: '2026-10-16T10:02:00.000Z'
+              }
+            ]
+          }
+        }
+      })
+    );
+    expect(screen.getByText('Snapshot answer')).toBeInTheDocument();
+    expect(screen.queryByText('Stale answer')).not.toBeInTheDocument();
   });
 
   it('approves all pending scenario assistant tool calls', async () => {
@@ -756,6 +1014,100 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     await waitFor(() =>
       expect(mockSource.approveAllScenarioAssistantToolCalls).toHaveBeenCalledWith('sas-1')
     );
+  });
+
+  it('updates batch counts after one call resolves and shows final suggestions after the rest', async () => {
+    const onApplyPatch = vi.fn();
+    const toolCalls = [
+      {
+        id: 'call-1',
+        server: 'oauth-server',
+        tool: 'search_assets',
+        publicToolName: 'oauth-server__search_assets',
+        arguments: {},
+        status: 'pending' as const,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'call-2',
+        server: 'oauth-server',
+        tool: 'list_tags',
+        publicToolName: 'oauth-server__list_tags',
+        arguments: {},
+        status: 'pending' as const,
+        createdAt: new Date().toISOString()
+      }
+    ];
+    const requestMessage = {
+      id: 'batch-message',
+      role: 'assistant' as const,
+      text: 'I need two tools.',
+      createdAt: new Date().toISOString(),
+      pendingToolCallIds: ['call-1', 'call-2']
+    };
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [requestMessage],
+        pendingToolCalls: toolCalls
+      }
+    });
+    mockSource.approveScenarioAssistantToolCall.mockResolvedValueOnce({
+      response: { type: 'tool_call_resolved', text: '' },
+      session: {
+        ...makeAssistantSession(),
+        messages: [requestMessage],
+        pendingToolCalls: [{ ...toolCalls[0], status: 'approved' }, toolCalls[1]]
+      }
+    });
+    const finalSuggestions = {
+      prompt: { replacement: 'Return exact tags.', rationale: 'Specific output.' }
+    };
+    mockSource.approveAllScenarioAssistantToolCalls.mockResolvedValueOnce({
+      response: {
+        type: 'assistant_message',
+        text: 'The proposal is ready.',
+        suggestions: finalSuggestions
+      },
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          requestMessage,
+          {
+            id: 'final-message',
+            role: 'assistant',
+            text: 'The proposal is ready.',
+            createdAt: new Date().toISOString(),
+            suggestions: finalSuggestions
+          }
+        ],
+        pendingToolCalls: toolCalls.map((call) => ({ ...call, status: 'approved' }))
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+    await screen.findByRole('button', { name: 'Approve All (2)' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]);
+    expect(await screen.findByText('1 of 2 tool calls resolved')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Approve All (1)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve All (2)' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve All (1)' }));
+    await screen.findByText('Structured Suggestions');
+    expect(screen.queryByText(/tool calls resolved/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Approve All/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exact tags.' });
   });
 
   it('minimizes an active session without discarding it', async () => {

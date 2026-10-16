@@ -1,44 +1,43 @@
 import { existsSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, join } from 'node:path';
+import { loadConfig, type AgentConfig, type EvalConfig } from '@inspectr/mcplab-core';
+import type {
+  AppRouteDeps,
+  AppRouteRequestContext,
+  ScenarioAssistantSessionsMap
+} from './app-context.js';
 import {
-  McpClientManager,
-  loadConfig,
-  type AgentConfig,
-  type EvalConfig,
-  throwIfAborted
-} from '@inspectr/mcplab-core';
-import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
-import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
-import { flushDanglingToolCalls } from './assistant-common.js';
+  setupScenarioAssistantSession,
+  type ScenarioAssistantContextInput,
+  type ScenarioAssistantSession,
+  type ScenarioAssistantSessionInitializer,
+  cleanupScenarioAssistantSessions,
+  touchScenarioAssistantSession,
+  scenarioAssistantSessionView
+} from './scenario-assistant-domain.js';
+import { handleAssistantSessionRoutes } from './assistant-session-routes.js';
+import {
+  isAssistantDeltaEvent,
+  broadcastAssistantSseEvent,
+  createAssistantSseEvent,
+  type AssistantSseEventType
+} from './assistant-events.js';
 import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
 } from './oauth-session-manager.js';
-import {
-  broadcastAssistantSseEvent,
-  createAssistantSseEvent,
-  endAssistantSseClients,
-  serveAssistantSseStream,
-  type AssistantSseEventType
-} from './assistant-events.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
   | 'parseBody'
   | 'asJson'
-  | 'cleanupAssistantSessions'
-  | 'touchAssistantSession'
-  | 'assistantSessionView'
   | 'ensureInsideRoot'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'resolveAssistantAgentFromConfig'
   | 'resolveAssistantAgentFromLibraries'
-  | 'preloadAssistantTools'
-  | 'continueAssistantTurn'
-  | 'executeAssistantToolCall'
-  | 'summarizeToolResultForAssistant'
+  | 'assistantRuntimeFactory'
 >;
 
 export async function handleScenarioAssistantRoutes(params: {
@@ -47,7 +46,7 @@ export async function handleScenarioAssistantRoutes(params: {
   pathname: string;
   method: string;
   settings: AppRouteRequestContext['settings'];
-  assistantSessions: AssistantSessionsMap;
+  assistantSessions: ScenarioAssistantSessionsMap;
   oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
@@ -56,23 +55,15 @@ export async function handleScenarioAssistantRoutes(params: {
   const {
     parseBody,
     asJson,
-    cleanupAssistantSessions,
-    touchAssistantSession,
-    assistantSessionView,
     ensureInsideRoot,
     readLibraries,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
-    preloadAssistantTools,
-    continueAssistantTurn,
-    executeAssistantToolCall,
-    summarizeToolResultForAssistant
+    assistantRuntimeFactory
   } = deps;
 
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-  type SessionPendingCall = ScenarioAssistantSession['pendingToolCalls'][number];
-  type SessionContext = ScenarioAssistantSession['context'];
   const publishSessionEvent = (
     session: ScenarioAssistantSession,
     type: AssistantSseEventType,
@@ -82,102 +73,14 @@ export async function handleScenarioAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        session: assistantSessionView(session),
+        ...(isAssistantDeltaEvent(type) ? {} : { session: scenarioAssistantSessionView(session) }),
         ...payload
       })
     );
   };
 
-  const continueWithAutoApprovedReads = async (
-    session: ScenarioAssistantSession,
-    signal?: AbortSignal
-  ) => {
-    throwIfAborted(signal);
-    publishSessionEvent(session, 'turn_started');
-    let output = await continueAssistantTurn(session, signal);
-    throwIfAborted(signal);
-    for (let i = 0; i < 25; i += 1) {
-      throwIfAborted(signal);
-      const pendingCalls = output.response?.pendingToolCalls;
-      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') {
-        if (output.response?.type === 'assistant_message') {
-          publishSessionEvent(session, 'assistant_message_completed', {
-            text: output.response.text,
-            suggestions: output.response.suggestions
-          });
-        } else if (
-          output.response?.type === 'tool_call_request' &&
-          output.response.pendingToolCalls
-        ) {
-          publishSessionEvent(session, 'tool_call_requested', {
-            pendingToolCalls: output.response.pendingToolCalls,
-            pendingToolCallId: output.response.pendingToolCalls[0]?.id
-          });
-        }
-        break;
-      }
-      publishSessionEvent(session, 'tool_call_requested', {
-        pendingToolCalls: pendingCalls,
-        pendingToolCallId: pendingCalls[0]?.id
-      });
-      throwIfAborted(signal);
-      const allReadOnly = pendingCalls.every(
-        (p) =>
-          session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
-      );
-      if (!allReadOnly) break;
-      let hadError = false;
-      for (const pending of pendingCalls) {
-        pending.status = 'approved';
-        publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
-        try {
-          const toolResult = await executeAssistantToolCall(session, pending, signal);
-          pending.resultPreview = summarizeToolResultForAssistant(toolResult);
-          session.llmMessages.push({
-            role: 'tool',
-            content: pending.resultPreview,
-            tool_call_id: pending.id,
-            name: pending.publicToolName
-          });
-          publishSessionEvent(session, 'tool_call_resolved', {
-            pendingToolCallId: pending.id,
-            pendingToolCall: pending
-          });
-        } catch (error: unknown) {
-          if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
-            throw error;
-          }
-          pending.status = 'error';
-          pending.error = error instanceof Error ? error.message : String(error);
-          session.llmMessages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: pending.error }),
-            tool_call_id: pending.id,
-            name: pending.publicToolName
-          });
-          publishSessionEvent(session, 'session_error', {
-            pendingToolCallId: pending.id,
-            error: pending.error
-          });
-          hadError = true;
-        }
-      }
-      touchAssistantSession(session);
-      if (hadError) break;
-      output = await continueAssistantTurn(session, signal);
-      throwIfAborted(signal);
-    }
-    if (output.response?.type === 'assistant_message') {
-      publishSessionEvent(session, 'assistant_message_completed', {
-        text: output.response.text,
-        suggestions: output.response.suggestions
-      });
-    }
-    return output;
-  };
-
   if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
-    cleanupAssistantSessions(assistantSessions);
+    cleanupScenarioAssistantSessions(assistantSessions);
     const body = (await parseBody(req)) as {
       configPath?: unknown;
       scenarioId?: unknown;
@@ -202,7 +105,7 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 400, { error: 'context.scenario is required' });
       return true;
     }
-    const context = contextRaw as SessionContext;
+    const context = contextRaw as ScenarioAssistantContextInput;
     let configPath: string | undefined;
     let agentConfig: AgentConfig;
     let serversByName: EvalConfig['servers'];
@@ -234,7 +137,7 @@ export async function handleScenarioAssistantRoutes(params: {
       const libraries = readLibraries(settings.librariesDir);
       selectedAssistantAgentName = pickDefaultAssistantAgentName({
         requested: requestedAssistantAgentName,
-        settingsDefault: settings.scenarioAssistantAgentName,
+        settingsDefault: settings.assistantAgentName,
         agentNames: Object.keys(libraries.agents)
       });
       if (!selectedAssistantAgentName) {
@@ -246,25 +149,21 @@ export async function handleScenarioAssistantRoutes(params: {
       agentConfig = resolveAssistantAgentFromLibraries(libraries, selectedAssistantAgentName);
       serversByName = libraries.servers;
     }
-    const session: ScenarioAssistantSession = {
+    const sessionInitializer: ScenarioAssistantSessionInitializer = {
       id: `sas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
       lastTouchedAt: Date.now(),
       configPath,
       selectedAssistantAgentName,
-      context,
-      agentConfig,
-      mcp: new McpClientManager(),
-      tools: [],
-      toolPublicMap: new Map(),
-      pendingToolCalls: [],
-      chatMessages: [],
-      llmMessages: [],
+      model: agentConfig.model,
+      provider: agentConfig.provider,
+      toolsLoaded: 0,
+      toolServers: [],
+      initialMessages: [],
       warnings,
-      events: [],
       clients: new Set()
     };
-    session.chatMessages.push({
+    sessionInitializer.initialMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'system',
       text: 'Scenario Assistant session created.',
@@ -296,329 +195,46 @@ export async function handleScenarioAssistantRoutes(params: {
         return true;
       }
     }
-    for (const warning of warnings) {
-      publishSessionEvent(session, 'session_warning', { warning });
-    }
-    await preloadAssistantTools(session, serversByName, selectedServerNames, { serverAuthHeaders });
+    const initialEvents = warnings.map((warning) => ({
+      type: 'session_warning' as const,
+      ts: new Date().toISOString(),
+      payload: { warning }
+    }));
+    const session = await setupScenarioAssistantSession({
+      session: sessionInitializer,
+      agentConfig,
+      context,
+      serversByName,
+      selectedServerNames,
+      serverAuthHeaders,
+      initialEvents,
+      assistantRuntimeFactory,
+      onEvent: (event, readySession) => {
+        touchScenarioAssistantSession(readySession);
+        publishSessionEvent(readySession, event.type, event.payload);
+      },
+      onActivity: touchScenarioAssistantSession
+    });
     assistantSessions.set(session.id, session);
     publishSessionEvent(session, 'session_started');
-    asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
+    asJson(res, 201, { sessionId: session.id, session: scenarioAssistantSessionView(session) });
     return true;
   }
 
-  if (
-    pathname.startsWith('/api/scenario-assistant/sessions/') &&
-    pathname.endsWith('/events') &&
-    method === 'GET'
-  ) {
-    cleanupAssistantSessions(assistantSessions);
-    const sessionId = pathname
-      .replace('/api/scenario-assistant/sessions/', '')
-      .replace('/events', '');
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    serveAssistantSseStream(req, res, session);
-    return true;
-  }
-
-  if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'GET') {
-    cleanupAssistantSessions(assistantSessions);
-    const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    touchAssistantSession(session);
-    asJson(res, 200, { session: assistantSessionView(session) });
-    return true;
-  }
-
-  if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'DELETE') {
-    cleanupAssistantSessions(assistantSessions);
-    const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
-    const session = assistantSessions.get(sessionId);
-    if (session) {
-      publishSessionEvent(session, 'session_finished');
-      endAssistantSseClients(session);
-    }
-    assistantSessions.delete(sessionId);
-    asJson(res, 200, { ok: true });
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/scenario-assistant/sessions/') &&
-    pathname.endsWith('/messages') &&
-    method === 'POST'
-  ) {
-    cleanupAssistantSessions(assistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    const chatMessagesBefore = session.chatMessages.length;
-    const llmMessagesBefore = session.llmMessages.length;
-    const pendingToolCallsBefore = session.pendingToolCalls.length;
-    const abortController = new AbortController();
-    const handleClose = () => {
-      if (req.complete) return;
-      if (res.writableEnded) return;
-      abortController.abort();
-    };
-    req.on('close', handleClose);
-    try {
-      const body = await parseBody(req);
-      const message = String(body.message ?? '').trim();
-      throwIfAborted(abortController.signal);
-      if (!message) {
-        asJson(res, 400, { error: 'message is required' });
-        return true;
-      }
-      session.chatMessages.push({
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role: 'user',
-        text: message,
-        createdAt: new Date().toISOString()
-      });
-      flushDanglingToolCalls(session.llmMessages);
-      session.llmMessages.push({ role: 'user', content: message });
-      const output = await continueWithAutoApprovedReads(session, abortController.signal);
-      throwIfAborted(abortController.signal);
-      asJson(res, 200, output);
-      return true;
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        session.chatMessages.splice(chatMessagesBefore);
-        session.llmMessages.splice(llmMessagesBefore);
-        session.pendingToolCalls.splice(pendingToolCallsBefore);
-        return true;
-      }
-      throw error;
-    } finally {
-      req.off('close', handleClose);
-    }
-  }
-
-  // Helper: find sibling pending tool call IDs for a given call
-  const findSiblingCallIds = (session: ScenarioAssistantSession, callId: string): string[] => {
-    const msg = session.chatMessages.find(
-      (m) => m.pendingToolCallIds?.includes(callId) ?? m.pendingToolCallId === callId
-    );
-    return msg?.pendingToolCallIds ?? (msg?.pendingToolCallId ? [msg.pendingToolCallId] : [callId]);
-  };
-
-  const allSiblingsResolved = (session: ScenarioAssistantSession, callId: string): boolean => {
-    const siblingIds = findSiblingCallIds(session, callId);
-    return siblingIds.every((id) => {
-      const call = session.pendingToolCalls.find((c: SessionPendingCall) => c.id === id);
-      return call && call.status !== 'pending';
-    });
-  };
-
-  if (
-    pathname.startsWith('/api/scenario-assistant/sessions/') &&
-    pathname.includes('/tool-calls/') &&
-    pathname.endsWith('/approve') &&
-    method === 'POST'
-  ) {
-    cleanupAssistantSessions(assistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const callId = parts[6];
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    const pending = session.pendingToolCalls.find((call: SessionPendingCall) => call.id === callId);
-    if (!pending) {
-      asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
-      return true;
-    }
-    if (pending.status !== 'pending') {
-      asJson(res, 409, { error: `Tool call is already ${pending.status}` });
-      return true;
-    }
-    const body = (await parseBody(req)) as { argumentsOverride?: unknown };
-    if (Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')) {
-      pending.arguments = body.argumentsOverride;
-    }
-    pending.status = 'approved';
-    publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
-    try {
-      const toolResult = await executeAssistantToolCall(session, pending);
-      pending.resultPreview = summarizeToolResultForAssistant(toolResult);
-      session.llmMessages.push({
-        role: 'tool',
-        content: pending.resultPreview,
-        tool_call_id: pending.id,
-        name: pending.publicToolName
-      });
-    } catch (error: unknown) {
-      pending.status = 'error';
-      pending.error = errorMessage(error);
-      session.llmMessages.push({
-        role: 'tool',
-        content: JSON.stringify({ error: pending.error }),
-        tool_call_id: pending.id,
-        name: pending.publicToolName
-      });
-      session.chatMessages.push({
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role: 'tool',
-        text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
-        createdAt: new Date().toISOString()
-      });
-      publishSessionEvent(session, 'session_error', {
-        pendingToolCallId: pending.id,
-        error: pending.error
-      });
-    }
-    publishSessionEvent(session, 'tool_call_resolved', {
-      pendingToolCallId: pending.id,
-      pendingToolCall: pending
-    });
-    if (allSiblingsResolved(session, callId)) {
-      const output = await continueWithAutoApprovedReads(session);
-      asJson(res, 200, output);
-    } else {
-      touchAssistantSession(session);
-      asJson(res, 200, {
-        session: assistantSessionView(session),
-        response: {
-          type: 'tool_call_resolved',
-          text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
-        }
-      });
-    }
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/scenario-assistant/sessions/') &&
-    pathname.includes('/tool-calls/') &&
-    pathname.endsWith('/deny') &&
-    method === 'POST'
-  ) {
-    cleanupAssistantSessions(assistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const callId = parts[6];
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    const pending = session.pendingToolCalls.find((call: SessionPendingCall) => call.id === callId);
-    if (!pending) {
-      asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
-      return true;
-    }
-    if (pending.status !== 'pending') {
-      asJson(res, 409, { error: `Tool call is already ${pending.status}` });
-      return true;
-    }
-    pending.status = 'denied';
-    session.llmMessages.push({
-      role: 'tool',
-      content: JSON.stringify({
-        denied: true,
-        reason: 'User denied tool call',
-        server: pending.server,
-        tool: pending.tool
-      }),
-      tool_call_id: pending.id,
-      name: pending.publicToolName
-    });
-    publishSessionEvent(session, 'tool_call_denied', { pendingToolCallId: pending.id });
-    publishSessionEvent(session, 'tool_call_resolved', {
-      pendingToolCallId: pending.id,
-      pendingToolCall: pending
-    });
-    if (allSiblingsResolved(session, callId)) {
-      const output = await continueWithAutoApprovedReads(session);
-      asJson(res, 200, output);
-    } else {
-      touchAssistantSession(session);
-      asJson(res, 200, {
-        session: assistantSessionView(session),
-        response: {
-          type: 'tool_call_resolved',
-          text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
-        }
-      });
-    }
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/scenario-assistant/sessions/') &&
-    pathname.includes('/tool-calls/approve-all') &&
-    method === 'POST'
-  ) {
-    cleanupAssistantSessions(assistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const session = assistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Scenario Assistant session not found' });
-      return true;
-    }
-    const pendingCalls = session.pendingToolCalls.filter(
-      (call: SessionPendingCall) => call.status === 'pending'
-    );
-    if (pendingCalls.length === 0) {
-      asJson(res, 409, { error: 'No pending tool calls to approve' });
-      return true;
-    }
-    for (const pending of pendingCalls) {
-      pending.status = 'approved';
-      publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
-      try {
-        const toolResult = await executeAssistantToolCall(session, pending);
-        pending.resultPreview = summarizeToolResultForAssistant(toolResult);
-        session.llmMessages.push({
-          role: 'tool',
-          content: pending.resultPreview,
-          tool_call_id: pending.id,
-          name: pending.publicToolName
-        });
-      } catch (error: unknown) {
-        pending.status = 'error';
-        pending.error = errorMessage(error);
-        session.llmMessages.push({
-          role: 'tool',
-          content: JSON.stringify({ error: pending.error }),
-          tool_call_id: pending.id,
-          name: pending.publicToolName
-        });
-        session.chatMessages.push({
-          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          role: 'tool',
-          text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
-          createdAt: new Date().toISOString()
-        });
-        publishSessionEvent(session, 'session_error', {
-          pendingToolCallId: pending.id,
-          error: pending.error
-        });
-      }
-      publishSessionEvent(session, 'tool_call_resolved', {
-        pendingToolCallId: pending.id,
-        pendingToolCall: pending
-      });
-    }
-    const output = await continueWithAutoApprovedReads(session);
-    asJson(res, 200, output);
-    return true;
-  }
-
-  return false;
+  return handleAssistantSessionRoutes({
+    req,
+    res,
+    pathname,
+    method,
+    prefix: '/api/scenario-assistant/sessions',
+    assistantLabel: 'Scenario Assistant',
+    parseBody,
+    asJson,
+    sessions: assistantSessions,
+    cleanup: () => cleanupScenarioAssistantSessions(assistantSessions),
+    touch: touchScenarioAssistantSession,
+    view: scenarioAssistantSessionView,
+    finish: (session) => publishSessionEvent(session, 'session_finished'),
+    approveAll: true
+  });
 }

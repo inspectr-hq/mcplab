@@ -14,7 +14,8 @@ export interface WorkspaceEvaluationSettings {
 }
 
 export interface WorkspaceSettingsOverrides {
-  scenario_assistant_agent_name?: string;
+  /** The agent every assistant uses unless a session picks another. */
+  assistant_agent_name?: string;
   evaluation_judge_agent_name?: string;
   default_queue_workers?: unknown;
   evaluation_decision?: EvaluationDecisionConfig;
@@ -22,12 +23,240 @@ export interface WorkspaceSettingsOverrides {
 
 export interface WorkspaceSettingsPatch {
   defaultQueueWorkers?: number;
-  scenarioAssistantAgentName?: string | null;
+  assistantAgentName?: string | null;
   evaluationJudgeAgentName?: string | null;
   evaluationDecision?: EvaluationDecisionConfig | null;
   evalsDir?: string;
   runsDir?: string;
   librariesDir?: string;
+}
+
+export type AssistantKind = 'scenario' | 'result';
+
+export type ScenarioAssistantSuggestionRuleType =
+  | 'required_tool'
+  | 'forbidden_tool'
+  | 'tool_sequence'
+  | `tool_input_${ToolInputAssertion['type']}`
+  | `response_${ResponseAssertion['type']}`
+  | 'agent_check';
+
+export interface ScenarioAssistantSuggestionRule {
+  type: ScenarioAssistantSuggestionRuleType;
+  value?: string | number | boolean;
+  sequence?: string[];
+  path?: string;
+  equals?: string | number | boolean;
+  tool?: string;
+  label?: string;
+  prompt?: string;
+}
+
+export interface ScenarioAssistantSuggestionBundle {
+  prompt?: { replacement: string; rationale?: string };
+  evalRules?: { replacement: ScenarioAssistantSuggestionRule[]; rationale?: string };
+  extractRules?: { replacement: Array<{ name: string; pattern: string }>; rationale?: string };
+  notes?: string[];
+}
+
+export interface ScenarioAssistantRuntimeContext {
+  scenario: {
+    id: string;
+    name?: string;
+    prompt: string;
+    serverNames: string[];
+    evalRules: ScenarioAssistantSuggestionRule[];
+    extractRules: Array<{ name: string; pattern: string }>;
+  };
+  availableServers?: Array<{ name: string; url?: string }>;
+  availableAgents?: Array<{ name: string; provider: string; model: string }>;
+}
+
+export interface ResultAssistantRuntimeContext {
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  resultSummary: ResultsJson | null;
+  referenceReportsForRun: Array<{
+    path: string;
+    relativePath: string;
+    name: string;
+    sizeBytes: number;
+    mtime: string;
+  }>;
+}
+
+export interface AssistantRuntimeMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCallId?: string;
+  pendingToolCallIds?: string[];
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
+  /** The model's reasoning summary for this message, when the provider returns one. */
+  reasoning?: AssistantReasoning;
+}
+
+export interface AssistantReasoning {
+  text: string;
+  /** Set once the model has finished reasoning. */
+  durationMs?: number;
+}
+
+export interface AssistantRuntimeToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  validationError?: string;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+  /** Whether the call waited for the user; automatic and local calls run without asking. */
+  requiresApproval?: boolean;
+  /** Display details from the MCP tool definition. */
+  title?: string;
+  description?: string;
+  hints?: AssistantToolHints;
+  /** Readable labels for argument fields, from the input schema's property titles. */
+  argumentLabels?: Record<string, string>;
+  startedAt?: string;
+  completedAt?: string;
+  /** The user's reason for denying the call, which the model also receives. */
+  denyMessage?: string;
+}
+
+/** The MCP tool annotations that matter to someone approving a call. */
+export interface AssistantToolHints {
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+  openWorld?: boolean;
+}
+
+export interface AssistantRuntimeSnapshot {
+  /** Monotonic within a session, including transient text updates. Reads do not advance it. */
+  revision: number;
+  messages: AssistantRuntimeMessage[];
+  pendingToolCalls: AssistantRuntimeToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: {
+    id: string;
+    turnId: string;
+    text: string;
+    createdAt: string;
+    reasoning?: AssistantReasoning;
+  };
+}
+
+export type ScenarioAssistantMessage = AssistantRuntimeMessage;
+export type ScenarioAssistantPendingToolCall = AssistantRuntimeToolCall;
+export type ResultAssistantSessionMessage = AssistantRuntimeMessage;
+export type ResultAssistantPendingToolCall = AssistantRuntimeToolCall;
+
+export interface ScenarioAssistantSessionView {
+  revision: number;
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  warnings: string[];
+  toolsLoaded: number;
+  toolServers: string[];
+  messages: ScenarioAssistantMessage[];
+  pendingToolCalls: ScenarioAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
+}
+
+export interface ResultAssistantSessionView {
+  revision: number;
+  id: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  messages: ResultAssistantSessionMessage[];
+  pendingToolCalls: ResultAssistantPendingToolCall[];
+  activeTurnId?: string;
+  streamingMessage?: AssistantRuntimeSnapshot['streamingMessage'];
+}
+
+export type AssistantSessionEvent<TSession = unknown> =
+  | {
+      type: 'assistant_message_delta' | 'assistant_reasoning_delta';
+      ts: string;
+      payload: Record<string, unknown> & {
+        sessionId: string;
+        session?: TSession;
+        turnId: string;
+        messageId: string;
+        offset: number;
+        delta: string;
+        createdAt: string;
+        revision: number;
+      };
+    }
+  | {
+      type: Exclude<
+        AssistantRuntimeEvent['type'],
+        'assistant_message_delta' | 'assistant_reasoning_delta'
+      >;
+      ts: string;
+      payload: Record<string, unknown> & { sessionId: string; session: TSession };
+    };
+
+export type ScenarioAssistantTurnResponse = AssistantRuntimeResponse;
+export type ResultAssistantTurnResponse = AssistantRuntimeResponse;
+
+export interface AssistantRuntimeEvent {
+  type:
+    | 'session_started'
+    | 'turn_started'
+    | 'tool_call_requested'
+    | 'tool_call_approved'
+    | 'tool_call_denied'
+    | 'tool_call_resolved'
+    | 'assistant_message_delta'
+    | 'assistant_reasoning_delta'
+    | 'assistant_message_completed'
+    | 'session_snapshot'
+    | 'session_warning'
+    | 'session_error'
+    | 'session_finished';
+  ts: string;
+  payload: Record<string, unknown>;
+}
+
+export type AssistantRuntimeResponse =
+  | {
+      type: 'assistant_message';
+      text: string;
+      suggestions?: ScenarioAssistantSuggestionBundle;
+    }
+  | {
+      type: 'tool_call_request' | 'tool_call_resolved';
+      text: string;
+      pendingToolCalls: AssistantRuntimeToolCall[];
+      pendingToolCall?: AssistantRuntimeToolCall;
+    };
+
+export interface AssistantToolCallDecision {
+  toolCallId: string;
+  decision: 'approve' | 'deny';
+  arguments?: unknown;
+  /** Why the user denied the call; the model receives it. */
+  message?: string;
 }
 
 export interface EvaluationJudge {

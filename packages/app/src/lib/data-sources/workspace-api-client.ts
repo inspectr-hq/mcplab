@@ -1,4 +1,5 @@
 import type {
+  AssistantRuntimeEvent,
   CoreEvalConfig,
   CoreSourceEvalConfig,
   CoreResultsJson,
@@ -90,24 +91,30 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   return response.text();
 }
 
+/** Every assistant event the server sends; a new event type fails to compile until listed here. */
+const ASSISTANT_EVENT_TYPES: Record<AssistantRuntimeEvent['type'], true> = {
+  session_started: true,
+  turn_started: true,
+  tool_call_requested: true,
+  tool_call_approved: true,
+  tool_call_denied: true,
+  tool_call_resolved: true,
+  assistant_message_delta: true,
+  assistant_reasoning_delta: true,
+  assistant_message_completed: true,
+  session_snapshot: true,
+  session_warning: true,
+  session_error: true,
+  session_finished: true
+};
+
 function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   path: string,
   onEvent: (event: TEvent) => void
 ): () => void {
   const source = new EventSource(`${BASE}${path}`);
   const terminalSessionPath = path.replace(/\/events$/, '');
-  const eventTypes = [
-    'session_started',
-    'turn_started',
-    'tool_call_requested',
-    'tool_call_approved',
-    'tool_call_denied',
-    'tool_call_resolved',
-    'assistant_message_completed',
-    'session_warning',
-    'session_error',
-    'session_finished'
-  ] as const;
+  const eventTypes = Object.keys(ASSISTANT_EVENT_TYPES) as AssistantRuntimeEvent['type'][];
   let closed = false;
   const close = () => {
     if (closed) return;
@@ -302,14 +309,24 @@ export const workspaceApiClient = {
     ),
   getResultAssistantSession: (sessionId: string) =>
     request<{ session: ResultAssistantSessionView }>(`/api/result-assistant/sessions/${sessionId}`),
-  sendResultAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendResultAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
+    ),
+  cancelResultAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/result-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
     ),
   approveResultAssistantToolCall: (
     sessionId: string,
@@ -323,12 +340,12 @@ export const workspaceApiClient = {
         body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyResultAssistantToolCall: (sessionId: string, callId: string) =>
+  denyResultAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   closeResultAssistantSession: (sessionId: string) =>
@@ -413,29 +430,43 @@ export const workspaceApiClient = {
     request<{ session: ScenarioAssistantSessionView }>(
       `/api/scenario-assistant/sessions/${sessionId}`
     ),
-  sendScenarioAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
+  sendScenarioAssistantMessage: (
+    sessionId: string,
+    message: string,
+    signal?: AbortSignal,
+    turnId?: string
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(turnId ? { turnId } : {}) }),
         signal
       }
     ),
-  approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  cancelScenarioAssistantTurn: (sessionId: string, turnId: string) =>
+    request<{ ok: boolean }>(
+      `/api/scenario-assistant/sessions/${sessionId}/turns/${encodeURIComponent(turnId)}/cancel`,
+      { method: 'POST', body: JSON.stringify({}) }
+    ),
+  approveScenarioAssistantToolCall: (
+    sessionId: string,
+    callId: string,
+    argumentsOverride?: unknown
+  ) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
-  denyScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+  denyScenarioAssistantToolCall: (sessionId: string, callId: string, message?: string) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
       {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify(message ? { message } : {})
       }
     ),
   approveAllScenarioAssistantToolCalls: (sessionId: string) =>

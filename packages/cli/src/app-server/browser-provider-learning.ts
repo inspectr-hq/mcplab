@@ -5,7 +5,7 @@ import {
   chatWithJsonRetry,
   extractJsonValuesFromAssistantText,
   parseJsonFromAssistantText
-} from './assistant-common.js';
+} from './one-shot-json.js';
 
 export interface BrowserProviderLearningTraceInput {
   evidenceVersion?: unknown;

@@ -626,7 +626,7 @@ These features are available through the web app (`mcplab app`).
 
 ### Scenario Assistant
 
-An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns — and can call your MCP server's tools directly to demonstrate expected behavior.
+An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns, and can call your MCP server's tools directly to demonstrate expected behavior.
 
 Open the app, navigate to an eval, and open the **Scenario Assistant** panel on any scenario.
 
@@ -636,6 +636,22 @@ An AI chat that analyzes completed evaluation runs. Ask it to explain failures, 
 
 Open a run in the app and click **Result Assistant**.
 
+Both assistants run on a standard LangChain agent (`createAgent`), with separate assistant definitions and in-memory sessions. Tool approvals use LangChain's human-in-the-loop middleware, so each call that needs approval can be approved, edited or denied on its own while read-only calls run immediately. Each user turn is limited to 25 model calls. Responses stream as they are generated. MCPLab keeps provider configuration and credentials, MCP connections and execution, OAuth, tool allowlists, and approval policies. Sessions stay in process; durable state is not enabled.
+
+Assistant conversations are not sent to LangSmith by default, even when evaluation tracing is enabled. To trace them as well, set `MCPLAB_ASSISTANT_TRACING=true` together with your LangSmith settings:
+
+```sh
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+MCPLAB_ASSISTANT_TRACING=true
+```
+
+Assistant traces include prompts, run results, tool inputs and tool results.
+
+```sh
+npm run app:dev
+```
+
 ### MCP Tool Analysis
 
 Automated quality review of your MCP server's tools. Connects to your server, discovers all tools, and produces a report covering:
@@ -643,7 +659,7 @@ Automated quality review of your MCP server's tools. Connects to your server, di
 - Name and description quality
 - Schema completeness
 - Safety classification (read-like vs. potentially destructive)
-- Sample call behavior (optional — runs real calls against your server)
+- Sample call behavior (optional, runs real calls against your server)
 
 Reports are saved to `mcplab/results/tool-analysis/` and viewable in the app.
 

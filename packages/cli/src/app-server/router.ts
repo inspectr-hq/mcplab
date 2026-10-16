@@ -36,6 +36,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
+import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { handleConnectionTestRoutes } from './connection-test-routes.js';
 import { applyRequestOriginPolicy } from './request-origin.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
@@ -78,26 +79,13 @@ import {
 } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
+import { type ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import {
-  cleanupAssistantSessions,
-  touchAssistantSession,
-  assistantSessionView,
   resolveAssistantAgentFromConfig,
   resolveAssistantAgentFromLibraries,
-  pickDefaultAssistantAgentName,
-  type ScenarioAssistantSession,
-  preloadAssistantTools,
-  continueAssistantTurn,
-  executeAssistantToolCall,
-  summarizeToolResultForAssistant
-} from './scenario-assistant-domain.js';
-import {
-  preloadResultAssistantTools,
-  continueResultAssistantTurn,
-  executeResultAssistantToolCall,
-  summarizeToolResultForResultAssistant,
-  type ResultAssistantSession
-} from './result-assistant-domain.js';
+  pickDefaultAssistantAgentName
+} from './assistant-agent.js';
+import { type ResultAssistantSession } from './result-assistant-domain.js';
 import {
   discoverMcpToolsForServers,
   runToolAnalysisJob,
@@ -242,7 +230,10 @@ export async function startAppServer(options: AppServerOptions) {
     }
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
+  const assistantRuntimeFactory = createLangChainAssistantRuntimeFactory();
+  console.info('[mcplab-app] Assistants runtime: LangGraph');
   const routeDeps: AppRouteDeps = {
+    assistantRuntimeFactory,
     parseBody,
     asHtml,
     asJson,
@@ -261,21 +252,10 @@ export async function startAppServer(options: AppServerOptions) {
     stopOAuthDebuggerSession,
     oauthDebuggerExportMarkdown,
     oauthDebuggerExportRawTrace,
-    cleanupAssistantSessions,
-    touchAssistantSession,
-    assistantSessionView,
     ensureInsideRoot,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
-    preloadResultAssistantTools,
-    continueResultAssistantTurn,
-    executeResultAssistantToolCall,
-    summarizeToolResultForResultAssistant,
-    preloadAssistantTools,
-    continueAssistantTurn,
-    executeAssistantToolCall,
-    summarizeToolResultForAssistant,
     getRunResults,
     decodeEvalId,
     readConfigRecord,
@@ -526,9 +506,14 @@ export async function startAppServer(options: AppServerOptions) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
           return;
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
-          candidate.scenarioAssistantAgentName =
-            String(body.scenarioAssistantAgentName ?? '').trim() || undefined;
+        // Older clients send the setting under its previous name.
+        const assistantAgentKey = Object.prototype.hasOwnProperty.call(body, 'assistantAgentName')
+          ? 'assistantAgentName'
+          : Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')
+            ? 'scenarioAssistantAgentName'
+            : undefined;
+        if (assistantAgentKey) {
+          candidate.assistantAgentName = String(body[assistantAgentKey] ?? '').trim() || undefined;
         }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
           candidate.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
@@ -540,6 +525,7 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
         }
         const settingsChanged = [
+          'assistantAgentName',
           'scenarioAssistantAgentName',
           'evaluationJudgeAgentName',
           'evaluationDecision',

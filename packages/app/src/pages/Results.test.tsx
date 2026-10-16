@@ -400,6 +400,26 @@ describe('Results', () => {
     expect(refreshedCall.until).not.toBe(initialCall.until);
   });
 
+  it('shows and hides the MCP Lab Assistant from the header button', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('Results');
+    const toggle = screen.getByRole('button', { name: 'MCP Lab Assistant' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument();
+  });
+
   it('toggles MCP Lab Assistant expand mode in results', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 
@@ -416,6 +436,37 @@ describe('Results', () => {
     const expandButton = screen.getByRole('button', { name: /Expand/i });
     fireEvent.click(expandButton);
     expect(screen.getByRole('button', { name: /Compact/i })).toBeInTheDocument();
+  });
+
+  it('splits the screen between a scrolling table and the assistant on wide screens', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as unknown as MediaQueryList);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1000);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByText('Results');
+    const table = screen.getByTestId('results-table');
+    expect(table.parentElement!.style.height).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
+    await waitFor(() => expect(table.parentElement!.style.height).not.toBe(''));
+    expect(table.querySelector('thead')).toHaveClass('sticky');
+    expect(table.querySelector('table')!.parentElement).toHaveClass('h-full', 'overflow-auto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitFor(() => expect(table.parentElement!.style.height).toBe(''));
+    expect(table.querySelector('thead')).not.toHaveClass('sticky');
+    vi.restoreAllMocks();
   });
 
   it('renders tool token totals and n/a when unavailable', async () => {

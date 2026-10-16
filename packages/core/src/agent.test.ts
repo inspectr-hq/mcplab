@@ -11,6 +11,13 @@ vi.mock('openai', () => ({
   }
 }));
 
+const anthropicCreate = vi.hoisted(() => vi.fn());
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class MockAnthropic {
+    messages = { create: anthropicCreate };
+  }
+}));
+
 import {
   buildBatchJudgeResponseFormat,
   buildSingleCheckJudgeResponseFormat,
@@ -392,5 +399,55 @@ describe('judge response formats', () => {
         }
       }
     });
+  });
+});
+
+describe('models that reject temperature', () => {
+  const messages = [{ role: 'user' as const, content: 'Hello' }];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    anthropicCreate.mockReset();
+    openAiCreate.mockReset();
+  });
+
+  it('fails an Anthropic request with what to change instead of retrying', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    const rejection = new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."}}'
+    );
+    anthropicCreate.mockRejectedValue(rejection);
+    const result = chatWithAgent({
+      agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
+      messages
+    });
+    await expect(result).rejects.toThrow(
+      "`luna-6` doesn't accept temperature. Remove it from this agent's settings."
+    );
+    await expect(result).rejects.toMatchObject({ cause: rejection });
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails an OpenAI request with what to change instead of retrying', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    openAiCreate.mockRejectedValue(
+      new Error(
+        "400 Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported."
+      )
+    );
+    await expect(
+      chatWithAgent({ agent: { provider: 'openai', model: 'o4-mini', temperature: 0.2 }, messages })
+    ).rejects.toThrow("`o4-mini` doesn't accept temperature.");
+    expect(openAiCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes other request errors through unchanged', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    anthropicCreate.mockRejectedValue(new Error('400 max_tokens is too large'));
+    await expect(
+      chatWithAgent({
+        agent: { provider: 'anthropic', model: 'luna-6', temperature: 0.2 },
+        messages
+      })
+    ).rejects.toThrow('400 max_tokens is too large');
   });
 });

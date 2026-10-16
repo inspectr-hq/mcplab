@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_OPENAI_API_VERSION
+} from './server-constants.js';
 import { resolveAzureFoundryConnection, resolveAzureOpenAIDeployment } from './azure-config.js';
 import { AgentConnectionError } from './agent-errors.js';
 import type {
@@ -569,16 +573,19 @@ class OpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create(
-      {
-        model: options.model,
-        messages: messages.map(toOpenAiMessage),
-        tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
-      },
-      options.signal ? { signal: options.signal } : undefined
+    const request = {
+      model: options.model,
+      messages: messages.map(toOpenAiMessage),
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+      ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
+    };
+    const response = await explainRejectedTemperature(options, () =>
+      this.client.chat.completions.create(
+        request,
+        options.signal ? { signal: options.signal } : undefined
+      )
     );
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
@@ -621,7 +628,7 @@ class AzureChatAdapter implements LlmAdapter {
     if (!deployment)
       throw new AgentConnectionError('deployment', 'Missing AZURE_OPENAI_DEPLOYMENT');
     this.deployment = deployment;
-    this.apiVersion = apiVersion ?? '2024-02-15-preview';
+    this.apiVersion = apiVersion ?? DEFAULT_AZURE_OPENAI_API_VERSION;
     this.client = new OpenAI({
       apiKey,
       baseURL: v1 ? `${endpoint}/openai/v1` : `${endpoint}/openai/deployments/${deployment}`,
@@ -722,28 +729,30 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.createWithModelFallback(
-      options.model,
-      {
-        temperature: options.temperature,
-        max_tokens: options.max_tokens ?? 1024,
-        system,
-        messages: anthroMessages,
-        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
-        // output_config is an Anthropic-side structured-output field. It is not part of the
-        // stable MessageCreateParams type, so it is injected via object spread. If the model
-        // or API version does not honour it, the constraint is silently dropped and JSON
-        // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
-        ...(options.responseFormat && {
-          output_config: {
-            format: {
-              type: 'json_schema' as const,
-              schema: options.responseFormat.json_schema.schema
+    const response = await explainRejectedTemperature(options, () =>
+      this.createWithModelFallback(
+        options.model,
+        {
+          temperature: options.temperature,
+          max_tokens: options.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+          system,
+          messages: anthroMessages,
+          tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
+          // output_config is an Anthropic-side structured-output field. It is not part of the
+          // stable MessageCreateParams type, so it is injected via object spread. If the model
+          // or API version does not honour it, the constraint is silently dropped and JSON
+          // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
+          ...(options.responseFormat && {
+            output_config: {
+              format: {
+                type: 'json_schema' as const,
+                schema: options.responseFormat.json_schema.schema
+              }
             }
-          }
-        })
-      },
-      options.signal
+          })
+        },
+        options.signal
+      )
     );
 
     const toolCalls: ToolCall[] = [];
@@ -827,6 +836,37 @@ function anthropicModelCandidates(model: string): string[] {
   return Array.from(new Set(out));
 }
 
+/**
+ * Evaluations run with the settings they are configured with: a model that rejects
+ * `temperature` fails with what to change, instead of silently running at its default.
+ */
+async function explainRejectedTemperature<T>(
+  options: AdapterOptions,
+  send: () => Promise<T>
+): Promise<T> {
+  try {
+    return await send();
+  } catch (error) {
+    if (typeof options.temperature !== 'number' || !isUnsupportedTemperatureError(error))
+      throw error;
+    throw new Error(
+      `\`${options.model}\` doesn't accept temperature. Remove it from this agent's settings.`,
+      { cause: error }
+    );
+  }
+}
+
+/** Providers reject `temperature` for some models (reasoning models, newer Claude models). */
+export function isUnsupportedTemperatureError(error: unknown): boolean {
+  const message = String((error as { message?: unknown })?.message ?? error).toLowerCase();
+  return (
+    message.includes('temperature') &&
+    ['not supported', 'unsupported', 'deprecated', 'only the default', 'does not support'].some(
+      (phrase) => message.includes(phrase)
+    )
+  );
+}
+
 function isModelNotFound(error: unknown): boolean {
   if (!error) return false;
   const anyErr = error as {
@@ -841,6 +881,8 @@ function isModelNotFound(error: unknown): boolean {
     statusNotFound || typeNotFound || (msg.includes('not_found_error') && msg.includes('model'))
   );
 }
+
+export { anthropicModelCandidates, isModelNotFound };
 
 function toOpenAiTool(tool: ToolDef) {
   return {

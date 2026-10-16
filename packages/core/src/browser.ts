@@ -5,7 +5,30 @@ export {
   DECISION_PROVIDERS,
   DECISION_DEFAULTS
 } from './decision-config.js';
-export type { EvaluationDecisionConfig, WorkspaceSettingsPatch } from './types.js';
+export type {
+  AssistantKind,
+  AssistantSessionEvent,
+  AssistantRuntimeEvent,
+  AssistantRuntimeMessage,
+  AssistantRuntimeResponse,
+  AssistantRuntimeSnapshot,
+  AssistantRuntimeToolCall,
+  AssistantToolCallDecision,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionMessage,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
+  ResultAssistantRuntimeContext,
+  ScenarioAssistantMessage,
+  ScenarioAssistantPendingToolCall,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
+  ScenarioAssistantRuntimeContext,
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantSuggestionRule,
+  EvaluationDecisionConfig,
+  WorkspaceSettingsPatch
+} from './types.js';
 export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,

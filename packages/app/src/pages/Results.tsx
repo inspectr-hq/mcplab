@@ -7,14 +7,10 @@ import {
   LayoutDashboard,
   Download,
   Play,
-  Bot,
   Trash2,
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
-  RectangleEllipsis,
-  User,
-  Wrench,
   BarChart3,
   Sparkles,
   CalendarRange,
@@ -59,15 +55,15 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { PassRateBadge } from '@/components/PassRateBadge';
-import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
+import { useHeightToViewportBottom } from '@/hooks/use-height-to-viewport-bottom';
+import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
-import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import type { EvalResult } from '@/types/eval';
 import { summaryToResult } from '@/lib/run-summary-to-result';
@@ -236,6 +232,8 @@ const Results = () => {
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
   const dashboardRequestIdRef = useRef(0);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const splitViewRef = useRef<HTMLDivElement | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -256,6 +254,13 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  // With the assistant open, the table and assistant share the rest of the screen below the
+  // header (and dashboard) and scroll independently, so the assistant's input stays visible.
+  const splitViewHeight = useHeightToViewportBottom(splitViewRef, {
+    active: assistantOpen,
+    observe: pageRef
+  });
+  const splitView = splitViewHeight !== undefined;
   const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
   const { offset, totalCount, hasMore } = pagination;
@@ -442,8 +447,8 @@ const Results = () => {
     assistantInput,
     assistantLoading,
     assistantTurnCancelable,
+    assistantExpired,
     cancelAssistantTurn,
-    assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,
     askAssistant,
@@ -718,7 +723,11 @@ const Results = () => {
     return map;
   }, [sorted]);
 
-  const openGlobalAssistant = () => {
+  const toggleGlobalAssistant = () => {
+    if (assistantOpen) {
+      setAssistantOpen(false);
+      return;
+    }
     setAssistantOpen(true);
     ensureIntroMessage(
       'Ask me to compare runs, explain regressions over time, or summarize historical drift patterns.'
@@ -774,7 +783,7 @@ const Results = () => {
   };
 
   return (
-    <div className="flex flex-col">
+    <div ref={pageRef} className="flex flex-col">
       <AlertDialog
         open={pendingDeleteRunId !== null}
         onOpenChange={(open) => {
@@ -977,7 +986,13 @@ const Results = () => {
           <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
             Next
           </Button>
-          <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5"
+            aria-pressed={assistantOpen}
+            onClick={toggleGlobalAssistant}
+          >
             <Sparkles className="h-4 w-4 text-amber-500" />
             MCP Lab Assistant
           </Button>
@@ -1004,18 +1019,34 @@ const Results = () => {
       ) : null}
 
       <div
-        className={`mt-4 grid gap-6 ${
+        ref={splitViewRef}
+        style={splitView ? { height: splitViewHeight } : undefined}
+        className={cn(
+          'mt-4 grid gap-6',
+          splitView ? 'grid-rows-[minmax(0,1fr)]' : 'items-start',
           assistantOpen
             ? assistantExpanded
               ? 'xl:grid-cols-[minmax(0,1fr)_52rem]'
               : 'xl:grid-cols-[minmax(0,1fr)_30rem]'
             : 'grid-cols-1'
-        }`}
+        )}
       >
-        <Card data-testid="results-table" className="results-table-container">
-          <CardContent className="p-0">
-            <Table className="table-auto">
-              <TableHeader>
+        <Card
+          data-testid="results-table"
+          className={cn(
+            'results-table-container',
+            splitView && 'flex min-h-0 flex-col overflow-hidden'
+          )}
+        >
+          <CardContent className={cn('p-0', splitView && 'min-h-0 flex-1')}>
+            <Table className="table-auto" containerClassName={splitView ? 'h-full' : undefined}>
+              <TableHeader
+                className={
+                  splitView
+                    ? 'sticky top-0 z-10 bg-card shadow-[0_1px_0_var(--color-border)]'
+                    : undefined
+                }
+              >
                 <TableRow>
                   <TableHead className="results-table-column-run-id w-120 max-w-120">
                     <button
@@ -1314,133 +1345,33 @@ const Results = () => {
         </Card>
 
         {assistantOpen && (
-          <ResultAssistantPanel
-            title="MCP Lab Assistant"
-            description="Analyze historical differences and trends across all result runs."
-            expanded={assistantExpanded}
-            onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
-            onHide={() => setAssistantOpen(false)}
-            messages={assistantMessages}
-            pendingToolCalls={assistantPendingToolCalls}
-            loading={assistantLoading}
-            onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
-            input={assistantInput}
-            onInputChange={setAssistantInput}
-            onSend={() => void askAssistant()}
-            inputPlaceholder="Ask about historical run differences..."
-            snippets={RESULT_ASSISTANT_SNIPPETS}
-            onSnippetSelect={(prompt) => {
-              setAssistantOpen(true);
-              applyResultAssistantSnippet(prompt);
-            }}
-            onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
-            onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
-            chatEndRef={assistantChatEndRef}
-            inputRef={assistantInputRef}
-            className="min-w-0 overflow-hidden xl:flex xl:h-[calc(100vh-14rem)] xl:min-h-0 xl:flex-col"
-            renderMessage={({
-              message,
-              index,
-              linkedPendingToolCall,
-              isUser,
-              isAssistant,
-              isSystem,
-              isTool
-            }) => {
-              const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
-              if (
-                isTool &&
-                /^(Approved|Denied) tool call\b/i.test(String(message.text ?? '').trim())
-              ) {
-                return null;
-              }
-
-              if (isAssistantToolRequest) {
-                const displayToolName = formatAssistantToolName(
-                  linkedPendingToolCall?.tool ??
-                    message.toolRequestName ??
-                    linkedPendingToolCall?.publicToolName ??
-                    message.toolRequestPublicName ??
-                    'unknown_tool'
-                );
-                return (
-                  <div
-                    key={`${message.id ?? `${message.role}-${index}`}:tool`}
-                    className="flex items-start gap-2"
-                  >
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                      <Bot className="h-3 w-3" />
-                    </div>
-                    <details
-                      open={Boolean(linkedPendingToolCall)}
-                      className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
-                    >
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                            <span
-                              className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                linkedPendingToolCall
-                                  ? 'bg-amber-100 text-amber-900'
-                                  : 'bg-muted text-muted-foreground'
-                              }`}
-                            >
-                              {linkedPendingToolCall ? 'Needs approval' : 'Completed'}
-                            </span>
-                          </div>
-                        </div>
-                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                      </summary>
-                      <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
-                        <MarkdownContent text={message.text} className="text-sm" />
-                      </div>
-                    </details>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={message.id ?? `${message.role}-${index}`}
-                  className={`flex items-start gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}
-                >
-                  {!isUser && (
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                      {isSystem ? (
-                        <RectangleEllipsis className="h-3 w-3" />
-                      ) : (
-                        <Bot className="h-3 w-3" />
-                      )}
-                    </div>
-                  )}
-                  <div
-                    className={`min-w-0 max-w-[92%] wrap-break-word rounded-md border p-3 text-sm ${
-                      isUser
-                        ? 'border-primary/20 bg-primary/10'
-                        : isSystem
-                          ? 'border-amber-400/30 bg-amber-50/70'
-                          : isTool
-                            ? 'border-blue-300/30 bg-blue-50/50'
-                            : 'border-border/80 bg-background shadow-xs'
-                    }`}
-                  >
-                    {isUser ? (
-                      <p className="whitespace-pre-wrap">{message.text}</p>
-                    ) : (
-                      <MarkdownContent text={message.text} className="text-sm" />
-                    )}
-                  </div>
-                  {isUser && (
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-                      <User className="h-3 w-3" />
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
+          <div className="min-h-0 min-w-0">
+            <ResultAssistantPanel
+              title="MCP Lab Assistant"
+              description="Analyze historical differences and trends across all result runs."
+              expanded={assistantExpanded}
+              onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
+              onHide={() => setAssistantOpen(false)}
+              messages={assistantMessages}
+              pendingToolCalls={assistantPendingToolCalls}
+              loading={assistantLoading}
+              onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
+              input={assistantInput}
+              onInputChange={setAssistantInput}
+              onSend={() => void askAssistant()}
+              inputPlaceholder="Ask about historical run differences..."
+              snippets={RESULT_ASSISTANT_SNIPPETS}
+              onSnippetSelect={(prompt) => {
+                setAssistantOpen(true);
+                applyResultAssistantSnippet(prompt);
+              }}
+              onApproveToolCall={approveResultAssistantToolCall}
+              onDenyToolCall={denyResultAssistantToolCall}
+              expired={assistantExpired}
+              inputRef={assistantInputRef}
+              className="min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col"
+            />
+          </div>
         )}
       </div>
     </div>

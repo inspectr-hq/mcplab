@@ -8,8 +8,9 @@ import {
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
-import { parseJsonFromAssistantText, truncateJson } from './assistant-common.js';
-export { parseJsonFromAssistantText } from './assistant-common.js';
+import { parseJsonFromAssistantText } from './one-shot-json.js';
+import { truncateJson } from './assistant-common.js';
+export { parseJsonFromAssistantText } from './one-shot-json.js';
 import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
@@ -17,7 +18,7 @@ import {
 import {
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromLibraries
-} from './scenario-assistant-domain.js';
+} from './assistant-agent.js';
 
 type JobEvent = {
   type: 'started' | 'log' | 'completed' | 'error';
@@ -642,7 +643,7 @@ export async function runToolAnalysisJob(params: {
   const libraries = readLibraries(settings.librariesDir);
   const selectedAssistantAgentName = pickDefaultAssistantAgentName({
     requested: params.requestedAssistantAgentName,
-    settingsDefault: settings.scenarioAssistantAgentName,
+    settingsDefault: settings.assistantAgentName,
     agentNames: Object.keys(libraries.agents)
   });
   if (!selectedAssistantAgentName) {

@@ -21,7 +21,7 @@ const SettingsPage = () => {
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
+  const [assistantAgentName, setAssistantAgentName] = useState<string>('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
@@ -30,20 +30,20 @@ const SettingsPage = () => {
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
 
   const effectiveAssistantAgentName = useMemo(
-    () => scenarioAssistantAgentName || agents[0]?.name || '',
-    [scenarioAssistantAgentName, agents]
+    () => assistantAgentName || agents[0]?.name || '',
+    [assistantAgentName, agents]
   );
 
   const loadSettings = useCallback(async () => {
     setLoadingSettings(true);
     try {
       const settings = await source.getWorkspaceSettings();
-      setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
+      setAssistantAgentName(settings?.assistantAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       setSavedDecision(settings?.evaluationDecision);
     } catch (error: unknown) {
-      setScenarioAssistantAgentName('');
+      setAssistantAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
       setSavedDecision(undefined);
@@ -62,12 +62,12 @@ const SettingsPage = () => {
   }, [loadSettings]);
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
-    const previousAgentName = scenarioAssistantAgentName;
-    setScenarioAssistantAgentName(nextAgentName);
+    const previousAgentName = assistantAgentName;
+    setAssistantAgentName(nextAgentName);
     setSavingSettings(true);
     try {
       await source.updateWorkspaceSettings({
-        scenarioAssistantAgentName: nextAgentName || undefined
+        assistantAgentName: nextAgentName || undefined
       });
       toast({
         title: 'Settings updated',
@@ -76,7 +76,7 @@ const SettingsPage = () => {
           : 'Default assistant agent cleared (will use first available agent by default).'
       });
     } catch (error: unknown) {
-      setScenarioAssistantAgentName(previousAgentName);
+      setAssistantAgentName(previousAgentName);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
