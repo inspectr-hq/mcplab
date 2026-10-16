@@ -19,28 +19,22 @@ export interface AssistantSessionRouteOptions<TSession extends AssistantHttpSess
   pathname: string;
   method: string;
   prefix: string;
-  missingSessionMessage: string;
-  parseBody(req: IncomingMessage): Promise<any>;
+  assistantLabel: string;
+  parseBody(req: IncomingMessage): Promise<unknown>;
   asJson(res: ServerResponse, status: number, body: unknown): void;
   sessions: Map<string, TSession>;
   cleanup(): void;
   touch(session: TSession): void;
   view(session: TSession): unknown;
-  response(response: AssistantRuntimeResponse): unknown;
   finish?(session: TSession): void;
-  afterDecision?(
-    response: AssistantRuntimeResponse,
-    decision: 'approve' | 'deny',
-    toolName: string
-  ): unknown;
   approveAll?: boolean;
-  toolCallNotFoundMessage: string;
 }
 
 export async function handleAssistantSessionRoutes<TSession extends AssistantHttpSession>(
   options: AssistantSessionRouteOptions<TSession>
 ): Promise<boolean> {
-  const { req, res, pathname, method, prefix, missingSessionMessage, sessions, asJson } = options;
+  const { req, res, pathname, method, prefix, sessions, asJson } = options;
+  const missingSessionMessage = `${options.assistantLabel} session not found`;
   if (!pathname.startsWith(`${prefix}/`)) return false;
   const parts = pathname.slice(prefix.length + 1).split('/');
   const sessionId = parts[0] ?? '';
@@ -111,7 +105,11 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
   }
   if (!session) {
     if (
-      isSessionRead || isMessage || isToolDecision || isApproveAll || (isEvents && method === 'GET')
+      isSessionRead ||
+      isMessage ||
+      isToolDecision ||
+      isApproveAll ||
+      (isEvents && method === 'GET')
     ) {
       asJson(res, 404, { error: missingSessionMessage });
       return true;
@@ -128,15 +126,18 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     try {
       throwIfAborted(abort.signal);
       const body = await options.parseBody(req);
-      const message = String(body.message ?? '').trim();
       throwIfAborted(abort.signal);
-      if (!message) {
+      if (!isPlainObject(body) || typeof body.message !== 'string' || !body.message.trim()) {
         asJson(res, 400, { error: 'message is required' });
         return true;
       }
+      const message = body.message.trim();
       const response = await session.runtime!.sendMessage(message, abort.signal);
       throwIfAborted(abort.signal);
-      asJson(res, 200, { session: options.view(session), response: options.response(response) });
+      asJson(res, 200, {
+        session: options.view(session),
+        response: formatAssistantRuntimeResponse(response)
+      });
     } catch (error) {
       if (!abort.signal.aborted) throw error;
     } finally {
@@ -156,7 +157,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
       .pendingToolCalls.find((call) => call.id === callId);
     if (!pending) {
       asJson(res, 404, {
-        error: options.toolCallNotFoundMessage
+        error: `${options.assistantLabel} tool call not found`
       });
       return true;
     }
@@ -170,13 +171,17 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
       throwIfAborted(abort.signal);
       const body = decision === 'approve' ? await options.parseBody(req) : {};
       throwIfAborted(abort.signal);
+      if (!isPlainObject(body)) {
+        asJson(res, 400, { error: 'Invalid request body' });
+        return true;
+      }
       const response = await session.runtime!.resolveToolCalls(
         [
           {
             toolCallId: pending.id,
             decision,
             ...(decision === 'approve' &&
-            Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')
+            Object.prototype.hasOwnProperty.call(body, 'argumentsOverride')
               ? { arguments: body.argumentsOverride }
               : {})
           }
@@ -186,9 +191,7 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
       throwIfAborted(abort.signal);
       asJson(res, 200, {
         session: options.view(session),
-        response:
-          options.afterDecision?.(response, decision, pending.publicToolName) ??
-          options.response(response)
+        response: formatAssistantRuntimeResponse(response)
       });
     } catch (error) {
       if (!abort.signal.aborted) throw error;
@@ -213,7 +216,10 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
         abort.signal
       );
       throwIfAborted(abort.signal);
-      asJson(res, 200, { session: options.view(session), response: options.response(response) });
+      asJson(res, 200, {
+        session: options.view(session),
+        response: formatAssistantRuntimeResponse(response)
+      });
     } catch (error) {
       if (!abort.signal.aborted) throw error;
     } finally {
@@ -222,6 +228,20 @@ export async function handleAssistantSessionRoutes<TSession extends AssistantHtt
     return true;
   }
   return false;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function formatAssistantRuntimeResponse(
+  response: AssistantRuntimeResponse
+): AssistantRuntimeResponse {
+  return response.type === 'tool_call_request' || response.type === 'tool_call_resolved'
+    ? { ...response, pendingToolCall: response.pendingToolCalls[0] }
+    : response;
 }
 
 function errorMessage(error: unknown): string {

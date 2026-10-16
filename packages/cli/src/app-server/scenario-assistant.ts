@@ -223,8 +223,7 @@ export async function handleScenarioAssistantRoutes(params: {
     pathname,
     method,
     prefix: '/api/scenario-assistant/sessions',
-    missingSessionMessage: 'Scenario Assistant session not found',
-    toolCallNotFoundMessage: 'Scenario Assistant tool call not found',
+    assistantLabel: 'Scenario Assistant',
     parseBody,
     asJson,
     sessions: assistantSessions,
@@ -232,22 +231,6 @@ export async function handleScenarioAssistantRoutes(params: {
     touch: touchScenarioAssistantSession,
     view: scenarioAssistantSessionView,
     finish: (session) => publishSessionEvent(session, 'session_finished'),
-    response: (response) =>
-      response.type === 'tool_call_request'
-        ? {
-            type: response.type,
-            text: response.text,
-            pendingToolCall: response.pendingToolCalls[0],
-            pendingToolCalls: response.pendingToolCalls
-          }
-        : response,
-    afterDecision: (response, decision, toolName) =>
-      response.type === 'tool_call_resolved'
-        ? {
-            ...response,
-            text: `${decision === 'approve' ? 'Approved' : 'Denied'} tool call ${toolName}. Waiting for remaining tool calls.`
-          }
-        : response,
     approveAll: true
   });
 }

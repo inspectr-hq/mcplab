@@ -144,30 +144,15 @@ export async function handleResultAssistantRoutes(params: {
     pathname,
     method,
     prefix: '/api/result-assistant/sessions',
-    missingSessionMessage: 'Result Assistant session not found',
-    toolCallNotFoundMessage: 'Result Assistant tool call not found',
+    assistantLabel: 'Result Assistant',
     parseBody,
     asJson,
     sessions: resultAssistantSessions,
     cleanup: () => cleanupResultAssistantSessions(resultAssistantSessions),
     touch: touchResultAssistantSession,
     view: resultAssistantSessionView,
-    finish: (session) => publishSessionEvent(session, 'session_finished'),
-    response: normalizeResultAssistantResponse
+    finish: (session) => publishSessionEvent(session, 'session_finished')
   });
-}
-
-function normalizeResultAssistantResponse(
-  response: import('@inspectr/mcplab-core').AssistantRuntimeResponse
-) {
-  return response.type === 'assistant_message'
-    ? response
-    : {
-        type: response.type,
-        text: response.text,
-        pendingToolCall: response.pendingToolCalls[0],
-        pendingToolCalls: response.pendingToolCalls
-      };
 }
 
 function localMcplabMcpUrl(): string {

@@ -1,6 +1,41 @@
 import { EventEmitter } from 'node:events';
+import type { AssistantRuntimeDefinition } from '@inspectr/mcplab-core';
 import { describe, expect, it, vi } from 'vitest';
-import { handleAssistantSessionRoutes, type AssistantHttpSession } from './assistant-session-routes.js';
+import {
+  handleAssistantSessionRoutes,
+  type AssistantHttpSession
+} from './assistant-session-routes.js';
+import { createStatefulAssistantRuntimeHarness } from '../../test-support/stateful-assistant-runtime.js';
+
+function makeRuntimeDefinition(
+  assistant: AssistantRuntimeDefinition['assistant'] = 'scenario'
+): AssistantRuntimeDefinition {
+  const context =
+    assistant === 'scenario'
+      ? {
+          scenario: {
+            id: 'scenario-1',
+            prompt: 'test prompt',
+            serverNames: [],
+            evalRules: [],
+            extractRules: []
+          }
+        }
+      : {
+          scope: 'all_runs' as const,
+          runId: null,
+          resultSummary: null,
+          referenceReportsForRun: []
+        };
+  return {
+    assistant,
+    agent: { provider: 'openai', model: 'gpt-4o-mini' },
+    context,
+    getSystemPrompt: () => 'test system prompt',
+    tools: [],
+    approvalPolicy: () => 'approval_required'
+  };
+}
 
 function makeSession() {
   const session: AssistantHttpSession = {
@@ -8,13 +43,11 @@ function makeSession() {
     events: [],
     clients: new Set(),
     runtime: {
-      sendMessage: vi.fn(),
-      resolveToolCalls: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'done' }),
+      resolveToolCalls: vi.fn().mockResolvedValue({ type: 'assistant_message', text: 'done' }),
       getSnapshot: vi.fn().mockReturnValue({
         messages: [],
-        pendingToolCalls: [
-          { id: 'tool-1', status: 'pending', publicToolName: 'write_report' }
-        ]
+        pendingToolCalls: [{ id: 'tool-1', status: 'pending', publicToolName: 'write_report' }]
       }),
       isBusy: () => false,
       dispose: vi.fn()
@@ -33,15 +66,15 @@ function makeOptions(action: string, session = makeSession(), approveAll = false
     pathname: `/api/assistant/sessions/${session.id}${action}`,
     method: 'POST',
     prefix: '/api/assistant/sessions',
-    missingSessionMessage: 'Assistant session not found',
-    toolCallNotFoundMessage: 'Assistant tool call not found',
-    parseBody: vi.fn().mockResolvedValue({ message: 'hello', argumentsOverride: { path: 'edited' } }),
+    assistantLabel: 'Assistant',
+    parseBody: vi
+      .fn()
+      .mockResolvedValue({ message: 'hello', argumentsOverride: { path: 'edited' } }),
     asJson,
     sessions: new Map([[session.id, session]]),
     cleanup: vi.fn(),
     touch: vi.fn(),
     view: vi.fn(() => ({ id: session.id })),
-    response: vi.fn((response) => response),
     approveAll
   } as any;
   return { options, session, res, asJson };
@@ -52,38 +85,54 @@ describe.each([
   ['Result', false]
 ])('%s shared assistant session routes', (_kind, supportsApproveAll) => {
   const actions = supportsApproveAll
-    ? ['/messages', '/tool-calls/tool-1/approve', '/tool-calls/tool-1/deny', '/tool-calls/approve-all']
+    ? [
+        '/messages',
+        '/tool-calls/tool-1/approve',
+        '/tool-calls/tool-1/deny',
+        '/tool-calls/approve-all'
+      ]
     : ['/messages', '/tool-calls/tool-1/approve', '/tool-calls/tool-1/deny'];
 
-  it.each(actions)('aborts %s work when its response closes and disposes the listener', async (action) => {
-    const { options, session, res, asJson } = makeOptions(action, makeSession(), supportsApproveAll);
-    let signal: AbortSignal | undefined;
-    const waitForAbort = (...args: any[]) =>
-      new Promise<any>((_resolve, reject) => {
-        const passedSignal = args.at(-1) as AbortSignal;
-        signal = passedSignal;
-        passedSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      });
-    if (action === '/messages') session.runtime!.sendMessage = vi.fn(waitForAbort);
-    else session.runtime!.resolveToolCalls = vi.fn(waitForAbort);
+  it.each(actions)(
+    'aborts %s work when its response closes and disposes the listener',
+    async (action) => {
+      const { options, session, res, asJson } = makeOptions(
+        action,
+        makeSession(),
+        supportsApproveAll
+      );
+      let signal: AbortSignal | undefined;
+      const waitForAbort = (...args: any[]) =>
+        new Promise<any>((_resolve, reject) => {
+          const passedSignal = args.at(-1) as AbortSignal;
+          signal = passedSignal;
+          passedSignal.addEventListener('abort', () => reject(new Error('aborted')), {
+            once: true
+          });
+        });
+      if (action === '/messages') session.runtime!.sendMessage = vi.fn(waitForAbort);
+      else session.runtime!.resolveToolCalls = vi.fn(waitForAbort);
 
-    const route = handleAssistantSessionRoutes(options);
-    await vi.waitFor(() => {
-      expect(
-        action === '/messages'
-          ? session.runtime!.sendMessage
-          : session.runtime!.resolveToolCalls
-      ).toHaveBeenCalledOnce();
-    });
-    res.emit('close');
-    await expect(route).resolves.toBe(true);
-    expect(signal?.aborted).toBe(true);
-    expect(asJson).not.toHaveBeenCalled();
-    expect(res.listenerCount('close')).toBe(0);
-  });
+      const route = handleAssistantSessionRoutes(options);
+      await vi.waitFor(() => {
+        expect(
+          action === '/messages' ? session.runtime!.sendMessage : session.runtime!.resolveToolCalls
+        ).toHaveBeenCalledOnce();
+      });
+      res.emit('close');
+      await expect(route).resolves.toBe(true);
+      expect(signal?.aborted).toBe(true);
+      expect(asJson).not.toHaveBeenCalled();
+      expect(res.listenerCount('close')).toBe(0);
+    }
+  );
 
   it('keeps a normal writable-ended close from aborting and removes the listener', async () => {
-    const { options, session, res, asJson } = makeOptions('/messages', makeSession(), supportsApproveAll);
+    const { options, session, res, asJson } = makeOptions(
+      '/messages',
+      makeSession(),
+      supportsApproveAll
+    );
     let signal: AbortSignal | undefined;
     asJson.mockImplementation(() => {
       res.writableEnded = true;
@@ -121,32 +170,216 @@ describe.each([
   it.each([
     ['/messages', 'sendMessage'],
     ['/tool-calls/tool-1/approve', 'resolveToolCalls']
-  ])('does not execute or write a response for a preclosed writableEnded response on %s', async (action, operation) => {
-    const { options, session, res, asJson } = makeOptions(action, makeSession(), supportsApproveAll);
-    res.writableEnded = true;
-    const handled = await handleAssistantSessionRoutes(options);
-    expect(handled).toBe(true);
-    expect(session.runtime![operation as 'sendMessage' | 'resolveToolCalls']).not.toHaveBeenCalled();
-    expect(asJson).not.toHaveBeenCalled();
-    expect(res.listenerCount('close')).toBe(0);
-  });
+  ])(
+    'does not execute or write a response for a preclosed writableEnded response on %s',
+    async (action, operation) => {
+      const { options, session, res, asJson } = makeOptions(
+        action,
+        makeSession(),
+        supportsApproveAll
+      );
+      res.writableEnded = true;
+      const handled = await handleAssistantSessionRoutes(options);
+      expect(handled).toBe(true);
+      expect(
+        session.runtime![operation as 'sendMessage' | 'resolveToolCalls']
+      ).not.toHaveBeenCalled();
+      expect(asJson).not.toHaveBeenCalled();
+      expect(res.listenerCount('close')).toBe(0);
+    }
+  );
 
   it.each([
     ['/messages', 'sendMessage'],
     ['/tool-calls/tool-1/approve', 'resolveToolCalls']
-  ])('does not execute or write a response for an already destroyed response on %s', async (action, operation) => {
-    const { options, session, res, asJson } = makeOptions(action, makeSession(), supportsApproveAll);
-    res.destroyed = true;
-    const handled = await handleAssistantSessionRoutes(options);
-    expect(handled).toBe(true);
-    expect(session.runtime![operation as 'sendMessage' | 'resolveToolCalls']).not.toHaveBeenCalled();
-    expect(asJson).not.toHaveBeenCalled();
-    expect(res.listenerCount('close')).toBe(0);
-  });
+  ])(
+    'does not execute or write a response for an already destroyed response on %s',
+    async (action, operation) => {
+      const { options, session, res, asJson } = makeOptions(
+        action,
+        makeSession(),
+        supportsApproveAll
+      );
+      res.destroyed = true;
+      const handled = await handleAssistantSessionRoutes(options);
+      expect(handled).toBe(true);
+      expect(
+        session.runtime![operation as 'sendMessage' | 'resolveToolCalls']
+      ).not.toHaveBeenCalled();
+      expect(asJson).not.toHaveBeenCalled();
+      expect(res.listenerCount('close')).toBe(0);
+    }
+  );
 
   it('does not run cleanup for malformed suffixes', async () => {
     const { options } = makeOptions('/messages/extra', makeSession(), supportsApproveAll);
     await expect(handleAssistantSessionRoutes(options)).resolves.toBe(false);
     expect(options.cleanup).not.toHaveBeenCalled();
+  });
+});
+
+describe('shared assistant session route behavior', () => {
+  it.each(['tool_call_request', 'tool_call_resolved'] as const)(
+    'adds the first pending tool call alias to %s responses',
+    async (type) => {
+      const { options, session, asJson } = makeOptions('/messages');
+      const pendingToolCalls = [
+        { id: 'tool-1', status: 'pending', publicToolName: 'write_report' },
+        { id: 'tool-2', status: 'pending', publicToolName: 'send_email' }
+      ];
+      const response = { type, text: 'keep this response', pendingToolCalls };
+      session.runtime!.sendMessage = vi.fn().mockResolvedValue(response);
+
+      await handleAssistantSessionRoutes(options);
+
+      const body = asJson.mock.calls[0]?.[2] as any;
+      expect(body.response).toEqual({ ...response, pendingToolCall: pendingToolCalls[0] });
+      expect(body.response.text).toBe('keep this response');
+    }
+  );
+
+  it.each([null, [], 'text', 3, {}, { message: 2 }, { message: '  ' }])(
+    'rejects malformed message body %j without calling the runtime',
+    async (body) => {
+      const { options, session, asJson } = makeOptions('/messages');
+      options.parseBody = vi.fn().mockResolvedValue(body);
+
+      await handleAssistantSessionRoutes(options);
+
+      expect(asJson).toHaveBeenCalledWith(expect.anything(), 400, { error: 'message is required' });
+      expect(session.runtime!.sendMessage).not.toHaveBeenCalled();
+    }
+  );
+
+  it('passes an explicit null arguments override through to the runtime', async () => {
+    const { options, session } = makeOptions('/tool-calls/tool-1/approve');
+    options.parseBody = vi.fn().mockResolvedValue({ argumentsOverride: null });
+
+    await handleAssistantSessionRoutes(options);
+
+    expect(session.runtime!.resolveToolCalls).toHaveBeenCalledWith(
+      [{ toolCallId: 'tool-1', decision: 'approve', arguments: null }],
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('allows an empty body for approval', async () => {
+    const { options, session, asJson } = makeOptions('/tool-calls/tool-1/approve');
+    options.parseBody = vi.fn().mockResolvedValue({});
+
+    await handleAssistantSessionRoutes(options);
+
+    expect(session.runtime!.resolveToolCalls).toHaveBeenCalledOnce();
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 200, expect.any(Object));
+  });
+
+  it.each([null, [], 'text', 3])(
+    'rejects malformed approval body %j without executing tools',
+    async (body) => {
+      const { options, session, asJson } = makeOptions('/tool-calls/tool-1/approve');
+      options.parseBody = vi.fn().mockResolvedValue(body);
+
+      await handleAssistantSessionRoutes(options);
+
+      expect(asJson).toHaveBeenCalledWith(expect.anything(), 400, {
+        error: 'Invalid request body'
+      });
+      expect(session.runtime!.resolveToolCalls).not.toHaveBeenCalled();
+    }
+  );
+
+  it('leaves an unknown subpath unhandled without cleanup or state mutation', async () => {
+    const { options, session } = makeOptions('/not-a-route');
+    const { factory, disposedSessions } = createStatefulAssistantRuntimeHarness();
+    session.runtime = await factory.create(makeRuntimeDefinition());
+    const before = session.runtime.getSnapshot();
+
+    await expect(handleAssistantSessionRoutes(options)).resolves.toBe(false);
+
+    expect(options.cleanup).not.toHaveBeenCalled();
+    expect(session.runtime.getSnapshot()).toEqual(before);
+    expect(disposedSessions).toEqual([]);
+  });
+
+  it.each(['Scenario Assistant', 'Result Assistant'])(
+    'derives the %s missing tool call message from its label',
+    async (assistantLabel) => {
+      const { options, session, asJson } = makeOptions('/tool-calls/missing/approve');
+      const { factory } = createStatefulAssistantRuntimeHarness();
+      session.runtime = await factory.create(makeRuntimeDefinition());
+      await session.runtime.sendMessage('start');
+      options.assistantLabel = assistantLabel;
+
+      await handleAssistantSessionRoutes(options);
+
+      expect(asJson).toHaveBeenCalledWith(expect.anything(), 404, {
+        error: `${assistantLabel} tool call not found`
+      });
+      expect(session.runtime.getSnapshot().pendingToolCalls[0]?.status).toBe('pending');
+    }
+  );
+
+  it.each(['Scenario Assistant', 'Result Assistant'])(
+    'derives the %s missing session message from its label',
+    async (assistantLabel) => {
+      const { options, asJson } = makeOptions('');
+      options.assistantLabel = assistantLabel;
+      options.pathname = '/api/assistant/sessions/missing';
+      options.method = 'GET';
+      options.sessions = new Map();
+
+      await handleAssistantSessionRoutes(options);
+
+      expect(asJson).toHaveBeenCalledWith(expect.anything(), 404, {
+        error: `${assistantLabel} session not found`
+      });
+    }
+  );
+
+  it('rejects repeated approvals without replaying runtime execution', async () => {
+    const { options, session, asJson } = makeOptions('/tool-calls/fake-call-1/approve');
+    const { factory } = createStatefulAssistantRuntimeHarness();
+    session.runtime = await factory.create(makeRuntimeDefinition());
+    const resolveToolCalls = vi.fn(session.runtime.resolveToolCalls.bind(session.runtime));
+    session.runtime.resolveToolCalls = resolveToolCalls;
+    await session.runtime.sendMessage('start');
+
+    await handleAssistantSessionRoutes(options);
+    const snapshotAfterFirstApproval = session.runtime.getSnapshot();
+    options.pathname = '/api/assistant/sessions/assistant-1/tool-calls/fake-call-1/approve';
+    await handleAssistantSessionRoutes(options);
+
+    expect(resolveToolCalls).toHaveBeenCalledOnce();
+    expect(session.runtime.getSnapshot()).toEqual(snapshotAfterFirstApproval);
+    expect(asJson).toHaveBeenLastCalledWith(expect.anything(), 409, {
+      error: 'Tool call is already approved'
+    });
+    expect(session.runtime.getSnapshot().pendingToolCalls[0]?.status).toBe('approved');
+  });
+
+  it('rejects Scenario approve-all when there are no pending calls', async () => {
+    const { options, session, asJson } = makeOptions(
+      '/tool-calls/approve-all',
+      makeSession(),
+      true
+    );
+    const { factory } = createStatefulAssistantRuntimeHarness();
+    session.runtime = await factory.create(makeRuntimeDefinition());
+
+    await handleAssistantSessionRoutes(options);
+
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 409, {
+      error: 'No pending tool calls to approve'
+    });
+  });
+
+  it('leaves Result approve-all unhandled', async () => {
+    const { options, session } = makeOptions('/tool-calls/approve-all', makeSession(), false);
+    const { factory } = createStatefulAssistantRuntimeHarness();
+    session.runtime = await factory.create(makeRuntimeDefinition('result'));
+
+    await expect(handleAssistantSessionRoutes(options)).resolves.toBe(false);
+    expect(options.cleanup).not.toHaveBeenCalled();
+    expect(session.runtime.getSnapshot().pendingToolCalls).toEqual([]);
   });
 });

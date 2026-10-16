@@ -36,6 +36,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
+import { createLangChainAssistantRuntimeFactory } from './langchain-assistant-runtime.js';
 import { handleConnectionTestRoutes } from './connection-test-routes.js';
 import { applyRequestOriginPolicy } from './request-origin.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
@@ -163,9 +164,6 @@ const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
 
 export async function startAppServer(options: AppServerOptions) {
-  // The CLI statically loads this router, so defer framework imports until app startup.
-  const { createLangChainAssistantRuntimeFactory } =
-    await import('./langchain-assistant-runtime.js');
   // Re-read .env before each connection so new/changed vars are picked up,
   // but do NOT override vars already set by the environment (CI, runtime, etc.)
   McpClientManager.onBeforeConnect = () => dotenv.config();

@@ -8,12 +8,12 @@ export function resolveAssistantAgentFromConfig(
   const agent = config.agents[selectedAssistantAgentName];
   if (!agent) {
     throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
+      `Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
     );
   }
   if (!isLlmAgent(agent))
     throw new Error(
-      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
+      `Browser agent '${selectedAssistantAgentName}' cannot be used as an assistant agent.`
     );
   return agent;
 }
@@ -25,12 +25,12 @@ export function resolveAssistantAgentFromLibraries(
   const agent = libraries.agents[selectedAssistantAgentName];
   if (!agent) {
     throw new Error(
-      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
+      `Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure an assistant agent in Libraries > Scenarios.`
     );
   }
   if (!isLlmAgent(agent))
     throw new Error(
-      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
+      `Browser agent '${selectedAssistantAgentName}' cannot be used as an assistant agent.`
     );
   return agent;
 }

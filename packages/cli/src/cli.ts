@@ -25,7 +25,6 @@ import {
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
-import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import {
@@ -650,6 +649,8 @@ program
         throw new Error('Port must be a positive number');
       }
       printCliBanner();
+      // Load the app router only when the user starts the app, keeping CLI commands lightweight.
+      const { startAppServer } = await import('./app-server/index.js');
       await startAppServer({
         host: resolvedAppOptions.host,
         port,

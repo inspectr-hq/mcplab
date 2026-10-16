@@ -47,7 +47,9 @@ function harness(
     assistantRuntimeFactory: factory
   };
   const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
-  const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue(tools as any);
+  const listTools = vi
+    .spyOn(McpClientManager.prototype, 'listTools')
+    .mockResolvedValue(tools as any);
   const mcpCall = vi.spyOn(McpClientManager.prototype, 'callTool');
   const invoke = async (method: string, pathname: string, requestBody?: unknown) => {
     const req = Object.assign(new EventEmitter(), {
@@ -89,27 +91,38 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     'accepts a proposal %s through the real route and preserves the scenario input',
     async (_label, withReadOnlyTool) => {
       let turn = 0;
-      const { invoke, sessions, scenario, connectAll, listTools, mcpCall } = harness(async (definition) => {
-        expect(definition.assistant).toBe('scenario');
-        expect('scenario' in definition.context ? definition.context.scenario.prompt : '').toBe(
-          'Original prompt'
-        );
-        if (turn++ > 0) return { type: 'assistant_message', text: 'Suggested edits are ready.' };
-        return {
-          type: 'tool_call_request',
-          text: 'Suggested edits',
-          toolCalls: [
-            {
-              id: 'proposal-1',
-              name: 'propose_scenario_changes',
-              arguments: { prompt: { replacement: 'Revised prompt' }, notes: ['Try edge cases'] }
-            },
-            ...(withReadOnlyTool
-              ? [{ id: 'read-only-1', name: 'server-1__lookup', arguments: { query: 'check' } }]
-              : [])
-          ]
-        };
-      }, withReadOnlyTool ? [{ name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }] : []);
+      const { invoke, sessions, scenario, connectAll, listTools, mcpCall } = harness(
+        async (definition) => {
+          expect(definition.assistant).toBe('scenario');
+          expect('scenario' in definition.context ? definition.context.scenario.prompt : '').toBe(
+            'Original prompt'
+          );
+          if (turn++ > 0) return { type: 'assistant_message', text: 'Suggested edits are ready.' };
+          return {
+            type: 'tool_call_request',
+            text: 'Suggested edits',
+            toolCalls: [
+              {
+                id: 'proposal-1',
+                name: 'propose_scenario_changes',
+                arguments: { prompt: { replacement: 'Revised prompt' }, notes: ['Try edge cases'] }
+              },
+              ...(withReadOnlyTool
+                ? [{ id: 'read-only-1', name: 'server-1__lookup', arguments: { query: 'check' } }]
+                : [])
+            ]
+          };
+        },
+        withReadOnlyTool
+          ? [
+              {
+                name: 'lookup',
+                inputSchema: { type: 'object' },
+                annotations: { readOnlyHint: true }
+              }
+            ]
+          : []
+      );
       const originalScenario = structuredClone(scenario);
       mcpCall.mockResolvedValue('read result');
       await invoke('POST', '/api/scenario-assistant/sessions');
@@ -146,40 +159,53 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
   it('buffers a proposal while individually approved calls resolve, then returns ordered results and suggestions', async () => {
     const modelMessages: any[][] = [];
     let turn = 0;
-    const { invoke, sessions, mcpCall, scenario } = harness(async (_definition, messages) => {
-      modelMessages.push(messages);
-      if (turn++ === 0)
-        return {
-          type: 'tool_call_request',
-          text: 'I will check both tools.',
-          toolCalls: [
-            {
-              id: 'proposal-2',
-              name: 'propose_scenario_changes',
-              arguments: {
-                prompt: { replacement: 'Updated prompt' },
-                evalRules: {
-                  replacement: [
-                    { type: 'tool_sequence', sequence: ['server-1__lookup'] },
-                    { type: 'response_regex', value: '^ok$' },
-                    { type: 'response_regex', value: '^ok$' },
-                    { type: 'required_tool', value: 'server-1__lookup' },
-                    { type: 'forbidden_tool', value: 'server-1__lookup' }
-                  ]
-                },
-                extractRules: { replacement: [{ name: 'key', pattern: 'key=(.+)' }] },
-                notes: ['Review carefully']
-              }
-            },
-            { id: 'read-1', name: 'server-1__lookup', arguments: { query: 'original' } },
-            { id: 'write-1', name: 'server-1__update', arguments: { value: 'original' } }
-          ]
-        };
-      return { type: 'assistant_message', text: 'The checks are complete.' };
-    }, [
-      { name: 'lookup', description: 'Read', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
-      { name: 'update', description: 'Write', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }
-    ]);
+    const { invoke, sessions, mcpCall, scenario } = harness(
+      async (_definition, messages) => {
+        modelMessages.push(messages);
+        if (turn++ === 0)
+          return {
+            type: 'tool_call_request',
+            text: 'I will check both tools.',
+            toolCalls: [
+              {
+                id: 'proposal-2',
+                name: 'propose_scenario_changes',
+                arguments: {
+                  prompt: { replacement: 'Updated prompt' },
+                  evalRules: {
+                    replacement: [
+                      { type: 'tool_sequence', sequence: ['server-1__lookup'] },
+                      { type: 'response_regex', value: '^ok$' },
+                      { type: 'response_regex', value: '^ok$' },
+                      { type: 'required_tool', value: 'server-1__lookup' },
+                      { type: 'forbidden_tool', value: 'server-1__lookup' }
+                    ]
+                  },
+                  extractRules: { replacement: [{ name: 'key', pattern: 'key=(.+)' }] },
+                  notes: ['Review carefully']
+                }
+              },
+              { id: 'read-1', name: 'server-1__lookup', arguments: { query: 'original' } },
+              { id: 'write-1', name: 'server-1__update', arguments: { value: 'original' } }
+            ]
+          };
+        return { type: 'assistant_message', text: 'The checks are complete.' };
+      },
+      [
+        {
+          name: 'lookup',
+          description: 'Read',
+          inputSchema: { type: 'object' },
+          annotations: { readOnlyHint: true }
+        },
+        {
+          name: 'update',
+          description: 'Write',
+          inputSchema: { type: 'object' },
+          annotations: { readOnlyHint: false }
+        }
+      ]
+    );
     const originalScenario = structuredClone(scenario);
     const calls = mcpCall.mockImplementation(
       async (_server: string, tool: string, args: unknown) => `${tool}:${JSON.stringify(args)}`
@@ -288,32 +314,35 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
   it('approves all calls sequentially and rejects a repeated approval without replaying MCP calls', async () => {
     let turn = 0;
     const executionOrder: string[] = [];
-    const { invoke, sessions, mcpCall } = harness(async (_definition, messages) => {
-      if (turn++ === 0)
+    const { invoke, sessions, mcpCall } = harness(
+      async (_definition, messages) => {
+        if (turn++ === 0)
+          return {
+            type: 'tool_call_request',
+            text: 'Need both.',
+            toolCalls: [
+              {
+                id: 'approve-proposal',
+                name: 'propose_scenario_changes',
+                arguments: {
+                  prompt: { replacement: 'Approved proposal prompt' },
+                  notes: ['Captured']
+                }
+              },
+              { id: 'first', name: 'server-1__lookup', arguments: { n: 1 } },
+              { id: 'second', name: 'server-1__update', arguments: { n: 2 } }
+            ]
+          };
         return {
-          type: 'tool_call_request',
-          text: 'Need both.',
-          toolCalls: [
-            {
-              id: 'approve-proposal',
-              name: 'propose_scenario_changes',
-              arguments: {
-                prompt: { replacement: 'Approved proposal prompt' },
-                notes: ['Captured']
-              }
-            },
-            { id: 'first', name: 'server-1__lookup', arguments: { n: 1 } },
-            { id: 'second', name: 'server-1__update', arguments: { n: 2 } }
-          ]
+          type: 'assistant_message',
+          text: `Completed ${messages.filter((message) => message.getType() === 'tool').length} calls.`
         };
-      return {
-        type: 'assistant_message',
-        text: `Completed ${messages.filter((message) => message.getType() === 'tool').length} calls.`
-      };
-    }, [
-      { name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } },
-      { name: 'update', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }
-    ]);
+      },
+      [
+        { name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } },
+        { name: 'update', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } }
+      ]
+    );
     let releaseFirst!: () => void;
     let markFirstStarted!: () => void;
     const firstStarted = new Promise<void>((resolve) => {

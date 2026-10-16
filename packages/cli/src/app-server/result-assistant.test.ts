@@ -222,7 +222,9 @@ describe('Result Assistant report refresh', () => {
     const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
     const listTools = vi
       .spyOn(McpClientManager.prototype, 'listTools')
-      .mockResolvedValue([{ name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }] as any);
+      .mockResolvedValue([
+        { name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }
+      ] as any);
     const sessions = new Map();
     const captured: Array<{ status: number; body: any }> = [];
     let definition: any;
@@ -443,12 +445,10 @@ it('runs the Result HTTP approval flow through a real LangGraph runtime and MCP 
   const sessions = new Map();
   let body: any;
   const connectAll = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
-  const listTools = vi
-    .spyOn(McpClientManager.prototype, 'listTools')
-    .mockResolvedValue([
-      { name: 'mcplab_read_run_artifact', inputSchema: { type: 'object' } },
-      { name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }
-    ] as any);
+  const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([
+    { name: 'mcplab_read_run_artifact', inputSchema: { type: 'object' } },
+    { name: 'mcplab_write_markdown_report', inputSchema: { type: 'object' } }
+  ] as any);
   const deps = {
     parseBody: vi.fn(async () => body ?? {}),
     asJson: vi.fn((_res, status, value) => captured.push({ status, body: value })),
