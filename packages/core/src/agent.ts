@@ -573,17 +573,23 @@ class OpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create(
-      {
-        model: options.model,
-        messages: messages.map(toOpenAiMessage),
-        tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
-      },
-      options.signal ? { signal: options.signal } : undefined
-    );
+    const request = {
+      model: options.model,
+      messages: messages.map(toOpenAiMessage),
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+      ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
+    };
+    const requestOptions = options.signal ? { signal: options.signal } : undefined;
+    let response;
+    try {
+      response = await this.client.chat.completions.create(request, requestOptions);
+    } catch (error) {
+      if (request.temperature === undefined || !isUnsupportedTemperatureError(error)) throw error;
+      const { temperature: _ignored, ...withoutTemperature } = request;
+      response = await this.client.chat.completions.create(withoutTemperature, requestOptions);
+    }
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
@@ -655,11 +661,7 @@ class AzureChatAdapter implements LlmAdapter {
           options.signal ? { signal: options.signal } : undefined
         );
       } catch (err: any) {
-        const message = String(err?.message ?? '');
-        const unsupportedTemperature =
-          message.includes('temperature') &&
-          (message.includes('not supported') || message.includes('Only the default'));
-        if (!unsupportedTemperature || !('temperature' in request)) throw err;
+        if (!isUnsupportedTemperatureError(err) || !('temperature' in request)) throw err;
         const { temperature: _ignored, ...withoutTemperature } = request;
         return this.client.chat.completions.create(
           withoutTemperature as any,
@@ -784,6 +786,20 @@ class AnthropicAdapter implements LlmAdapter {
     };
   }
 
+  private async createWithoutRejectedTemperature(
+    request: Anthropic.Messages.MessageCreateParamsNonStreaming,
+    signal?: AbortSignal
+  ): Promise<Anthropic.Messages.Message> {
+    const options = signal ? { signal } : undefined;
+    try {
+      return await this.client.messages.create(request, options);
+    } catch (error) {
+      if (request.temperature === undefined || !isUnsupportedTemperatureError(error)) throw error;
+      const { temperature: _ignored, ...withoutTemperature } = request;
+      return this.client.messages.create(withoutTemperature, options);
+    }
+  }
+
   private async createWithModelFallback(
     model: string,
     payload: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, 'model'>,
@@ -794,13 +810,9 @@ class AnthropicAdapter implements LlmAdapter {
 
     for (const candidate of candidates) {
       try {
-        return await this.client.messages.create(
-          {
-            model: candidate,
-            stream: false,
-            ...payload
-          },
-          signal ? { signal } : undefined
+        return await this.createWithoutRejectedTemperature(
+          { model: candidate, stream: false, ...payload },
+          signal
         );
       } catch (error) {
         lastError = error;
@@ -829,6 +841,17 @@ function anthropicModelCandidates(model: string): string[] {
     out.push(`${match[1]}-latest`);
   }
   return Array.from(new Set(out));
+}
+
+/** Providers reject `temperature` for some models (reasoning models, newer Claude models). */
+export function isUnsupportedTemperatureError(error: unknown): boolean {
+  const message = String((error as { message?: unknown })?.message ?? error).toLowerCase();
+  return (
+    message.includes('temperature') &&
+    ['not supported', 'unsupported', 'deprecated', 'only the default', 'does not support'].some(
+      (phrase) => message.includes(phrase)
+    )
+  );
 }
 
 function isModelNotFound(error: unknown): boolean {

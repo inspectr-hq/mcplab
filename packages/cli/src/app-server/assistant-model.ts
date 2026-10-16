@@ -7,6 +7,7 @@ import {
   anthropicModelCandidates,
   isAbortError,
   isModelNotFound,
+  isUnsupportedTemperatureError,
   resolveAzureFoundryConnection,
   resolveAzureOpenAIDeployment,
   type LlmAgentConfig,
@@ -97,6 +98,9 @@ function nextVariant(
   error: unknown,
   anthropicCandidates: string[]
 ): ModelVariant | undefined {
+  // Some models (reasoning models, newer Claude models) reject temperature outright.
+  if (variant.includeTemperature && isUnsupportedTemperatureError(error))
+    return { ...variant, includeTemperature: false };
   if (agent.provider === 'anthropic') {
     if (!isAnthropicModelNotFound(error)) return undefined;
     const index = anthropicCandidates.indexOf(variant.anthropicModel ?? '');
@@ -122,12 +126,6 @@ function nextVariant(
     message.includes('not supported')
   )
     return { ...variant, azureTokenField: 'max_tokens' };
-  if (
-    variant.includeTemperature &&
-    message.includes('temperature') &&
-    (message.includes('not supported') || message.includes('only the default'))
-  )
-    return { ...variant, includeTemperature: false };
   return undefined;
 }
 
@@ -154,7 +152,7 @@ async function buildChatModel(
       return new ChatOpenAIResponses({
         apiKey,
         model: agent.model,
-        temperature: agent.temperature,
+        temperature: variant.includeTemperature ? agent.temperature : undefined,
         maxTokens: agent.max_tokens,
         maxRetries: 0,
         configuration: { maxRetries: 0 },
@@ -169,7 +167,7 @@ async function buildChatModel(
     return new ChatOpenAICompletions({
       apiKey,
       model: agent.model,
-      temperature: agent.temperature,
+      temperature: variant.includeTemperature ? agent.temperature : undefined,
       maxTokens: agent.max_tokens,
       maxRetries: 0,
       configuration: { maxRetries: 0 },
@@ -183,7 +181,7 @@ async function buildChatModel(
     return new ChatAnthropic({
       apiKey,
       model: variant.anthropicModel ?? agent.model,
-      temperature: agent.temperature,
+      temperature: variant.includeTemperature ? agent.temperature : undefined,
       maxTokens: agent.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
       maxRetries: 0,
       clientOptions: { maxRetries: 0 },

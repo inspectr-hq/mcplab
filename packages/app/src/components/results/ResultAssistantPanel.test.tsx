@@ -73,7 +73,6 @@ describe('ResultAssistantPanel', () => {
           inputPlaceholder="Ask the assistant"
           snippets={[]}
           onSnippetSelect={vi.fn()}
-          chatEndRef={assistant.assistantChatEndRef}
           inputRef={assistant.assistantInputRef}
         />
       );

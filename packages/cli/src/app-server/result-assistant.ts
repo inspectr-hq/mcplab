@@ -15,6 +15,7 @@ import {
 } from './result-assistant-domain.js';
 import { handleAssistantSessionRoutes } from './assistant-session-routes.js';
 import {
+  isAssistantDeltaEvent,
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
   type AssistantSseEventType
@@ -61,9 +62,7 @@ export async function handleResultAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        ...(type === 'assistant_message_delta'
-          ? {}
-          : { session: resultAssistantSessionView(session) }),
+        ...(isAssistantDeltaEvent(type) ? {} : { session: resultAssistantSessionView(session) }),
         ...payload
       })
     );

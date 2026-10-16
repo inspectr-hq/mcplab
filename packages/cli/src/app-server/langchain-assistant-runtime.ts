@@ -71,6 +71,8 @@ interface ActiveTurn {
   proposals: ScenarioAssistantSuggestionBundle[];
   /** Calls the user already decided; LangGraph keeps listing them until the batch settles. */
   decided: Set<string>;
+  /** Calls already announced as waiting for approval; each new batch is announced once. */
+  announced: Set<string>;
   streaming?: StreamingMessage;
   paused: boolean;
 }
@@ -206,7 +208,13 @@ class LangChainAssistantRuntime {
     await this.resetTurnBudget();
     this.turnIds.add(turnId);
     this.createdAt.set(turnId, new Date().toISOString());
-    this.turn = { id: turnId, proposals: [], decided: new Set(), paused: false };
+    this.turn = {
+      id: turnId,
+      proposals: [],
+      decided: new Set(),
+      announced: new Set(),
+      paused: false
+    };
     this.publish();
     this.emit('turn_started');
     return this.run({ messages: [new HumanMessage({ id: turnId, content: text })] }, signal);
@@ -336,17 +344,20 @@ class LangChainAssistantRuntime {
     const interrupts = await this.pendingInterrupts();
     if (interrupts.size) {
       const waiting = this.calls.filter((call) => interrupts.has(call.id));
-      const firstPause = !turn.paused && turn.decided.size === 0;
+      // A new batch (the first, or one the model asked for after earlier decisions) is a request;
+      // a batch the user has only partly decided is still the same request.
+      const newBatch = waiting.some((call) => !turn.announced.has(call.id));
+      for (const call of waiting) turn.announced.add(call.id);
       turn.paused = true;
       this.publish();
-      if (firstPause)
+      if (newBatch)
         this.emit('tool_call_requested', {
           pendingToolCalls: waiting,
           pendingToolCallId: waiting[0]?.id
         });
       return {
-        type: firstPause ? 'tool_call_request' : 'tool_call_resolved',
-        text: firstPause ? this.lastAssistantText() : '',
+        type: newBatch ? 'tool_call_request' : 'tool_call_resolved',
+        text: newBatch ? this.lastAssistantText() : '',
         pendingToolCalls: structuredClone(waiting)
       };
     }

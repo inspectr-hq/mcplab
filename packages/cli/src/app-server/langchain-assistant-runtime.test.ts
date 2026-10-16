@@ -765,3 +765,42 @@ it('adds no placeholder text when the model requests tools without writing anyth
   expect(request).toMatchObject({ text: '', pendingToolCallIds: ['w1'] });
   await session.dispose();
 });
+
+it('announces a second approval batch that the model requests later in the same turn', async () => {
+  const events: AssistantRuntimeEvent[] = [];
+  let round = 0;
+  const session = await createScriptedRuntimeFactory(async () => {
+    round += 1;
+    if (round === 1)
+      return {
+        type: 'tool_call_request',
+        text: 'First write',
+        toolCalls: [{ id: 'w1', name: 'write', arguments: {} }]
+      };
+    if (round === 2)
+      return {
+        type: 'tool_call_request',
+        text: 'One more write',
+        toolCalls: [{ id: 'w2', name: 'write', arguments: {} }]
+      };
+    return { type: 'assistant_message', text: 'Done' };
+  }).create(
+    definitionWith({
+      tools: [{ name: 'write', server: 's', tool: 'write', execute: async () => ({ ok: true }) }],
+      onEvent: (event) => events.push(event)
+    })
+  );
+  await session.sendMessage('write twice');
+  await expect(
+    session.resolveToolCalls([{ toolCallId: 'w1', decision: 'approve' }])
+  ).resolves.toMatchObject({
+    type: 'tool_call_request',
+    text: 'One more write',
+    pendingToolCalls: [{ id: 'w2' }]
+  });
+  const requested = events
+    .filter((event) => event.type === 'tool_call_requested')
+    .map((event) => event.payload.pendingToolCallId);
+  expect(requested).toEqual(['w1', 'w2']);
+  await session.dispose();
+});

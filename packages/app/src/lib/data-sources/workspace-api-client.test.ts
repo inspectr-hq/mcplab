@@ -85,6 +85,30 @@ describe('workspaceApiClient SSE subscriptions', () => {
     MockSharedWorker.reset();
   });
 
+  it('forwards streamed reasoning deltas to assistant subscribers', () => {
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    const onEvent = vi.fn();
+    const unsubscribe = workspaceApiClient.subscribeScenarioAssistantSessionEvents(
+      'sas-1',
+      onEvent
+    );
+    const delta = {
+      type: 'assistant_reasoning_delta',
+      ts: '2026-10-16T10:00:00.000Z',
+      payload: {
+        sessionId: 'sas-1',
+        turnId: 't',
+        messageId: 'm',
+        offset: 0,
+        delta: 'Hm',
+        revision: 2
+      }
+    };
+    MockEventSource.instances[0]!.emit('assistant_reasoning_delta', delta);
+    expect(onEvent).toHaveBeenCalledWith(delta);
+    unsubscribe();
+  });
+
   it('closes terminal assistant subscriptions when the session endpoint returns 404', async () => {
     const fetchMock = vi.fn(async (): Promise<FetchResponse> => ({
       status: 404,

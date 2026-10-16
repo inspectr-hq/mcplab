@@ -18,6 +18,7 @@ import {
 } from './scenario-assistant-domain.js';
 import { handleAssistantSessionRoutes } from './assistant-session-routes.js';
 import {
+  isAssistantDeltaEvent,
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
   type AssistantSseEventType
@@ -72,9 +73,7 @@ export async function handleScenarioAssistantRoutes(params: {
       session,
       createAssistantSseEvent(type, {
         sessionId: session.id,
-        ...(type === 'assistant_message_delta'
-          ? {}
-          : { session: scenarioAssistantSessionView(session) }),
+        ...(isAssistantDeltaEvent(type) ? {} : { session: scenarioAssistantSessionView(session) }),
         ...payload
       })
     );

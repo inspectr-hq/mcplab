@@ -595,6 +595,10 @@ describe('Scenario Assistant runtime definition', () => {
       { evalRules: { replacement: [{ type: 'response_contains', value: 4 }] } },
       'evalRules.replacement[0].value'
     ],
+    [
+      { evalRules: { replacement: [{ type: 'tool_sequence', sequence: ['lookup', '  '] }] } },
+      'evalRules.replacement[0].sequence'
+    ],
     [{ extractRules: { replacement: [{ name: 'tag' }] } }, 'extractRules.replacement[0].pattern'],
     [{ notes: ['ok', 1] }, 'notes[1]']
   ])('reports the JSON path for invalid proposal fields', (proposal, path) => {

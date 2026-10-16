@@ -315,6 +315,21 @@ describe('assistant chat models on the standard agent', () => {
     await session.dispose();
   });
 
+  it('retries an OpenAI model that rejects temperature without it', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+    const requests = captureFetch((_request, index) =>
+      index === 0
+        ? jsonError(400, '`temperature` is deprecated for this model.')
+        : openAiStream('answer')
+    );
+    const { response, session } = await ask(definition('openai'));
+    await expect(response).resolves.toMatchObject({ text: 'answer' });
+    expect(requests).toHaveLength(2);
+    expect(requests[0]!.body.temperature).toBe(0.25);
+    expect(requests[1]!.body).not.toHaveProperty('temperature');
+    await session.dispose();
+  });
+
   it('does not retry a compatibility error once text has been streamed', async () => {
     vi.stubEnv('AZURE_OPENAI_API_KEY', 'azure-key');
     vi.stubEnv('AZURE_OPENAI_ENDPOINT', 'https://azure.example');

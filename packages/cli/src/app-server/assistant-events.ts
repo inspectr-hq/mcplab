@@ -3,6 +3,11 @@ import type { AssistantRuntimeEvent } from '@inspectr/mcplab-core';
 import { sendSseEvent, type SseEvent } from './jobs.js';
 
 export type AssistantSseEventType = AssistantRuntimeEvent['type'];
+
+/** Streamed text and reasoning deltas are small and frequent; they carry no session snapshot. */
+export function isAssistantDeltaEvent(type: AssistantSseEventType): boolean {
+  return type === 'assistant_message_delta' || type === 'assistant_reasoning_delta';
+}
 export type AssistantSseEvent = AssistantRuntimeEvent & SseEvent;
 
 export interface AssistantSseSessionState {

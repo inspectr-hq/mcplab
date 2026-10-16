@@ -1,4 +1,5 @@
 import type {
+  AssistantRuntimeEvent,
   CoreEvalConfig,
   CoreSourceEvalConfig,
   CoreResultsJson,
@@ -90,26 +91,30 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   return response.text();
 }
 
+/** Every assistant event the server sends; a new event type fails to compile until listed here. */
+const ASSISTANT_EVENT_TYPES: Record<AssistantRuntimeEvent['type'], true> = {
+  session_started: true,
+  turn_started: true,
+  tool_call_requested: true,
+  tool_call_approved: true,
+  tool_call_denied: true,
+  tool_call_resolved: true,
+  assistant_message_delta: true,
+  assistant_reasoning_delta: true,
+  assistant_message_completed: true,
+  session_snapshot: true,
+  session_warning: true,
+  session_error: true,
+  session_finished: true
+};
+
 function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   path: string,
   onEvent: (event: TEvent) => void
 ): () => void {
   const source = new EventSource(`${BASE}${path}`);
   const terminalSessionPath = path.replace(/\/events$/, '');
-  const eventTypes = [
-    'session_started',
-    'turn_started',
-    'tool_call_requested',
-    'tool_call_approved',
-    'tool_call_denied',
-    'tool_call_resolved',
-    'assistant_message_delta',
-    'assistant_message_completed',
-    'session_snapshot',
-    'session_warning',
-    'session_error',
-    'session_finished'
-  ] as const;
+  const eventTypes = Object.keys(ASSISTANT_EVENT_TYPES) as AssistantRuntimeEvent['type'][];
   let closed = false;
   const close = () => {
     if (closed) return;

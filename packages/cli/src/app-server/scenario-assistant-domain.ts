@@ -853,6 +853,9 @@ export function validateScenarioAssistantProposal(
       }
       if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
         return invalid(`${path}.sequence`, 'required and must be a non-empty array');
+      // Blank names are dropped when the rule is normalized, which could empty the sequence.
+      if (type === 'tool_sequence' && (r.sequence as string[]).some((toolName) => !toolName.trim()))
+        return invalid(`${path}.sequence`, 'tool names must not be blank');
       if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
         return invalid(`${path}.tool`, 'required and must be a string');
       if (
