@@ -229,7 +229,15 @@ export async function runAgentScenario(params: {
       : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
-    const tools = await mcp.listTools(serverName, params.signal, serverRequestHeaders[serverName]);
+    const listToolsHeaders = {
+      ...(params.requestId ? { 'x-request-id': params.requestId } : {}),
+      ...(serverRequestHeaders[serverName] ?? {})
+    };
+    const tools = await mcp.listTools(
+      serverName,
+      params.signal,
+      Object.keys(listToolsHeaders).length > 0 ? listToolsHeaders : undefined
+    );
     for (const tool of tools) {
       if (toolsByName.has(tool.name)) {
         throw new Error(`Duplicate tool name across servers: ${tool.name}`);

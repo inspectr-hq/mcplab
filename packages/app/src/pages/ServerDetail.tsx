@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import IconInspectr from '@/components/ui/IconInspectr.jsx';
 import {
   Select,
   SelectContent,
@@ -560,11 +561,7 @@ const ServerDetail = () => {
                     aria-label="Inspectr"
                     className="shrink-0"
                   >
-                    <img
-                      src="https://inspectr.dev/brand/inspectr_brand_logo.png"
-                      alt="Inspectr"
-                      className="h-6 w-6 object-contain"
-                    />
+                    <IconInspectr width={24} height={24} aria-hidden="true" />
                   </a>
                   <p className="min-w-0 flex-1 text-xs text-muted-foreground">
                     Route MCP traffic through a local Inspectr proxy for request tracing.{' '}

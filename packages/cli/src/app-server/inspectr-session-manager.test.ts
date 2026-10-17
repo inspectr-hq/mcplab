@@ -17,7 +17,7 @@ describe('InspectrSessionManager', () => {
     const manager = new InspectrSessionManager({
       storageRoot: '/tmp/mcplab-inspectr-test',
       commandPath: 'inspectr-test',
-      allocatePort: async () => nextPort++,
+      allocatePorts: async (count) => Array.from({ length: count }, () => nextPort++),
       spawn,
       log,
       waitForReady: async () => undefined
@@ -67,7 +67,7 @@ describe('InspectrSessionManager', () => {
       const manager = new InspectrSessionManager({
         storageRoot,
         commandPath: 'inspectr-missing',
-        allocatePort: async () => 49100,
+        allocatePorts: async () => [49100, 49101],
         spawn: () => child,
         waitForReady: async () => {
           handlers.get('error')?.(Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
@@ -79,6 +79,61 @@ describe('InspectrSessionManager', () => {
         'Inspectr is not installed. Install it with `npm install -g @inspectr/inspectr` or Homebrew'
       );
       expect(child.kill).toHaveBeenCalled();
+    } finally {
+      rmSync(storageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('stops every running Inspectr process synchronously', async () => {
+    const children: Array<{ kill: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> }> = [];
+    const storageRoot = mkdtempSync(join(tmpdir(), 'mcplab-inspectr-stop-'));
+    try {
+      let nextPort = 49200;
+      const manager = new InspectrSessionManager({
+        storageRoot,
+        commandPath: 'inspectr-test',
+        allocatePorts: async (count) => Array.from({ length: count }, () => nextPort++),
+        spawn: () => {
+          const child = { kill: vi.fn(), once: vi.fn() };
+          children.push(child);
+          return child as any;
+        },
+        log: () => undefined,
+        waitForReady: async () => undefined
+      });
+      await manager.acquire('https://one.test/mcp');
+      await manager.acquire('https://two.test/mcp');
+
+      manager.stopAll();
+
+      expect(children).toHaveLength(2);
+      for (const child of children) expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      rmSync(storageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('also stops a process that is still starting', async () => {
+    const child = { kill: vi.fn(), once: vi.fn() } as any;
+    let finishStartup!: () => void;
+    const storageRoot = mkdtempSync(join(tmpdir(), 'mcplab-inspectr-starting-'));
+    try {
+      const manager = new InspectrSessionManager({
+        storageRoot,
+        commandPath: 'inspectr-test',
+        allocatePorts: async () => [49300, 49301],
+        spawn: () => child,
+        log: () => undefined,
+        waitForReady: () => new Promise<void>((resolve) => (finishStartup = resolve))
+      });
+      const starting = manager.acquire('https://slow.test/mcp');
+      await vi.waitFor(() => expect(finishStartup).toBeDefined());
+
+      manager.stopAll();
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      finishStartup();
+      await starting;
     } finally {
       rmSync(storageRoot, { recursive: true, force: true });
     }
@@ -97,6 +152,22 @@ describe('InspectrSessionManager', () => {
     expect(
       rewriteUrlThroughInspectr('https://backend.test//evil.test/mcp', 'http://127.0.0.1:49000')
     ).toBe('http://127.0.0.1:49000//evil.test/mcp');
+  });
+
+  it('keeps tag headers ASCII so non-Latin names cannot break requests', () => {
+    const headers = buildInspectrRequestHeaders({
+      phase: 'scenario',
+      runId: 'run-1',
+      serverName: 'café',
+      scenarioId: '検索',
+      agentName: 'Claude – prod 🚀',
+      requestId: 'mcplab-run:run-1:scn:agent:run1'
+    });
+
+    expect(headers['inspectr-tag']).toBe(
+      'mcplab, mcplab-run:run-1, mcplab-scenario:_, mcplab-agent:Claude _ prod _, mcplab-server:cafe'
+    );
+    expect(() => new Headers(headers)).not.toThrow();
   });
 
   it('builds run and execution tags without allowing header delimiters', () => {

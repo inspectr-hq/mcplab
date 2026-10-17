@@ -307,11 +307,22 @@ export async function executeRunJob(params: {
     );
     const mcpServerUrlOverrides: Record<string, string> = {};
     const inspectedOriginByServer = new Map<string, string>();
-    if (inspectedServerNames.length > 0) {
-      if (!params.inspectrSessionManager) {
-        throw new Error('Inspectr request inspection is not available in this app server');
-      }
-      const sessions = new Map<string, Awaited<ReturnType<InspectrSessionManager['acquire']>>>();
+    const warnInspectrUnavailable = (target: string, reason: string) =>
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Warning: Inspectr is unavailable for ${target} (${reason}). Running without request inspection.`
+        }
+      });
+    const inspectrSessionManager = params.inspectrSessionManager;
+    if (inspectedServerNames.length > 0 && !inspectrSessionManager) {
+      warnInspectrUnavailable(inspectedServerNames.join(', '), 'not available in this app server');
+    }
+    if (inspectedServerNames.length > 0 && inspectrSessionManager) {
+      // Inspectr is an optional diagnostic: a missing binary or failed start must not fail the run.
+      const announcedOrigins = new Set<string>();
+      const unavailableOrigins = new Set<string>();
       for (const serverName of inspectedServerNames) {
         const server = expandedConfig.servers[serverName];
         if (server.transport !== 'http') {
@@ -320,10 +331,17 @@ export async function executeRunJob(params: {
           );
         }
         const origin = new URL(server.url).origin;
-        let session = sessions.get(origin);
-        if (!session) {
-          session = await params.inspectrSessionManager.acquire(server.url);
-          sessions.set(origin, session);
+        if (unavailableOrigins.has(origin)) continue;
+        let session: Awaited<ReturnType<InspectrSessionManager['acquire']>>;
+        try {
+          session = await inspectrSessionManager.acquire(server.url);
+        } catch (error) {
+          unavailableOrigins.add(origin);
+          warnInspectrUnavailable(origin, error instanceof Error ? error.message : String(error));
+          continue;
+        }
+        if (!announcedOrigins.has(session.upstreamOrigin)) {
+          announcedOrigins.add(session.upstreamOrigin);
           addJobEvent(job, {
             type: 'inspection_ready',
             ts: new Date().toISOString(),
@@ -383,7 +401,7 @@ export async function executeRunJob(params: {
       mcpServerAuthHeaders,
       mcpServerUrlOverrides,
       resolveMcpRequestHeaders:
-        inspectedServerNames.length > 0
+        Object.keys(mcpServerUrlOverrides).length > 0
           ? (context) =>
               context.serverName in mcpServerUrlOverrides
                 ? buildInspectrRequestHeaders(context)

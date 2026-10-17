@@ -37,7 +37,8 @@ interface InspectrSessionManagerOptions {
   storageRoot: string;
   commandPath?: string;
   log?: (message: string) => void;
-  allocatePort?: () => Promise<number>;
+  /** Returns `count` distinct free local ports. */
+  allocatePorts?: (count: number) => Promise<number[]>;
   spawn?: (
     command: string,
     args: string[],
@@ -52,17 +53,19 @@ export class InspectrSessionManager {
   private readonly storageRoot: string;
   private commandPath: string | undefined;
   private readonly log: (message: string) => void;
-  private readonly allocatePort: () => Promise<number>;
+  private readonly allocatePorts: (count: number) => Promise<number[]>;
   private readonly spawn: NonNullable<InspectrSessionManagerOptions['spawn']>;
   private readonly waitForReady: NonNullable<InspectrSessionManagerOptions['waitForReady']>;
   private readonly sessions = new Map<string, ManagedSession>();
   private readonly starting = new Map<string, Promise<ManagedSession>>();
+  /** Every spawned process, including ones still starting, so shutdown can reach all of them. */
+  private readonly children = new Set<InspectrChild>();
 
   constructor(options: InspectrSessionManagerOptions) {
     this.storageRoot = options.storageRoot;
     this.commandPath = options.commandPath;
     this.log = options.log ?? console.log;
-    this.allocatePort = options.allocatePort ?? allocateFreePort;
+    this.allocatePorts = options.allocatePorts ?? allocateFreePorts;
     this.spawn =
       options.spawn ?? ((command, args, spawnOptions) => defaultSpawn(command, args, spawnOptions));
     this.waitForReady = options.waitForReady ?? waitForPorts;
@@ -82,6 +85,14 @@ export class InspectrSessionManager {
     return promise;
   }
 
+  /** Synchronously signals every running Inspectr process; safe to call from process exit hooks. */
+  stopAll(): void {
+    const children = [...this.children];
+    this.children.clear();
+    this.sessions.clear();
+    for (const child of children) child.kill('SIGTERM');
+  }
+
   async closeAll(): Promise<void> {
     await Promise.allSettled(this.starting.values());
     const sessions = [...this.sessions.values()];
@@ -90,8 +101,7 @@ export class InspectrSessionManager {
   }
 
   private async start(upstreamOrigin: string): Promise<ManagedSession> {
-    const proxyPort = await this.allocatePort();
-    const dashboardPort = await this.allocatePort();
+    const [proxyPort, dashboardPort] = await this.allocatePorts(2);
     const cwd = join(this.storageRoot, originKey(upstreamOrigin));
     mkdirSync(cwd, { recursive: true });
     const channel = `mcplab-${originKey(upstreamOrigin)}`;
@@ -118,6 +128,8 @@ export class InspectrSessionManager {
       ],
       { cwd, stdio: ['ignore', 'ignore', 'ignore'] }
     );
+    this.children.add(child);
+    child.once('exit', () => this.children.delete(child));
     let spawnError: NodeJS.ErrnoException | undefined;
     child.once('error', (error: NodeJS.ErrnoException) => {
       spawnError = error;
@@ -197,25 +209,46 @@ function originKey(origin: string): string {
 }
 
 function tagPart(value: string): string {
+  // Header values must be ByteStrings: drop accents, then replace anything that is not printable
+  // ASCII (and the tag delimiter) so names like "Claude – prod" or CJK cannot break requests.
   return (
     value
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7e]+|,+/g, '_')
       .trim()
-      .replace(/[\u0000-\u001f\u007f,]+/g, '_')
       .slice(0, 120) || 'unknown'
   );
 }
 
-async function allocateFreePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-  const address = server.address();
-  const port = typeof address === 'object' && address ? address.port : 0;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (!port) throw new Error('Could not allocate a local Inspectr port');
-  return port;
+/** Keeps every listener open until all ports are known, so the OS cannot hand out one twice. */
+async function allocateFreePorts(count: number): Promise<number[]> {
+  const servers = Array.from({ length: count }, () => createServer());
+  try {
+    return await Promise.all(
+      servers.map(
+        (server) =>
+          new Promise<number>((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, '127.0.0.1', () => {
+              const address = server.address();
+              const port = typeof address === 'object' && address ? address.port : 0;
+              if (port) resolve(port);
+              else reject(new Error('Could not allocate a local Inspectr port'));
+            });
+          })
+      )
+    );
+  } finally {
+    await Promise.all(
+      servers.map(
+        (server) =>
+          new Promise<void>((resolve) =>
+            server.listening ? server.close(() => resolve()) : resolve()
+          )
+      )
+    );
+  }
 }
 
 async function waitForPorts(session: InspectrProxySession, child: InspectrChild): Promise<void> {

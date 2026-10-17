@@ -314,18 +314,15 @@ export async function runAll(
                 ? Object.fromEntries(
                     serverNames.map((serverName) => [
                       serverName,
-                      {
-                        ...options.resolveMcpRequestHeaders!({
-                          phase: 'scenario',
-                          runId,
-                          requestId,
-                          scenarioId: scenario.id,
-                          agentName: scenario.agent,
-                          runIndex,
-                          serverName
-                        }),
-                        'x-request-id': requestId
-                      }
+                      options.resolveMcpRequestHeaders!({
+                        phase: 'scenario',
+                        runId,
+                        requestId,
+                        scenarioId: scenario.id,
+                        agentName: scenario.agent,
+                        runIndex,
+                        serverName
+                      }) ?? {}
                     ])
                   )
                 : undefined;
@@ -638,7 +635,15 @@ export function buildFallbackScenarioRequestId(params: {
 function normalizeRequestIdPart(value: string | undefined, fallback: string): string {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
+  if (!trimmed) return fallback;
+  if (/^[\x20-\x7e]*$/.test(trimmed)) return trimmed;
+  // Request IDs travel in HTTP headers (x-request-id, inspectr-trace-id), which only accept
+  // ByteStrings. Replace other characters and keep a digest of the original so IDs stay unique.
+  const ascii = trimmed
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]+/g, '_');
+  return `${ascii}~${createHash('sha256').update(trimmed).digest('hex').slice(0, 8)}`;
 }
 
 function clampRequestIdLength(

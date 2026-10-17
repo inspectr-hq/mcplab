@@ -31,6 +31,7 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
+import type { InspectrSession } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -95,9 +96,7 @@ const RunEvaluation = () => {
     Record<string, string[]>
   >({});
   const [runNote, setRunNote] = useState('');
-  const [inspectionDashboards, setInspectionDashboards] = useState<
-    Array<{ upstreamOrigin: string; dashboardUrl: string }>
-  >([]);
+  const [inspectionDashboards, setInspectionDashboards] = useState<InspectrSession[]>([]);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);

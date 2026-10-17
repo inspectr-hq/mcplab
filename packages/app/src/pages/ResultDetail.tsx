@@ -26,7 +26,6 @@ import {
   Play,
   Pencil,
   FileCode,
-  ExternalLink,
   Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

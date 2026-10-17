@@ -205,6 +205,16 @@ export async function startAppServer(options: AppServerOptions) {
   const inspectrSessionManager = new InspectrSessionManager({
     storageRoot: join(settings.librariesDir, '.inspectr-sessions')
   });
+  // Inspectr runs as child processes; stop them when the app server process goes away, not only on
+  // a graceful HTTP close. Signals are re-raised so the default termination still happens.
+  const stopInspectr = () => inspectrSessionManager.stopAll();
+  const stopInspectrOnSignal = (signal: NodeJS.Signals) => {
+    stopInspectr();
+    process.kill(process.pid, signal);
+  };
+  process.once('exit', stopInspectr);
+  process.once('SIGINT', stopInspectrOnSignal);
+  process.once('SIGTERM', stopInspectrOnSignal);
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const liveTestService = new LiveTestService({
@@ -896,6 +906,9 @@ export async function startAppServer(options: AppServerOptions) {
     runQueueService.closeSubscribers();
     roverConnection.close();
     devMcp?.stop();
+    process.off('exit', stopInspectr);
+    process.off('SIGINT', stopInspectrOnSignal);
+    process.off('SIGTERM', stopInspectrOnSignal);
     void inspectrSessionManager.closeAll();
   });
 

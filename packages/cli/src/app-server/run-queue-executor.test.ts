@@ -202,6 +202,86 @@ describe('executeRunJob', () => {
     }
   });
 
+  it('runs without inspection and warns when Inspectr cannot start', async () => {
+    const fixture = createOauthEvalFixture();
+    try {
+      const job = createQueuedJob(fixture.configPath, 'job-inspectr-missing');
+      const acquire = vi.fn().mockRejectedValue(new Error('Inspectr is not installed.'));
+      const results = aggregateResults({
+        runId: 'execution-inspectr-missing',
+        timestamp: '2026-10-17T00:00:00Z',
+        configHash: 'test',
+        cliVersion: 'test',
+        scenarioRuns: [{ scenario_id: 's1', agent: 'mini', runs: [] }]
+      });
+      runAllMock.mockImplementationOnce(async (_config, options) => {
+        expect(options.mcpServerUrlOverrides).toEqual({});
+        expect(options.resolveMcpRequestHeaders).toBeUndefined();
+        return { runDir: fixture.runsDir, results };
+      });
+      const servers = {
+        inspected: {
+          transport: 'http',
+          url: 'http://upstream.test/mcp',
+          inspectr: { enabled: true }
+        },
+        sibling: {
+          transport: 'http',
+          url: 'http://upstream.test/other',
+          inspectr: { enabled: true }
+        }
+      };
+      await executeRunJob({
+        job,
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root
+        },
+        oauthSessionManager: {} as any,
+        inspectrSessionManager: { acquire } as any,
+        deps: {
+          addJobEvent: (target: any, event: any) => target.events.push(event),
+          getScenarioRunTraceRecords: () => [],
+          selectScenarioIds: (config: any) => ({
+            ...config,
+            servers,
+            scenarios: [{ id: 's1', prompt: 'hi', servers: ['inspected', 'sibling'] }]
+          }),
+          expandConfigForAgents: (config: any) => ({
+            ...config,
+            servers,
+            scenarios: [
+              { id: 's1', prompt: 'hi', agent: 'mini', servers: ['inspected', 'sibling'] }
+            ]
+          }),
+          resolveRunSelectedAgents: () => ['mini'],
+          readLibraries: () => ({
+            agents: { mini: { provider: 'openai', model: 'test' } },
+            servers: {},
+            scenarios: []
+          }),
+          pkgVersion: 'test'
+        } as any
+      });
+
+      expect(runAllMock).toHaveBeenCalled();
+      // One failed start per origin, not one per server.
+      expect(acquire).toHaveBeenCalledTimes(1);
+      expect(
+        job.events.some((event: any) =>
+          String(event.payload?.message ?? '').includes(
+            'Warning: Inspectr is unavailable for http://upstream.test (Inspectr is not installed.)'
+          )
+        )
+      ).toBe(true);
+      expect(results.scenarios[0]).not.toHaveProperty('inspectr_origins');
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
   it('uses the evaluation ID for grouped completion results', () => {
     expect(
       getCompletedRunId({ runParams: { evaluationRunId: 'evaluation-1' } } as any, 'execution-1')

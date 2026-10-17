@@ -299,6 +299,24 @@ describe('buildScenarioRequestId', () => {
     expect(requestId).toBe('mcplab-run:run-123:unknown:azure_gpt_5_2_chat:run3');
   });
 
+  it('keeps request IDs header-safe and unique for non-ASCII scenario ids and agent names', () => {
+    const build = (scenarioId: string, agentName: string) =>
+      buildScenarioRequestId({
+        runId: 'run-1',
+        scenarioId,
+        agentName,
+        scenarioExecId: `${scenarioId}-${agentName}`,
+        runIndex: 0
+      });
+    const ids = [build('検索', 'agent'), build('検索結果', 'agent'), build('s1', 'Claude – prod')];
+
+    for (const id of ids) expect(() => new Headers({ 'x-request-id': id })).not.toThrow();
+    expect(new Set(ids).size).toBe(3);
+    expect(build('tag-profile', 'claude-haiku-55')).toBe(
+      'mcplab-run:run-1:tag-profile:claude-haiku-55:run1'
+    );
+  });
+
   it('clamps IDs to 180 characters', () => {
     const requestId = buildScenarioRequestId({
       runId: 'run-123',
