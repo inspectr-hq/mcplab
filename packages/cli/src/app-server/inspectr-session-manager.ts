@@ -82,6 +82,15 @@ export class InspectrSessionManager {
     return promise;
   }
 
+  /** Sessions whose Inspectr process is currently running. */
+  listSessions(): InspectrProxySession[] {
+    return [...this.sessions.values()].map(({ upstreamOrigin, proxyOrigin, dashboardUrl }) => ({
+      upstreamOrigin,
+      proxyOrigin,
+      dashboardUrl
+    }));
+  }
+
   async closeAll(): Promise<void> {
     await Promise.allSettled(this.starting.values());
     const sessions = [...this.sessions.values()];

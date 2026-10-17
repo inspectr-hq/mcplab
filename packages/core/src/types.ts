@@ -892,6 +892,8 @@ export interface ResultsJson {
     git_commit?: string;
     config_hash: string;
     langsmith_trace_urls?: Record<string, string>;
+    /** Upstream MCP origins whose traffic was routed through Inspectr during the run. */
+    inspectr_origins?: string[];
     config_path?: string;
     config_name?: string;
     rerun_agents?: string[];

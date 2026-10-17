@@ -129,6 +129,13 @@ describe('executeRunJob', () => {
         proxyOrigin: 'http://127.0.0.1:9999',
         dashboardUrl: 'http://127.0.0.1:9998/?channel=test'
       }));
+      const inspectrResults = aggregateResults({
+        runId: 'execution-inspectr',
+        timestamp: '2026-10-16T00:00:00Z',
+        configHash: 'test',
+        cliVersion: 'test',
+        scenarioRuns: []
+      });
       runAllMock.mockImplementationOnce(async (_config, options) => {
         expect(options.mcpServerUrlOverrides).toEqual({
           inspected: 'http://127.0.0.1:9999/mcp?x=1'
@@ -143,16 +150,7 @@ describe('executeRunJob', () => {
             serverName: 'inspected'
           })
         ).toMatchObject({ 'inspectr-trace-id': 'mcplab-run:r1' });
-        return {
-          runDir: fixture.runsDir,
-          results: aggregateResults({
-            runId: 'execution-inspectr',
-            timestamp: '2026-10-16T00:00:00Z',
-            configHash: 'test',
-            cliVersion: 'test',
-            scenarioRuns: []
-          })
-        };
+        return { runDir: fixture.runsDir, results: inspectrResults };
       });
       const servers = {
         inspected: {
@@ -198,6 +196,7 @@ describe('executeRunJob', () => {
       expect(acquire).toHaveBeenCalledTimes(1);
       expect(acquire).toHaveBeenCalledWith('http://upstream.test/mcp?x=1');
       expect(job.events.filter((event: any) => event.type === 'inspection_ready')).toHaveLength(1);
+      expect(inspectrResults.metadata.inspectr_origins).toEqual(['http://upstream.test']);
     } finally {
       cleanupFixtureRoot(fixture.root);
     }

@@ -642,6 +642,11 @@ export interface OAuthEnsureServerStatus {
   message?: string;
 }
 
+export interface InspectrSession {
+  upstreamOrigin: string;
+  dashboardUrl: string;
+}
+
 export interface EvalDataSource {
   health: () => Promise<WorkspaceHealthResponse>;
   listConfigs: () => Promise<EvalConfig[]>;
@@ -709,6 +714,8 @@ export interface EvalDataSource {
     pageUrl?: string;
     activeJobId?: string | null;
   }>;
+  /** Inspectr proxy sessions that are currently running on the app server. */
+  listInspectrSessions: () => Promise<InspectrSession[]>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;

@@ -453,6 +453,14 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (pathname === '/api/inspectr/sessions' && method === 'GET') {
+        asJson(res, 200, {
+          sessions: inspectrSessionManager
+            .listSessions()
+            .map(({ upstreamOrigin, dashboardUrl }) => ({ upstreamOrigin, dashboardUrl }))
+        });
+        return;
+      }
       if (pathname === '/api/rover/status' && method === 'GET') {
         const connection = roverConnection.connection();
         asJson(res, 200, {

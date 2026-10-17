@@ -22,7 +22,8 @@ export type {
   DecisionConnectionTestResult,
   AgentConnectionTestResult,
   ProviderModelsResponse,
-  WorkspaceSettingsPatch
+  WorkspaceSettingsPatch,
+  InspectrSession
 } from '@/lib/data-sources/types';
 
 export interface ServerConfig {
@@ -203,6 +204,8 @@ export interface TokenUsage {
 
 export interface ScenarioRun {
   runIndex: number;
+  // Shared with MCP request headers; used as the Inspectr trace ID
+  requestId?: string;
   passed: boolean;
   outcome?: RunOutcome;
   error?: string;
@@ -243,6 +246,8 @@ export interface EvalResult {
   configPath?: string;
   configName?: string;
   langsmithTraceUrls?: Record<string, string>;
+  // Upstream MCP origins that were inspected with Inspectr during the run
+  inspectrOrigins?: string[];
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];

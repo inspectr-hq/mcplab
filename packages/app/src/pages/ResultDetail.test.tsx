@@ -14,6 +14,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     const listMarkdownReports = vi.fn().mockResolvedValue([]);
     const updateRunNote = vi.fn().mockResolvedValue(undefined);
     const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
+    const listInspectrSessions = vi.fn().mockResolvedValue([]);
     const configs: EvalConfig[] = [];
     const libraryScenarios: EvalConfig['scenarios'] = [];
     const assistantState = {
@@ -33,7 +34,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     };
     return {
       getResultMock: getResult,
-      sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
+      sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun, listInspectrSessions },
       mockResultAssistantState: assistantState,
       mockConfigs: configs,
       mockLibraryScenarios: libraryScenarios
@@ -223,6 +224,53 @@ describe('ResultDetail conversation toggle', () => {
       'aria-expanded',
       'true'
     );
+  });
+
+  it('links each run to its Inspectr trace while the inspected session is running', async () => {
+    const result = makeResult();
+    result.inspectrOrigins = ['http://upstream.test'];
+    result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
+    getResultMock.mockResolvedValue(result);
+    sourceMock.listInspectrSessions.mockResolvedValueOnce([
+      {
+        upstreamOrigin: 'http://upstream.test',
+        dashboardUrl: 'http://127.0.0.1:57506/?channel=c&channelCode=x'
+      },
+      { upstreamOrigin: 'http://other.test', dashboardUrl: 'http://127.0.0.1:57600/' }
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    const links = await screen.findAllByRole('link', { name: /Inspectr trace/ });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute(
+      'href',
+      'http://127.0.0.1:57506/?channel=c&channelCode=x#traces/mcplab-run%3Arun-1%3Ascn-1%3Aagent-1%3Arun1'
+    );
+  });
+
+  it('does not query Inspectr for runs without inspected origins', async () => {
+    sourceMock.listInspectrSessions.mockClear();
+    getResultMock.mockResolvedValue(makeResult());
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(sourceMock.listInspectrSessions).not.toHaveBeenCalled();
   });
 
   it('shows run note placeholder for historical runs without note', async () => {

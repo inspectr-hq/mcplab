@@ -306,6 +306,7 @@ export async function executeRunJob(params: {
       (serverName) => expandedConfig.servers[serverName]?.inspectr?.enabled
     );
     const mcpServerUrlOverrides: Record<string, string> = {};
+    const inspectedOrigins = new Set<string>();
     if (inspectedServerNames.length > 0) {
       if (!params.inspectrSessionManager) {
         throw new Error('Inspectr request inspection is not available in this app server');
@@ -323,6 +324,7 @@ export async function executeRunJob(params: {
         if (!session) {
           session = await params.inspectrSessionManager.acquire(server.url);
           sessions.set(origin, session);
+          inspectedOrigins.add(session.upstreamOrigin);
           addJobEvent(job, {
             type: 'inspection_ready',
             ts: new Date().toISOString(),
@@ -428,6 +430,11 @@ export async function executeRunJob(params: {
     );
     if (job.runParams.evaluationRunId) {
       results.metadata.evaluation_run_id = job.runParams.evaluationRunId;
+    }
+    if (inspectedOrigins.size > 0) {
+      results.metadata.inspectr_origins = [...inspectedOrigins];
+    } else {
+      delete results.metadata.inspectr_origins;
     }
     if (serverOverrideAll && serverOverrideAll.length > 0) {
       results.metadata.rerun_server_override_all = [...serverOverrideAll];

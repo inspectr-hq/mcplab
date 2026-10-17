@@ -671,6 +671,31 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
+  /api/inspectr/sessions:
+    get:
+      tags: [Runs]
+      summary: List running Inspectr proxy sessions
+      description: |
+        Inspectr proxies started for MCP servers with `inspectr.enabled`. Sessions exist only while the
+        app server runs; dashboards for a stored result are reachable when its `inspectr_origins` match.
+      operationId: listInspectrSessions
+      responses:
+        "200":
+          description: Running Inspectr sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      required: [upstreamOrigin, dashboardUrl]
+                      properties:
+                        upstreamOrigin: { type: string, format: uri }
+                        dashboardUrl: { type: string, format: uri }
   /api/runs/{runId}/assistant:
     parameters:
       - $ref: "#/components/parameters/RunId"

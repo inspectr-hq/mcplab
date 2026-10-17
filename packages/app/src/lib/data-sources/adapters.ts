@@ -1385,6 +1385,7 @@ export function fromCoreResultsJson(
       const tokenUsage = estimateRunTokenUsage(record);
       return {
         runIndex: run.run_index,
+        requestId: run.request_id,
         passed: run.pass,
         outcome: run.outcome,
         error: run.error,
@@ -1477,6 +1478,7 @@ export function fromCoreResultsJson(
     configPath: results.metadata.config_path,
     configName: results.metadata.config_name,
     langsmithTraceUrls: results.metadata.langsmith_trace_urls,
+    inspectrOrigins: results.metadata.inspectr_origins,
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,
@@ -1523,6 +1525,7 @@ export function fromCoreScenarioRunPreview(
   const tokenUsage = estimateRunTokenUsage(traceRecord ?? undefined);
   return {
     runIndex: run.run_index,
+    requestId: run.request_id,
     passed: run.pass,
     outcome: run.outcome,
     error: run.error,

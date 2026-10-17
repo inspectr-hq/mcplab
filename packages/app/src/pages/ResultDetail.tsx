@@ -102,7 +102,8 @@ import type {
   ConversationItem,
   EvalResult,
   EvalConfig as UiEvalConfig,
-  EvalRule
+  EvalRule,
+  InspectrSession
 } from '@/types/eval';
 import type { MarkdownReportContent, MarkdownReportSummary } from '@/lib/data-sources/types';
 
@@ -166,6 +167,7 @@ const ResultDetail = () => {
     'assistant'
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
+  const [inspectrSessions, setInspectrSessions] = useState<InspectrSession[]>([]);
 
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState('');
@@ -262,6 +264,29 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source, resetAssistantSession]);
+
+  // Inspectr dashboards only live as long as the app server's proxy process; link while running.
+  const inspectrOriginsKey = (result?.inspectrOrigins ?? []).join(' ');
+  useEffect(() => {
+    const origins = new Set(inspectrOriginsKey.split(' ').filter(Boolean));
+    if (origins.size === 0) {
+      setInspectrSessions([]);
+      return;
+    }
+    let active = true;
+    source
+      .listInspectrSessions()
+      .then((sessions) => {
+        if (!active) return;
+        setInspectrSessions(sessions.filter((session) => origins.has(session.upstreamOrigin)));
+      })
+      .catch(() => {
+        if (active) setInspectrSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [inspectrOriginsKey, source]);
 
   useEffect(() => {
     const node = headerRowRef.current;
@@ -1321,6 +1346,23 @@ const ResultDetail = () => {
                                                   )}{' '}
                                                   tool tokens
                                                 </span>
+                                                {run.requestId &&
+                                                  inspectrSessions.map((session) => (
+                                                    <a
+                                                      key={session.dashboardUrl}
+                                                      href={`${session.dashboardUrl}#traces/${encodeURIComponent(run.requestId!)}`}
+                                                      target="_blank"
+                                                      rel="noreferrer"
+                                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                                                      title="Open this run's MCP requests in Inspectr"
+                                                    >
+                                                      <ExternalLink className="h-3 w-3" />
+                                                      Inspectr trace
+                                                      {inspectrSessions.length > 1
+                                                        ? ` (${new URL(session.upstreamOrigin).host})`
+                                                        : ''}
+                                                    </a>
+                                                  ))}
                                                 {run.outcome === 'incomplete' ? (
                                                   <Badge
                                                     variant="outline"

@@ -38,7 +38,8 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsPatch,
   EvaluationDecisionConfig,
-  DecisionConnectionTestResult
+  DecisionConnectionTestResult,
+  InspectrSession
 } from './types';
 
 function getBaseUrl(): string {
@@ -732,6 +733,10 @@ export const workspaceApiClient = {
       pageUrl?: string;
       activeJobId?: string | null;
     }>('/api/rover/status'),
+  listInspectrSessions: () =>
+    request<{ sessions: InspectrSession[] }>('/api/inspectr/sessions').then(
+      (body) => body.sessions
+    ),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {
