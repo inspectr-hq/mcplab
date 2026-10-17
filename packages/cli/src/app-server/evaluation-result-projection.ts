@@ -61,6 +61,10 @@ export function projectEvaluationResult(params: {
   const serverOverrideAll = executions.find(
     (result) => (result.metadata.rerun_server_override_all?.length ?? 0) > 0
   )?.metadata.rerun_server_override_all;
+  // Trace URLs are keyed by per-run request IDs, so merging child executions cannot collide.
+  const langsmithTraceUrls = Object.fromEntries(
+    executions.flatMap((result) => Object.entries(result.metadata.langsmith_trace_urls ?? {}))
+  );
   const scenarioServerOverrides = Object.fromEntries(
     executions.flatMap((result) =>
       Object.entries(result.metadata.rerun_scenario_server_overrides ?? {})
@@ -123,6 +127,9 @@ export function projectEvaluationResult(params: {
         sourceMetadata?.config_name ||
         `Evaluation ${params.evaluationRunId}`,
       ...(params.runNote?.trim() ? { run_note: params.runNote.trim() } : {}),
+      ...(Object.keys(langsmithTraceUrls).length > 0
+        ? { langsmith_trace_urls: langsmithTraceUrls }
+        : {}),
       ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
       ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
       ...(serverOverrideAll ? { rerun_server_override_all: [...serverOverrideAll] } : {}),

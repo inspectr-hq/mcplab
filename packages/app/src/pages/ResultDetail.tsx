@@ -32,12 +32,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -62,6 +56,7 @@ import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
+import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -172,7 +167,6 @@ const ResultDetail = () => {
     'assistant'
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
-  const [openingInspectrTrace, setOpeningInspectrTrace] = useState<string | null>(null);
 
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState('');
@@ -269,30 +263,6 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source, resetAssistantSession]);
-
-  // Inspectr proxies stop with the app server, so the session is (re)started on demand.
-  const openInspectrTrace = async (origin: string, requestId: string) => {
-    if (!id) return;
-    // Open the tab synchronously: browsers block popups opened after an await.
-    const tab = window.open('', '_blank');
-    if (tab) tab.opener = null;
-    setOpeningInspectrTrace(`${origin}|${requestId}`);
-    try {
-      const session = await source.openRunInspectrSession(id, origin);
-      const url = `${session.dashboardUrl}#traces/${encodeURIComponent(requestId)}`;
-      if (tab) tab.location.href = url;
-      else window.open(url, '_blank', 'noopener');
-    } catch (error) {
-      tab?.close();
-      toast({
-        title: 'Could not open Inspectr',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setOpeningInspectrTrace(null);
-    }
-  };
 
   useEffect(() => {
     const node = headerRowRef.current;
@@ -868,20 +838,6 @@ const ResultDetail = () => {
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
             <McpServerBadge versions={result.mcpServerVersions} />
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {Object.entries(result.langsmithTraceUrls ?? {}).map(([requestId, url]) => (
-                <a
-                  key={requestId}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  aria-label="LangSmith trace"
-                  title="Open LangSmith trace"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {!isEmbedded && 'LangSmith trace'}
-                </a>
-              ))}
               <Button
                 variant="outline"
                 size="sm"
@@ -1273,90 +1229,11 @@ const ResultDetail = () => {
                                           </Link>
                                         </Button>
                                       ) : null}
-                                      {(() => {
-                                        const multipleOrigins =
-                                          (sc.inspectrOrigins?.length ?? 0) > 1;
-                                        const traces = (sc.inspectrOrigins ?? []).flatMap(
-                                          (origin) =>
-                                            sc.runs.flatMap((run) =>
-                                              run.requestId
-                                                ? [
-                                                    {
-                                                      key: `${origin}|${run.requestId}`,
-                                                      origin,
-                                                      requestId: run.requestId,
-                                                      label: `Run #${run.runIndex + 1}${
-                                                        multipleOrigins
-                                                          ? ` (${new URL(origin).host})`
-                                                          : ''
-                                                      }`
-                                                    }
-                                                  ]
-                                                : []
-                                            )
-                                        );
-                                        if (traces.length === 0) return null;
-                                        const opening = traces.some(
-                                          (trace) => trace.key === openingInspectrTrace
-                                        );
-                                        const buttonProps = {
-                                          type: 'button' as const,
-                                          variant: 'ghost' as const,
-                                          size: 'sm' as const,
-                                          className: 'h-7 gap-1 px-2 text-xs text-muted-foreground',
-                                          disabled: openingInspectrTrace !== null,
-                                          title:
-                                            'Open the MCP requests in Inspectr (starts Inspectr if needed)'
-                                        };
-                                        const icon = opening ? (
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                          <ExternalLink className="h-3.5 w-3.5" />
-                                        );
-                                        if (traces.length === 1) {
-                                          const [trace] = traces;
-                                          return (
-                                            <Button
-                                              {...buttonProps}
-                                              onClick={() =>
-                                                void openInspectrTrace(
-                                                  trace.origin,
-                                                  trace.requestId
-                                                )
-                                              }
-                                            >
-                                              {icon}
-                                              Inspectr trace
-                                            </Button>
-                                          );
-                                        }
-                                        return (
-                                          <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                              <Button {...buttonProps}>
-                                                {icon}
-                                                Inspectr trace
-                                                <ChevronDown className="h-3 w-3" />
-                                              </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                              {traces.map((trace) => (
-                                                <DropdownMenuItem
-                                                  key={trace.key}
-                                                  onSelect={() =>
-                                                    void openInspectrTrace(
-                                                      trace.origin,
-                                                      trace.requestId
-                                                    )
-                                                  }
-                                                >
-                                                  {trace.label}
-                                                </DropdownMenuItem>
-                                              ))}
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        );
-                                      })()}
+                                      <ScenarioTraceButtons
+                                        runId={id}
+                                        scenario={sc}
+                                        langsmithTraceUrls={result.langsmithTraceUrls}
+                                      />
                                       <Button
                                         type="button"
                                         variant="outline"

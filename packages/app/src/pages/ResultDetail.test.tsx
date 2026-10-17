@@ -620,12 +620,14 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByText(/Evaluated by decision/)).not.toBeInTheDocument();
   });
 
-  it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
+  it('shows the LangSmith trace on the scenario that produced it', async () => {
     const result = makeResult();
+    result.scenarios[0].runs[0].requestId = 'request-1';
     result.langsmithTraceUrls = {
       'request-1': 'https://eu.smith.langchain.com/public/trace-1'
     };
     getResultMock.mockResolvedValue(result);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
 
     render(
       <MemoryRouter initialEntries={['/results/run-1']}>
@@ -636,9 +638,15 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    const traceLink = screen.getByRole('link', { name: 'LangSmith trace' });
-    expect(traceLink).toHaveAttribute('href', 'https://eu.smith.langchain.com/public/trace-1');
-    expect(traceLink).toHaveAttribute('target', '_blank');
+    expect(screen.queryByRole('link', { name: 'LangSmith trace' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Scenario 1'));
+    fireEvent.click(screen.getByRole('button', { name: 'LangSmith trace' }));
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://eu.smith.langchain.com/public/trace-1',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    openSpy.mockRestore();
   });
 
   it('offers subtle links to edit the parent scenario and reusable test case', async () => {

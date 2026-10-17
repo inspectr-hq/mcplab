@@ -43,6 +43,22 @@ describe('projectEvaluationResult', () => {
     }
   );
 
+  it('keeps LangSmith trace URLs from every execution', () => {
+    const first = execution('llm-1', 1, 1);
+    const second = execution('llm-2', 1, 1);
+    first.metadata.langsmith_trace_urls = { 'request-1': 'https://smith.test/trace-1' };
+    second.metadata.langsmith_trace_urls = { 'request-2': 'https://smith.test/trace-2' };
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-1',
+      runId: 'run-1',
+      executions: [first, second, execution('rover-1', 1, 1)]
+    });
+    expect(result.metadata.langsmith_trace_urls).toEqual({
+      'request-1': 'https://smith.test/trace-1',
+      'request-2': 'https://smith.test/trace-2'
+    });
+  });
+
   it('merges scenario overrides from separate execution snapshots', () => {
     const first = execution('llm-1', 1, 1);
     const second = execution('llm-2', 1, 1);
