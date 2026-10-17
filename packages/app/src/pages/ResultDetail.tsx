@@ -885,7 +885,7 @@ const ResultDetail = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className={`max-w-full gap-1.5 ${isEmbedded ? 'px-2' : ''}`}
+                className="max-w-full px-2"
                 onClick={() => {
                   const html = generateHtmlReport(result);
                   const blob = new Blob([html], { type: 'text/html' });
@@ -900,7 +900,6 @@ const ResultDetail = () => {
                 title="Download Report"
               >
                 <Download className="h-3.5 w-3.5" />
-                {!isEmbedded && 'Download Report'}
               </Button>
               <Button
                 type="button"
@@ -935,7 +934,7 @@ const ResultDetail = () => {
                 onClick={() => openAssistantWithPrompt()}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                {hideDeleteLabel ? 'Assistant' : 'MCP Lab Assistant'}
+                Assistant
               </Button>
               <Button
                 type="button"
