@@ -733,10 +733,11 @@ export const workspaceApiClient = {
       pageUrl?: string;
       activeJobId?: string | null;
     }>('/api/rover/status'),
-  openRunInspectrSessions: (runId: string) =>
-    request<{ sessions: InspectrSession[] }>(`/api/runs/${encodeURIComponent(runId)}/inspectr`, {
-      method: 'POST'
-    }).then((body) => body.sessions),
+  openRunInspectrSession: (runId: string, origin: string) =>
+    request<{ session: InspectrSession }>(`/api/runs/${encodeURIComponent(runId)}/inspectr`, {
+      method: 'POST',
+      body: JSON.stringify({ origin })
+    }).then((body) => body.session),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {

@@ -53,9 +53,6 @@ export function projectEvaluationResult(params: {
   const rerunAgents = Array.from(
     new Set(executions.flatMap((result) => result.metadata.rerun_agents ?? []))
   );
-  const inspectrOrigins = Array.from(
-    new Set(executions.flatMap((result) => result.metadata.inspectr_origins ?? []))
-  );
   const rerunScenarioIds = Array.from(
     new Set(executions.flatMap((result) => result.metadata.rerun_scenario_ids ?? []))
   );
@@ -127,7 +124,6 @@ export function projectEvaluationResult(params: {
         `Evaluation ${params.evaluationRunId}`,
       ...(params.runNote?.trim() ? { run_note: params.runNote.trim() } : {}),
       ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
-      ...(inspectrOrigins.length > 0 ? { inspectr_origins: inspectrOrigins } : {}),
       ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
       ...(serverOverrideAll ? { rerun_server_override_all: [...serverOverrideAll] } : {}),
       ...(Object.keys(scenarioServerOverrides).length > 0

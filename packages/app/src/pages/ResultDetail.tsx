@@ -272,9 +272,7 @@ const ResultDetail = () => {
     if (tab) tab.opener = null;
     setOpeningInspectrOrigin(origin);
     try {
-      const sessions = await source.openRunInspectrSessions(id);
-      const session = sessions.find((candidate) => candidate.upstreamOrigin === origin);
-      if (!session) throw new Error(`No Inspectr session available for ${origin}`);
+      const session = await source.openRunInspectrSession(id, origin);
       const url = `${session.dashboardUrl}#traces/${encodeURIComponent(requestId)}`;
       if (tab) tab.location.href = url;
       else window.open(url, '_blank', 'noopener');
@@ -1349,7 +1347,7 @@ const ResultDetail = () => {
                                                   tool tokens
                                                 </span>
                                                 {run.requestId &&
-                                                  (result.inspectrOrigins ?? []).map((origin) => (
+                                                  (sc.inspectrOrigins ?? []).map((origin) => (
                                                     <button
                                                       key={origin}
                                                       type="button"
@@ -1369,7 +1367,7 @@ const ResultDetail = () => {
                                                         <ExternalLink className="h-3 w-3" />
                                                       )}
                                                       Open in Inspectr
-                                                      {(result.inspectrOrigins?.length ?? 0) > 1
+                                                      {(sc.inspectrOrigins?.length ?? 0) > 1
                                                         ? ` (${new URL(origin).host})`
                                                         : ''}
                                                     </button>

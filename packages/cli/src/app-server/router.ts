@@ -456,11 +456,13 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (
         await handleInspectrRoutes({
+          req,
           res,
           pathname,
           method,
           runsDir: settings.runsDir,
           inspectrSessionManager,
+          parseBody,
           asJson
         })
       ) {

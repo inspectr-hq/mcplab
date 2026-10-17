@@ -10,7 +10,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function writeRun(inspectrOrigins?: string[]): string {
+function writeRun(inspectrOrigins: string[]): string {
   const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-inspectr-routes-'));
   roots.push(runsDir);
   const results = aggregateResults({
@@ -18,77 +18,80 @@ function writeRun(inspectrOrigins?: string[]): string {
     timestamp: '2026-10-17T00:00:00Z',
     configHash: 'test',
     cliVersion: 'test',
-    scenarioRuns: []
+    scenarioRuns: [{ scenario_id: 's1', agent: 'a1', runs: [] }]
   });
-  if (inspectrOrigins) results.metadata.inspectr_origins = inspectrOrigins;
+  results.scenarios[0]!.inspectr_origins = inspectrOrigins;
   mkdirSync(join(runsDir, 'run-1'));
   writeFileSync(join(runsDir, 'run-1', 'results.json'), JSON.stringify(results));
   return runsDir;
 }
 
-function call(runsDir: string, pathname: string, acquire = vi.fn()) {
+async function call(runsDir: string, pathname: string, origin: unknown, acquire = vi.fn()) {
   const responses: Array<{ status: number; body: unknown }> = [];
-  const handled = handleInspectrRoutes({
+  const handled = await handleInspectrRoutes({
+    req: {} as any,
     res: {} as any,
     pathname,
     method: 'POST',
     runsDir,
     inspectrSessionManager: { acquire },
+    parseBody: async () => ({ origin }),
     asJson: (_res, status, body) => responses.push({ status, body })
   });
   return { handled, responses, acquire };
 }
 
 describe('POST /api/runs/:runId/inspectr', () => {
-  it('starts sessions only for the origins recorded on the run', async () => {
+  it('starts only the requested origin when the run recorded it', async () => {
     const acquire = vi.fn(async (origin: string) => ({
       upstreamOrigin: origin,
       proxyOrigin: 'http://127.0.0.1:1',
       dashboardUrl: 'http://127.0.0.1:2/?channel=c'
     }));
-    const { handled, responses } = call(
-      writeRun(['http://upstream.test']),
+    const { handled, responses } = await call(
+      writeRun(['http://upstream.test', 'http://other.test']),
       '/api/runs/run-1/inspectr',
+      'http://upstream.test',
       acquire
     );
 
-    expect(await handled).toBe(true);
+    expect(handled).toBe(true);
     expect(acquire).toHaveBeenCalledExactlyOnceWith('http://upstream.test');
     expect(responses).toEqual([
       {
         status: 200,
         body: {
-          sessions: [
-            {
-              upstreamOrigin: 'http://upstream.test',
-              dashboardUrl: 'http://127.0.0.1:2/?channel=c'
-            }
-          ]
+          session: {
+            upstreamOrigin: 'http://upstream.test',
+            dashboardUrl: 'http://127.0.0.1:2/?channel=c'
+          }
         }
       }
     ]);
   });
 
-  it('returns no sessions for runs without inspected origins', async () => {
-    const { handled, responses, acquire } = call(writeRun(), '/api/runs/run-1/inspectr');
+  it('rejects origins the run did not inspect', async () => {
+    const { responses, acquire } = await call(
+      writeRun(['http://upstream.test']),
+      '/api/runs/run-1/inspectr',
+      'http://attacker.test'
+    );
 
-    expect(await handled).toBe(true);
     expect(acquire).not.toHaveBeenCalled();
-    expect(responses).toEqual([{ status: 200, body: { sessions: [] } }]);
+    expect(responses[0]?.status).toBe(400);
   });
 
   it('returns 404 for unknown runs and 502 when Inspectr fails to start', async () => {
     const runsDir = writeRun(['http://upstream.test']);
-    const missing = call(runsDir, '/api/runs/missing/inspectr');
-    expect(await missing.handled).toBe(true);
+    const missing = await call(runsDir, '/api/runs/missing/inspectr', 'http://upstream.test');
     expect(missing.responses[0]?.status).toBe(404);
 
-    const failing = call(
+    const failing = await call(
       runsDir,
       '/api/runs/run-1/inspectr',
+      'http://upstream.test',
       vi.fn().mockRejectedValue(new Error('Inspectr failed to start'))
     );
-    expect(await failing.handled).toBe(true);
     expect(failing.responses).toEqual([
       { status: 502, body: { error: 'Inspectr failed to start' } }
     ]);

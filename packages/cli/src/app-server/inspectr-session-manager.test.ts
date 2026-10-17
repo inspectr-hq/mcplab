@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildInspectrRequestHeaders,
@@ -48,6 +51,37 @@ describe('InspectrSessionManager', () => {
       `--channel-code=${channelCode}`,
       '--print=false'
     ]);
+  });
+
+  it('explains how to install Inspectr when the executable is missing', async () => {
+    const handlers = new Map<string, (...args: any[]) => void>();
+    const child = {
+      kill: vi.fn(),
+      once: vi.fn((event: string, handler: (...args: any[]) => void) => {
+        handlers.set(event, handler);
+        return child;
+      })
+    } as any;
+    const storageRoot = mkdtempSync(join(tmpdir(), 'mcplab-inspectr-missing-'));
+    try {
+      const manager = new InspectrSessionManager({
+        storageRoot,
+        commandPath: 'inspectr-missing',
+        allocatePort: async () => 49100,
+        spawn: () => child,
+        waitForReady: async () => {
+          handlers.get('error')?.(Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
+          throw new Error('Inspectr process exited during startup');
+        }
+      });
+
+      await expect(manager.acquire('https://backend.test/mcp')).rejects.toThrow(
+        'Inspectr is not installed. Install it with `npm install -g @inspectr/inspectr` or Homebrew'
+      );
+      expect(child.kill).toHaveBeenCalled();
+    } finally {
+      rmSync(storageRoot, { recursive: true, force: true });
+    }
   });
 
   it('rewrites only the origin while preserving path and query', () => {

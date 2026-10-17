@@ -134,7 +134,7 @@ describe('executeRunJob', () => {
         timestamp: '2026-10-16T00:00:00Z',
         configHash: 'test',
         cliVersion: 'test',
-        scenarioRuns: []
+        scenarioRuns: [{ scenario_id: 's1', agent: 'mini', runs: [] }]
       });
       runAllMock.mockImplementationOnce(async (_config, options) => {
         expect(options.mcpServerUrlOverrides).toEqual({
@@ -196,7 +196,7 @@ describe('executeRunJob', () => {
       expect(acquire).toHaveBeenCalledTimes(1);
       expect(acquire).toHaveBeenCalledWith('http://upstream.test/mcp?x=1');
       expect(job.events.filter((event: any) => event.type === 'inspection_ready')).toHaveLength(1);
-      expect(inspectrResults.metadata.inspectr_origins).toEqual(['http://upstream.test']);
+      expect(inspectrResults.scenarios[0]?.inspectr_origins).toEqual(['http://upstream.test']);
     } finally {
       cleanupFixtureRoot(fixture.root);
     }

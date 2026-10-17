@@ -230,6 +230,8 @@ export interface ScenarioResult {
   provider?: string;
   model?: string;
   runs: ScenarioRun[];
+  // Upstream MCP origins this scenario's traffic went through Inspectr
+  inspectrOrigins?: string[];
   passRate: number | null;
   avgToolCalls: number;
   avgDuration: number;
@@ -246,8 +248,6 @@ export interface EvalResult {
   configPath?: string;
   configName?: string;
   langsmithTraceUrls?: Record<string, string>;
-  // Upstream MCP origins that were inspected with Inspectr during the run
-  inspectrOrigins?: string[];
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];

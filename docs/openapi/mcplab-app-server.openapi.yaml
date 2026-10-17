@@ -676,32 +676,41 @@ paths:
       tags: [Runs]
       summary: Open Inspectr for a run
       description: |
-        Starts (or reuses) the local Inspectr proxy for every origin in the run's `inspectr_origins` and
-        returns their dashboards. Only origins recorded on the run can be started. Dashboard URLs change
-        whenever an Inspectr process restarts.
-      operationId: openRunInspectrSessions
+        Starts (or reuses) the local Inspectr proxy for one origin recorded in a scenario's
+        `inspectr_origins` and returns its dashboard. Origins the run did not inspect are rejected.
+        Dashboard URLs change whenever an Inspectr process restarts.
+      operationId: openRunInspectrSession
       parameters:
         - name: runId
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin]
+              properties:
+                origin: { type: string, format: uri }
       responses:
         "200":
-          description: Inspectr sessions for the run's inspected origins
+          description: Inspectr session for the requested origin
           content:
             application/json:
               schema:
                 type: object
-                required: [sessions]
+                required: [session]
                 properties:
-                  sessions:
-                    type: array
-                    items:
-                      type: object
-                      required: [upstreamOrigin, dashboardUrl]
-                      properties:
-                        upstreamOrigin: { type: string, format: uri }
-                        dashboardUrl: { type: string, format: uri }
+                  session:
+                    type: object
+                    required: [upstreamOrigin, dashboardUrl]
+                    properties:
+                      upstreamOrigin: { type: string, format: uri }
+                      dashboardUrl: { type: string, format: uri }
+        "400":
+          description: Origin was not inspected in this run
         "404":
           description: Run not found
         "502":

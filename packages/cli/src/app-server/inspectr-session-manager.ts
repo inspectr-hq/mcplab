@@ -50,7 +50,7 @@ type ManagedSession = InspectrProxySession & { child: InspectrChild; cwd: string
 
 export class InspectrSessionManager {
   private readonly storageRoot: string;
-  private readonly commandPath: string;
+  private commandPath: string | undefined;
   private readonly log: (message: string) => void;
   private readonly allocatePort: () => Promise<number>;
   private readonly spawn: NonNullable<InspectrSessionManagerOptions['spawn']>;
@@ -60,7 +60,7 @@ export class InspectrSessionManager {
 
   constructor(options: InspectrSessionManagerOptions) {
     this.storageRoot = options.storageRoot;
-    this.commandPath = options.commandPath ?? resolveInspectrCommand();
+    this.commandPath = options.commandPath;
     this.log = options.log ?? console.log;
     this.allocatePort = options.allocatePort ?? allocateFreePort;
     this.spawn =
@@ -104,6 +104,8 @@ export class InspectrSessionManager {
       proxyOrigin: `http://127.0.0.1:${proxyPort}`,
       dashboardUrl: dashboardUrl.toString()
     };
+    // Resolved on first use so the app server starts even when Inspectr is not installed.
+    this.commandPath ??= resolveInspectrCommand();
     const child = this.spawn(
       this.commandPath,
       [
@@ -116,10 +118,19 @@ export class InspectrSessionManager {
       ],
       { cwd, stdio: ['ignore', 'ignore', 'ignore'] }
     );
+    let spawnError: NodeJS.ErrnoException | undefined;
+    child.once('error', (error: NodeJS.ErrnoException) => {
+      spawnError = error;
+    });
     try {
       await this.waitForReady(session, child);
     } catch (error) {
       await stopChild(child);
+      if (spawnError?.code === 'ENOENT') {
+        throw new Error(
+          'Inspectr is not installed. Install it with `npm install -g @inspectr/inspectr` or Homebrew, then try again.'
+        );
+      }
       throw new Error(
         `Inspectr failed to start for ${upstreamOrigin}: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -140,14 +151,20 @@ export class InspectrSessionManager {
   }
 }
 
+/** Prefers the optional @inspectr/inspectr dependency, else an `inspectr` on PATH. */
 function resolveInspectrCommand(): string {
   const require = createRequire(import.meta.url);
-  const packageJsonPath = require.resolve('@inspectr/inspectr/package.json');
+  let packageJsonPath: string;
+  try {
+    packageJsonPath = require.resolve('@inspectr/inspectr/package.json');
+  } catch {
+    return 'inspectr';
+  }
   const manifest = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
     bin?: string | Record<string, string>;
   };
   const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.inspectr;
-  if (!bin) throw new Error('Installed @inspectr/inspectr package has no inspectr executable');
+  if (!bin) return 'inspectr';
   const packageBin = join(dirname(packageJsonPath), bin);
   return existsSync(packageBin) ? packageBin : 'inspectr';
 }

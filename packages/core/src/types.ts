@@ -857,6 +857,8 @@ export interface ScenarioAggregate {
     forbidden: Record<string, number>;
   };
   runs: ScenarioRunResult[];
+  /** Upstream MCP origins whose traffic for this scenario was routed through Inspectr. */
+  inspectr_origins?: string[];
   pass_rate: number | null;
   distinct_sequences: Record<string, number>;
   tool_usage_frequency: Record<string, number>;
@@ -892,8 +894,6 @@ export interface ResultsJson {
     git_commit?: string;
     config_hash: string;
     langsmith_trace_urls?: Record<string, string>;
-    /** Upstream MCP origins whose traffic was routed through Inspectr during the run. */
-    inspectr_origins?: string[];
     config_path?: string;
     config_name?: string;
     rerun_agents?: string[];

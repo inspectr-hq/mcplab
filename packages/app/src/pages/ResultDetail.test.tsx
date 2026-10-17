@@ -14,7 +14,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     const listMarkdownReports = vi.fn().mockResolvedValue([]);
     const updateRunNote = vi.fn().mockResolvedValue(undefined);
     const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-    const openRunInspectrSessions = vi.fn().mockResolvedValue([]);
+    const openRunInspectrSession = vi.fn();
     const configs: EvalConfig[] = [];
     const libraryScenarios: EvalConfig['scenarios'] = [];
     const assistantState = {
@@ -39,7 +39,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
         listMarkdownReports,
         updateRunNote,
         startRun,
-        openRunInspectrSessions
+        openRunInspectrSession
       },
       mockResultAssistantState: assistantState,
       mockConfigs: configs,
@@ -234,15 +234,13 @@ describe('ResultDetail conversation toggle', () => {
 
   it('starts Inspectr on demand and opens the run trace in a new tab', async () => {
     const result = makeResult();
-    result.inspectrOrigins = ['http://upstream.test'];
+    result.scenarios[0].inspectrOrigins = ['http://upstream.test'];
     result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
     getResultMock.mockResolvedValue(result);
-    sourceMock.openRunInspectrSessions.mockResolvedValueOnce([
-      {
-        upstreamOrigin: 'http://upstream.test',
-        dashboardUrl: 'http://127.0.0.1:57506/?channel=c&channelCode=x'
-      }
-    ]);
+    sourceMock.openRunInspectrSession.mockResolvedValueOnce({
+      upstreamOrigin: 'http://upstream.test',
+      dashboardUrl: 'http://127.0.0.1:57506/?channel=c&channelCode=x'
+    });
     const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
 
@@ -263,7 +261,7 @@ describe('ResultDetail conversation toggle', () => {
         'http://127.0.0.1:57506/?channel=c&channelCode=x#traces/mcplab-run%3Arun-1%3Ascn-1%3Aagent-1%3Arun1'
       )
     );
-    expect(sourceMock.openRunInspectrSessions).toHaveBeenCalledWith('run-1');
+    expect(sourceMock.openRunInspectrSession).toHaveBeenCalledWith('run-1', 'http://upstream.test');
     expect(openSpy).toHaveBeenCalledWith('', '_blank');
     expect(tab.opener).toBeNull();
     openSpy.mockRestore();
@@ -271,10 +269,10 @@ describe('ResultDetail conversation toggle', () => {
 
   it('closes the pending tab when Inspectr cannot be started', async () => {
     const result = makeResult();
-    result.inspectrOrigins = ['http://upstream.test'];
+    result.scenarios[0].inspectrOrigins = ['http://upstream.test'];
     result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
     getResultMock.mockResolvedValue(result);
-    sourceMock.openRunInspectrSessions.mockRejectedValueOnce(new Error('inspectr missing'));
+    sourceMock.openRunInspectrSession.mockRejectedValueOnce(new Error('inspectr missing'));
     const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
 
@@ -294,8 +292,18 @@ describe('ResultDetail conversation toggle', () => {
     openSpy.mockRestore();
   });
 
-  it('does not offer Inspectr for runs without inspected origins', async () => {
-    getResultMock.mockResolvedValue(makeResult());
+  it('only offers Inspectr on scenarios whose traffic was inspected', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
+    result.scenarios.push({
+      ...result.scenarios[0],
+      scenarioId: 'scn-2',
+      scenarioName: 'Scenario 2',
+      inspectrOrigins: ['http://upstream.test'],
+      runs: [{ ...result.scenarios[0].runs[0], requestId: 'mcplab-run:run-1:scn-2:agent-1:run1' }]
+    });
+    result.totalScenarios = 2;
+    getResultMock.mockResolvedValue(result);
 
     render(
       <MemoryRouter initialEntries={['/results/run-1']}>
@@ -308,6 +316,8 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
     expect(screen.queryByRole('button', { name: /Open in Inspectr/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Scenario 2'));
+    expect(screen.getAllByRole('button', { name: /Open in Inspectr/ })).toHaveLength(1);
   });
 
   it('shows run note placeholder for historical runs without note', async () => {

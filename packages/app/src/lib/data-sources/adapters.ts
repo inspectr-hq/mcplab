@@ -1332,6 +1332,7 @@ export function fromCoreResultsJson(
     return {
       scenarioId: scenario.scenario_id,
       scenarioName: scenario.scenario_name || scenario.scenario_id,
+      inspectrOrigins: scenario.inspectr_origins,
       agentId: scenario.agent,
       agentName: scenario.agent,
       provider: scenario.provider,
@@ -1373,7 +1374,6 @@ export function fromCoreResultsJson(
     configPath: results.metadata.config_path,
     configName: results.metadata.config_name,
     langsmithTraceUrls: results.metadata.langsmith_trace_urls,
-    inspectrOrigins: results.metadata.inspectr_origins,
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,
