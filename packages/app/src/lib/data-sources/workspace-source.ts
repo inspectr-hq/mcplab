@@ -171,8 +171,8 @@ export const workspaceSource: EvalDataSource = {
   async getRoverStatus() {
     return workspaceApiClient.getRoverStatus();
   },
-  async listInspectrSessions() {
-    return workspaceApiClient.listInspectrSessions();
+  async openRunInspectrSessions(runId) {
+    return workspaceApiClient.openRunInspectrSessions(runId);
   },
   async getRunQueue() {
     return workspaceApiClient.getRunQueue();

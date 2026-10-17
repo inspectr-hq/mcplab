@@ -50,7 +50,7 @@ export type RunsRouteDeps = Pick<
   | 'pkgVersion'
 >;
 
-function respondWithRunStoreError(
+export function respondWithRunStoreError(
   res: ServerResponse,
   asJson: (res: ServerResponse, status: number, body: unknown) => void,
   error: unknown

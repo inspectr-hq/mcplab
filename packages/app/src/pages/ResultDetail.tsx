@@ -102,8 +102,7 @@ import type {
   ConversationItem,
   EvalResult,
   EvalConfig as UiEvalConfig,
-  EvalRule,
-  InspectrSession
+  EvalRule
 } from '@/types/eval';
 import type { MarkdownReportContent, MarkdownReportSummary } from '@/lib/data-sources/types';
 
@@ -167,7 +166,7 @@ const ResultDetail = () => {
     'assistant'
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
-  const [inspectrSessions, setInspectrSessions] = useState<InspectrSession[]>([]);
+  const [openingInspectrOrigin, setOpeningInspectrOrigin] = useState<string | null>(null);
 
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState('');
@@ -265,28 +264,31 @@ const ResultDetail = () => {
     };
   }, [id, source, resetAssistantSession]);
 
-  // Inspectr dashboards only live as long as the app server's proxy process; link while running.
-  const inspectrOriginsKey = (result?.inspectrOrigins ?? []).join(' ');
-  useEffect(() => {
-    const origins = new Set(inspectrOriginsKey.split(' ').filter(Boolean));
-    if (origins.size === 0) {
-      setInspectrSessions([]);
-      return;
-    }
-    let active = true;
-    source
-      .listInspectrSessions()
-      .then((sessions) => {
-        if (!active) return;
-        setInspectrSessions(sessions.filter((session) => origins.has(session.upstreamOrigin)));
-      })
-      .catch(() => {
-        if (active) setInspectrSessions([]);
+  // Inspectr proxies stop with the app server, so the session is (re)started on demand.
+  const openInspectrTrace = async (origin: string, requestId: string) => {
+    if (!id) return;
+    // Open the tab synchronously: browsers block popups opened after an await.
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    setOpeningInspectrOrigin(origin);
+    try {
+      const sessions = await source.openRunInspectrSessions(id);
+      const session = sessions.find((candidate) => candidate.upstreamOrigin === origin);
+      if (!session) throw new Error(`No Inspectr session available for ${origin}`);
+      const url = `${session.dashboardUrl}#traces/${encodeURIComponent(requestId)}`;
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank', 'noopener');
+    } catch (error) {
+      tab?.close();
+      toast({
+        title: 'Could not open Inspectr',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
-    return () => {
-      active = false;
-    };
-  }, [inspectrOriginsKey, source]);
+    } finally {
+      setOpeningInspectrOrigin(null);
+    }
+  };
 
   useEffect(() => {
     const node = headerRowRef.current;
@@ -1347,21 +1349,30 @@ const ResultDetail = () => {
                                                   tool tokens
                                                 </span>
                                                 {run.requestId &&
-                                                  inspectrSessions.map((session) => (
-                                                    <a
-                                                      key={session.dashboardUrl}
-                                                      href={`${session.dashboardUrl}#traces/${encodeURIComponent(run.requestId!)}`}
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                                                      title="Open this run's MCP requests in Inspectr"
+                                                  (result.inspectrOrigins ?? []).map((origin) => (
+                                                    <button
+                                                      key={origin}
+                                                      type="button"
+                                                      onClick={() =>
+                                                        void openInspectrTrace(
+                                                          origin,
+                                                          run.requestId!
+                                                        )
+                                                      }
+                                                      disabled={openingInspectrOrigin !== null}
+                                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+                                                      title="Open this run's MCP requests in Inspectr (starts Inspectr if needed)"
                                                     >
-                                                      <ExternalLink className="h-3 w-3" />
-                                                      Inspectr trace
-                                                      {inspectrSessions.length > 1
-                                                        ? ` (${new URL(session.upstreamOrigin).host})`
+                                                      {openingInspectrOrigin === origin ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                      ) : (
+                                                        <ExternalLink className="h-3 w-3" />
+                                                      )}
+                                                      Open in Inspectr
+                                                      {(result.inspectrOrigins?.length ?? 0) > 1
+                                                        ? ` (${new URL(origin).host})`
                                                         : ''}
-                                                    </a>
+                                                    </button>
                                                   ))}
                                                 {run.outcome === 'incomplete' ? (
                                                   <Badge

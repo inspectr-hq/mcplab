@@ -32,7 +32,6 @@ describe('InspectrSessionManager', () => {
     });
     expect(second).toBe(first);
     expect(spawn).toHaveBeenCalledTimes(1);
-    expect(manager.listSessions()).toEqual([first]);
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining(
         '[mcplab-app] Inspectr started for https://backend.test, proxy: http://127.0.0.1:49000, dashboard:'

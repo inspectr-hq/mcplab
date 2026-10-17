@@ -14,7 +14,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     const listMarkdownReports = vi.fn().mockResolvedValue([]);
     const updateRunNote = vi.fn().mockResolvedValue(undefined);
     const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-    const listInspectrSessions = vi.fn().mockResolvedValue([]);
+    const openRunInspectrSessions = vi.fn().mockResolvedValue([]);
     const configs: EvalConfig[] = [];
     const libraryScenarios: EvalConfig['scenarios'] = [];
     const assistantState = {
@@ -34,7 +34,13 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     };
     return {
       getResultMock: getResult,
-      sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun, listInspectrSessions },
+      sourceMock: {
+        getResult,
+        listMarkdownReports,
+        updateRunNote,
+        startRun,
+        openRunInspectrSessions
+      },
       mockResultAssistantState: assistantState,
       mockConfigs: configs,
       mockLibraryScenarios: libraryScenarios
@@ -226,18 +232,19 @@ describe('ResultDetail conversation toggle', () => {
     );
   });
 
-  it('links each run to its Inspectr trace while the inspected session is running', async () => {
+  it('starts Inspectr on demand and opens the run trace in a new tab', async () => {
     const result = makeResult();
     result.inspectrOrigins = ['http://upstream.test'];
     result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
     getResultMock.mockResolvedValue(result);
-    sourceMock.listInspectrSessions.mockResolvedValueOnce([
+    sourceMock.openRunInspectrSessions.mockResolvedValueOnce([
       {
         upstreamOrigin: 'http://upstream.test',
         dashboardUrl: 'http://127.0.0.1:57506/?channel=c&channelCode=x'
-      },
-      { upstreamOrigin: 'http://other.test', dashboardUrl: 'http://127.0.0.1:57600/' }
+      }
     ]);
+    const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
 
     render(
       <MemoryRouter initialEntries={['/results/run-1']}>
@@ -249,16 +256,45 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     fireEvent.click(screen.getByText('Scenario 1'));
-    const links = await screen.findAllByRole('link', { name: /Inspectr trace/ });
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute(
-      'href',
-      'http://127.0.0.1:57506/?channel=c&channelCode=x#traces/mcplab-run%3Arun-1%3Ascn-1%3Aagent-1%3Arun1'
+    fireEvent.click(screen.getByRole('button', { name: /Open in Inspectr/ }));
+
+    await waitFor(() =>
+      expect(tab.location.href).toBe(
+        'http://127.0.0.1:57506/?channel=c&channelCode=x#traces/mcplab-run%3Arun-1%3Ascn-1%3Aagent-1%3Arun1'
+      )
     );
+    expect(sourceMock.openRunInspectrSessions).toHaveBeenCalledWith('run-1');
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    expect(tab.opener).toBeNull();
+    openSpy.mockRestore();
   });
 
-  it('does not query Inspectr for runs without inspected origins', async () => {
-    sourceMock.listInspectrSessions.mockClear();
+  it('closes the pending tab when Inspectr cannot be started', async () => {
+    const result = makeResult();
+    result.inspectrOrigins = ['http://upstream.test'];
+    result.scenarios[0].runs[0].requestId = 'mcplab-run:run-1:scn-1:agent-1:run1';
+    getResultMock.mockResolvedValue(result);
+    sourceMock.openRunInspectrSessions.mockRejectedValueOnce(new Error('inspectr missing'));
+    const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    fireEvent.click(screen.getByRole('button', { name: /Open in Inspectr/ }));
+
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    openSpy.mockRestore();
+  });
+
+  it('does not offer Inspectr for runs without inspected origins', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
@@ -270,7 +306,8 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(sourceMock.listInspectrSessions).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.queryByRole('button', { name: /Open in Inspectr/ })).not.toBeInTheDocument();
   });
 
   it('shows run note placeholder for historical runs without note', async () => {

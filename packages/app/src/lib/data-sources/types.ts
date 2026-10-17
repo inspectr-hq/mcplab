@@ -714,8 +714,8 @@ export interface EvalDataSource {
     pageUrl?: string;
     activeJobId?: string | null;
   }>;
-  /** Inspectr proxy sessions that are currently running on the app server. */
-  listInspectrSessions: () => Promise<InspectrSession[]>;
+  /** Starts (or reuses) the Inspectr proxies for the origins a run inspected. */
+  openRunInspectrSessions: (runId: string) => Promise<InspectrSession[]>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;

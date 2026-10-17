@@ -671,17 +671,23 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
-  /api/inspectr/sessions:
-    get:
+  /api/runs/{runId}/inspectr:
+    post:
       tags: [Runs]
-      summary: List running Inspectr proxy sessions
+      summary: Open Inspectr for a run
       description: |
-        Inspectr proxies started for MCP servers with `inspectr.enabled`. Sessions exist only while the
-        app server runs; dashboards for a stored result are reachable when its `inspectr_origins` match.
-      operationId: listInspectrSessions
+        Starts (or reuses) the local Inspectr proxy for every origin in the run's `inspectr_origins` and
+        returns their dashboards. Only origins recorded on the run can be started. Dashboard URLs change
+        whenever an Inspectr process restarts.
+      operationId: openRunInspectrSessions
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
       responses:
         "200":
-          description: Running Inspectr sessions
+          description: Inspectr sessions for the run's inspected origins
           content:
             application/json:
               schema:
@@ -696,6 +702,10 @@ paths:
                       properties:
                         upstreamOrigin: { type: string, format: uri }
                         dashboardUrl: { type: string, format: uri }
+        "404":
+          description: Run not found
+        "502":
+          description: Inspectr could not be started
   /api/runs/{runId}/assistant:
     parameters:
       - $ref: "#/components/parameters/RunId"

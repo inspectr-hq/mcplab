@@ -72,6 +72,7 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
+import { handleInspectrRoutes } from './inspectr-routes.js';
 import {
   createRunQueueService,
   type RoverAssignmentWorker,
@@ -453,12 +454,16 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
-      if (pathname === '/api/inspectr/sessions' && method === 'GET') {
-        asJson(res, 200, {
-          sessions: inspectrSessionManager
-            .listSessions()
-            .map(({ upstreamOrigin, dashboardUrl }) => ({ upstreamOrigin, dashboardUrl }))
-        });
+      if (
+        await handleInspectrRoutes({
+          res,
+          pathname,
+          method,
+          runsDir: settings.runsDir,
+          inspectrSessionManager,
+          asJson
+        })
+      ) {
         return;
       }
       if (pathname === '/api/rover/status' && method === 'GET') {
