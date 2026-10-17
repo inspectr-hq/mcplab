@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Loader2, Wifi, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import IconMcp from '@/components/ui/IconMcp';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
@@ -302,7 +303,7 @@ const ServerDetail = () => {
             <ArrowLeft className="h-4 w-4" /> Servers
           </Link>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <img src="/mcp.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            <IconMcp className="h-6 w-6" />
             {isNew ? 'New Server' : displayName(form)}
           </h1>
         </div>

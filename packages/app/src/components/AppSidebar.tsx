@@ -1,4 +1,4 @@
-import { useMemo, type ComponentProps } from 'react';
+import { useMemo } from 'react';
 import {
   LayoutDashboard,
   Settings,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import IconInspectr from '@/components/ui/IconInspectr.jsx';
+import IconMcp from '@/components/ui/IconMcp';
 import { useLocation } from 'react-router-dom';
 import {
   Sidebar,
@@ -32,10 +33,6 @@ import {
   SidebarHeader,
   useSidebar
 } from '@/components/ui/sidebar';
-
-function McpIcon(props: ComponentProps<'img'>) {
-  return <img src="/mcp.svg" alt="" aria-hidden="true" {...props} />;
-}
 
 const navSections = [
   {
@@ -54,7 +51,7 @@ const navSections = [
     title: 'Libraries',
     items: [
       { title: 'Test Cases', url: '/libraries/test-cases', icon: FileCode },
-      { title: 'MCP servers', url: '/libraries/servers', icon: McpIcon },
+      { title: 'MCP servers', url: '/libraries/servers', icon: IconMcp },
       { title: 'Agents', url: '/libraries/agents', icon: Bot }
     ]
   },
