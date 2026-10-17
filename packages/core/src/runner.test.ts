@@ -313,6 +313,22 @@ describe('buildScenarioRequestId', () => {
     expect(requestId.endsWith('-run1')).toBe(true);
   });
 
+  it('keeps clamped IDs distinct for long scenario ids that share a prefix', () => {
+    const [first, second] = ['a', 'b'].map((tail) =>
+      buildScenarioRequestId({
+        runId: 'run-123',
+        scenarioId: `${'s'.repeat(200)}${tail}`,
+        agentName: 'agent',
+        scenarioExecId: `${'s'.repeat(200)}${tail}-agent`,
+        runIndex: 0
+      })
+    );
+
+    expect(first).not.toBe(second);
+    expect(first.length).toBe(180);
+    expect(first).toMatch(/~[0-9a-f]{8}:agent:run1$/);
+  });
+
   it('keeps IDs distinct across runs when scenario_exec_id is set and clamped', () => {
     const run1 = buildScenarioRequestId({
       runId: 'run-123',

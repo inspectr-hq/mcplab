@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
@@ -647,17 +648,16 @@ function clampRequestIdLength(
   }
 ): string {
   if (value.length <= MAX_REQUEST_ID_LENGTH) return value;
-  const requiredSuffix = options?.requiredSuffix;
-  if (!requiredSuffix) {
-    return value.slice(0, MAX_REQUEST_ID_LENGTH);
-  }
+  // Truncation drops part of the ID, so keep a digest of the full value to stay unique.
+  const digest = `~${createHash('sha256').update(value).digest('hex').slice(0, 8)}`;
+  const maxSuffixLength = MAX_REQUEST_ID_LENGTH - digest.length;
+  const requiredSuffix = options?.requiredSuffix ?? '';
   const normalizedSuffix =
-    requiredSuffix.length > MAX_REQUEST_ID_LENGTH
-      ? requiredSuffix.slice(requiredSuffix.length - MAX_REQUEST_ID_LENGTH)
+    requiredSuffix.length > maxSuffixLength
+      ? requiredSuffix.slice(requiredSuffix.length - maxSuffixLength)
       : requiredSuffix;
-  const prefixLength = MAX_REQUEST_ID_LENGTH - normalizedSuffix.length;
-  if (prefixLength <= 0) return normalizedSuffix;
-  return `${value.slice(0, prefixLength)}${normalizedSuffix}`;
+  const prefixLength = maxSuffixLength - normalizedSuffix.length;
+  return `${value.slice(0, prefixLength)}${digest}${normalizedSuffix}`;
 }
 
 function slugifyAgentName(agentName: string): string {

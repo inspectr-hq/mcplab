@@ -473,56 +473,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     if (!inlineId) continue;
     const id = inlineId;
     serverIdByName.set(inlineId, id);
-    const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
-      entry.auth?.type === 'bearer'
-        ? 'bearer'
-        : entry.auth?.type === 'api_key'
-          ? 'api-key'
-          : entry.auth?.type === 'oauth_client_credentials'
-            ? 'api-key'
-            : entry.auth?.type === 'oauth_authorization_code'
-              ? 'oauth2'
-              : 'none';
-    const mappedServer = {
-      id,
-      name: String(entry.name || inlineId),
-      transport: 'streamable-http' as const,
-      url: entry.url,
-      authType,
-      authValue:
-        entry.auth?.type === 'bearer'
-          ? (entry.auth.token ?? (entry.auth.env ? `\${${entry.auth.env}}` : undefined))
-          : entry.auth?.type === 'api_key'
-            ? entry.auth.value
-            : undefined,
-      apiKeyHeaderName: entry.auth?.type === 'api_key' ? entry.auth.header_name : undefined,
-      oauthClientId:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_id : undefined,
-      oauthClientSecret:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_secret : undefined,
-      oauthRedirectUrl:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.redirect_url : undefined,
-      oauthScope:
-        entry.auth?.type === 'oauth_authorization_code'
-          ? entry.auth.scope
-          : entry.auth?.type === 'oauth_client_credentials'
-            ? entry.auth.scope
-            : undefined,
-      oauthMode: entry.auth?.type === 'oauth_authorization_code' ? entry.auth.mode : undefined,
-      oauthAuthorizationUrl:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.authorization_url : undefined,
-      oauthTokenEndpoint:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.token_url : undefined,
-      oauthTokenUrl:
-        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.token_url : undefined,
-      oauthClientIdEnv:
-        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.client_id_env : undefined,
-      oauthClientSecretEnv:
-        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.client_secret_env : undefined,
-      oauthAudience:
-        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.audience : undefined,
-      inspectrEnabled: entry.inspectr?.enabled === true || undefined
-    };
+    const mappedServer = toUiServerConfigFromMcpEntry({ ...entry, id })!.server;
     servers.push(mappedServer);
     mixedServerEntries.push({ kind: 'inline', server: mappedServer });
   }
@@ -710,66 +661,72 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
   };
 }
 
+/** Converts a UI server into its core config shape; shared by eval configs and libraries. */
+function toCoreServerConfig(server: EvalConfig['servers'][number]) {
+  const sourceId = server.id;
+  const trimmedAuthValue = server.authValue?.trim() ?? '';
+  const trimmedApiKeyHeaderName = server.apiKeyHeaderName?.trim() ?? '';
+  const auth =
+    server.authType === 'bearer'
+      ? (() => {
+          if (!trimmedAuthValue) {
+            throw new Error(`Server '${sourceId}' is missing bearer token value`);
+          }
+          return { type: 'bearer' as const, token: trimmedAuthValue };
+        })()
+      : server.authType === 'api-key' && !server.oauthTokenUrl
+        ? {
+            type: 'api_key' as const,
+            ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
+            value: (() => {
+              if (!trimmedAuthValue) {
+                throw new Error(`Server '${sourceId}' is missing API key value`);
+              }
+              return trimmedAuthValue;
+            })()
+          }
+        : server.authType === 'api-key'
+          ? {
+              type: 'oauth_client_credentials' as const,
+              token_url: server.oauthTokenUrl || '',
+              client_id_env: server.oauthClientIdEnv || '',
+              client_secret_env: server.oauthClientSecretEnv || '',
+              ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+              ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
+            }
+          : server.authType === 'oauth2'
+            ? {
+                type: 'oauth_authorization_code' as const,
+                ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+                ...(server.oauthMode !== 'dcr' && server.oauthClientId
+                  ? { client_id: server.oauthClientId }
+                  : {}),
+                ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
+                ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
+                ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                ...(server.oauthAuthorizationUrl
+                  ? { authorization_url: server.oauthAuthorizationUrl }
+                  : {}),
+                ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
+              }
+            : undefined;
+  return {
+    ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
+    transport: 'http' as const,
+    url: server.url || 'http://localhost:3000/mcp',
+    ...(auth !== undefined ? { auth } : {}),
+    ...(server.inspectrEnabled ? { inspectr: { enabled: true } } : {})
+  };
+}
+
 export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const serverNameById = new Map<string, string>();
 
-  const mapInlineServer = (server: EvalConfig['servers'][number]) => {
-    const sourceId = server.id;
-    const trimmedAuthValue = server.authValue?.trim() ?? '';
-    const trimmedApiKeyHeaderName = server.apiKeyHeaderName?.trim() ?? '';
-    const auth =
-      server.authType === 'bearer'
-        ? (() => {
-            if (!trimmedAuthValue) {
-              throw new Error(`Server '${sourceId}' is missing bearer token value`);
-            }
-            return { type: 'bearer' as const, token: trimmedAuthValue };
-          })()
-        : server.authType === 'api-key' && !server.oauthTokenUrl
-          ? {
-              type: 'api_key' as const,
-              ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
-              value: (() => {
-                if (!trimmedAuthValue) {
-                  throw new Error(`Server '${sourceId}' is missing API key value`);
-                }
-                return trimmedAuthValue;
-              })()
-            }
-          : server.authType === 'api-key'
-            ? {
-                type: 'oauth_client_credentials' as const,
-                token_url: server.oauthTokenUrl || '',
-                client_id_env: server.oauthClientIdEnv || '',
-                client_secret_env: server.oauthClientSecretEnv || '',
-                ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
-              }
-            : server.authType === 'oauth2'
-              ? {
-                  type: 'oauth_authorization_code' as const,
-                  ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
-                  ...(server.oauthMode !== 'dcr' && server.oauthClientId
-                    ? { client_id: server.oauthClientId }
-                    : {}),
-                  ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
-                  ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                  ...(server.oauthAuthorizationUrl
-                    ? { authorization_url: server.oauthAuthorizationUrl }
-                    : {}),
-                  ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
-                }
-              : undefined;
-    return {
-      id: sourceId,
-      ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
-      transport: 'http',
-      url: server.url || 'http://localhost:3000/mcp',
-      ...(auth !== undefined ? { auth } : {}),
-      ...(server.inspectrEnabled ? { inspectr: { enabled: true } } : {})
-    } satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
-  };
+  const mapInlineServer = (server: EvalConfig['servers'][number]) =>
+    ({
+      id: server.id,
+      ...toCoreServerConfig(server)
+    }) satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
   const mixedServerEntries =
     config.serverEntries && config.serverEntries.length > 0
       ? config.serverEntries
@@ -867,69 +824,7 @@ export function toCoreLibraries(
     Pick<LibraryBundle, 'browserProviders'>
 ): CoreLibraryBundle {
   const servers = Object.fromEntries(
-    (input.servers ?? []).map((server) => [
-      server.id,
-      (() => {
-        const trimmedAuthValue = server.authValue?.trim() ?? '';
-        const trimmedApiKeyHeaderName = server.apiKeyHeaderName?.trim() ?? '';
-        return {
-          ...(server.name && server.name !== server.id ? { name: server.name } : {}),
-          transport: 'http' as const,
-          url: server.url || 'http://localhost:3000/mcp',
-          auth:
-            server.authType === 'bearer'
-              ? (() => {
-                  if (!trimmedAuthValue) {
-                    throw new Error(`Server '${server.id}' is missing bearer token value`);
-                  }
-                  return { type: 'bearer' as const, token: trimmedAuthValue };
-                })()
-              : server.authType === 'api-key' && !server.oauthTokenUrl
-                ? {
-                    type: 'api_key' as const,
-                    ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
-                    value: (() => {
-                      if (!trimmedAuthValue) {
-                        throw new Error(`Server '${server.id}' is missing API key value`);
-                      }
-                      return trimmedAuthValue;
-                    })()
-                  }
-                : server.authType === 'api-key'
-                  ? {
-                      type: 'oauth_client_credentials' as const,
-                      token_url: server.oauthTokenUrl || '',
-                      client_id_env: server.oauthClientIdEnv || '',
-                      client_secret_env: server.oauthClientSecretEnv || '',
-                      ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                      ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
-                    }
-                  : server.authType === 'oauth2'
-                    ? {
-                        type: 'oauth_authorization_code' as const,
-                        ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
-                        ...(server.oauthMode !== 'dcr' && server.oauthClientId
-                          ? { client_id: server.oauthClientId }
-                          : {}),
-                        ...(server.oauthClientSecret
-                          ? { client_secret: server.oauthClientSecret }
-                          : {}),
-                        ...(server.oauthRedirectUrl
-                          ? { redirect_url: server.oauthRedirectUrl }
-                          : {}),
-                        ...(server.oauthScope ? { scope: server.oauthScope } : {}),
-                        ...(server.oauthAuthorizationUrl
-                          ? { authorization_url: server.oauthAuthorizationUrl }
-                          : {}),
-                        ...(server.oauthTokenEndpoint
-                          ? { token_url: server.oauthTokenEndpoint }
-                          : {})
-                      }
-                    : undefined,
-          ...(server.inspectrEnabled ? { inspectr: { enabled: true } } : {})
-        };
-      })()
-    ])
+    (input.servers ?? []).map((server) => [server.id, toCoreServerConfig(server)])
   ) as CoreEvalConfig['servers'];
 
   const agents = Object.fromEntries(
