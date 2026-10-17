@@ -26,7 +26,13 @@ function writeRun(inspectrOrigins: string[]): string {
   return runsDir;
 }
 
-async function call(runsDir: string, pathname: string, origin: unknown, acquire = vi.fn()) {
+async function call(
+  runsDir: string,
+  pathname: string,
+  origin: unknown,
+  acquire = vi.fn(),
+  body: unknown = { origin }
+) {
   const responses: Array<{ status: number; body: unknown }> = [];
   const handled = await handleInspectrRoutes({
     req: {} as any,
@@ -35,7 +41,7 @@ async function call(runsDir: string, pathname: string, origin: unknown, acquire 
     method: 'POST',
     runsDir,
     inspectrSessionManager: { acquire },
-    parseBody: async () => ({ origin }),
+    parseBody: async () => body,
     asJson: (_res, status, body) => responses.push({ status, body })
   });
   return { handled, responses, acquire };
@@ -75,6 +81,19 @@ describe('POST /api/runs/:runId/inspectr', () => {
       writeRun(['http://upstream.test']),
       '/api/runs/run-1/inspectr',
       'http://attacker.test'
+    );
+
+    expect(acquire).not.toHaveBeenCalled();
+    expect(responses[0]?.status).toBe(400);
+  });
+
+  it('returns 400 instead of crashing when the request body is null', async () => {
+    const { responses, acquire } = await call(
+      writeRun(['http://upstream.test']),
+      '/api/runs/run-1/inspectr',
+      undefined,
+      vi.fn(),
+      null
     );
 
     expect(acquire).not.toHaveBeenCalled();

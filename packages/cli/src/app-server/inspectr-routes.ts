@@ -28,8 +28,9 @@ export async function handleInspectrRoutes(params: {
     if (!respondWithRunStoreError(res, asJson, error)) throw error;
     return true;
   }
-  const body = (await parseBody(req)) as { origin?: unknown };
-  const origin = typeof body.origin === 'string' ? body.origin : '';
+  // JSON bodies may be `null` or a non-object; treat anything without a string origin as missing.
+  const body = (await parseBody(req)) as { origin?: unknown } | null;
+  const origin = typeof body?.origin === 'string' ? body.origin : '';
   // Only origins recorded on the run can be started, never arbitrary URLs from the client.
   if (!recordedOrigins.has(origin)) {
     asJson(res, 400, { error: 'origin was not inspected with Inspectr in this run' });

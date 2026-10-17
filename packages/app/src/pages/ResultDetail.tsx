@@ -32,6 +32,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -166,7 +172,7 @@ const ResultDetail = () => {
     'assistant'
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
-  const [openingInspectrOrigin, setOpeningInspectrOrigin] = useState<string | null>(null);
+  const [openingInspectrTrace, setOpeningInspectrTrace] = useState<string | null>(null);
 
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState('');
@@ -270,7 +276,7 @@ const ResultDetail = () => {
     // Open the tab synchronously: browsers block popups opened after an await.
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
-    setOpeningInspectrOrigin(origin);
+    setOpeningInspectrTrace(`${origin}|${requestId}`);
     try {
       const session = await source.openRunInspectrSession(id, origin);
       const url = `${session.dashboardUrl}#traces/${encodeURIComponent(requestId)}`;
@@ -284,7 +290,7 @@ const ResultDetail = () => {
         variant: 'destructive'
       });
     } finally {
-      setOpeningInspectrOrigin(null);
+      setOpeningInspectrTrace(null);
     }
   };
 
@@ -1268,6 +1274,90 @@ const ResultDetail = () => {
                                           </Link>
                                         </Button>
                                       ) : null}
+                                      {(() => {
+                                        const multipleOrigins =
+                                          (sc.inspectrOrigins?.length ?? 0) > 1;
+                                        const traces = (sc.inspectrOrigins ?? []).flatMap(
+                                          (origin) =>
+                                            sc.runs.flatMap((run) =>
+                                              run.requestId
+                                                ? [
+                                                    {
+                                                      key: `${origin}|${run.requestId}`,
+                                                      origin,
+                                                      requestId: run.requestId,
+                                                      label: `Run #${run.runIndex + 1}${
+                                                        multipleOrigins
+                                                          ? ` (${new URL(origin).host})`
+                                                          : ''
+                                                      }`
+                                                    }
+                                                  ]
+                                                : []
+                                            )
+                                        );
+                                        if (traces.length === 0) return null;
+                                        const opening = traces.some(
+                                          (trace) => trace.key === openingInspectrTrace
+                                        );
+                                        const buttonProps = {
+                                          type: 'button' as const,
+                                          variant: 'ghost' as const,
+                                          size: 'sm' as const,
+                                          className: 'h-7 gap-1 px-2 text-xs text-muted-foreground',
+                                          disabled: openingInspectrTrace !== null,
+                                          title:
+                                            'Open the MCP requests in Inspectr (starts Inspectr if needed)'
+                                        };
+                                        const icon = opening ? (
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        );
+                                        if (traces.length === 1) {
+                                          const [trace] = traces;
+                                          return (
+                                            <Button
+                                              {...buttonProps}
+                                              onClick={() =>
+                                                void openInspectrTrace(
+                                                  trace.origin,
+                                                  trace.requestId
+                                                )
+                                              }
+                                            >
+                                              {icon}
+                                              Inspectr trace
+                                            </Button>
+                                          );
+                                        }
+                                        return (
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button {...buttonProps}>
+                                                {icon}
+                                                Inspectr trace
+                                                <ChevronDown className="h-3 w-3" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              {traces.map((trace) => (
+                                                <DropdownMenuItem
+                                                  key={trace.key}
+                                                  onSelect={() =>
+                                                    void openInspectrTrace(
+                                                      trace.origin,
+                                                      trace.requestId
+                                                    )
+                                                  }
+                                                >
+                                                  {trace.label}
+                                                </DropdownMenuItem>
+                                              ))}
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        );
+                                      })()}
                                       <Button
                                         type="button"
                                         variant="outline"
@@ -1346,32 +1436,6 @@ const ResultDetail = () => {
                                                   )}{' '}
                                                   tool tokens
                                                 </span>
-                                                {run.requestId &&
-                                                  (sc.inspectrOrigins ?? []).map((origin) => (
-                                                    <button
-                                                      key={origin}
-                                                      type="button"
-                                                      onClick={() =>
-                                                        void openInspectrTrace(
-                                                          origin,
-                                                          run.requestId!
-                                                        )
-                                                      }
-                                                      disabled={openingInspectrOrigin !== null}
-                                                      className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
-                                                      title="Open this run's MCP requests in Inspectr (starts Inspectr if needed)"
-                                                    >
-                                                      {openingInspectrOrigin === origin ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                      ) : (
-                                                        <ExternalLink className="h-3 w-3" />
-                                                      )}
-                                                      Open in Inspectr
-                                                      {(sc.inspectrOrigins?.length ?? 0) > 1
-                                                        ? ` (${new URL(origin).host})`
-                                                        : ''}
-                                                    </button>
-                                                  ))}
                                                 {run.outcome === 'incomplete' ? (
                                                   <Badge
                                                     variant="outline"
