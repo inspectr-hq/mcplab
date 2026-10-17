@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.26.0
+
+### Minor Changes
+
+- feat: add Inspectr for MCP request inspection
+
 ## 1.25.0
 
 ### Minor Changes

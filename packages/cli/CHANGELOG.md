@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.32.0
+
+### Minor Changes
+
+- feat: add Inspectr for MCP request inspection
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.26.0
+  - @inspectr/mcplab-mcp-server@1.10.2
+  - @inspectr/mcplab-reporting@1.3.3
+
 ## 1.31.1
 
 ### Patch Changes
