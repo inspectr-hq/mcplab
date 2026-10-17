@@ -861,6 +861,18 @@ async function executeSingleConfigRun(params: {
     );
   }
 
+  // Inspectr proxies are owned by the app server; a CLI run would tear the dashboard down on exit.
+  const inspectedServers = Array.from(effectiveServerIds).filter(
+    (name) => expanded.servers?.[name]?.inspectr?.enabled
+  );
+  if (inspectedServers.length > 0) {
+    console.warn(
+      kleur.yellow(
+        `Inspectr is enabled for server(s) ${inspectedServers.join(', ')}, but 'mcplab run' does not route traffic through Inspectr. Queue the evaluation from 'mcplab app' to inspect its MCP requests.`
+      )
+    );
+  }
+
   const { runDir, results } = await runAll(expanded, {
     runsPerScenario,
     scenarioId: options.scenario,

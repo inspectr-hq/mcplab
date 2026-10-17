@@ -21,11 +21,24 @@ import type {
   ScenarioListEntry,
   ScenarioRefEntry,
   SourceScenario,
+  ServerConfig,
   ServerInlineEntry,
   ServerListEntry,
   ServerRefEntry,
   SourceEvalConfig
 } from './types.js';
+
+/** Runtime fields every server projection carries; add new server settings here. */
+function serverConfigFields(
+  server: Pick<ServerConfig, 'transport' | 'url' | 'auth' | 'inspectr'>
+): ServerConfig {
+  return {
+    transport: server.transport,
+    url: server.url,
+    auth: server.auth,
+    ...(server.inspectr ? { inspectr: server.inspectr } : {})
+  };
+}
 
 const TEST_CASES_DIR = 'test-cases';
 const LEGACY_SCENARIOS_DIR = 'scenarios';
@@ -178,9 +191,7 @@ function resolveReferences(
     }
     seenServerNames.add(resolvedId);
     resolvedServers[resolvedId] = {
-      transport: entry.transport,
-      url: entry.url,
-      auth: entry.auth
+      ...serverConfigFields(entry)
     };
   }
 
@@ -305,9 +316,7 @@ function resolveReferences(
         const inlineEntry = entry as ServerInlineEntry;
         const id = inlineEntry.id;
         const inlineConfig: EvalConfig['servers'][string] = {
-          transport: inlineEntry.transport,
-          url: inlineEntry.url,
-          auth: inlineEntry.auth
+          ...serverConfigFields(inlineEntry)
         };
         if (scenarioServerUnion[id]) {
           if (stableStringify(scenarioServerUnion[id]) !== stableStringify(inlineConfig)) {
@@ -431,12 +440,11 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       if (!inlineId && legacyName) {
         warnings.push(`Legacy inline server.name migrated to server.id: ${legacyName}`);
       }
+      const inlineServer = server as ServerInlineEntry;
       normalizedServers.push({
         id: resolvedId,
         name: legacyName || undefined,
-        transport: (server as ServerInlineEntry).transport,
-        url: (server as ServerInlineEntry).url,
-        auth: (server as ServerInlineEntry).auth
+        ...serverConfigFields(inlineServer)
       });
     }
   } else {
@@ -451,9 +459,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
           typeof (server as { name?: unknown }).name === 'string'
             ? String((server as { name?: unknown }).name)
             : undefined,
-        transport: server.transport,
-        url: server.url,
-        auth: server.auth
+        ...serverConfigFields(server)
       });
     }
     if (Object.keys(legacyInlineServers).length > 0) {
@@ -639,14 +645,13 @@ export function normalizeLibraryServers(
         transport?: EvalConfig['servers'][string]['transport'];
         url?: string;
         auth?: EvalConfig['servers'][string]['auth'];
+        inspectr?: EvalConfig['servers'][string]['inspectr'];
       };
       const id = String(server.id ?? server.name ?? '').trim();
       if (!id || !server.transport || !server.url) continue;
       out[id] = {
         name: typeof server.name === 'string' ? server.name : undefined,
-        transport: server.transport,
-        url: server.url,
-        auth: server.auth
+        ...serverConfigFields({ ...server, transport: server.transport, url: server.url })
       };
     }
     return out;
@@ -658,9 +663,7 @@ export function normalizeLibraryServers(
     if (!server.transport || !server.url) continue;
     out[id] = {
       name: typeof server.name === 'string' ? server.name : undefined,
-      transport: server.transport,
-      url: server.url,
-      auth: server.auth
+      ...serverConfigFields(server)
     };
   }
   return out;
@@ -860,9 +863,7 @@ function normalizeMcpServerEntries(rawMcpServers: unknown[]): ServerListEntry[] 
       }
       normalizedMcpServers.push({
         id,
-        transport: inlineEntry.transport,
-        url: inlineEntry.url,
-        auth: inlineEntry.auth
+        ...serverConfigFields(inlineEntry)
       });
     }
   }

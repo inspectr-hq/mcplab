@@ -26,7 +26,7 @@ import {
   Play,
   Pencil,
   FileCode,
-  ExternalLink
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,7 @@ import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
+import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -837,24 +838,10 @@ const ResultDetail = () => {
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
             <McpServerBadge versions={result.mcpServerVersions} />
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {Object.entries(result.langsmithTraceUrls ?? {}).map(([requestId, url]) => (
-                <a
-                  key={requestId}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  aria-label="LangSmith trace"
-                  title="Open LangSmith trace"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {!isEmbedded && 'LangSmith trace'}
-                </a>
-              ))}
               <Button
                 variant="outline"
                 size="sm"
-                className={`max-w-full gap-1.5 ${isEmbedded ? 'px-2' : ''}`}
+                className="max-w-full px-2"
                 onClick={() => {
                   const html = generateHtmlReport(result);
                   const blob = new Blob([html], { type: 'text/html' });
@@ -869,7 +856,6 @@ const ResultDetail = () => {
                 title="Download Report"
               >
                 <Download className="h-3.5 w-3.5" />
-                {!isEmbedded && 'Download Report'}
               </Button>
               <Button
                 type="button"
@@ -878,6 +864,7 @@ const ResultDetail = () => {
                 className="max-w-full gap-1.5"
                 onClick={() => openReportsPanel()}
                 disabled={referenceReportsLoading}
+                title="Show reports for this run"
               >
                 <NotepadText className="h-3.5 w-3.5" />
                 {referenceReportsLoading
@@ -890,6 +877,7 @@ const ResultDetail = () => {
                 size="sm"
                 className="max-w-full gap-1.5"
                 aria-label="Run Note"
+                title="View or edit the run note"
                 onClick={() => openRunNotePanel()}
               >
                 <NotepadText className="h-3.5 w-3.5" />
@@ -901,10 +889,11 @@ const ResultDetail = () => {
                 size="sm"
                 className="max-w-full gap-1.5"
                 aria-label="MCP Lab Assistant"
+                title="Ask the MCP Lab Assistant about this result"
                 onClick={() => openAssistantWithPrompt()}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                {hideDeleteLabel ? 'Assistant' : 'MCP Lab Assistant'}
+                Assistant
               </Button>
               <Button
                 type="button"
@@ -913,6 +902,7 @@ const ResultDetail = () => {
                 className="max-w-full gap-1.5"
                 onClick={() => void rerunResult()}
                 disabled={rerunningRun || !resultConfigPath.trim()}
+                title="Queue this evaluation again with the same settings"
               >
                 <Play className="h-3.5 w-3.5" />
                 {rerunningRun ? 'Queueing...' : 'Rerun'}
@@ -925,11 +915,12 @@ const ResultDetail = () => {
                 onClick={() => setDeleteRunOpen(true)}
                 disabled={deletingRun}
                 aria-label={deletingRun ? 'Deleting run' : 'Delete run'}
+                title="Delete this run"
               >
                 {deletingRun ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <XCircle className="h-4 w-4" />
+                  <Trash2 className="h-4 w-4" />
                 )}
                 {!hideDeleteLabel ? (deletingRun ? 'Deleting...' : 'Delete') : null}
               </Button>
@@ -1243,6 +1234,11 @@ const ResultDetail = () => {
                                           </Link>
                                         </Button>
                                       ) : null}
+                                      <ScenarioTraceButtons
+                                        runId={id}
+                                        scenario={sc}
+                                        langsmithTraceUrls={result.langsmithTraceUrls}
+                                      />
                                       <Button
                                         type="button"
                                         variant="outline"

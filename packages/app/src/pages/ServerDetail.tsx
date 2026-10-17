@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Loader2, Wifi, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import IconMcp from '@/components/ui/IconMcp';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import IconInspectr from '@/components/ui/IconInspectr.jsx';
 import {
   Select,
   SelectContent,
@@ -300,7 +303,7 @@ const ServerDetail = () => {
             <ArrowLeft className="h-4 w-4" /> Servers
           </Link>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <img src="/mcp.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            <IconMcp className="h-6 w-6" />
             {isNew ? 'New Server' : displayName(form)}
           </h1>
         </div>
@@ -548,18 +551,55 @@ const ServerDetail = () => {
                 </SelectContent>
               </Select>
             </div>
-            {form.authType === 'bearer' && (
+            {form.transport !== 'stdio' && (
               <div className="space-y-1.5">
-                <Label>Token</Label>
-                <Input
-                  value={form.authValue || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
-                  placeholder="${DATABRICKS_TOKEN}"
-                  className="font-mono text-xs"
-                />
+                <Label htmlFor="server-inspectr-enabled">Inspect MCP requests with Inspectr</Label>
+                <div className="flex items-center gap-3 rounded-md border px-3 py-2">
+                  <a
+                    href="https://inspectr.dev"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Inspectr"
+                    className="shrink-0"
+                  >
+                    <IconInspectr width={24} height={24} aria-hidden="true" />
+                  </a>
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                    Route MCP traffic through a local Inspectr proxy for request tracing.{' '}
+                    <a
+                      href="https://inspectr.dev"
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Learn more about Inspectr"
+                      className="underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      Learn more <span aria-hidden="true">↗</span>
+                    </a>
+                  </p>
+                  <Switch
+                    id="server-inspectr-enabled"
+                    checked={Boolean(form.inspectrEnabled)}
+                    onCheckedChange={(checked) =>
+                      setForm((f) => ({ ...f, inspectrEnabled: checked || undefined }))
+                    }
+                    className="shrink-0"
+                  />
+                </div>
               </div>
             )}
           </div>
+
+          {form.authType === 'bearer' && (
+            <div className="space-y-1.5">
+              <Label>Token</Label>
+              <Input
+                value={form.authValue || ''}
+                onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
+                placeholder="${DATABRICKS_TOKEN}"
+                className="font-mono text-xs"
+              />
+            </div>
+          )}
 
           {form.authType === 'bearer' && (
             <p className="text-xs text-muted-foreground -mt-1">

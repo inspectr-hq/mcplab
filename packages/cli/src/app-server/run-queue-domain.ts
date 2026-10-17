@@ -14,6 +14,7 @@ import {
   type RunQueueState
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
+import type { InspectrSessionManager } from './inspectr-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
 import {
   ROVER_LEASE_REQUEUE_REASONS,
@@ -102,6 +103,7 @@ export interface RunQueueService {
 export function createRunQueueService(params: {
   settings: AppRouteRequestContext['settings'];
   oauthSessionManager: OAuthSessionManager;
+  inspectrSessionManager?: InspectrSessionManager;
   deps: QueueServiceDeps;
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
@@ -111,7 +113,7 @@ export function createRunQueueService(params: {
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
-  const { settings, oauthSessionManager, deps } = params;
+  const { settings, oauthSessionManager, inspectrSessionManager, deps } = params;
   const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let rejectedRoverRegistration: { connectionId: string; version: number } | undefined;
 
@@ -433,6 +435,7 @@ export function createRunQueueService(params: {
       job,
       settings,
       oauthSessionManager,
+      inspectrSessionManager,
       deps: deps as any
     });
     await handleExecutionOutcome(job, outcome, options);

@@ -31,6 +31,7 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
+import type { InspectrSession } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -95,6 +96,7 @@ const RunEvaluation = () => {
     Record<string, string[]>
   >({});
   const [runNote, setRunNote] = useState('');
+  const [inspectionDashboards, setInspectionDashboards] = useState<InspectrSession[]>([]);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
@@ -360,6 +362,7 @@ const RunEvaluation = () => {
     setDone(false);
     setStopped(false);
     setRunId('');
+    setInspectionDashboards([]);
     const compositionMode =
       (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === 'referenced') ||
       (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === 'referenced') ||
@@ -690,6 +693,8 @@ const RunEvaluation = () => {
   const attachRunJob = (jobId: string) => {
     if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
+    // Dashboard links belong to the attached job; its replayed events re-add them.
+    if (attachedJobIdRef.current !== jobId) setInspectionDashboards([]);
     attachedJobIdRef.current = jobId;
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
@@ -714,6 +719,18 @@ const RunEvaluation = () => {
           )}. Click "Connect & Resume" to authenticate.`;
           return prev.includes(line) ? prev : [...prev, line];
         });
+        return;
+      }
+      if (event.type === 'inspection_ready') {
+        const upstreamOrigin = String(event.payload.upstreamOrigin ?? '').trim();
+        const dashboardUrl = String(event.payload.dashboardUrl ?? '').trim();
+        if (upstreamOrigin && dashboardUrl) {
+          setInspectionDashboards((prev) =>
+            prev.some((entry) => entry.dashboardUrl === dashboardUrl)
+              ? prev
+              : [...prev, { upstreamOrigin, dashboardUrl }]
+          );
+        }
         return;
       }
       if (event.type === 'started') {
@@ -1402,6 +1419,22 @@ const RunEvaluation = () => {
                 </div>
               ))}
             </div>
+            {inspectionDashboards.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Inspectr:</span>
+                {inspectionDashboards.map((entry) => (
+                  <a
+                    key={entry.dashboardUrl}
+                    href={entry.dashboardUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Open {entry.upstreamOrigin}
+                  </a>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

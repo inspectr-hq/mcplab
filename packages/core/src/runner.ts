@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
@@ -47,8 +48,22 @@ export interface RunOptions extends WorkspaceEvaluation {
   scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
   traceExporter?: TraceExporter;
+  mcpServerUrlOverrides?: Record<string, string>;
+  resolveMcpRequestHeaders?: (
+    context: McpRequestHeaderContext
+  ) => Record<string, string> | undefined;
   /** Skip standard result projections when a caller owns shared persistence. */
   persistArtifacts?: boolean;
+}
+
+export interface McpRequestHeaderContext {
+  phase: 'connect' | 'scenario';
+  runId: string;
+  serverName: string;
+  requestId?: string;
+  scenarioId?: string;
+  agentName?: string;
+  runIndex?: number;
 }
 
 export type RunProgressEvent =
@@ -99,6 +114,19 @@ export function buildMcpServerAuthHeaders(
     }
   }
   return out;
+}
+
+function mergeServerRequestHeaders(
+  ...sources: Array<Record<string, Record<string, string>> | undefined>
+): Record<string, Record<string, string>> {
+  const merged: Record<string, Record<string, string>> = {};
+  for (const source of sources) {
+    if (!source) continue;
+    for (const [serverName, headers] of Object.entries(source)) {
+      merged[serverName] = { ...(merged[serverName] ?? {}), ...headers };
+    }
+  }
+  return merged;
 }
 
 export async function runAll(
@@ -161,7 +189,8 @@ export async function runAll(
             `Scenario references unknown MCP server '${id}'. Ensure override/config server refs exist in resolved config.servers.`
           );
         }
-        return [id, server];
+        const url = options.mcpServerUrlOverrides?.[id];
+        return [id, url ? { ...server, url } : server];
       })
     );
     await emitProgress({
@@ -169,8 +198,21 @@ export async function runAll(
       serverCount: usedServerIds.length,
       serverNames: usedServerIds
     });
+    const serverRequestHeaders = options.resolveMcpRequestHeaders
+      ? Object.fromEntries(
+          usedServerIds.map((serverName) => [
+            serverName,
+            options.resolveMcpRequestHeaders!({
+              phase: 'connect',
+              runId,
+              serverName
+            }) ?? {}
+          ])
+        )
+      : undefined;
     await mcp.connectAll(usedServers, options.signal, {
-      serverAuthHeaders: buildMcpServerAuthHeaders(options)
+      serverAuthHeaders: buildMcpServerAuthHeaders(options),
+      serverRequestHeaders
     });
     await emitProgress({
       type: 'mcp_connect_finished',
@@ -268,7 +310,27 @@ export async function runAll(
                 options.resolveMcpServerAuthHeaders?.(serverNames, { signal: runSignal }) ??
                   Promise.resolve({})
               ]);
-              return { ...clientCredentialsHeaders, ...externalHeaders };
+              const requestHeaders = options.resolveMcpRequestHeaders
+                ? Object.fromEntries(
+                    serverNames.map((serverName) => [
+                      serverName,
+                      options.resolveMcpRequestHeaders!({
+                        phase: 'scenario',
+                        runId,
+                        requestId,
+                        scenarioId: scenario.id,
+                        agentName: scenario.agent,
+                        runIndex,
+                        serverName
+                      }) ?? {}
+                    ])
+                  )
+                : undefined;
+              return mergeServerRequestHeaders(
+                clientCredentialsHeaders,
+                externalHeaders,
+                requestHeaders
+              );
             },
             maxTurns: agent.max_turns,
             signal: runSignal,
@@ -548,7 +610,10 @@ export function buildScenarioRequestId(params: {
   const agentSlug = slugifyAgentName(params.agentName ?? 'unknown-agent');
   const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
   const execBase = normalizeRequestIdPart(params.scenarioExecId, '');
-  const execSuffix = execBase ? `${execBase}-${runSuffix}` : runSuffix;
+  // scenario_exec_id is `<scenario>-<agent>`: only repeat it when slugifying lost part of the
+  // agent name, so distinct agents with the same slug keep distinct IDs.
+  const execSuffix =
+    execBase && execBase !== `${scenarioId}-${agentSlug}` ? `${execBase}-${runSuffix}` : runSuffix;
   return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`, {
     requiredSuffix: `:${agentSlug}:${execSuffix}`
   });
@@ -570,7 +635,15 @@ export function buildFallbackScenarioRequestId(params: {
 function normalizeRequestIdPart(value: string | undefined, fallback: string): string {
   if (typeof value !== 'string') return fallback;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
+  if (!trimmed) return fallback;
+  if (/^[\x20-\x7e]*$/.test(trimmed)) return trimmed;
+  // Request IDs travel in HTTP headers (x-request-id, inspectr-trace-id), which only accept
+  // ByteStrings. Replace other characters and keep a digest of the original so IDs stay unique.
+  const ascii = trimmed
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]+/g, '_');
+  return `${ascii}~${createHash('sha256').update(trimmed).digest('hex').slice(0, 8)}`;
 }
 
 function clampRequestIdLength(
@@ -580,17 +653,16 @@ function clampRequestIdLength(
   }
 ): string {
   if (value.length <= MAX_REQUEST_ID_LENGTH) return value;
-  const requiredSuffix = options?.requiredSuffix;
-  if (!requiredSuffix) {
-    return value.slice(0, MAX_REQUEST_ID_LENGTH);
-  }
+  // Truncation drops part of the ID, so keep a digest of the full value to stay unique.
+  const digest = `~${createHash('sha256').update(value).digest('hex').slice(0, 8)}`;
+  const maxSuffixLength = MAX_REQUEST_ID_LENGTH - digest.length;
+  const requiredSuffix = options?.requiredSuffix ?? '';
   const normalizedSuffix =
-    requiredSuffix.length > MAX_REQUEST_ID_LENGTH
-      ? requiredSuffix.slice(requiredSuffix.length - MAX_REQUEST_ID_LENGTH)
+    requiredSuffix.length > maxSuffixLength
+      ? requiredSuffix.slice(requiredSuffix.length - maxSuffixLength)
       : requiredSuffix;
-  const prefixLength = MAX_REQUEST_ID_LENGTH - normalizedSuffix.length;
-  if (prefixLength <= 0) return normalizedSuffix;
-  return `${value.slice(0, prefixLength)}${normalizedSuffix}`;
+  const prefixLength = maxSuffixLength - normalizedSuffix.length;
+  return `${value.slice(0, prefixLength)}${digest}${normalizedSuffix}`;
 }
 
 function slugifyAgentName(agentName: string): string {

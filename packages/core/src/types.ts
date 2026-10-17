@@ -394,12 +394,18 @@ export type ServerAuth =
   | ServerAuthOauthClientCredentials
   | ServerAuthOauthAuthorizationCode;
 
+export interface ServerInspectrConfig {
+  /** Route this server's MCP traffic through a local Inspectr proxy during evaluations. */
+  enabled: boolean;
+}
+
 export interface ServerConfig {
   name?: string;
   transport: TransportType;
   url: string;
   headers?: Record<string, string>;
   auth?: ServerAuth;
+  inspectr?: ServerInspectrConfig;
 }
 
 export interface ServerInlineEntry extends ServerConfig {
@@ -851,6 +857,8 @@ export interface ScenarioAggregate {
     forbidden: Record<string, number>;
   };
   runs: ScenarioRunResult[];
+  /** Upstream MCP origins whose traffic for this scenario was routed through Inspectr. */
+  inspectr_origins?: string[];
   pass_rate: number | null;
   distinct_sequences: Record<string, number>;
   tool_usage_frequency: Record<string, number>;

@@ -38,7 +38,8 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsPatch,
   EvaluationDecisionConfig,
-  DecisionConnectionTestResult
+  DecisionConnectionTestResult,
+  InspectrSession
 } from './types';
 
 function getBaseUrl(): string {
@@ -732,6 +733,11 @@ export const workspaceApiClient = {
       pageUrl?: string;
       activeJobId?: string | null;
     }>('/api/rover/status'),
+  openRunInspectrSession: (runId: string, origin: string) =>
+    request<{ session: InspectrSession }>(`/api/runs/${encodeURIComponent(runId)}/inspectr`, {
+      method: 'POST',
+      body: JSON.stringify({ origin })
+    }).then((body) => body.session),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {
@@ -840,6 +846,7 @@ export const workspaceApiClient = {
     source.addEventListener('completed', messageHandler);
     source.addEventListener('error', messageHandler);
     source.addEventListener('oauth_required', messageHandler);
+    source.addEventListener('inspection_ready', messageHandler);
     source.onerror = () => {
       if (closed) return;
       onEvent({

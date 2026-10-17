@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigEditor from './ConfigEditor';
 import type { EvalConfig } from '@/types/eval';
@@ -49,6 +49,11 @@ vi.mock('@/components/config-editor/ScenarioForm', () => ({
     return <div data-testid="scenario-form" />;
   }
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
+}
 
 describe('ConfigEditor', () => {
   beforeEach(() => {
@@ -120,6 +125,32 @@ describe('ConfigEditor', () => {
       screen.queryByText('/workspace/mcplab/evals/editor-config.yaml')
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  it('keeps the active agents tab when entering edit mode', () => {
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route
+            path="/mcp-evaluations/:id/:tab?"
+            element={
+              <>
+                <ConfigEditor />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '/mcp-evaluations/cfg-1/edit?tab=agents'
+    );
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Agents' })).toHaveAttribute('data-state', 'active');
   });
 
   it('hides optional metadata fields in regular view mode', () => {

@@ -208,6 +208,27 @@ describe('runAgentScenario', () => {
     });
   });
 
+  it('tags tool listing with the request id, like tool calls', async () => {
+    const mcp = { listTools: vi.fn().mockResolvedValue([]) };
+
+    await runAgentScenario({
+      scenario: {
+        id: 'scenario-1',
+        prompt: 'Do the thing',
+        servers: ['plain-server'],
+        agent: 'agent-1'
+      } as any,
+      agent: { provider: 'openai', model: 'gpt-4o-mini' } as any,
+      mcp: mcp as any,
+      requestId: 'mcplab-run:run-1:scenario-1:agent-1:run1',
+      maxTurns: 0
+    });
+
+    expect(mcp.listTools).toHaveBeenCalledWith('plain-server', undefined, {
+      'x-request-id': 'mcplab-run:run-1:scenario-1:agent-1:run1'
+    });
+  });
+
   it('exports chat-shaped LLM output and tool spans through the trace interface', async () => {
     openAiCreate
       .mockResolvedValueOnce({

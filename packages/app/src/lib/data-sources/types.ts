@@ -203,7 +203,15 @@ export interface MarkdownReportContent {
 }
 
 export interface RunJobEvent {
-  type: 'started' | 'log' | 'completed' | 'error' | 'queued' | 'oauth_required' | (string & {});
+  type:
+    | 'started'
+    | 'log'
+    | 'completed'
+    | 'error'
+    | 'queued'
+    | 'oauth_required'
+    | 'inspection_ready'
+    | (string & {});
   ts: string;
   payload: Record<string, unknown>;
 }
@@ -634,6 +642,11 @@ export interface OAuthEnsureServerStatus {
   message?: string;
 }
 
+export interface InspectrSession {
+  upstreamOrigin: string;
+  dashboardUrl: string;
+}
+
 export interface EvalDataSource {
   health: () => Promise<WorkspaceHealthResponse>;
   listConfigs: () => Promise<EvalConfig[]>;
@@ -701,6 +714,8 @@ export interface EvalDataSource {
     pageUrl?: string;
     activeJobId?: string | null;
   }>;
+  /** Starts (or reuses) the Inspectr proxy for an origin the run inspected. */
+  openRunInspectrSession: (runId: string, origin: string) => Promise<InspectrSession>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;

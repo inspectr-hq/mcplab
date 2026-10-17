@@ -72,6 +72,7 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
+import { handleInspectrRoutes } from './inspectr-routes.js';
 import {
   createRunQueueService,
   type RoverAssignmentWorker,
@@ -110,6 +111,7 @@ import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
+import { InspectrSessionManager } from './inspectr-session-manager.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
 import {
@@ -200,6 +202,19 @@ export async function startAppServer(options: AppServerOptions) {
     runtimeSessions: oauthRuntimeSessions,
     oauthDebuggerSessions
   });
+  const inspectrSessionManager = new InspectrSessionManager({
+    storageRoot: join(settings.librariesDir, '.inspectr-sessions')
+  });
+  // Inspectr runs as child processes; stop them when the app server process goes away, not only on
+  // a graceful HTTP close. Signals are re-raised so the default termination still happens.
+  const stopInspectr = () => inspectrSessionManager.stopAll();
+  const stopInspectrOnSignal = (signal: NodeJS.Signals) => {
+    stopInspectr();
+    process.kill(process.pid, signal);
+  };
+  process.once('exit', stopInspectr);
+  process.once('SIGINT', stopInspectrOnSignal);
+  process.once('SIGTERM', stopInspectrOnSignal);
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const liveTestService = new LiveTestService({
@@ -273,6 +288,7 @@ export async function startAppServer(options: AppServerOptions) {
   const runQueueService = createRunQueueService({
     settings,
     oauthSessionManager,
+    inspectrSessionManager,
     deps: routeDeps,
     jobs: jobs as any,
     state: runQueueState,
@@ -448,6 +464,20 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (
+        await handleInspectrRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          runsDir: settings.runsDir,
+          inspectrSessionManager,
+          parseBody,
+          asJson
+        })
+      ) {
+        return;
+      }
       if (pathname === '/api/rover/status' && method === 'GET') {
         const connection = roverConnection.connection();
         asJson(res, 200, {
@@ -876,6 +906,10 @@ export async function startAppServer(options: AppServerOptions) {
     runQueueService.closeSubscribers();
     roverConnection.close();
     devMcp?.stop();
+    process.off('exit', stopInspectr);
+    process.off('SIGINT', stopInspectrOnSignal);
+    process.off('SIGTERM', stopInspectrOnSignal);
+    void inspectrSessionManager.closeAll();
   });
 
   const url = `http://${options.host}:${options.port}`;

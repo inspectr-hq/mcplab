@@ -22,6 +22,11 @@ import {
 } from './oauth-session-manager.js';
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
+import {
+  buildInspectrRequestHeaders,
+  InspectrSessionManager,
+  rewriteUrlThroughInspectr
+} from './inspectr-session-manager.js';
 import type { AppSettings } from './types.js';
 
 export function getCompletedRunId(job: Pick<RunJob, 'runParams'>, executionRunId: string): string {
@@ -159,6 +164,7 @@ export async function executeRunJob(params: {
     | 'evaluationDecision'
   >;
   oauthSessionManager: OAuthSessionManager;
+  inspectrSessionManager?: InspectrSessionManager;
   deps: RunsRouteDeps;
 }): Promise<ExecutionOutcome> {
   const { job, settings, oauthSessionManager, deps } = params;
@@ -296,6 +302,63 @@ export async function executeRunJob(params: {
     const usedServerNames = new Set(
       expandedConfig.scenarios.flatMap((scenario) => scenario.servers)
     );
+    const inspectedServerNames = Array.from(usedServerNames).filter(
+      (serverName) => expandedConfig.servers[serverName]?.inspectr?.enabled
+    );
+    const mcpServerUrlOverrides: Record<string, string> = {};
+    const inspectedOriginByServer = new Map<string, string>();
+    const warnInspectrUnavailable = (target: string, reason: string) =>
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Warning: Inspectr is unavailable for ${target} (${reason}). Running without request inspection.`
+        }
+      });
+    const inspectrSessionManager = params.inspectrSessionManager;
+    if (inspectedServerNames.length > 0 && !inspectrSessionManager) {
+      warnInspectrUnavailable(inspectedServerNames.join(', '), 'not available in this app server');
+    }
+    if (inspectedServerNames.length > 0 && inspectrSessionManager) {
+      // Inspectr is an optional diagnostic: a missing binary or failed start must not fail the run.
+      const announcedOrigins = new Set<string>();
+      const unavailableOrigins = new Set<string>();
+      for (const serverName of inspectedServerNames) {
+        const server = expandedConfig.servers[serverName];
+        if (server.transport !== 'http') {
+          throw new Error(
+            `Inspectr request inspection currently supports HTTP MCP servers only: ${serverName}`
+          );
+        }
+        const origin = new URL(server.url).origin;
+        if (unavailableOrigins.has(origin)) continue;
+        let session: Awaited<ReturnType<InspectrSessionManager['acquire']>>;
+        try {
+          session = await inspectrSessionManager.acquire(server.url);
+        } catch (error) {
+          unavailableOrigins.add(origin);
+          warnInspectrUnavailable(origin, error instanceof Error ? error.message : String(error));
+          continue;
+        }
+        if (!announcedOrigins.has(session.upstreamOrigin)) {
+          announcedOrigins.add(session.upstreamOrigin);
+          addJobEvent(job, {
+            type: 'inspection_ready',
+            ts: new Date().toISOString(),
+            payload: {
+              upstreamOrigin: session.upstreamOrigin,
+              proxyOrigin: session.proxyOrigin,
+              dashboardUrl: session.dashboardUrl
+            }
+          });
+        }
+        inspectedOriginByServer.set(serverName, session.upstreamOrigin);
+        mcpServerUrlOverrides[serverName] = rewriteUrlThroughInspectr(
+          server.url,
+          session.proxyOrigin
+        );
+      }
+    }
     const oauthServers = Array.from(usedServerNames).filter(
       (serverName) => expandedConfig.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
@@ -336,6 +399,14 @@ export async function executeRunJob(params: {
       runsDir: settings.runsDir,
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
+      mcpServerUrlOverrides,
+      resolveMcpRequestHeaders:
+        Object.keys(mcpServerUrlOverrides).length > 0
+          ? (context) =>
+              context.serverName in mcpServerUrlOverrides
+                ? buildInspectrRequestHeaders(context)
+                : undefined
+          : undefined,
       ...resolveWorkspaceEvaluation({
         agents: libraryAgents,
         scenarios: expandedConfig.scenarios,
@@ -377,6 +448,18 @@ export async function executeRunJob(params: {
     );
     if (job.runParams.evaluationRunId) {
       results.metadata.evaluation_run_id = job.runParams.evaluationRunId;
+    }
+    for (const aggregate of results.scenarios) {
+      const scenario = expandedConfig.scenarios.find(
+        (candidate) => candidate.id === aggregate.scenario_id && candidate.agent === aggregate.agent
+      );
+      const origins = new Set(
+        (scenario?.servers ?? []).flatMap((serverName) => {
+          const origin = inspectedOriginByServer.get(serverName);
+          return origin ? [origin] : [];
+        })
+      );
+      if (origins.size > 0) aggregate.inspectr_origins = [...origins];
     }
     if (serverOverrideAll && serverOverrideAll.length > 0) {
       results.metadata.rerun_server_override_all = [...serverOverrideAll];

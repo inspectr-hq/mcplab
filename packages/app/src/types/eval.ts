@@ -22,7 +22,8 @@ export type {
   DecisionConnectionTestResult,
   AgentConnectionTestResult,
   ProviderModelsResponse,
-  WorkspaceSettingsPatch
+  WorkspaceSettingsPatch,
+  InspectrSession
 } from '@/lib/data-sources/types';
 
 export interface ServerConfig {
@@ -49,6 +50,8 @@ export interface ServerConfig {
   oauthClientIdEnv?: string;
   oauthClientSecretEnv?: string;
   oauthAudience?: string;
+  // Route MCP traffic through a local Inspectr proxy during evaluations
+  inspectrEnabled?: boolean;
 }
 
 export type ServerEntry =
@@ -201,6 +204,8 @@ export interface TokenUsage {
 
 export interface ScenarioRun {
   runIndex: number;
+  // Shared with MCP request headers; used as the Inspectr trace ID
+  requestId?: string;
   passed: boolean;
   outcome?: RunOutcome;
   error?: string;
@@ -225,6 +230,8 @@ export interface ScenarioResult {
   provider?: string;
   model?: string;
   runs: ScenarioRun[];
+  // Upstream MCP origins this scenario's traffic went through Inspectr
+  inspectrOrigins?: string[];
   passRate: number | null;
   avgToolCalls: number;
   avgDuration: number;

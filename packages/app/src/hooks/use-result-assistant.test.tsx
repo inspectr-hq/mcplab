@@ -33,6 +33,17 @@ describe('useResultAssistant SSE updates', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps action callbacks stable across re-renders so effects do not loop', () => {
+    const source = {} as unknown as EvalDataSource;
+    const { result, rerender } = renderHook(() =>
+      useResultAssistant({ source, open: false, scope: 'run', runId: 'run-1' })
+    );
+    const first = result.current;
+    rerender();
+    expect(result.current.resetAssistantSession).toBe(first.resetAssistantSession);
+    expect(result.current.cancelAssistantTurn).toBe(first.cancelAssistantTurn);
+  });
+
   it('merges live assistant session updates from SSE events', async () => {
     let onResultEvent:
       | ((event: {

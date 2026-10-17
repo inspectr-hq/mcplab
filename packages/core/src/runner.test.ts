@@ -259,7 +259,7 @@ describe('buildScenarioRequestId', () => {
     expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:claude-sonnet-46:run1');
   });
 
-  it('uses scenario_exec_id when provided', () => {
+  it('omits scenario_exec_id when it only repeats the scenario and agent slug', () => {
     const requestId = buildScenarioRequestId({
       runId: '20260303-120509',
       scenarioId: 'batch-quality',
@@ -268,9 +268,24 @@ describe('buildScenarioRequestId', () => {
       runIndex: 1
     });
 
-    expect(requestId).toBe(
-      'mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:batch-quality-azure-gpt-52-chat-run2'
+    expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:run2');
+  });
+
+  it('keeps scenario_exec_id when agents share a slug', () => {
+    const ids = ['Claude', 'claude'].map((agentName) =>
+      buildScenarioRequestId({
+        runId: '20260303-120509',
+        scenarioId: 'batch-quality',
+        agentName,
+        scenarioExecId: `batch-quality-${agentName}`,
+        runIndex: 0
+      })
     );
+
+    expect(ids).toEqual([
+      'mcplab-run:20260303-120509:batch-quality:claude:batch-quality-Claude-run1',
+      'mcplab-run:20260303-120509:batch-quality:claude:run1'
+    ]);
   });
 
   it('sanitizes agent names and falls back for missing scenario id', () => {
@@ -282,6 +297,24 @@ describe('buildScenarioRequestId', () => {
     });
 
     expect(requestId).toBe('mcplab-run:run-123:unknown:azure_gpt_5_2_chat:run3');
+  });
+
+  it('keeps request IDs header-safe and unique for non-ASCII scenario ids and agent names', () => {
+    const build = (scenarioId: string, agentName: string) =>
+      buildScenarioRequestId({
+        runId: 'run-1',
+        scenarioId,
+        agentName,
+        scenarioExecId: `${scenarioId}-${agentName}`,
+        runIndex: 0
+      });
+    const ids = [build('検索', 'agent'), build('検索結果', 'agent'), build('s1', 'Claude – prod')];
+
+    for (const id of ids) expect(() => new Headers({ 'x-request-id': id })).not.toThrow();
+    expect(new Set(ids).size).toBe(3);
+    expect(build('tag-profile', 'claude-haiku-55')).toBe(
+      'mcplab-run:run-1:tag-profile:claude-haiku-55:run1'
+    );
   });
 
   it('clamps IDs to 180 characters', () => {
@@ -296,6 +329,22 @@ describe('buildScenarioRequestId', () => {
     expect(requestId.length).toBe(180);
     expect(requestId.startsWith('mcplab-run:run-123:')).toBe(true);
     expect(requestId.endsWith('-run1')).toBe(true);
+  });
+
+  it('keeps clamped IDs distinct for long scenario ids that share a prefix', () => {
+    const [first, second] = ['a', 'b'].map((tail) =>
+      buildScenarioRequestId({
+        runId: 'run-123',
+        scenarioId: `${'s'.repeat(200)}${tail}`,
+        agentName: 'agent',
+        scenarioExecId: `${'s'.repeat(200)}${tail}-agent`,
+        runIndex: 0
+      })
+    );
+
+    expect(first).not.toBe(second);
+    expect(first.length).toBe(180);
+    expect(first).toMatch(/~[0-9a-f]{8}:agent:run1$/);
   });
 
   it('keeps IDs distinct across runs when scenario_exec_id is set and clamped', () => {
