@@ -246,7 +246,6 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
   const assistantRuntimeFactory = createLangChainAssistantRuntimeFactory();
-  console.info('[mcplab-app] Assistants runtime: LangGraph');
   const routeDeps: AppRouteDeps = {
     assistantRuntimeFactory,
     parseBody,
