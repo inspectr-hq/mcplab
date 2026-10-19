@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import type { ConversationItem, ScenarioRun } from '@/types/eval';
 import { formatTokenCount } from '@/lib/format-duration';
+import { CopyButton } from '@/components/CopyButton';
 
 export function RunConversationPreview({
   run,
@@ -20,20 +21,20 @@ export function RunConversationPreview({
     <div className="space-y-2">
       <Collapsible open={finalOpen} onOpenChange={setFinalOpen}>
         <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="mb-2 flex w-full items-center justify-between gap-2 text-left"
-            >
-              <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform ${finalOpen ? 'rotate-180' : ''}`}
-                />
-                <Bot className="h-3.5 w-3.5" />
-                Final answer
-              </p>
-            </button>
-          </CollapsibleTrigger>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <CollapsibleTrigger asChild>
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${finalOpen ? 'rotate-180' : ''}`}
+                  />
+                  <Bot className="h-3.5 w-3.5" />
+                  Final answer
+                </p>
+              </button>
+            </CollapsibleTrigger>
+            <CopyButton text={run.finalAnswer || ''} label="Final answer" iconOnly />
+          </div>
           <CollapsibleContent>
             <ExpandableText
               text={run.finalAnswer || 'No final answer captured.'}
@@ -97,6 +98,7 @@ function ConversationRow({
         variant="call"
         title={`Tool call · ${item.toolName || 'unknown'}${tokenSuffix}`}
         text={item.text}
+        copyLabel={`tool call ${item.toolName || 'unknown'}`}
       />
     );
   }
@@ -115,6 +117,7 @@ function ConversationRow({
         }${tokenSuffix}`}
         text={item.text}
         icon={statusIcon}
+        copyLabel={`tool result ${item.toolName || 'unknown'}`}
       />
     );
   }
@@ -138,13 +141,14 @@ function ConversationRow({
         </div>
       )}
       <div className={`max-w-[90%] rounded-md p-2 ${isUser ? 'bg-primary/10' : 'bg-muted/50'}`}>
-        <p
-          className={`mb-1 text-[11px] font-semibold text-muted-foreground ${
-            isUser ? 'text-right' : ''
-          }`}
-        >
-          {label}
-        </p>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <p
+            className={`text-[11px] font-semibold text-muted-foreground ${isUser ? 'text-right' : ''}`}
+          >
+            {label}
+          </p>
+          <CopyButton text={displayText} label={label} iconOnly />
+        </div>
         {isUser ? (
           <ExpandableText text={displayText} maxLength={280} className="text-xs" />
         ) : (
@@ -183,12 +187,14 @@ function ToolEventRow({
   variant,
   title,
   text,
-  icon
+  icon,
+  copyLabel
 }: {
   variant: 'call' | 'result_ok' | 'result_error';
   title: string;
   text: string;
   icon?: ReactNode;
+  copyLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const styleByVariant = {
@@ -200,20 +206,23 @@ function ToolEventRow({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className={`rounded-md border p-2 text-xs ${styleByVariant[variant]}`}>
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-2 text-left"
-          >
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              {icon ?? <Wrench className="h-3.5 w-3.5" />}
-              <span>{title}</span>
-            </div>
-            <span className="text-[11px] font-semibold">
-              {open ? 'Hide content' : 'Show content'}
-            </span>
-          </button>
-        </CollapsibleTrigger>
+        <div className="flex items-center gap-2">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+            >
+              <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                {icon ?? <Wrench className="h-3.5 w-3.5" />}
+                <span>{title}</span>
+              </div>
+              <span className="text-[11px] font-semibold">
+                {open ? 'Hide content' : 'Show content'}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CopyButton text={text} label={copyLabel} iconOnly />
+        </div>
         <CollapsibleContent>
           <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
         </CollapsibleContent>

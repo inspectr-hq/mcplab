@@ -1,8 +1,8 @@
 import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
-import { Bot, Copy, Loader2 } from 'lucide-react';
+import { Bot, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MarkdownContent } from '@/components/MarkdownContent';
-import { toast } from '@/hooks/use-toast';
+import { CopyButton } from '@/components/CopyButton';
 import { cn } from '@/lib/utils';
 import {
   AssistantComposer,
@@ -246,30 +246,13 @@ function ToolRequest({
 }
 
 function CopyMessageButton({ text, alignLeft }: { text: string; alignLeft: boolean }) {
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not copy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
+    <CopyButton
+      text={text}
+      label="message"
+      iconOnly
       className={`absolute bottom-1 h-6 w-6 text-muted-foreground ${alignLeft ? '-left-8' : '-right-8'}`}
-      onClick={() => void copy()}
-      aria-label="Copy message"
-      title="Copy message"
-    >
-      <Copy className="h-3.5 w-3.5" />
-    </Button>
+    />
   );
 }
 

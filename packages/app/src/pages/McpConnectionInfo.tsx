@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, RefreshCw, Link2 } from 'lucide-react';
+import { RefreshCw, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/CopyButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -11,39 +12,6 @@ const DEFAULT_MCP_HOST = '127.0.0.1';
 const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_DIRECT_URL = `http://${DEFAULT_MCP_HOST}:${DEFAULT_MCP_PORT}${DEFAULT_MCP_PATH}`;
-
-function copyToClipboard(text: string) {
-  return navigator.clipboard.writeText(text);
-}
-
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await copyToClipboard(text);
-      setCopied(true);
-      toast({
-        title: 'Copied',
-        description: `${label} copied to clipboard.`
-      });
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch (error: unknown) {
-      toast({
-        title: 'Copy failed',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  return (
-    <Button type="button" size="sm" variant="outline" onClick={() => void handleCopy()}>
-      <Copy className="mr-2 h-3.5 w-3.5" />
-      {copied ? 'Copied' : 'Copy'}
-    </Button>
-  );
-}
 
 function InfoRow({
   label,
