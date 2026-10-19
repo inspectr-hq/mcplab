@@ -341,7 +341,7 @@ export async function handleOAuthDebuggerRoutes(params: {
       return true;
     }
     session.clients.add(res);
-    req.on('close', () => {
+    res.on('close', () => {
       session.clients.delete(res);
     });
     return true;

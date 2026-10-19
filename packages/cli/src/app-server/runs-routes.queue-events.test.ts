@@ -157,6 +157,9 @@ describe('run queue SSE endpoint', () => {
       },
       flushHeaders() {
         return undefined;
+      },
+      on(event: string, cb: () => void) {
+        if (event === 'close') closeHandler = cb;
       }
     } as any;
 
@@ -170,10 +173,7 @@ describe('run queue SSE endpoint', () => {
     const handled = await handleRunsRoutes({
       req: {
         url: '/api/runs/queue/events',
-        headers: {},
-        on: (event: string, cb: () => void) => {
-          if (event === 'close') closeHandler = cb;
-        }
+        headers: {}
       } as any,
       res,
       pathname: '/api/runs/queue/events',
@@ -213,6 +213,9 @@ describe('run queue SSE endpoint', () => {
         flushHeaders() {
           return undefined;
         },
+        on(event: string, cb: () => void) {
+          if (event === 'close') closeHandler = cb;
+        },
         end() {
           ended = true;
         }
@@ -236,10 +239,7 @@ describe('run queue SSE endpoint', () => {
       const handled = await handleRunsRoutes({
         req: {
           url: `/api/runs/jobs/${job.id}/events`,
-          headers: {},
-          on: (event: string, cb: () => void) => {
-            if (event === 'close') closeHandler = cb;
-          }
+          headers: {}
         } as any,
         res,
         pathname: `/api/runs/jobs/${job.id}/events`,
@@ -292,6 +292,9 @@ describe('queue event emission', () => {
       },
       flushHeaders() {
         return undefined;
+      },
+      on() {
+        return this;
       }
     } as any;
 
@@ -450,6 +453,9 @@ describe('queue event emission', () => {
         },
         flushHeaders() {
           return undefined;
+        },
+        on() {
+          return this;
         }
       } as any;
       await handleRunsRoutes({
@@ -792,7 +798,7 @@ describe('queue event emission', () => {
     }
   });
 
-  it('client removed from SSE clients set on request close', async () => {
+  it('client removed from SSE clients set on response close', async () => {
     const sseEvents: Array<{ target: any; event: any }> = [];
     const runQueueState = createRunQueueState();
     const deps = makeDeps(sseEvents) as any;
@@ -809,16 +815,16 @@ describe('queue event emission', () => {
       },
       flushHeaders() {
         return undefined;
+      },
+      on(evt: string, cb: () => void) {
+        if (evt === 'close') closeHandler = cb;
       }
     } as any;
 
     await handleRunsRoutes({
       req: {
         url: '/api/runs/queue/events',
-        headers: {},
-        on: (evt: string, cb: () => void) => {
-          if (evt === 'close') closeHandler = cb;
-        }
+        headers: {}
       } as any,
       res,
       pathname: '/api/runs/queue/events',

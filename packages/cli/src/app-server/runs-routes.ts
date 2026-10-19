@@ -266,7 +266,7 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     job.clients.add(res);
-    req.on('close', () => {
+    res.on('close', () => {
       job.clients.delete(res);
     });
     return true;
@@ -336,10 +336,7 @@ export async function handleRunsRoutes(params: {
     res.setHeader('content-type', 'text/event-stream');
     res.setHeader('cache-control', 'no-cache');
     res.setHeader('connection', 'keep-alive');
-    if ('flushHeaders' in res && typeof res.flushHeaders === 'function') {
-      res.flushHeaders();
-    }
-    runQueueService.subscribeQueue(req, res);
+    runQueueService.subscribeQueue(res);
     return true;
   }
 

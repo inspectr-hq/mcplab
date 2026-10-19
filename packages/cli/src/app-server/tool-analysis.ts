@@ -362,7 +362,7 @@ export async function handleToolAnalysisRoutes(params: {
       return true;
     }
     job.clients.add(res);
-    req.on('close', () => {
+    res.on('close', () => {
       job.clients.delete(res);
     });
     return true;

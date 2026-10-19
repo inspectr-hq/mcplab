@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { ServerResponse } from 'node:http';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import { emitQueueEvent, buildQueueState, closeJobClients } from './run-queue-events.js';
 import { admitQueuedJob, executeRunJob, resolveOAuthServersForJob } from './run-queue-executor.js';
@@ -70,7 +70,7 @@ export interface RunQueueService {
   getWaitingRoverJobs(
     provider: string
   ): Array<{ jobId: string; evaluationName?: string; provider: string; position: number }>;
-  subscribeQueue(req: IncomingMessage, res: ServerResponse): void;
+  subscribeQueue(res: ServerResponse): void;
   advance(options?: QueueAdvanceOptions): Promise<void>;
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
   closeSubscribers(): void;
@@ -821,7 +821,7 @@ export function createRunQueueService(params: {
         ];
       });
     },
-    subscribeQueue(req, res) {
+    subscribeQueue(res) {
       if ('flushHeaders' in res && typeof res.flushHeaders === 'function') {
         res.flushHeaders();
       }
@@ -831,7 +831,7 @@ export function createRunQueueService(params: {
         payload: { event: buildQueueState(jobs, state) }
       });
       state.clients.add(res);
-      req.on('close', () => {
+      res.on('close', () => {
         state.clients.delete(res);
       });
     },
