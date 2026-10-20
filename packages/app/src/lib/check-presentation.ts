@@ -7,6 +7,7 @@ import {
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
+import { formatToolAlternatives } from '@inspectr/mcplab-core';
 
 const evaluatorProviderLabels: Record<string, string> = {
   openai: 'OpenAI',
@@ -128,8 +129,9 @@ export function buildCheckItems({
 }
 
 export function formatEvalRuleLabel(rule: EvalRule): string {
-  if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
-  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
+  if (rule.type === 'required_tool')
+    return `Required tool · ${formatToolExpression(String(rule.value ?? ''))}`;
+  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${String(rule.value ?? '')}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
     return formatToolInputAssertionLabel({
@@ -166,6 +168,14 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
   if (rule.type === 'agent_check') return `Agent check · ${rule.label}`;
   return `${rule.type} · ${rule.value}`;
+}
+
+function formatToolExpression(expression: string): string {
+  try {
+    return formatToolAlternatives(expression);
+  } catch {
+    return expression;
+  }
 }
 
 function formatToolSequenceText(sequence: string[]): string {

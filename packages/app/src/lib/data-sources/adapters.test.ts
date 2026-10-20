@@ -28,6 +28,42 @@ it('round-trips Foundry agents without converting them to OpenAI', () => {
   });
 });
 
+it('round-trips spaced tool expressions and writes canonical YAML expressions', () => {
+  const sourceRecord: WorkspaceConfigRecord = {
+    id: 'cfg-tool-alternatives',
+    name: 'tool-alternatives',
+    path: '/tmp/tool-alternatives.yaml',
+    mtime: '2026-04-01T10:00:00.000Z',
+    hash: 'hash-tool-alternatives',
+    config: {
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-alternatives',
+          name: 'Alternatives',
+          servers: [],
+          prompt: 'test',
+          eval: {
+            tool_constraints: { required_tools: [' lookup | search '], forbidden_tools: [] },
+            tool_sequence: [' lookup | search ', ' lookup | search ']
+          }
+        }
+      ]
+    }
+  };
+  const uiConfig = fromCoreConfigYaml(sourceRecord);
+  expect(uiConfig.scenarios[0]?.evalRules).toEqual([
+    { type: 'required_tool', value: ' lookup | search ' },
+    { type: 'tool_sequence', sequence: [' lookup | search ', ' lookup | search '] }
+  ]);
+  const written = toCoreConfigYaml(uiConfig);
+  const scenario = (written.scenarios as unknown as AnyRecord[])[0];
+  const evalBlock = scenario?.['eval'] as AnyRecord;
+  expect(evalBlock['tool_constraints']).toMatchObject({ required_tools: ['lookup|search'] });
+  expect(evalBlock['tool_sequence']).toEqual(['lookup|search', 'lookup|search']);
+});
+
 it('maps app LLM providers to their core provider names', () => {
   const libraries = toCoreLibraries({
     agents: [

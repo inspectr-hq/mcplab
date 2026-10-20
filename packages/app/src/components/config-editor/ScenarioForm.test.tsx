@@ -116,7 +116,7 @@ describe('ScenarioForm checks editor', () => {
     fireEvent.change(screen.getByPlaceholderText('Value'), {
       target: { value: 'success' }
     });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -261,6 +261,74 @@ describe('ScenarioForm checks editor', () => {
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_contains', value: 'approved' }]);
   });
 
+  it('creates and edits required tool OR groups in place', async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={onChange} />
+    );
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getAllByText('Required Tool').at(-1)!);
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), { target: { value: ' lookup ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add alternative' }));
+    fireEvent.change(screen.getAllByPlaceholderText('Tool name')[1]!, {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
+    const created = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(created[0]?.evalRules).toEqual([{ type: 'required_tool', value: 'lookup|search' }]);
+
+    onChange.mockClear();
+    rerender(<ScenarioForm scenarios={created} agents={[]} servers={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    expect(
+      screen.getAllByPlaceholderText('Tool name').map((input) => (input as HTMLInputElement).value)
+    ).toEqual(['lookup', 'search']);
+    fireEvent.change(screen.getAllByPlaceholderText('Tool name')[0]!, {
+      target: { value: 'lookup_v2' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update check' }));
+    const edited = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(edited[0]?.evalRules).toEqual([{ type: 'required_tool', value: 'lookup_v2|search' }]);
+  });
+
+  it('blocks empty and duplicate tool alternatives', () => {
+    const onChange = vi.fn();
+    render(
+      <ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={onChange} />
+    );
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getAllByText('Required Tool').at(-1)!);
+    const save = screen.getAllByRole('button', { name: 'Add' })[0]!;
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'lookup|search' }
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Use Add alternative');
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), { target: { value: 'lookup' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add alternative' }));
+    fireEvent.change(screen.getAllByPlaceholderText('Tool name')[1]!, {
+      target: { value: 'lookup' }
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Tool already added.');
+    expect(save).toBeDisabled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('warns on partially forbidden alternatives while retaining both rules', () => {
+    const scenario = {
+      ...baseScenario(),
+      evalRules: [
+        { type: 'required_tool', value: 'lookup|search' },
+        { type: 'forbidden_tool', value: 'lookup' }
+      ] as Scenario['evalRules']
+    };
+    render(<ScenarioForm scenarios={[scenario]} agents={[]} servers={[]} onChange={vi.fn()} />);
+    expect(screen.getByRole('note')).toHaveTextContent('includes forbidden alternative');
+    expect(screen.getByText('lookup OR search')).toBeInTheDocument();
+    expect(screen.getByText('lookup', { selector: 'span' })).toBeInTheDocument();
+  });
+
   it('adds ordered tool sequence checks as an ordered list', async () => {
     const onChange = vi.fn();
 
@@ -280,7 +348,7 @@ describe('ScenarioForm checks editor', () => {
       target: { value: 'search' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -288,6 +356,107 @@ describe('ScenarioForm checks editor', () => {
       type: 'tool_sequence',
       sequence: ['search']
     });
+  });
+
+  it('saves repeated sequence steps with canonical alternatives and reopens them', async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={onChange} />
+    );
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool Sequence'));
+    for (const [first, second] of [
+      [' lookup ', 'search'],
+      [' lookup ', 'search']
+    ]) {
+      fireEvent.change(screen.getByLabelText('Sequence step alternatives 1'), {
+        target: { value: first }
+      });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add alternative' })[0]!);
+      fireEvent.change(screen.getByLabelText('Sequence step alternatives 2'), {
+        target: { value: second }
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    }
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    const saved = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(saved[0]?.evalRules).toEqual([
+      { type: 'tool_sequence', sequence: ['lookup|search', 'lookup|search'] }
+    ]);
+    rerender(<ScenarioForm scenarios={saved} agents={[]} servers={[]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    expect(
+      (screen.getByLabelText('Sequence step 1 alternatives 1') as HTMLInputElement).value
+    ).toBe('lookup');
+    expect(
+      (screen.getByLabelText('Sequence step 1 alternatives 2') as HTMLInputElement).value
+    ).toBe('search');
+    expect(
+      (screen.getByLabelText('Sequence step 2 alternatives 1') as HTMLInputElement).value
+    ).toBe('lookup');
+    expect(
+      (screen.getByLabelText('Sequence step 2 alternatives 2') as HTMLInputElement).value
+    ).toBe('search');
+  });
+
+  it('edits existing sequence alternatives and blocks invalid or rejected steps from saving', () => {
+    const onChange = vi.fn();
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'tool_sequence', sequence: ['fetch|search', 'finish'] }]
+          }
+        ]}
+        agents={[]}
+        servers={[]}
+        onChange={onChange}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+
+    const updateSequence = screen.getByRole('button', { name: 'Update sequence' });
+    const save = screen.getAllByRole('button', { name: 'Add' })[0]!;
+    const stepOne = screen.getByLabelText('Sequence step 1 alternatives 1') as HTMLInputElement;
+    const stepTwo = screen.getByLabelText('Sequence step 2 alternatives 1') as HTMLInputElement;
+    const stepOneSecond = screen.getByLabelText(
+      'Sequence step 1 alternatives 2'
+    ) as HTMLInputElement;
+
+    fireEvent.change(stepTwo, { target: { value: 'archive' } });
+    expect(stepTwo.value).toBe('archive');
+    fireEvent.change(stepTwo, { target: { value: 'finish' } });
+    fireEvent.change(stepTwo, { target: { value: '' } });
+    expect(updateSequence).toBeDisabled();
+    expect(save).toBeDisabled();
+
+    fireEvent.change(stepTwo, { target: { value: 'finish' } });
+    fireEvent.change(stepOneSecond, { target: { value: 'fetch' } });
+    expect(updateSequence).toBeDisabled();
+
+    fireEvent.change(stepOne, { target: { value: 'fetch|other' } });
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) => alert.textContent?.includes('Use Add alternative'))
+    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add step' })).toBeDisabled();
+    expect(updateSequence).toBeDisabled();
+    expect(save).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Sequence step alternatives 1'), {
+      target: { value: 'fresh|step' }
+    });
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) => alert.textContent?.includes('Use Add alternative'))
+    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add step' })).toBeDisabled();
+    expect(updateSequence).toBeDisabled();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('renders a tool_sequence rule safely even when sequence data is missing', async () => {
@@ -343,8 +512,6 @@ describe('ScenarioForm checks editor', () => {
     );
 
     expect(screen.queryByText('Sequence steps')).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Tool name')).not.toBeInTheDocument();
-
     fireEvent.click(screen.getAllByRole('combobox')[1]);
     expect(screen.queryByText('Tool Sequence')).not.toBeInTheDocument();
     fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
@@ -353,7 +520,7 @@ describe('ScenarioForm checks editor', () => {
 
     expect(screen.getAllByRole('combobox')[1]).toHaveTextContent('Tool Sequence');
     expect(screen.getByText('Sequence steps')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Tool name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sequence step 1 alternatives 1')).toBeInTheDocument();
   });
 
   it('adds response_jsonpath checks with optional equals', async () => {

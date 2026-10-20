@@ -844,7 +844,7 @@ const ConfigEditor = () => {
           <CardContent className="pt-4 space-y-1">
             <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
               <AlertTriangle className="h-4 w-4" />
-              Migration warnings
+              Configuration warnings
             </div>
             {config.loadWarnings?.map((warning, index) => (
               <p key={`${warning}-${index}`} className="text-xs text-muted-foreground">

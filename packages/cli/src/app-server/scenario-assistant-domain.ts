@@ -11,6 +11,7 @@ import {
   type ToolDef
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
+import { parseToolAlternatives, validateEvalToolRules } from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
   assistantToolDisplay,
@@ -154,7 +155,9 @@ function assistantSystemPrompt(
     'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
-    'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order. Do not put the sequence in value.',
+    'For required_tool, value may be one raw MCP tool name or an OR expression such as `search | lookup`; any one alternative satisfies that rule, while separate required_tool rules are all mandatory.',
+    'For tool_sequence eval rules, set sequence to an array of required ordered steps. Each entry may be an OR expression such as `search | lookup`; each step consumes a separate tool call, and the listed steps must appear in order. Do not put the sequence in value.',
+    'forbidden_tool accepts exactly one raw MCP tool name; never use `|` alternatives for forbidden_tool.',
     'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
     'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.',
     'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
@@ -358,19 +361,20 @@ function normalizeEvalRuleToolNames(
       typeof rule.value === 'string' &&
       rule.value
     ) {
-      const mapping = toolPublicMap.get(rule.value);
-      if (mapping) {
-        rule.value = mapping.tool;
+      const alternatives = parseToolAlternatives(rule.value);
+      const mapped = alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name);
+      if (mapped.some((name, index) => name !== alternatives[index])) {
+        rule.value = mapped.join(' | ');
       }
     }
     if (rule.type === 'tool_sequence' && Array.isArray(rule.sequence)) {
-      rule.sequence = rule.sequence
-        .map((toolName) => toolName.trim())
-        .filter((toolName) => toolName.length > 0)
-        .map((toolName) => {
-          const mapping = toolPublicMap.get(toolName);
-          return mapping ? mapping.tool : toolName;
-        });
+      rule.sequence = rule.sequence.map((expression) => {
+        const alternatives = parseToolAlternatives(expression);
+        const mapped = alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name);
+        return mapped.some((name, index) => name !== alternatives[index])
+          ? mapped.join(' | ')
+          : expression;
+      });
     }
     if (
       (rule.type === 'tool_input_contains' ||
@@ -795,6 +799,7 @@ export function validateScenarioAssistantProposal(
   };
   checkKeys(value, ['prompt', 'evalRules', 'extractRules', 'notes'], 'proposal');
   const result: ScenarioAssistantSuggestionBundle = {};
+  const evalWarnings: string[] = [];
   const validRationale = (obj: Record<string, unknown>) =>
     obj.rationale === undefined || typeof obj.rationale === 'string';
   if (value.prompt !== undefined) {
@@ -851,11 +856,39 @@ export function validateScenarioAssistantProposal(
         if (typeof r.value !== 'string')
           return invalid(`${path}.value`, 'required and must be a string');
       }
+      if (type === 'required_tool' && typeof r.value === 'string') {
+        try {
+          parseToolAlternatives(r.value);
+        } catch (error) {
+          return invalid(`${path}.value`, error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (
+        type === 'forbidden_tool' &&
+        typeof r.value === 'string' &&
+        (!r.value.trim() || r.value.includes('|'))
+      )
+        return invalid(
+          `${path}.value`,
+          'must be one non-empty tool name; alternatives are not supported'
+        );
       if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
         return invalid(`${path}.sequence`, 'required and must be a non-empty array');
       // Blank names are dropped when the rule is normalized, which could empty the sequence.
       if (type === 'tool_sequence' && (r.sequence as string[]).some((toolName) => !toolName.trim()))
         return invalid(`${path}.sequence`, 'tool names must not be blank');
+      if (type === 'tool_sequence') {
+        for (const [sequenceIndex, expression] of (r.sequence as string[]).entries()) {
+          try {
+            parseToolAlternatives(expression);
+          } catch (error) {
+            return invalid(
+              `${path}.sequence[${sequenceIndex}]`,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      }
       if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
         return invalid(`${path}.tool`, 'required and must be a string');
       if (
@@ -881,6 +914,21 @@ export function validateScenarioAssistantProposal(
     const rules = structuredClone(e.replacement) as ScenarioAssistantEvalRuleSuggestion[];
     const bundle = { evalRules: { replacement: rules } };
     normalizeEvalRuleToolNames(bundle, toolPublicMap);
+    const required = bundle.evalRules.replacement
+      .filter((rule) => rule.type === 'required_tool')
+      .map((rule) => String(rule.value));
+    const forbidden = bundle.evalRules.replacement
+      .filter((rule) => rule.type === 'forbidden_tool')
+      .map((rule) => String(rule.value));
+    const sequence = bundle.evalRules.replacement
+      .filter((rule) => rule.type === 'tool_sequence')
+      .flatMap((rule) => rule.sequence ?? []);
+    const warnings = validateEvalToolRules({
+      ...(required.length || forbidden.length
+        ? { tool_constraints: { required_tools: required, forbidden_tools: forbidden } }
+        : {}),
+      ...(sequence.length ? { tool_sequence: sequence } : {})
+    });
     bundle.evalRules.replacement = normalizeScenarioAssistantEvalRules(
       bundle.evalRules.replacement
     );
@@ -888,6 +936,7 @@ export function validateScenarioAssistantProposal(
       ...bundle.evalRules,
       ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
     };
+    evalWarnings.push(...warnings);
   }
   if (value.extractRules !== undefined) {
     if (
@@ -923,6 +972,7 @@ export function validateScenarioAssistantProposal(
       if (typeof note !== 'string') return invalid(`notes[${index}]`, 'expected a string');
     result.notes = [...value.notes] as string[];
   }
+  if (evalWarnings.length) result.notes = [...(result.notes ?? []), ...evalWarnings];
   if (!result.prompt && !result.evalRules && !result.extractRules)
     return invalid('proposal', 'must include at least one change');
   return result;

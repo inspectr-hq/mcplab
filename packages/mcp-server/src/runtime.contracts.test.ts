@@ -156,11 +156,35 @@ describe('mcp tool contracts', () => {
     });
   });
 
+  it('accepts OR expressions in required and sequence entries, rejects malformed expressions', () => {
+    const schema = asSchema(setupTools().get('mcplab_generate_scenario_entry')!.config.inputSchema);
+    const valid = schema.safeParse({
+      id: 'alternatives',
+      servers: ['mcp-lab'],
+      prompt: 'Search.',
+      required_tools: ['authenticate', 'search | lookup'],
+      eval: { tool_sequence: ['search | lookup'] }
+    });
+    expect(valid.success).toBe(true);
+    for (const expression of ['search | ', '| lookup', 'search | search']) {
+      expect(
+        schema.safeParse({
+          id: 'alternatives',
+          servers: ['mcp-lab'],
+          prompt: 'Search.',
+          required_tools: [expression]
+        }).success
+      ).toBe(false);
+    }
+  });
+
   it('describes evaluation assertion types and exposes them in scenario output', () => {
     const tools = setupTools();
     const generateTool = tools.get('mcplab_generate_scenario_entry')!.config as any;
     expect(generateTool.description).toContain('eval object');
-    expect(generateTool.inputSchema.required_tools.description).toContain('Simple shorthand');
+    expect(generateTool.inputSchema.required_tools.description).toContain(
+      'Every entry is mandatory'
+    );
     expect(generateTool.inputSchema.eval.description).toContain('Full evaluation-rule object');
 
     const outputScenario = asSchema(
@@ -234,6 +258,10 @@ describe('mcp tool contracts', () => {
     expect(runDescription).toContain('immediately');
     expect(queueDescription).toContain('APP queue');
     expect(queueDescription).toContain('does not execute');
+    const runOutput = tools.get('mcplab_run_eval')!.config.outputSchema as Record<string, unknown>;
+    expect(asSchema(runOutput.warnings).parse(['some tool alternative is forbidden'])).toEqual([
+      'some tool alternative is forbidden'
+    ]);
   });
 
   it('documents the trace discovery workflow', () => {

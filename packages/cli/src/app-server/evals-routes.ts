@@ -61,7 +61,7 @@ export async function handleEvalsRoutes(params: {
     }
     let normalizedConfig: SourceEvalConfig;
     try {
-      normalizedConfig = normalizeSourceConfig(config).config;
+      normalizedConfig = normalizeSourceConfig(config, { forWrite: true }).config;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
@@ -113,7 +113,7 @@ export async function handleEvalsRoutes(params: {
     }
     let normalizedConfig: SourceEvalConfig;
     try {
-      normalizedConfig = normalizeSourceConfig(config).config;
+      normalizedConfig = normalizeSourceConfig(config, { forWrite: true }).config;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;

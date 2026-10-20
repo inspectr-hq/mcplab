@@ -44,6 +44,7 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
+import { normalizeToolExpression } from '@inspectr/mcplab-core';
 import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import { toComparableString } from '../value-normalization';
 
@@ -267,17 +268,22 @@ function buildCoreEvalBlock(
       agent_context?: AgentContext;
     }
   | undefined {
+  const normalizeRuleExpression = (rule: EvalRule): string => {
+    if (typeof rule.value !== 'string')
+      throw new Error('Tool checks require a tool expression string.');
+    return normalizeToolExpression(rule.value);
+  };
   const required_tools = evalRules
     .filter((rule) => rule.type === 'required_tool')
-    .map((rule) => rule.value)
+    .map(normalizeRuleExpression)
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const forbidden_tools = evalRules
     .filter((rule) => rule.type === 'forbidden_tool')
-    .map((rule) => rule.value)
+    .map(normalizeRuleExpression)
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const tool_sequence = evalRules
     .find((rule) => rule.type === 'tool_sequence')
-    ?.sequence?.map((value) => value.trim())
+    ?.sequence?.map((value) => normalizeToolExpression(value))
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))

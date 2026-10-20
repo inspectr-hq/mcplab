@@ -32,7 +32,7 @@ export function createEvaluationConfigFile(params: {
 }): CreatedEvaluationConfigFile {
   const evalsDir = resolve(params.evalsDir);
   const fileName = safeEvaluationConfigFileName(params.fileName);
-  const { config, warnings } = normalizeSourceConfig(params.config);
+  const { config, warnings } = normalizeSourceConfig(params.config, { forWrite: true });
   const folder = params.folder?.trim();
   if (
     folder &&
@@ -85,7 +85,7 @@ export function updateEvaluationConfigFile(params: {
   if (!path.startsWith(`${evalsDir}${sep}`) || !/\.ya?ml$/i.test(path))
     throw new Error('Evaluation config path is outside the configured evals directory.');
   if (!existsSync(path)) throw new Error(`Evaluation config not found: ${params.filePath}`);
-  const { config, warnings } = normalizeSourceConfig(params.config);
+  const { config, warnings } = normalizeSourceConfig(params.config, { forWrite: true });
   writeFileSync(path, `${stringifyYaml(config)}\n`, { encoding: 'utf8' });
   return {
     fileName: path.slice(evalsDir.length + 1).replace(/\.ya?ml$/i, ''),

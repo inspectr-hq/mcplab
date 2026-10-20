@@ -58,6 +58,24 @@ describe('createTestCaseFile', () => {
     ]);
   });
 
+  it('canonicalizes alternatives on writes and preserves repeated sequence steps', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    const created = createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: {
+        id: 'alternatives',
+        servers: ['mcp-lab'],
+        prompt: 'Search twice.',
+        requiredTools: [' authenticate |  login '],
+        toolSequence: ['search | lookup', 'search | lookup']
+      }
+    });
+    expect(created.testCase.eval?.tool_constraints?.required_tools).toEqual(['authenticate|login']);
+    expect(created.testCase.eval?.tool_sequence).toEqual(['search|lookup', 'search|lookup']);
+  });
+
   it('persists canonical evaluation assertion types', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);

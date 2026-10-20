@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createAbortError } from './abort.js';
 import {
   buildNotExecutedCheckResults,
+  buildNotEvaluatedCheckResults,
   evaluateScenario,
   evaluateScenarioWithAgentChecks,
   extractValues,
@@ -19,6 +20,73 @@ describe('evaluateScenario — no rules', () => {
 });
 
 describe('evaluateScenario — tool_constraints', () => {
+  it.each([
+    { calls: ['search'], pass: true },
+    { calls: ['lookup'], pass: true },
+    { calls: ['search', 'lookup'], pass: true },
+    { calls: [], pass: false },
+    { calls: ['Search'], pass: false }
+  ])('requires any alternative for $calls', ({ calls, pass }) => {
+    const result = evaluateScenario('ok', calls, {
+      tool_constraints: { required_tools: ['search|lookup'] }
+    });
+    expect(result.pass).toBe(pass);
+    expect(result.check_results).toHaveLength(1);
+  });
+
+  it('requires every group while allowing overlapping alternatives', () => {
+    const rules = { tool_constraints: { required_tools: ['search|lookup', 'lookup|fetch'] } };
+    expect(evaluateScenario('ok', ['lookup'], rules).pass).toBe(true);
+    const result = evaluateScenario('ok', ['search'], rules);
+    expect(result.pass).toBe(false);
+    expect(result.check_results.map((check) => check.status)).toEqual(['passed', 'failed']);
+  });
+  it('trims forbidden tool names in labels and matching', () => {
+    const result = evaluateScenario('response', ['delete'], {
+      tool_constraints: { forbidden_tools: [' delete '] }
+    });
+    expect(result.pass).toBe(false);
+    expect(result.check_results[0]).toMatchObject({
+      label: 'Forbidden tool · delete',
+      reason: 'Forbidden tool used: delete'
+    });
+  });
+  it('accepts any required alternative and exposes matched tool metadata', () => {
+    const result = evaluateScenario('response', ['fetch'], {
+      tool_constraints: { required_tools: ['search | fetch'] }
+    });
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      metadata: {
+        expression: 'search|fetch',
+        alternatives: ['search', 'fetch'],
+        matched_tools: ['fetch']
+      }
+    });
+  });
+
+  it('canonicalizes spaced alternatives before evaluating and reporting checks', () => {
+    const rules = { tool_constraints: { required_tools: ['search | lookup'] } };
+    const result = evaluateScenario('response', ['lookup'], rules);
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      label: 'Required tool · (search OR lookup)',
+      metadata: {
+        expression: 'search|lookup',
+        alternatives: ['search', 'lookup'],
+        matched_tools: ['lookup']
+      }
+    });
+    expect(buildNotExecutedCheckResults(rules)[0]).toMatchObject({
+      label: 'Required tool · (search OR lookup)',
+      metadata: {
+        expression: 'search|lookup',
+        alternatives: ['search', 'lookup'],
+        matched_tools: []
+      }
+    });
+  });
+
   it('resolves a client namespace prefix when the raw tool is exposed', () => {
     const rules = normalizeToolConstraintAliases(
       { tool_constraints: { required_tools: ['MCPLab:mcplab_aggregate_runs'] } },
@@ -83,6 +151,26 @@ describe('evaluateScenario — tool_constraints', () => {
 });
 
 describe('evaluateScenario — tool_sequence', () => {
+  it.each([
+    { calls: ['lookup', 'search'], pass: true },
+    { calls: ['search'], pass: false },
+    { calls: ['search', 'search'], pass: true },
+    { calls: ['lookup', 'unrelated', 'search'], pass: true },
+    { calls: ['search', 'lookup'], pass: false }
+  ])('greedily consumes separate calls for overlapping steps: $calls', ({ calls, pass }) => {
+    const result = evaluateScenario('ok', calls, { tool_sequence: ['search|lookup', 'search'] });
+    expect(result.pass).toBe(pass);
+    expect(result.check_results).toHaveLength(1);
+  });
+  it('matches spaced alternatives in order and records actual matches', () => {
+    const result = evaluateScenario('response', ['fetch', 'write'], {
+      tool_sequence: ['search | fetch', 'store | write']
+    });
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      metadata: { expected: ['search|fetch', 'store|write'], matched_tools: ['fetch', 'write'] }
+    });
+  });
   it('passes when the required tools appear in order with tools in between', () => {
     const result = evaluateScenario('response', ['search', 'lookup', 'fetch'], {
       tool_sequence: ['search', 'fetch']
@@ -836,6 +924,19 @@ describe('evaluateScenarioWithAgentChecks', () => {
 });
 
 describe('buildNotExecutedCheckResults', () => {
+  it.each([buildNotExecutedCheckResults, buildNotEvaluatedCheckResults])(
+    'uses canonical sequence identities when execution cannot be evaluated',
+    (buildChecks) => {
+      const rules = { tool_sequence: ['search | lookup', 'search'] };
+      expect(buildChecks(rules)[0]?.metadata).toMatchObject({
+        expected: ['search|lookup', 'search'],
+        alternatives: [['search', 'lookup'], ['search']],
+        actual: [],
+        matched_tools: []
+      });
+      expect(rules.tool_sequence).toEqual(['search | lookup', 'search']);
+    }
+  );
   it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
     const results = buildNotExecutedCheckResults({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
@@ -874,7 +975,8 @@ describe('buildNotExecutedCheckResults', () => {
         type: 'required_tool',
         label: 'Required tool · search',
         status: 'not_executed',
-        reason: undefined
+        reason: undefined,
+        metadata: { expression: 'search', alternatives: ['search'], matched_tools: [] }
       }
     ]);
   });

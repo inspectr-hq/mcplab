@@ -3,6 +3,7 @@ import { resolve, sep } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvalRules, SourceScenario } from './types.js';
 import { buildScenarioEntry } from './scenario-builder.js';
+import { normalizeEvalToolRules } from './tool-rule-expressions.js';
 
 export type TestCaseCreateInput = {
   id: string;
@@ -44,7 +45,7 @@ export function createTestCaseFile(params: {
   if (!path.startsWith(`${testCasesDir}${sep}`))
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
-  const testCase = buildScenarioEntry({
+  const draft = buildScenarioEntry({
     id,
     name: input.name?.trim() || id,
     servers,
@@ -56,6 +57,7 @@ export function createTestCaseFile(params: {
     eval: input.eval,
     extract_rules: input.extractRules
   });
+  const testCase = draft.eval ? { ...draft, eval: normalizeEvalToolRules(draft.eval) } : draft;
   try {
     writeFileSync(path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8', flag: 'wx' });
   } catch (error) {
@@ -106,7 +108,7 @@ export function updateTestCaseFile(params: {
   const known = new Set(params.knownServerIds);
   const missing = servers.filter((server) => !known.has(server));
   if (missing.length) throw new Error(`Unknown MCP server(s): ${missing.join(', ')}`);
-  const testCase = buildScenarioEntry({
+  const draft = buildScenarioEntry({
     id,
     name: input.name?.trim() || id,
     servers,
@@ -118,6 +120,7 @@ export function updateTestCaseFile(params: {
     eval: input.eval,
     extract_rules: input.extractRules
   });
+  const testCase = draft.eval ? { ...draft, eval: normalizeEvalToolRules(draft.eval) } : draft;
   const librariesDir = resolve(params.librariesDir);
   const testCasesDir = resolve(librariesDir, 'test-cases');
   assertUniqueTestCaseId(testCasesDir, id, existing.path);

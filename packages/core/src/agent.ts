@@ -207,26 +207,17 @@ function buildJudgeBatchResultSchema() {
   };
 }
 
-export async function runAgentScenario(params: {
-  scenario: ExecutableScenario;
-  agent: AgentConfig;
+export type ScenarioToolCatalog = Map<string, { server: string; tool: ToolDef }>;
+
+export async function discoverScenarioTools(params: {
+  scenario: Pick<ExecutableScenario, 'servers'>;
   mcp: McpClientManager;
   requestId?: string;
-  resolveServerRequestHeaders?: (
-    serverNames: string[]
-  ) => Promise<Record<string, Record<string, string>>>;
-  maxTurns?: number;
   signal?: AbortSignal;
-  onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
-  trace?: ScenarioTraceSpan;
-}): Promise<AgentRunResult> {
-  const { scenario, agent, mcp } = params;
-  if (!isLlmAgent(agent))
-    throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
-  const serverRequestHeaders =
-    typeof params.resolveServerRequestHeaders === 'function'
-      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
-      : {};
+  serverRequestHeaders?: Record<string, Record<string, string>>;
+}): Promise<ScenarioToolCatalog> {
+  const { scenario, mcp } = params;
+  const serverRequestHeaders = params.serverRequestHeaders ?? {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
     const listToolsHeaders = {
@@ -245,6 +236,39 @@ export async function runAgentScenario(params: {
       toolsByName.set(tool.name, { server: serverName, tool });
     }
   }
+  return toolsByName;
+}
+
+export async function runAgentScenario(params: {
+  scenario: ExecutableScenario;
+  agent: AgentConfig;
+  mcp: McpClientManager;
+  requestId?: string;
+  resolveServerRequestHeaders?: (
+    serverNames: string[]
+  ) => Promise<Record<string, Record<string, string>>>;
+  maxTurns?: number;
+  signal?: AbortSignal;
+  onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
+  trace?: ScenarioTraceSpan;
+  preparedTools?: ScenarioToolCatalog;
+}): Promise<AgentRunResult> {
+  const { scenario, agent, mcp } = params;
+  if (!isLlmAgent(agent))
+    throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
+  const serverRequestHeaders =
+    typeof params.resolveServerRequestHeaders === 'function'
+      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
+      : {};
+  const toolsByName =
+    params.preparedTools ??
+    (await discoverScenarioTools({
+      scenario,
+      mcp,
+      requestId: params.requestId,
+      signal: params.signal,
+      serverRequestHeaders
+    }));
   const tools = Array.from(toolsByName.values()).map((entry) => entry.tool);
 
   const adapter = createAdapter(agent);

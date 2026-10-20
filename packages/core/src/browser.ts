@@ -37,3 +37,4 @@ export {
 } from './eval.js';
 
 export { calculatePassRate } from './result-metrics.js';
+export * from './tool-rule-expressions.js';

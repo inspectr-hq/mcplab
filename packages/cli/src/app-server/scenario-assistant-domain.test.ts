@@ -518,25 +518,92 @@ describe('Scenario Assistant runtime definition', () => {
     ]);
   });
 
-  it('normalizes sequence and tool-input names and removes contradictory rules', () => {
+  it('rejects contradictory required and forbidden tools before lint normalization', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        {
+          evalRules: {
+            replacement: [
+              { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
+              { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
+              { type: 'required_tool', value: 'srv__refund_tool' },
+              { type: 'forbidden_tool', value: 'srv__refund_tool' }
+            ]
+          }
+        },
+        new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
+      )
+    ).toThrow(/fully forbidden|forbidden/);
+  });
+
+  it('maps each alternative and preserves OR expressions in native proposals', () => {
     const output = validateScenarioAssistantProposal(
       {
         evalRules: {
           replacement: [
-            { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
-            { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
-            { type: 'required_tool', value: 'srv__refund_tool' },
-            { type: 'forbidden_tool', value: 'srv__refund_tool' }
+            { type: 'required_tool', value: 'srv__search | lookup' },
+            { type: 'tool_sequence', sequence: ['srv__search | lookup', 'search'] }
           ]
         }
       },
-      new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
+      new Map([['srv__search', { server: 'srv', tool: 'search' }]])
     );
     expect(output.evalRules?.replacement).toEqual([
-      { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] },
-      { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
-      { type: 'required_tool', value: 'refund_tool' }
+      { type: 'required_tool', value: 'search | lookup' },
+      { type: 'tool_sequence', sequence: ['search | lookup', 'search'] }
     ]);
+  });
+
+  it('preserves authored alternative spacing when no alias mapping applies', () => {
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'required_tool', value: 'search  |  lookup' },
+            { type: 'tool_sequence', sequence: ['search  |  lookup'] }
+          ]
+        }
+      },
+      new Map()
+    );
+    expect(output.evalRules?.replacement).toEqual([
+      { type: 'required_tool', value: 'search  |  lookup' },
+      { type: 'tool_sequence', sequence: ['search  |  lookup'] }
+    ]);
+  });
+
+  it('rejects empty sequence expressions before normalization can drop them', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'tool_sequence', sequence: ['search', '  '] }] } },
+        new Map()
+      )
+    ).toThrow(/tool names must not be blank/);
+  });
+
+  it('returns partial forbidden-alternative warning in proposal notes', () => {
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'required_tool', value: 'search | lookup' },
+            { type: 'forbidden_tool', value: 'search' }
+          ]
+        }
+      },
+      new Map()
+    );
+    expect(output.evalRules?.replacement).toHaveLength(2);
+    expect(output.notes?.join(' ')).toContain('includes forbidden alternative');
+  });
+
+  it('rejects alternatives that map to the same public tool alias', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'required_tool', value: 'srv__search | search' }] } },
+        new Map([['srv__search', { server: 'srv', tool: 'search' }]])
+      )
+    ).toThrow(/Duplicate tool alternative/);
   });
 
   it('omits unchanged placeholders while preserving proposed checks', () => {

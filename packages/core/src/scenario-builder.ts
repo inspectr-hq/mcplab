@@ -1,4 +1,5 @@
 import type { EvalRules, SourceScenario } from './types.js';
+import { validateEvalToolRules } from './tool-rule-expressions.js';
 
 export type ScenarioBuildInput = {
   id?: string;
@@ -18,9 +19,9 @@ export type ScenarioBuildInput = {
 export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   const id = input.id?.trim() || slugify(input.name?.trim() || input.prompt.slice(0, 40));
   if (!id) throw new Error('Unable to derive scenario id. Provide id or name.');
-  const required = unique(input.required_tools);
-  const forbidden = unique(input.forbidden_tools);
-  const sequence = unique(input.tool_sequence);
+  const required = copyStrings(input.required_tools);
+  const forbidden = copyStrings(input.forbidden_tools);
+  const sequence = copyStrings(input.tool_sequence);
   const patterns = unique(input.response_regex_patterns);
   const evalRules = mergeEvalRules(input.eval, {
     required,
@@ -28,6 +29,7 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
     sequence,
     patterns
   });
+  validateEvalToolRules(evalRules);
   return {
     id,
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
@@ -105,6 +107,9 @@ function mergeEvalRules(
 
 function unique(values?: string[]): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+function copyStrings(values?: string[]): string[] {
+  return values ? [...values] : [];
 }
 function slugify(input: string): string {
   return input

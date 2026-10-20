@@ -9,6 +9,7 @@ import {
   hashConfig,
   createRunId,
   runAll,
+  validateEvalToolRules,
   resolveWorkspaceEvaluation,
   applyRuntimeServerOverrides,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
@@ -673,6 +674,12 @@ export async function handleRunsRoutes(params: {
 
     const previewWarnings: string[] = [];
     const coreEval = toCoreEvalRules(evalRules, previewWarnings);
+    try {
+      previewWarnings.push(...validateEvalToolRules(coreEval, `Scenario "${scenarioId}"`));
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     const coreExtract = toCoreExtractRules(extractRules);
     const previewConfigBase: EvalConfig = {
       name: `Preview ${scenarioId}`,
@@ -706,6 +713,9 @@ export async function handleRunsRoutes(params: {
 
     try {
       const { results } = await runAll(expandedPreviewConfig, {
+        onWarning: (warning) => {
+          if (!previewWarnings.includes(warning)) previewWarnings.push(warning);
+        },
         runsPerScenario: 1,
         configHash: hashConfig(previewConfigBase),
         cliVersion: pkgVersion,

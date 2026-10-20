@@ -124,3 +124,4 @@ export {
 } from './default-browser-providers.js';
 
 export { calculatePassRate } from './result-metrics.js';
+export * from './tool-rule-expressions.js';
