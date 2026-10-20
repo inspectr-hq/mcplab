@@ -46,6 +46,7 @@ interface QueueRunParamsBase {
 export interface QueueChildProgress {
   scenarioId: string;
   agentName: string;
+  serverNames?: string[];
   completed: number;
   total: number;
   status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';

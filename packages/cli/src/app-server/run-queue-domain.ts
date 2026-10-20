@@ -633,6 +633,7 @@ export function createRunQueueService(params: {
               childProgress: (runParams.roverScenarios ?? []).map((scenario) => ({
                 scenarioId: scenario.id,
                 agentName: runParams.roverAgent.name,
+                serverNames: [...scenario.servers],
                 completed: 0,
                 total: 1,
                 status: 'queued' as const
@@ -1011,6 +1012,7 @@ export function createRunQueueService(params: {
       }
       const progress = job.childProgress ?? [];
       const next = {
+        ...child,
         scenarioId,
         agentName: job.runParams.roverAgent.name,
         completed: child?.completed ?? 0,
@@ -1199,6 +1201,7 @@ export function createRunQueueService(params: {
               child.scenarioId === message.scenarioId && child.agentName === roverAgent.name
           );
           const next = {
+            ...current,
             scenarioId: message.scenarioId,
             agentName: roverAgent.name,
             completed: Math.max(0, Number(message.completed ?? 0)),

@@ -288,6 +288,7 @@ export async function executeRunJob(params: {
     job.childProgress = expandedConfig.scenarios.map((scenario) => ({
       scenarioId: scenario.id,
       agentName: scenario.agent,
+      serverNames: [...scenario.servers],
       completed: 0,
       total: runsPerScenario,
       status: 'queued' as const

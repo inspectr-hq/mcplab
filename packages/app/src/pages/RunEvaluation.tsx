@@ -1634,7 +1634,15 @@ const RunEvaluation = () => {
                               <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
                             )}
                             {child
-                              ? `${child.scenarioId} · ${child.agentName}: `
+                              ? `${child.scenarioId} · ${child.agentName}${
+                                  child.serverNames
+                                    ? ` · MCP servers: ${
+                                        child.serverNames.length
+                                          ? child.serverNames.join(', ')
+                                          : 'none'
+                                      }`
+                                    : ''
+                                } · `
                               : `${
                                   job.roverAgent?.name ??
                                   job.runParams.agents?.join(', ') ??
