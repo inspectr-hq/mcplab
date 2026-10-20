@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { normalizeSourceConfig } from './config.js';
 import type { SourceEvalConfig } from './types.js';
@@ -27,15 +27,34 @@ export function safeEvaluationConfigFileName(name: string): string {
 export function createEvaluationConfigFile(params: {
   evalsDir: string;
   fileName: string;
+  folder?: string;
   config: SourceEvalConfig;
 }): CreatedEvaluationConfigFile {
   const evalsDir = resolve(params.evalsDir);
   const fileName = safeEvaluationConfigFileName(params.fileName);
   const { config, warnings } = normalizeSourceConfig(params.config);
-  mkdirSync(evalsDir, { recursive: true });
-  let target = join(evalsDir, `${fileName}.yaml`);
+  const folder = params.folder?.trim();
+  if (
+    folder &&
+    (isAbsolute(folder) ||
+      folder.startsWith('/') ||
+      folder.startsWith('\\') ||
+      /^[a-z]:/i.test(folder) ||
+      folder.split(/[\\/]+/).includes('..'))
+  ) {
+    throw new Error('Evaluation config folder must be a relative path inside the evals directory.');
+  }
+  const targetDir = folder ? resolve(evalsDir, folder) : evalsDir;
+  if (targetDir !== evalsDir && !targetDir.startsWith(`${evalsDir}${sep}`))
+    throw new Error('Evaluation config folder is outside the configured evals directory.');
+  mkdirSync(targetDir, { recursive: true });
+  const realEvalsDir = realpathSync(evalsDir);
+  const realTargetDir = realpathSync(targetDir);
+  if (realTargetDir !== realEvalsDir && !realTargetDir.startsWith(`${realEvalsDir}${sep}`))
+    throw new Error('Evaluation config folder is outside the configured evals directory.');
+  let target = join(targetDir, `${fileName}.yaml`);
   let suffix = 1;
-  while (existsSync(target)) target = join(evalsDir, `${fileName}-${suffix++}.yaml`);
+  while (existsSync(target)) target = join(targetDir, `${fileName}-${suffix++}.yaml`);
   const resolvedTarget = resolve(target);
   if (!resolvedTarget.startsWith(`${evalsDir}${sep}`))
     throw new Error('Evaluation config path is outside the configured evals directory.');

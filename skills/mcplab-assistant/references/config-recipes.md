@@ -2,7 +2,7 @@
 
 ## MCP Authoring Flow
 
-Use `mcplab_generate_scenario_entry` to draft a reusable Test Case, review the returned YAML, then call the confirmation-required `mcplab_create_test_case` to persist it under `mcplab/test-cases/`. Create evaluation files with `mcplab_create_evaluation_config`; it writes normalized YAML under `mcplab/evals/`. Verify the returned path and validate the resulting file before running it.
+Use `mcplab_generate_scenario_entry` to draft a reusable Test Case, review the returned YAML, then call the confirmation-required `mcplab_create_test_case` to persist it under `mcplab/test-cases/`. Create evaluation files with `mcplab_create_evaluation_config`; it writes normalized YAML under `mcplab/evals/`. Set its optional `folder` argument to a relative path such as `mcp-dev/routines` to create the file in a nested folder. Verify the returned path and validate the resulting file before running it.
 
 Use this as a schema-first guide for MCPLab config authoring.
 Source of truth: `config-schema.json`.

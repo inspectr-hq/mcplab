@@ -1720,7 +1720,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_evaluation_config',
     {
       description:
-        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/, optionally inside a relative folder such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       outputSchema: {
         file_name: z.string(),
         path: z.string(),
@@ -1734,16 +1734,23 @@ export function registerTools(server: McpServer): void {
           .describe(
             'Destination YAML filename under mcplab/evals/. Extension is added if omitted.'
           ),
+        folder: z
+          .string()
+          .optional()
+          .describe(
+            'Optional folder path relative to mcplab/evals/, such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected.'
+          ),
         config: GenericObjectSchema.describe(
           'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
         )
       }
     },
-    async ({ file_name, config }) =>
+    async ({ file_name, folder, config }) =>
       withToolHandling(async () => {
         const created = createEvaluationConfigFile({
           evalsDir: join(resolveBundleRoot(), 'evals'),
           fileName: file_name,
+          folder,
           config: config as unknown as SourceEvalConfig
         });
         return ok(`Created evaluation configuration '${created.fileName}'`, {

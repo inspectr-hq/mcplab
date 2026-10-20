@@ -154,7 +154,7 @@ When the request is about analyzing results, the assistant must:
 12. Prefer minimal deterministic edits over large rewrites.
 
 13. For new Test Cases, draft YAML with `mcplab_generate_scenario_entry` first, then persist only after confirmation with `mcplab_create_test_case`. Use `as_library_file=true` when creating a reusable file under `mcplab/test-cases/`.
-14. For evaluation configs, pass the complete config object to the confirmation-required `mcplab_create_evaluation_config`; it writes under `mcplab/evals/` and normalizes collisions automatically.
+14. For evaluation configs, pass the complete config object to the confirmation-required `mcplab_create_evaluation_config`; it writes under `mcplab/evals/` and normalizes collisions automatically. Set the optional `folder` path relative to `mcplab/evals/` to place the config in a nested folder, for example `mcp-dev/routines`.
 15. Verify persistence by checking the returned `path`/`relative_path` and then validate the created config with `mcplab_validate_config` when a config path is available.
 
 ## Browser Agent Workflow
