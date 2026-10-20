@@ -126,7 +126,7 @@ export function loadConfig(
     hash,
     raw,
     bundleRoot,
-    warnings: [...new Set([...normalizeWarnings, ...resolveWarnings])]
+    warnings: [...normalizeWarnings, ...resolveWarnings]
   };
 }
 
@@ -543,7 +543,9 @@ export function normalizeSourceConfig(
       continue;
     }
     const rawScenario = scenario as SourceScenario & { agent?: unknown };
-    warnings.push(...validateEvalToolRules(rawScenario.eval, `Scenario "${rawScenario.id}"`));
+    if (options?.forWrite) {
+      warnings.push(...validateEvalToolRules(rawScenario.eval, `Scenario "${rawScenario.id}"`));
+    }
     const legacyServers = Array.isArray(rawScenario.servers) ? rawScenario.servers : [];
     const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
     if (legacyServers.length > 0 && Array.isArray(rawMcpServers) && rawMcpServers.length > 0) {

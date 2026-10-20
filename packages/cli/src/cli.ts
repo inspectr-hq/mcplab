@@ -874,7 +874,6 @@ async function executeSingleConfigRun(params: {
   }
 
   const { runDir, results } = await runAll(expanded, {
-    onWarning: (warning) => console.warn(kleur.yellow(warning)),
     runsPerScenario,
     scenarioId: options.scenario,
     runNote,

@@ -392,12 +392,6 @@ export async function executeRunJob(params: {
       });
     }
     const { runDir, results } = await runAll(expandedConfig, {
-      onWarning: (message) =>
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: { message: `Warning: ${message}` }
-        }),
       runsPerScenario,
       scenarioId,
       runNote,

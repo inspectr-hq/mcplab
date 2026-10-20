@@ -45,7 +45,7 @@ import {
   parseToolAlternatives,
   normalizeToolExpression,
   validateEvalToolRules
-} from '@inspectr/mcplab-core';
+} from '@/types/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';

@@ -46,7 +46,6 @@ import {
   updateTestCaseFile,
   buildScenarioEntry,
   parseToolAlternatives,
-  validateEvalToolRules,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
@@ -1613,7 +1612,7 @@ export function registerTools(server: McpServer): void {
           id: created.id,
           path: created.path,
           test_case: created.testCase,
-          warnings: validateEvalToolRules(created.testCase.eval)
+          warnings: created.warnings
         });
       })
   );
@@ -1743,7 +1742,7 @@ export function registerTools(server: McpServer): void {
           id: updated.id,
           path: updated.path,
           test_case: updated.testCase,
-          warnings: validateEvalToolRules(updated.testCase.eval)
+          warnings: updated.warnings
         });
       })
   );
@@ -1951,14 +1950,12 @@ export function registerTools(server: McpServer): void {
     },
     async (input) => {
       return withToolHandling(async () => {
-        const scenario = buildScenario(input);
+        const warnings: string[] = [];
+        const scenario = buildScenario(input, warnings);
         const asLibraryFile = Boolean(input.as_library_file);
         const yamlLibraryFile = stringifyYaml(scenario).trimEnd();
         const yamlInlineListItem = indentBlock(stringifyYaml([scenario]).trimEnd(), 2);
-        const warnings = [
-          ...validateScenarioHeuristics(scenario),
-          ...validateEvalToolRules(scenario.eval)
-        ];
+        warnings.unshift(...validateScenarioHeuristics(scenario));
         return ok(`Generated scenario '${scenario.id}'`, {
           scenario,
           yaml: asLibraryFile ? yamlLibraryFile : yamlInlineListItem,
@@ -2112,7 +2109,7 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden.run_defaults?.selected_agents
         );
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
-        const warnings = new Set(loaded.warnings ?? []);
+        const warnings = loaded.warnings ?? [];
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
@@ -2124,10 +2121,7 @@ export function registerTools(server: McpServer): void {
             agents: libraries.agents,
             scenarios: executable.scenarios,
             settings: toWorkspaceEvaluationSettings(workspaceSettings)
-          }),
-          onWarning: (warning) => {
-            warnings.add(warning);
-          }
+          })
         });
 
         const reportHtml = renderReport(results);
@@ -2155,7 +2149,7 @@ export function registerTools(server: McpServer): void {
           passed_runs: passedRuns,
           failed_runs: failedRuns,
           skipped_runs: skippedRuns,
-          warnings: [...warnings],
+          warnings,
           duration_ms: durationMs,
           summary: results.summary,
           metadata: results.metadata,
@@ -3843,9 +3837,12 @@ function buildServerEntry(input: {
 }
 
 function buildScenario(
-  input: Parameters<typeof buildScenarioEntry>[0]
+  input: Parameters<typeof buildScenarioEntry>[0],
+  warnings: string[]
 ): EvalConfig['scenarios'][number] {
-  return buildScenarioEntry(input) as EvalConfig['scenarios'][number];
+  return buildScenarioEntry(input, (items) =>
+    warnings.push(...items)
+  ) as EvalConfig['scenarios'][number];
 }
 
 function validateScenarioHeuristics(scenario: EvalConfig['scenarios'][number]): string[] {

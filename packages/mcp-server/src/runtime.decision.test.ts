@@ -116,14 +116,15 @@ describe('immediate MCP decision evaluation', () => {
     );
   });
 
-  it('returns config and run warnings without logging them', async () => {
+  it('returns loaded config warnings without logging them', async () => {
     const consoleWarning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const duplicateWarning =
+      'Scenario "semantic": tool_constraints.required_tools[0] includes forbidden alternative.';
     mocks.loadConfig.mockReturnValue({
       config: { servers: {}, agents: {}, scenarios: [] },
-      warnings: ['Loaded config warning']
+      warnings: [duplicateWarning, 'Unrelated warning']
     });
-    mocks.runAll.mockImplementation(async (_config, options) => {
-      await options.onWarning('Tool alternative warning');
+    mocks.runAll.mockImplementation(async () => {
       return {
         runDir: '/tmp/mcplab-mcp-test',
         results: aggregateResults({
@@ -137,10 +138,7 @@ describe('immediate MCP decision evaluation', () => {
     });
 
     const result = await runTool({ config_path: '/tmp/eval.yaml' });
-    expect(result.structuredContent.warnings).toEqual([
-      'Loaded config warning',
-      'Tool alternative warning'
-    ]);
+    expect(result.structuredContent.warnings).toEqual([duplicateWarning, 'Unrelated warning']);
     expect(consoleWarning).not.toHaveBeenCalled();
     consoleWarning.mockRestore();
   });

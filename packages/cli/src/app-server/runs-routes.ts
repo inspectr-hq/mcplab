@@ -713,9 +713,6 @@ export async function handleRunsRoutes(params: {
 
     try {
       const { results } = await runAll(expandedPreviewConfig, {
-        onWarning: (warning) => {
-          if (!previewWarnings.includes(warning)) previewWarnings.push(warning);
-        },
         runsPerScenario: 1,
         configHash: hashConfig(previewConfigBase),
         cliVersion: pkgVersion,

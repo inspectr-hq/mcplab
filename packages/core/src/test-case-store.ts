@@ -17,7 +17,12 @@ export type TestCaseCreateInput = {
   eval?: EvalRules;
   extractRules?: Array<{ name: string; regex: string }>;
 };
-export type CreatedTestCaseFile = { id: string; path: string; testCase: SourceScenario };
+export type CreatedTestCaseFile = {
+  id: string;
+  path: string;
+  testCase: SourceScenario;
+  warnings: string[];
+};
 export type UpdatedTestCaseFile = CreatedTestCaseFile;
 
 export function createTestCaseFile(params: {
@@ -45,18 +50,22 @@ export function createTestCaseFile(params: {
   if (!path.startsWith(`${testCasesDir}${sep}`))
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
-  const draft = buildScenarioEntry({
-    id,
-    name: input.name?.trim() || id,
-    servers,
-    prompt,
-    required_tools: input.requiredTools,
-    forbidden_tools: input.forbiddenTools,
-    tool_sequence: input.toolSequence,
-    response_regex_patterns: input.responseRegexPatterns,
-    eval: input.eval,
-    extract_rules: input.extractRules
-  });
+  const warnings: string[] = [];
+  const draft = buildScenarioEntry(
+    {
+      id,
+      name: input.name?.trim() || id,
+      servers,
+      prompt,
+      required_tools: input.requiredTools,
+      forbidden_tools: input.forbiddenTools,
+      tool_sequence: input.toolSequence,
+      response_regex_patterns: input.responseRegexPatterns,
+      eval: input.eval,
+      extract_rules: input.extractRules
+    },
+    (items) => warnings.push(...items)
+  );
   const testCase = draft.eval ? { ...draft, eval: normalizeEvalToolRules(draft.eval) } : draft;
   try {
     writeFileSync(path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8', flag: 'wx' });
@@ -66,13 +75,13 @@ export function createTestCaseFile(params: {
     }
     throw error;
   }
-  return { id, path, testCase };
+  return { id, path, testCase, warnings };
 }
 
 export function readTestCaseFile(params: {
   librariesDir: string;
   filePath: string;
-}): CreatedTestCaseFile {
+}): Omit<CreatedTestCaseFile, 'warnings'> {
   const librariesDir = resolve(params.librariesDir);
   const testCasesDir = resolve(librariesDir, 'test-cases');
   const path = resolve(testCasesDir, params.filePath);
@@ -108,24 +117,28 @@ export function updateTestCaseFile(params: {
   const known = new Set(params.knownServerIds);
   const missing = servers.filter((server) => !known.has(server));
   if (missing.length) throw new Error(`Unknown MCP server(s): ${missing.join(', ')}`);
-  const draft = buildScenarioEntry({
-    id,
-    name: input.name?.trim() || id,
-    servers,
-    prompt,
-    required_tools: input.requiredTools,
-    forbidden_tools: input.forbiddenTools,
-    tool_sequence: input.toolSequence,
-    response_regex_patterns: input.responseRegexPatterns,
-    eval: input.eval,
-    extract_rules: input.extractRules
-  });
+  const warnings: string[] = [];
+  const draft = buildScenarioEntry(
+    {
+      id,
+      name: input.name?.trim() || id,
+      servers,
+      prompt,
+      required_tools: input.requiredTools,
+      forbidden_tools: input.forbiddenTools,
+      tool_sequence: input.toolSequence,
+      response_regex_patterns: input.responseRegexPatterns,
+      eval: input.eval,
+      extract_rules: input.extractRules
+    },
+    (items) => warnings.push(...items)
+  );
   const testCase = draft.eval ? { ...draft, eval: normalizeEvalToolRules(draft.eval) } : draft;
   const librariesDir = resolve(params.librariesDir);
   const testCasesDir = resolve(librariesDir, 'test-cases');
   assertUniqueTestCaseId(testCasesDir, id, existing.path);
   writeFileSync(existing.path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8' });
-  return { id, path: existing.path, testCase };
+  return { id, path: existing.path, testCase, warnings };
 }
 
 function assertUniqueTestCaseId(testCasesDir: string, id: string, excludingPath?: string): void {

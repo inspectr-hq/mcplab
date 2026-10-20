@@ -20,6 +20,46 @@ describe('evaluateScenario — no rules', () => {
 });
 
 describe('evaluateScenario — tool_constraints', () => {
+  it('records authored and resolved identities for aliased tool rules', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      'ok',
+      ['lookup', 'search'],
+      {
+        tool_constraints: {
+          required_tools: ['server:lookup | server:search'],
+          forbidden_tools: ['server:delete']
+        },
+        tool_sequence: ['server:lookup | server:search', 'server:search']
+      },
+      { availableToolNames: ['lookup', 'search', 'delete'] }
+    );
+    expect(
+      result.check_results.find((check) => check.type === 'required_tool')?.metadata
+    ).toMatchObject({
+      expression: 'lookup|search',
+      source_expression: 'server:lookup|server:search'
+    });
+    expect(
+      result.check_results.find((check) => check.type === 'forbidden_tool')?.metadata
+    ).toMatchObject({
+      expression: 'delete',
+      source_expression: 'server:delete'
+    });
+    expect(
+      result.check_results.find((check) => check.type === 'tool_sequence')?.metadata
+    ).toMatchObject({
+      expected: ['lookup|search', 'search'],
+      source_expected: ['server:lookup|server:search', 'server:search']
+    });
+    const skipped = buildNotExecutedCheckResults(
+      { tool_constraints: { required_tools: ['server:lookup | server:search'] } },
+      ['lookup', 'search']
+    );
+    expect(skipped[0].metadata).toMatchObject({
+      expression: 'lookup|search',
+      source_expression: 'server:lookup|server:search'
+    });
+  });
   it.each([
     { calls: ['search'], pass: true },
     { calls: ['lookup'], pass: true },
@@ -94,6 +134,35 @@ describe('evaluateScenario — tool_constraints', () => {
     );
     const result = evaluateScenario('response', ['mcplab_aggregate_runs'], rules);
     expect(result.pass).toBe(true);
+  });
+
+  it('deduplicates alternatives that resolve to the same exposed tool', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      'response',
+      ['search'],
+      { tool_constraints: { required_tools: ['srv:search|search'] } },
+      { availableToolNames: ['search'] }
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      status: 'passed',
+      metadata: {
+        expression: 'search',
+        alternatives: ['search'],
+        matched_tools: ['search'],
+        source_expression: 'srv:search|search'
+      }
+    });
+  });
+
+  it('keeps tool-input assertion tool names exact during alias resolution', () => {
+    const rules = normalizeToolConstraintAliases(
+      { tool_input_assertions: [{ type: 'contains', tool: 'srv:search', value: 'query' }] },
+      ['search']
+    );
+
+    expect(rules?.tool_input_assertions?.[0].tool).toBe('srv:search');
   });
 
   it('does not resolve an unknown or ambiguous-looking prefixed tool', () => {

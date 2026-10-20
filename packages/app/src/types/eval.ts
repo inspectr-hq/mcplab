@@ -12,7 +12,12 @@ export {
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
-  normalizeEvaluationDecisionConfig
+  normalizeEvaluationDecisionConfig,
+  formatToolSequenceLabel,
+  formatToolAlternatives,
+  parseToolAlternatives,
+  normalizeToolExpression,
+  validateEvalToolRules
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 

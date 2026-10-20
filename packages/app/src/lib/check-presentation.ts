@@ -3,11 +3,12 @@ import type { CheckResult, EvalRule } from '@/types/eval';
 import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
-  formatToolSequenceLabel
+  formatToolSequenceLabel,
+  normalizeToolExpression
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
-import { formatToolAlternatives } from '@inspectr/mcplab-core';
+import { formatToolAlternatives } from '@/lib/data-sources/types';
 
 const evaluatorProviderLabels: Record<string, string> = {
   openai: 'OpenAI',
@@ -236,7 +237,14 @@ export function matchFailureReasonForRule(
   }
 
   const expectedPrefix = (() => {
-    if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
+    if (rule.type === 'required_tool') {
+      const expression = String(rule.value ?? '');
+      try {
+        return `Required tool not used: ${formatToolAlternatives(expression)}`;
+      } catch {
+        return `Required tool not used: ${expression}`;
+      }
+    }
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
     if (rule.type === 'tool_sequence')
       return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
@@ -259,6 +267,12 @@ export function matchFailureReasonForRule(
   })();
   if (!expectedPrefix) return undefined;
 
+  if (rule.type === 'required_tool') {
+    const legacyReason = `Required tool not used: ${String(rule.value ?? '')}`;
+    const legacyMatch = failureReasons.find((reason) => reason === legacyReason);
+    if (legacyMatch) return legacyMatch;
+  }
+
   const exact = failureReasons.find((reason) => reason === expectedPrefix);
   if (exact) return exact;
 
@@ -275,11 +289,29 @@ export function matchFailureReasonForRule(
   }
 
   if (rule.type === 'tool_sequence') {
+    const canonicalSequence = (rule.sequence ?? []).map((expression) => {
+      try {
+        return normalizeToolExpression(expression);
+      } catch {
+        return expression;
+      }
+    });
+    const missingStepReasons = (rule.sequence ?? []).flatMap((expression) => {
+      const reasons = new Set<string>([`Required tool in sequence not used: ${expression}`]);
+      try {
+        reasons.add(`Required tool in sequence not used: ${formatToolAlternatives(expression)}`);
+      } catch {
+        // Keep legacy raw-expression matching for malformed historical rules.
+      }
+      return [...reasons];
+    });
+    const orderFailureReasons = [
+      `Tool sequence order was not satisfied: ${canonicalSequence.join(' -> ')}`,
+      `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`,
+      `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`
+    ];
     return failureReasons.find(
-      (reason) =>
-        reason.startsWith(
-          `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
-        ) || reason.startsWith('Required tool in sequence not used:')
+      (reason) => orderFailureReasons.includes(reason) || missingStepReasons.includes(reason)
     );
   }
 

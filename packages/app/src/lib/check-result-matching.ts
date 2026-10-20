@@ -1,6 +1,22 @@
 import type { EvalRule, CheckResult } from '@/types/eval';
 import { toComparableString } from './value-normalization';
-import { normalizeToolExpression, resolveToolNameAlias } from '@inspectr/mcplab-core';
+import { normalizeToolExpression } from '@/lib/data-sources/types';
+
+function sameExpression(left: string, right: string): boolean {
+  try {
+    return normalizeToolExpression(left) === normalizeToolExpression(right);
+  } catch {
+    return false;
+  }
+}
+
+function sameSequence(left: unknown, right: string[]): boolean {
+  return (
+    Array.isArray(left) &&
+    left.length === right.length &&
+    left.every((item, index) => typeof item === 'string' && sameExpression(item, right[index]))
+  );
+}
 
 export function matchStructuredCheckResult(
   rule: EvalRule,
@@ -17,25 +33,16 @@ export function matchStructuredCheckResult(
     const sequence = rule.sequence ?? [];
     const metadataMatch = checkResults.find((result) => {
       if (result.type !== rule.type) return false;
-      const expected = result.metadata?.expected;
-      if (!Array.isArray(expected) || expected.length !== sequence.length) return false;
-      try {
-        return expected.every(
-          (expression, index) =>
-            typeof expression === 'string' &&
-            normalizeToolExpression(expression) === normalizeToolExpression(sequence[index])
-        );
-      } catch {
-        return false;
-      }
+      const sourceExpected = result.metadata?.source_expected;
+      return Array.isArray(sourceExpected) && sameSequence(sourceExpected, sequence);
     });
     return (
       metadataMatch ??
       checkResults.find(
         (result) =>
           result.type === rule.type &&
-          (result.label === formatLabel(rule) ||
-            result.label === `Tool sequence · ${sequence.join(' -> ')}`)
+          !Array.isArray(result.metadata?.source_expected) &&
+          result.label === `Tool sequence · ${sequence.join(' -> ')}`
       )
     );
   }
@@ -76,31 +83,11 @@ export function matchStructuredCheckResult(
     const metadataMatch = checkResults.find((result) => {
       if (result.type !== rule.type) return false;
       const metadata = result.metadata as Record<string, unknown> | undefined;
-      const available = [metadata?.available_tool_names, metadata?.available_tools].find(
-        (names): names is string[] =>
-          Array.isArray(names) && names.every((name) => typeof name === 'string')
-      );
-      const resolve = available
-        ? (name: string) => resolveToolNameAlias(name, available)
-        : undefined;
-      const equal = (expression: string) => {
-        try {
-          return (
-            normalizeToolExpression(expression, resolve) ===
-            normalizeToolExpression(expected, resolve)
-          );
-        } catch {
-          return false;
-        }
-      };
-      const expressions = [metadata?.expression].filter(
-        (candidate): candidate is string => typeof candidate === 'string'
-      );
-      if (expressions.some(equal)) return true;
-      const alternatives = metadata?.alternatives;
-      if (Array.isArray(alternatives) && alternatives.every((item) => typeof item === 'string')) {
-        if (equal(alternatives.join('|'))) return true;
-      }
+      if (
+        typeof metadata?.source_expression === 'string' &&
+        sameExpression(metadata.source_expression, expected)
+      )
+        return true;
       return false;
     });
     if (metadataMatch) return metadataMatch;
@@ -108,10 +95,13 @@ export function matchStructuredCheckResult(
 
   const expectedLabel = formatLabel(rule);
   if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') {
-    const legacyLabel = `${rule.type === 'required_tool' ? 'Required tool' : 'Forbidden tool'} · ${String(rule.value ?? '')}`;
-    return (
-      checkResults.find((result) => result.type === rule.type && result.label === legacyLabel) ??
-      checkResults.find((result) => result.type === rule.type && result.label === expectedLabel)
+    const value = String(rule.value ?? '');
+    const legacyLabel = `${rule.type === 'required_tool' ? 'Required tool' : 'Forbidden tool'} · ${value}`;
+    return checkResults.find(
+      (result) =>
+        result.type === rule.type &&
+        typeof result.metadata?.source_expression !== 'string' &&
+        result.label === legacyLabel
     );
   }
   return checkResults.find((result) => result.type === rule.type && result.label === expectedLabel);

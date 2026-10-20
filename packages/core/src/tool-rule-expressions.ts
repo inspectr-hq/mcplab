@@ -13,10 +13,7 @@ export function normalizeToolExpression(
   expression: string,
   resolveName: (name: string) => string = (name) => name
 ): string {
-  const alternatives = parseToolAlternatives(expression).map(resolveName);
-  if (new Set(alternatives).size !== alternatives.length) {
-    throw new Error(`Tool alternatives in "${expression}" resolve to duplicate names.`);
-  }
+  const alternatives = [...new Set(parseToolAlternatives(expression).map(resolveName))];
   return alternatives.join('|');
 }
 
@@ -78,10 +75,13 @@ export function validateEvalToolRules(
       throw new Error(
         `${context ?? 'Eval rules'}: ${path} expression "${expression}" is entirely forbidden.`
       );
-    if (blocked.length)
+    if (blocked.length) {
+      const authoredNames = expression.split('|').map((name) => name.trim());
+      const blockedNames = authoredNames.filter((_, index) => forbidden.has(names[index]));
       warnings.push(
-        `${context ? `${context}: ` : ''}${path} expression "${expression}" includes forbidden alternative${blocked.length > 1 ? 's' : ''}: ${blocked.join(', ')}.`
+        `${context ? `${context}: ` : ''}${path} expression "${expression}" includes forbidden alternative${blocked.length > 1 ? 's' : ''}: ${blockedNames.join(', ')}.`
       );
+    }
   };
   for (const [index, expression] of requiredRules.entries())
     validateRequired(expression, `tool_constraints.required_tools[${index}]`);

@@ -15,13 +15,7 @@ import { isAbortError, throwIfAborted } from './abort.js';
 import { isLlmAgent } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
-import {
-  discoverScenarioTools,
-  runAgentScenario,
-  type AgentRunProgressEvent,
-  type ScenarioToolCatalog
-} from './agent.js';
-import { validateEvalToolRules } from './tool-rule-expressions.js';
+import { runAgentScenario, type AgentRunProgressEvent } from './agent.js';
 import { buildNotExecutedCheckResults, normalizeToolConstraintAliases } from './eval.js';
 import { aggregateResults } from './results.js';
 import { evaluateScenarioObservation } from './scenario-observation.js';
@@ -53,7 +47,6 @@ export interface RunOptions extends WorkspaceEvaluation {
   /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
   scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
-  onWarning?: (warning: string) => void | Promise<void>;
   traceExporter?: TraceExporter;
   mcpServerUrlOverrides?: Record<string, string>;
   resolveMcpRequestHeaders?: (
@@ -142,17 +135,6 @@ export async function runAll(
 ): Promise<{ runDir: string; results: ResultsJson }> {
   throwIfAborted(options.signal);
   const scenariosToRun = filterScenariosForRun(config.scenarios, options.scenarioId);
-  const warned = new Set<string>();
-  const warn = async (warning: string) => {
-    if (warned.has(warning)) return;
-    warned.add(warning);
-    if (options.onWarning) await options.onWarning(warning);
-    else console.warn(warning);
-  };
-  for (const scenario of scenariosToRun) {
-    for (const warning of validateEvalToolRules(scenario.eval, `Scenario "${scenario.id}"`))
-      await warn(warning);
-  }
   const scenariosWithAgentChecks = scenariosToRun.filter(
     (scenario) => (scenario.eval?.agent_assertions?.length ?? 0) > 0
   );
@@ -195,36 +177,6 @@ export async function runAll(
   });
 
   const mcp = new McpClientManager();
-  const scenarioRequestHeaders = async (
-    scenario: ExecutableScenario,
-    runSignal: AbortSignal | undefined,
-    runIndex: number,
-    requestId: string
-  ) => {
-    const serverNames = scenario.servers;
-    const [clientCredentialsHeaders, externalHeaders] = await Promise.all([
-      mcp.getRequestHeadersForServers(serverNames, runSignal),
-      options.resolveMcpServerAuthHeaders?.(serverNames, { signal: runSignal }) ??
-        Promise.resolve({})
-    ]);
-    const requestHeaders = options.resolveMcpRequestHeaders
-      ? Object.fromEntries(
-          serverNames.map((serverName) => [
-            serverName,
-            options.resolveMcpRequestHeaders!({
-              phase: 'scenario',
-              runId,
-              requestId,
-              scenarioId: scenario.id,
-              agentName: scenario.agent,
-              runIndex,
-              serverName
-            }) ?? {}
-          ])
-        )
-      : undefined;
-    return mergeServerRequestHeaders(clientCredentialsHeaders, externalHeaders, requestHeaders);
-  };
   try {
     const usedServerIds = Array.from(
       new Set(scenariosToRun.flatMap((scenario) => scenario.servers))
@@ -268,45 +220,6 @@ export async function runAll(
       serverNames: usedServerIds
     });
     const mcpServerVersions = mcp.getServerVersions();
-    const preparedTools = new Map<ExecutableScenario, ScenarioToolCatalog>();
-    const preparedRules = new Map<ExecutableScenario, ExecutableScenario['eval']>();
-    for (const scenario of scenariosToRun) {
-      // Discovery prepares the entire job. Child cancellation only gates its attempts.
-      const signal = options.signal;
-      throwIfAborted(options.signal);
-      let requestId: string;
-      try {
-        requestId = buildScenarioRequestId({
-          runId,
-          scenarioId: scenario.id,
-          agentName: scenario.agent,
-          scenarioExecId: scenario.scenario_exec_id,
-          runIndex: 0
-        });
-      } catch {
-        requestId = buildFallbackScenarioRequestId({
-          runId,
-          runIndex: 0,
-          scenarioAgent: scenario.agent
-        });
-      }
-      const catalog = await discoverScenarioTools({
-        scenario,
-        mcp,
-        signal,
-        requestId,
-        serverRequestHeaders: await scenarioRequestHeaders(scenario, signal, 0, requestId)
-      });
-      const names = [...catalog.keys()];
-      for (const warning of validateEvalToolRules(
-        scenario.eval,
-        `Scenario "${scenario.id}"`,
-        names
-      ))
-        await warn(warning);
-      preparedTools.set(scenario, catalog);
-      preparedRules.set(scenario, normalizeToolConstraintAliases(scenario.eval, names));
-    }
 
     const scenarioRuns: Array<{
       scenario_id: string;
@@ -334,7 +247,7 @@ export async function runAll(
         throw new Error(`Browser agent '${scenario.agent}' must be dispatched through Rover.`);
       }
       const runs: ScenarioRunResult[] = [];
-      const effectiveScenarioEval = preparedRules.get(scenario) ?? scenario.eval;
+      let effectiveScenarioEval = scenario.eval;
       const scenarioSignal = options.scenarioSignal?.(scenario, 0) ?? options.signal;
 
       for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
@@ -390,10 +303,34 @@ export async function runAll(
             scenario,
             agent,
             mcp,
-            preparedTools: preparedTools.get(scenario),
             requestId,
-            resolveServerRequestHeaders: async () => {
-              return scenarioRequestHeaders(scenario, runSignal, runIndex, requestId);
+            resolveServerRequestHeaders: async (serverNames) => {
+              const [clientCredentialsHeaders, externalHeaders] = await Promise.all([
+                mcp.getRequestHeadersForServers(serverNames, runSignal),
+                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: runSignal }) ??
+                  Promise.resolve({})
+              ]);
+              const requestHeaders = options.resolveMcpRequestHeaders
+                ? Object.fromEntries(
+                    serverNames.map((serverName) => [
+                      serverName,
+                      options.resolveMcpRequestHeaders!({
+                        phase: 'scenario',
+                        runId,
+                        requestId,
+                        scenarioId: scenario.id,
+                        agentName: scenario.agent,
+                        runIndex,
+                        serverName
+                      }) ?? {}
+                    ])
+                  )
+                : undefined;
+              return mergeServerRequestHeaders(
+                clientCredentialsHeaders,
+                externalHeaders,
+                requestHeaders
+              );
             },
             maxTurns: agent.max_turns,
             signal: runSignal,
@@ -407,8 +344,12 @@ export async function runAll(
               });
             }
           });
+          effectiveScenarioEval = normalizeToolConstraintAliases(
+            scenario.eval,
+            runResult.availableToolNames
+          );
           const scenarioRun = await evaluateScenarioObservation({
-            scenario: { ...scenario, eval: effectiveScenarioEval },
+            scenario,
             runIndex,
             observation: {
               finalText: runResult.finalText,

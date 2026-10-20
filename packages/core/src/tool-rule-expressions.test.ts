@@ -41,12 +41,10 @@ describe('tool rule expressions', () => {
     expect(parseToolAlternatives(' a | b ')).toEqual(['a', 'b']);
     expect(formatToolAlternatives(' a | b ')).toBe('a OR b');
   });
-  it('rejects empty, duplicate, and alias-colliding alternatives', () => {
+  it('rejects empty and authored duplicate alternatives', () => {
     expect(() => parseToolAlternatives('a||b')).toThrow();
     expect(() => parseToolAlternatives('a|a')).toThrow();
-    expect(() =>
-      normalizeToolExpression('x|y', (name) => (name === 'x' || name === 'y' ? 'z' : name))
-    ).toThrow();
+    expect(normalizeToolExpression('x|y', () => 'z')).toBe('z');
   });
   it('validates forbidden alternatives and warns on partial overlap', () => {
     expect(() =>
@@ -81,15 +79,27 @@ describe('tool rule expressions', () => {
         ['delete', 'search']
       )
     ).toHaveLength(1);
-    expect(() =>
+    expect(
       validateEvalToolRules(
-        {
-          tool_constraints: { required_tools: ['server:lookup|lookup'] }
-        },
+        { tool_constraints: { required_tools: ['server:lookup|lookup'] } },
         'scenario',
         ['lookup']
       )
-    ).toThrow(/duplicate names/);
+    ).toEqual([]);
+    expect(() =>
+      validateEvalToolRules({ tool_constraints: { required_tools: ['lookup|lookup'] } })
+    ).toThrow(/Duplicate tool alternative/);
+  });
+  it('keeps equivalent static and discovered warnings identical for authored aliases', () => {
+    const rules = {
+      tool_constraints: {
+        required_tools: ['server:search | lookup'],
+        forbidden_tools: ['server:search']
+      }
+    };
+    expect(validateEvalToolRules(rules, 'Scenario "test"', ['search', 'lookup'])).toEqual(
+      validateEvalToolRules(rules, 'Scenario "test"')
+    );
   });
 
   it('reports malformed runtime arrays with rule paths', () => {

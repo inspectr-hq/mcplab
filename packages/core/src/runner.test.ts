@@ -24,6 +24,66 @@ afterEach(() => {
 });
 
 describe('runAll agent dispatch', () => {
+  it('evaluates alias alternatives during each run and isolates later discovery errors', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-alternatives-'));
+    temporaryRunDirs.push(runsDir);
+    const logError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    runAgentScenarioMock
+      .mockResolvedValueOnce({
+        finalText: 'done',
+        toolCalls: [{ name: 'search', arguments: {} }],
+        toolDurationsMs: [],
+        availableToolNames: ['search'],
+        toolSequence: ['search'],
+        traceMessages: [],
+        traceModel: 'test',
+        traceProvider: 'openai'
+      })
+      .mockRejectedValueOnce(new Error('Tool discovery failed'));
+    try {
+      const { results } = await runAll(
+        {
+          servers: {},
+          agents: { agent: { provider: 'openai', model: 'test' } },
+          scenarios: ['first', 'second'].map((id) => ({
+            id,
+            prompt: 'test',
+            agent: 'agent',
+            servers: [],
+            eval: { tool_constraints: { required_tools: ['srv:search | search'] } }
+          }))
+        } as any,
+        {
+          runsPerScenario: 1,
+          configHash: 'test',
+          cliVersion: 'test',
+          runsDir,
+          traceExporter: {
+            startScenario: () => ({ end: async () => undefined }),
+            flush: async () => ({ traceUrls: {} })
+          }
+        }
+      );
+      expect(results.scenarios[0].runs[0]).toMatchObject({ pass: true });
+      expect(results.scenarios[0].runs[0].check_results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              expression: 'search',
+              source_expression: 'srv:search|search'
+            })
+          })
+        ])
+      );
+      expect(results.scenarios[1].runs[0]).toMatchObject({
+        outcome: 'error',
+        error: 'Tool discovery failed'
+      });
+    } finally {
+      logError.mockRestore();
+    }
+  });
+
   it('keeps an evaluated run when trace cleanup fails after a late child stop', async () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-recorded-stop-'));
     temporaryRunDirs.push(runsDir);

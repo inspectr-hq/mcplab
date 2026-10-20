@@ -64,6 +64,71 @@ it('round-trips spaced tool expressions and writes canonical YAML expressions', 
   expect(evalBlock['tool_sequence']).toEqual(['lookup|search', 'lookup|search']);
 });
 
+it('skips stale blank tool rules', () => {
+  const config: EvalConfig = {
+    id: 'cfg-blank-tool-rules',
+    name: 'blank-tool-rules',
+    createdAt: '2026-04-01T10:00:00.000Z',
+    updatedAt: '2026-04-01T10:00:00.000Z',
+    servers: [],
+    agents: [],
+    scenarios: [
+      {
+        id: 'scn-blank-tool-rules',
+        name: 'Blank tool rules',
+        serverIds: [],
+        prompt: 'test',
+        evalRules: [
+          { type: 'required_tool' },
+          { type: 'required_tool', value: '' },
+          { type: 'required_tool', value: '  ' },
+          { type: 'forbidden_tool', value: 42 },
+          { type: 'forbidden_tool', value: ' ' },
+          { type: 'tool_sequence', sequence: ['', '  ', 'search'] }
+        ],
+        extractRules: []
+      }
+    ]
+  };
+  const output = toCoreConfigYaml(config);
+  const scenario = (output.scenarios as unknown as AnyRecord[])[0];
+  expect(scenario?.['eval']).toMatchObject({ tool_sequence: ['search'] });
+});
+
+it('preserves malformed nonblank tool rules for validation at the backend boundary', () => {
+  const output = toCoreConfigYaml({
+    id: 'cfg-malformed-tool-rules',
+    name: 'malformed-tool-rules',
+    createdAt: '2026-04-01T10:00:00.000Z',
+    updatedAt: '2026-04-01T10:00:00.000Z',
+    servers: [],
+    agents: [],
+    scenarios: [
+      {
+        id: 'scn-malformed-tool-rules',
+        name: 'Malformed tool rules',
+        serverIds: [],
+        prompt: 'test',
+        evalRules: [
+          { type: 'required_tool', value: ' search||lookup ' },
+          { type: 'required_tool', value: 'duplicate|duplicate' },
+          { type: 'forbidden_tool', value: ' delete | all ' },
+          { type: 'tool_sequence', sequence: [' lookup |', 'fetch|fetch'] }
+        ],
+        extractRules: []
+      }
+    ]
+  });
+  const scenario = (output.scenarios as unknown as AnyRecord[])[0];
+  expect(scenario?.['eval']).toMatchObject({
+    tool_constraints: {
+      required_tools: ['search||lookup', 'duplicate|duplicate'],
+      forbidden_tools: ['delete | all']
+    },
+    tool_sequence: ['lookup |', 'fetch|fetch']
+  });
+});
+
 it('maps app LLM providers to their core provider names', () => {
   const libraries = toCoreLibraries({
     agents: [

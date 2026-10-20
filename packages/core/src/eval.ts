@@ -45,7 +45,18 @@ export interface EvaluateScenarioWithAgentChecksOptions {
   scenarioPrompt?: string;
 }
 
-export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
+export function buildNotExecutedCheckResults(
+  evalRules?: EvalRules,
+  availableToolNames?: string[]
+): CheckResult[] {
+  if (availableToolNames) {
+    const resolvedRules = normalizeToolConstraintAliases(evalRules, availableToolNames);
+    return withSourceToolRuleMetadata(
+      buildNotExecutedCheckResults(resolvedRules),
+      evalRules,
+      resolvedRules
+    );
+  }
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
@@ -176,7 +187,7 @@ export async function evaluateScenarioWithAgentChecks(
   const normalizedRules = normalizeToolConstraintAliases(evalRules, options?.availableToolNames);
   const base = evaluateScenario(finalText, toolSequence, normalizedRules, options?.toolCalls ?? []);
   const failures = [...base.failures];
-  const check_results = [...base.check_results];
+  const check_results = withSourceToolRuleMetadata(base.check_results, evalRules, normalizedRules);
 
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
@@ -258,6 +269,41 @@ export async function evaluateScenarioWithAgentChecks(
   return { pass: failures.length === 0, failures, check_results };
 }
 
+function withSourceToolRuleMetadata(
+  checks: CheckResult[],
+  authored: EvalRules | undefined,
+  resolved: EvalRules | undefined
+): CheckResult[] {
+  let requiredIndex = 0;
+  let forbiddenIndex = 0;
+  return checks.map((check): CheckResult => {
+    if (check.type === 'required_tool' || check.type === 'forbidden_tool') {
+      const key = check.type === 'required_tool' ? 'required_tools' : 'forbidden_tools';
+      const index = check.type === 'required_tool' ? requiredIndex++ : forbiddenIndex++;
+      return {
+        ...check,
+        metadata: {
+          ...check.metadata,
+          source_expression: normalizeToolExpression(authored!.tool_constraints![key]![index]),
+          expression: normalizeToolExpression(resolved!.tool_constraints![key]![index])
+        }
+      };
+    }
+    if (check.type === 'tool_sequence') {
+      return {
+        ...check,
+        metadata: {
+          ...check.metadata,
+          source_expected: authored!.tool_sequence!.map((expression) =>
+            normalizeToolExpression(expression)
+          )
+        }
+      };
+    }
+    return check;
+  });
+}
+
 /** Resolve client display aliases such as `MCPLab:tool_name` to exposed MCP names. */
 export function normalizeToolConstraintAliases(
   evalRules: EvalRules | undefined,
@@ -288,14 +334,6 @@ export function normalizeToolConstraintAliases(
     ...(evalRules.tool_sequence
       ? { tool_sequence: evalRules.tool_sequence.map((x) => normalizeToolExpression(x, resolve)) }
       : {}),
-    ...(evalRules.tool_input_assertions
-      ? {
-          tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({
-            ...a,
-            tool: resolve(a.tool)
-          }))
-        }
-      : {})
   };
 }
 

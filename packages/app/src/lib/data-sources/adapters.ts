@@ -28,12 +28,10 @@ import {
   inferAttachmentMediaType
 } from '../../../../core/src/attachments';
 import type {
-  AgentConfig as CoreAgentConfig,
-  CheckResult as CoreCheckResult,
+  CoreAgentConfig,
+  CoreCheckResult,
   ScenarioAttachment,
-  SourceScenarioAttachment
-} from '@inspectr/mcplab-core';
-import type {
+  SourceScenarioAttachment,
   CoreEvalConfig,
   CoreResultsJson,
   CoreScenarioRun,
@@ -44,8 +42,7 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
-import { normalizeToolExpression } from '@inspectr/mcplab-core';
-import { tallyCheckCounts } from '@inspectr/mcplab-core';
+import { normalizeToolExpression, tallyCheckCounts } from './types';
 import { toComparableString } from '../value-normalization';
 
 const coreLlmProvider = {
@@ -268,23 +265,29 @@ function buildCoreEvalBlock(
       agent_context?: AgentContext;
     }
   | undefined {
-  const normalizeRuleExpression = (rule: EvalRule): string => {
-    if (typeof rule.value !== 'string')
-      throw new Error('Tool checks require a tool expression string.');
-    return normalizeToolExpression(rule.value);
+  const normalizeExpressionForSave = (expression: string): string => {
+    const trimmed = expression.trim();
+    try {
+      return normalizeToolExpression(trimmed);
+    } catch {
+      return trimmed;
+    }
   };
   const required_tools = evalRules
-    .filter((rule) => rule.type === 'required_tool')
-    .map(normalizeRuleExpression)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    .filter(
+      (rule) => rule.type === 'required_tool' && typeof rule.value === 'string' && rule.value.trim()
+    )
+    .map((rule) => normalizeExpressionForSave(rule.value as string));
   const forbidden_tools = evalRules
-    .filter((rule) => rule.type === 'forbidden_tool')
-    .map(normalizeRuleExpression)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    .filter(
+      (rule) =>
+        rule.type === 'forbidden_tool' && typeof rule.value === 'string' && rule.value.trim()
+    )
+    .map((rule) => (rule.value as string).trim());
   const tool_sequence = evalRules
     .find((rule) => rule.type === 'tool_sequence')
-    ?.sequence?.map((value) => normalizeToolExpression(value))
-    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    ?.sequence?.filter((value) => typeof value === 'string' && value.trim())
+    .map(normalizeExpressionForSave);
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));

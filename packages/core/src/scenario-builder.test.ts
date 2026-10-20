@@ -2,16 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { buildScenarioEntry } from './scenario-builder.js';
 
 describe('buildScenarioEntry tool expressions', () => {
-  it('validates alternatives while preserving draft spacing and repeated steps', () => {
+  it('trims and deduplicates shorthand rules while preserving repeated steps', () => {
     const scenario = buildScenarioEntry({
       id: 'draft',
       servers: ['server'],
       prompt: 'Search twice.',
-      required_tools: [' search | lookup '],
+      required_tools: [' search | lookup ', 'search | lookup'],
+      forbidden_tools: [' remove ', 'remove'],
       tool_sequence: ['search | lookup', 'search | lookup']
     });
-    expect(scenario.eval?.tool_constraints?.required_tools).toEqual([' search | lookup ']);
+    expect(scenario.eval?.tool_constraints?.required_tools).toEqual(['search | lookup']);
+    expect(scenario.eval?.tool_constraints?.forbidden_tools).toEqual(['remove']);
     expect(scenario.eval?.tool_sequence).toEqual(['search | lookup', 'search | lookup']);
+  });
+
+  it('preserves canonical eval expression spelling', () => {
+    const scenario = buildScenarioEntry({
+      id: 'draft',
+      servers: ['server'],
+      prompt: 'Search.',
+      eval: { tool_constraints: { required_tools: [' search | lookup '] } }
+    });
+    expect(scenario.eval?.tool_constraints?.required_tools).toEqual([' search | lookup ']);
   });
 
   it('rejects empty and duplicate alternatives', () => {
