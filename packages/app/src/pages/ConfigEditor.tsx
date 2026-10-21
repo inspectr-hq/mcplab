@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
@@ -80,6 +80,9 @@ const ConfigEditor = () => {
     loading: librariesLoading
   } = useLibraries();
   const defaultEvaluationAgent = useDefaultEvaluationAgent();
+  const hasLoadedLibraries = useRef(false);
+  if (!librariesLoading) hasLoadedLibraries.current = true;
+  const librariesReady = hasLoadedLibraries.current;
 
   const isNew = id === 'new';
   const isView = !isNew && !!id;
@@ -960,7 +963,7 @@ const ConfigEditor = () => {
             <div className="mb-4">
               <WorkspaceDefaultAgentNotice
                 {...defaultEvaluationAgent}
-                loading={defaultEvaluationAgent.loading || librariesLoading}
+                loading={defaultEvaluationAgent.loading || !librariesReady}
                 agents={libAgents}
               />
             </div>

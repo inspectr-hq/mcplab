@@ -8,21 +8,30 @@ export function useDefaultEvaluationAgent() {
   });
   useEffect(() => {
     let current = true;
-    setState({ loading: true });
-    source.getWorkspaceSettings().then(
-      (settings) => {
-        if (current) setState({ name: settings?.defaultEvaluationAgentName, loading: false });
-      },
-      () => {
-        if (current)
-          setState({
-            loading: false,
-            error: 'Could not load the workspace default agent. Reload this page to try again.'
-          });
+    let loaded = false;
+    let requestVersion = 0;
+    const load = async () => {
+      const version = ++requestVersion;
+      if (!loaded) setState((previous) => ({ ...previous, loading: true, error: undefined }));
+      try {
+        const settings = await source.getWorkspaceSettings();
+        if (!current || version !== requestVersion) return;
+        loaded = true;
+        setState({ name: settings?.defaultEvaluationAgentName, loading: false });
+      } catch {
+        if (!current || version !== requestVersion) return;
+        setState((previous) => ({
+          ...previous,
+          loading: false,
+          error: 'Could not load the workspace default agent. Reload this page to try again.'
+        }));
       }
-    );
+    };
+    void load();
+    window.addEventListener('focus', load);
     return () => {
       current = false;
+      window.removeEventListener('focus', load);
     };
   }, [source]);
   return state;

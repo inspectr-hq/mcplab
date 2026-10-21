@@ -20,13 +20,30 @@ export function resolveRunAgentSelection(params: RunAgentSelectionParams): RunAg
     );
   }
   const defaults = selectDefaultAgents(params);
-  const selection = params.requestedAgentNames?.length
-    ? { agentNames: [...params.requestedAgentNames], source: 'requested' as const }
-    : defaults;
+  const selection =
+    params.requestedAgentNames !== undefined
+      ? { agentNames: [...params.requestedAgentNames], source: 'requested' as const }
+      : defaults;
   if (selection.source === 'workspace_default' && params.availableAgents) {
     requireLlmAgent(params.availableAgents, selection.agentNames[0]!, 'Default evaluation agent');
   }
   return { ...selection, agentNames: [...selection.agentNames] };
+}
+
+export function resolveLoadedRunAgents(
+  loaded: { declaredAgentNames: string[] },
+  config: Pick<EvalConfig, 'agents' | 'run_defaults'>,
+  requestedAgentNames?: string[],
+  defaultEvaluationAgentName?: string,
+  options: { validateAvailableAgents?: boolean } = {}
+): RunAgentSelection {
+  return resolveRunAgentSelection({
+    declaredAgentNames: loaded.declaredAgentNames,
+    selectedAgentNames: config.run_defaults?.selected_agents,
+    requestedAgentNames,
+    availableAgents: options.validateAvailableAgents === false ? undefined : config.agents,
+    defaultEvaluationAgentName
+  });
 }
 
 function selectDefaultAgents(params: RunAgentSelectionParams): RunAgentSelection {

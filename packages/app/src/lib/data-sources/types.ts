@@ -102,6 +102,8 @@ export {
   parseToolAlternatives,
   isValidToolExpression,
   tallyCheckCounts,
+  isLlmAgent,
+  resolveLoadedRunAgents,
   resolveRunAgentSelection
 } from '@inspectr/mcplab-core';
 

@@ -33,6 +33,15 @@ describe('resolveRunAgentSelection', () => {
   it('returns no agents when nothing is configured, without selecting the whole library', () => {
     expect(resolveRunAgentSelection({ declaredAgentNames: [] }).agentNames).toEqual([]);
   });
+  it('respects an explicitly empty agent request instead of falling back to workspace defaults', () => {
+    expect(
+      resolveRunAgentSelection({
+        declaredAgentNames: [],
+        requestedAgentNames: [],
+        defaultEvaluationAgentName: 'workspace'
+      })
+    ).toEqual({ agentNames: [], source: 'requested' });
+  });
   it('rejects evaluation defaults outside declared agents instead of silently substituting', () => {
     expect(() => resolveRunAgentSelection({ ...base, selectedAgentNames: ['deleted'] })).toThrow(
       'Evaluation default agents must be declared in the evaluation: deleted'

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import kleur from 'kleur';
 import {
-  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
   loadConfig,
   loadWorkspaceSettingsOverrides,
   type EvalConfig,
@@ -48,7 +48,7 @@ export interface RunInteractiveSelectionOptions {
   promptAgentSelection?: boolean;
   loadConfigForValidation: (path: string) => {
     config: EvalConfig;
-    agentSelection?: RunAgentSelection;
+    agentSelection: RunAgentSelection;
   };
 }
 
@@ -57,12 +57,13 @@ export function loadInteractiveConfig(
 ): ReturnType<typeof loadConfig> & { agentSelection: RunAgentSelection } {
   const loaded = loadConfig(path);
   const libraries = readLibraries(loaded.bundleRoot);
-  const agentSelection = resolveRunAgentSelection({
-    declaredAgentNames: loaded.declaredAgentNames,
-    selectedAgentNames: loaded.config.run_defaults?.selected_agents,
-    defaultEvaluationAgentName: loadWorkspaceSettingsOverrides(loaded.bundleRoot)
-      .default_evaluation_agent_name
-  });
+  const agentSelection = resolveLoadedRunAgents(
+    loaded,
+    loaded.config,
+    undefined,
+    loadWorkspaceSettingsOverrides(loaded.bundleRoot).default_evaluation_agent_name,
+    { validateAvailableAgents: false }
+  );
   // Keep the fallback visible in the prompt; validate it only if the user chooses it.
   return {
     ...loaded,
@@ -211,13 +212,7 @@ export async function runInteractiveSelection(
 
     const loaded = opts.loadConfigForValidation(configPath);
     const agentIds = Object.keys(loaded.config.agents);
-    const selection =
-      loaded.agentSelection ??
-      resolveRunAgentSelection({
-        declaredAgentNames: agentIds,
-        selectedAgentNames: loaded.config.run_defaults?.selected_agents
-      });
-    const agentMode = await promptForAgentMode(ask, agentIds, selection);
+    const agentMode = await promptForAgentMode(ask, agentIds, loaded.agentSelection);
 
     if (agentMode === 'specific') {
       const agents = await promptForSpecificAgents(ask, agentIds);

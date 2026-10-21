@@ -124,6 +124,59 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it('refreshes the workspace default on focus without disabling agents during library refresh', async () => {
+    configsRef.value = [
+      {
+        id: 'empty',
+        name: 'Empty',
+        sourcePath: '/empty.yaml',
+        agents: [],
+        scenarios: [
+          {
+            id: 's1',
+            name: 'Test',
+            prompt: 'test',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    const agentA: AgentConfig = {
+      id: 'agent-a',
+      name: 'Agent A',
+      provider: 'openai',
+      model: 'test',
+      maxTokens: 100
+    };
+    const agentB: AgentConfig = { ...agentA, id: 'agent-b', name: 'Agent B' };
+    libraryAgentsRef.value = [agentA, agentB];
+    sourceMock.getWorkspaceSettings
+      .mockResolvedValueOnce({ defaultEvaluationAgentName: 'agent-a' })
+      .mockResolvedValueOnce({ defaultEvaluationAgentName: 'agent-b' });
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Agent A' })).toBeChecked());
+    const runButton = screen.getByRole('button', { name: 'Run' });
+    expect(runButton).toBeEnabled();
+    libraryLoadingRef.value = true;
+    act(() => window.dispatchEvent(new Event('focus')));
+
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Agent B' })).toBeChecked());
+    expect(screen.getByRole('checkbox', { name: 'Agent A' })).not.toBeChecked();
+    expect(runButton).toBeEnabled();
+  });
+
   it.each([false, true])(
     'sends inherited intent unless the user changes the selection, edited=%s',
     async (edited) => {

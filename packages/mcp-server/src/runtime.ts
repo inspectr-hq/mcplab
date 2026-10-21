@@ -22,7 +22,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
   loadConfig,
   expandConfigForAgents,
-  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
   hashConfig,
   runAll,
   loadWorkspaceSettingsOverrides,
@@ -2080,12 +2080,12 @@ export function registerTools(server: McpServer): void {
         });
         const effectiveConfigHash = hashConfig(runtimeOverridden);
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
-        const selection = resolveRunAgentSelection({
-          declaredAgentNames: loaded.declaredAgentNames,
-          availableAgents: runtimeOverridden.agents,
-          selectedAgentNames: runtimeOverridden.run_defaults?.selected_agents,
-          defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
-        });
+        const selection = resolveLoadedRunAgents(
+          loaded,
+          runtimeOverridden,
+          undefined,
+          workspaceSettings.default_evaluation_agent_name
+        );
         const executable = expandConfigForAgents(runtimeOverridden, selection.agentNames);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,

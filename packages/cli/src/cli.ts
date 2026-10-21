@@ -11,7 +11,7 @@ import {
   selectScenarios,
   runAll,
   resolveWorkspaceEvaluation,
-  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
@@ -786,13 +786,12 @@ async function executeSingleConfigRun(params: {
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
-  const selection = resolveRunAgentSelection({
-    declaredAgentNames: loaded.declaredAgentNames,
-    availableAgents: runtimeOverriddenConfig.agents,
-    selectedAgentNames: runtimeOverriddenConfig.run_defaults?.selected_agents,
-    requestedAgentNames: requestedAgents,
-    defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
-  });
+  const selection = resolveLoadedRunAgents(
+    loaded,
+    runtimeOverriddenConfig,
+    requestedAgents,
+    workspaceSettings.default_evaluation_agent_name
+  );
   const effectiveAgents = selection.agentNames;
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
   console.log(

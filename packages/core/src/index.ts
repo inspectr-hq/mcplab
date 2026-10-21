@@ -1,5 +1,9 @@
 export * from './types.js';
-export { resolveRunAgentSelection, NO_EVALUATION_AGENTS_MESSAGE } from './run-agent-selection.js';
+export {
+  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
+  NO_EVALUATION_AGENTS_MESSAGE
+} from './run-agent-selection.js';
 export * from './server-constants.js';
 export { tallyCheckCounts } from './check-counts.js';
 export { readBrowserProviderProfiles } from './browser-provider-store.js';

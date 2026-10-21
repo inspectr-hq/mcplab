@@ -18,6 +18,8 @@ export {
   parseToolAlternatives,
   isValidToolExpression,
   formatToolSequenceLabel,
+  isLlmAgent,
+  resolveLoadedRunAgents,
   resolveRunAgentSelection
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;

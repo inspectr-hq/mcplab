@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -19,6 +19,9 @@ import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings
 const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
+  const hasLoadedLibraries = useRef(false);
+  if (!librariesLoading) hasLoadedLibraries.current = true;
+  const librariesReady = hasLoadedLibraries.current;
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [assistantAgentName, setAssistantAgentName] = useState<string>('');
@@ -189,7 +192,7 @@ const SettingsPage = () => {
                   value === '__none__' ? '' : value
                 )
               }
-              disabled={savingSettings || loadingSettings || librariesLoading}
+              disabled={savingSettings || loadingSettings || !librariesReady}
             >
               <SelectTrigger
                 id="default-evaluation-agent"

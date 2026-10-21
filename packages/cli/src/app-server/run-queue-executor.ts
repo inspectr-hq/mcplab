@@ -6,6 +6,7 @@ import {
   loadConfig,
   runAll,
   resolveWorkspaceEvaluation,
+  resolveLoadedRunAgents,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -177,7 +178,6 @@ export async function executeRunJob(params: {
     getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
-    resolveRunSelectedAgents,
     readLibraries,
     pkgVersion
   } = deps;
@@ -279,12 +279,16 @@ export async function executeRunJob(params: {
         message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
       }
     });
-    const selection = requestedAgents?.length
-      ? { agentNames: requestedAgents, source: job.runParams.agentSelectionSource ?? 'requested' }
-      : resolveRunSelectedAgents(runtimeOverriddenConfig, undefined, {
-          declaredAgentNames: loaded.declaredAgentNames,
-          defaultEvaluationAgentName: settings.defaultEvaluationAgentName
-        });
+    const requestedAgentNames = requestedAgents ?? undefined;
+    const resolvedSelection = resolveLoadedRunAgents(
+      loaded,
+      runtimeOverriddenConfig,
+      requestedAgentNames,
+      settings.defaultEvaluationAgentName
+    );
+    const selection = requestedAgentNames?.length
+      ? { ...resolvedSelection, source: job.runParams.agentSelectionSource ?? 'requested' }
+      : resolvedSelection;
     const resolvedAgents = selection.agentNames;
     const source = selection.source;
     const sourceLabel = {

@@ -35,6 +35,7 @@ import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
 import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { isLlmAgent } from '@/types/eval';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 type ConversationMode = 'agent_default' | 'new' | 'same';
@@ -129,6 +130,9 @@ const RunEvaluation = () => {
     servers: libraryServers,
     reload: reloadLibraries
   } = useLibraries();
+  const hasLoadedLibraries = useRef(false);
+  if (!librariesLoading) hasLoadedLibraries.current = true;
+  const librariesReady = hasLoadedLibraries.current;
   const normalizedRunId = runId.trim();
   const resultsHref = normalizedRunId
     ? `/results/${encodeURIComponent(normalizedRunId)}${
@@ -236,7 +240,7 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   const prevConfigKeyRef = useRef('');
-  const agentsLoading = defaultEvaluationAgent.loading || librariesLoading;
+  const agentsLoading = defaultEvaluationAgent.loading || !librariesReady;
   const defaultSelection = useMemo<RunAgentSelection & { error?: string }>(() => {
     try {
       return selectedConfig
@@ -250,12 +254,14 @@ const RunEvaluation = () => {
       };
     }
   }, [selectedConfig, defaultEvaluationAgent.name]);
-  const agentSelectionError = selectedConfig?.loadError || defaultSelection.error;
+  const agentSelectionError =
+    selectedConfig?.loadError ||
+    defaultSelection.error ||
+    ((defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none') &&
+      defaultEvaluationAgent.error);
   const invalidWorkspaceDefault =
     defaultSelection.source === 'workspace_default' &&
-    availableAgents.some(
-      (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
-    );
+    availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name && !isLlmAgent(agent));
   const unavailableAgentNames = defaultSelection.agentNames.filter(
     (id) => !availableAgents.some((agent) => agent.id === id)
   );
@@ -308,6 +314,25 @@ const RunEvaluation = () => {
     agentsLoading,
     defaultSelection,
     invalidWorkspaceDefault
+  ]);
+  useEffect(() => {
+    if (
+      agentsLoading ||
+      agentSelectionEdited ||
+      (defaultSelection.source !== 'workspace_default' && defaultSelection.source !== 'none')
+    ) {
+      return;
+    }
+    const selectedAgentNames = invalidWorkspaceDefault ? [] : defaultSelection.agentNames;
+    setSelectedAgentIds(
+      selectedAgentNames.filter((id) => availableAgents.some((agent) => agent.id === id))
+    );
+  }, [
+    agentsLoading,
+    agentSelectionEdited,
+    defaultSelection,
+    invalidWorkspaceDefault,
+    availableAgents
   ]);
 
   const startWorkspaceRun = async () => {

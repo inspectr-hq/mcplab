@@ -1,5 +1,5 @@
 import {
-  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
   type EvalConfig,
   type RunAgentSelection
 } from '@inspectr/mcplab-core';
@@ -12,11 +12,10 @@ export function resolveRunSelectedAgents(
     defaultEvaluationAgentName?: string;
   }
 ): RunAgentSelection {
-  return resolveRunAgentSelection({
-    declaredAgentNames: options.declaredAgentNames,
-    selectedAgentNames: config.run_defaults?.selected_agents,
-    requestedAgentNames: requestedAgents,
-    availableAgents: config.agents,
-    defaultEvaluationAgentName: options.defaultEvaluationAgentName
-  });
+  return resolveLoadedRunAgents(
+    { declaredAgentNames: options.declaredAgentNames },
+    config,
+    requestedAgents,
+    options.defaultEvaluationAgentName
+  );
 }
