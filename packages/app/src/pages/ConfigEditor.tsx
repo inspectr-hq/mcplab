@@ -668,6 +668,7 @@ const ConfigEditor = () => {
     )
   );
   const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
+  const showMissingAgentRefs = librariesReady && missingAgentRefs.length > 0;
   const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
@@ -1305,105 +1306,109 @@ const ConfigEditor = () => {
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">
-                  {librariesReady && agentViewRows.length === 0 && (
+                  {!librariesReady && (
+                    <p className="text-xs text-muted-foreground">Loading agents…</p>
+                  )}
+                  {showMissingAgentRefs && (
                     <p className="text-xs text-destructive">
                       Referenced agents not found: {missingAgentRefs.join(', ')}
                     </p>
                   )}
-                  {agentViewRows.map((row, index) => {
-                    const name = safeText(row.agent.name, row.agent.id);
-                    const isDefault = defaultRunAgentNames.includes(
-                      row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
-                    );
-                    const viewAgentKey = row.ref ?? row.agent.id;
-                    const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
-                    return (
-                      <div
-                        key={`agent-view-${index}-${row.ref ?? row.agent.id}`}
-                        className="rounded-md border p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <span className="inline-flex min-w-0 items-center gap-2">
-                              <AgentTypeIcon agent={row.agent} />
-                              <span className="truncate font-medium text-sm">{name}</span>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isDefault && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
-                              >
-                                Default
-                              </Badge>
-                            )}
-                            <Badge
-                              variant={row.origin === 'inline' ? 'secondary' : 'outline-solid'}
-                            >
-                              {row.origin === 'inline' ? 'Inline' : 'Referenced'}
-                            </Badge>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                setExpandedViewAgentIds((prev) => ({
-                                  ...prev,
-                                  // eslint-disable-next-line no-extra-boolean-cast
-                                  [viewAgentKey]: !Boolean(prev[viewAgentKey])
-                                }))
-                              }
-                              aria-label={
-                                expanded ? 'Collapse agent details' : 'Expand agent details'
-                              }
-                            >
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ${
-                                  expanded ? 'rotate-180' : ''
-                                }`}
-                              />
-                            </Button>
-                          </div>
-                        </div>
-                        {expanded && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
-                            <ProviderBadge provider={row.agent.provider} />
-                            {row.agent.type === 'browser' ? (
-                              <>
+                  {librariesReady &&
+                    agentViewRows.map((row, index) => {
+                      const name = safeText(row.agent.name, row.agent.id);
+                      const isDefault = defaultRunAgentNames.includes(
+                        row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
+                      );
+                      const viewAgentKey = row.ref ?? row.agent.id;
+                      const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
+                      return (
+                        <div
+                          key={`agent-view-${index}-${row.ref ?? row.agent.id}`}
+                          className="rounded-md border p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                              <span className="inline-flex min-w-0 items-center gap-2">
+                                <AgentTypeIcon agent={row.agent} />
+                                <span className="truncate font-medium text-sm">{name}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isDefault && (
                                 <Badge
                                   variant="outline"
-                                  className="max-w-full truncate font-mono text-xs"
-                                  title={row.agent.url}
+                                  className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
                                 >
-                                  {row.agent.url || 'Not configured'}
+                                  Default
                                 </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {row.agent.newConversationBetweenScenarios === false
-                                    ? 'Continue same conversation'
-                                    : 'New conversation per scenario'}
-                                </Badge>
-                              </>
-                            ) : (
-                              <>
-                                <Badge variant="outline" className="text-xs font-mono">
-                                  {row.agent.model}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs font-mono">
-                                  max_tokens: {row.agent.maxTokens}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs font-mono">
-                                  temperature: {resolveAgentTemperature(row.agent.temperature)}
-                                </Badge>
-                              </>
-                            )}
+                              )}
+                              <Badge
+                                variant={row.origin === 'inline' ? 'secondary' : 'outline-solid'}
+                              >
+                                {row.origin === 'inline' ? 'Inline' : 'Referenced'}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={() =>
+                                  setExpandedViewAgentIds((prev) => ({
+                                    ...prev,
+                                    // eslint-disable-next-line no-extra-boolean-cast
+                                    [viewAgentKey]: !Boolean(prev[viewAgentKey])
+                                  }))
+                                }
+                                aria-label={
+                                  expanded ? 'Collapse agent details' : 'Expand agent details'
+                                }
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    expanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </Button>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                          {expanded && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                              <ProviderBadge provider={row.agent.provider} />
+                              {row.agent.type === 'browser' ? (
+                                <>
+                                  <Badge
+                                    variant="outline"
+                                    className="max-w-full truncate font-mono text-xs"
+                                    title={row.agent.url}
+                                  >
+                                    {row.agent.url || 'Not configured'}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {row.agent.newConversationBetweenScenarios === false
+                                      ? 'Continue same conversation'
+                                      : 'New conversation per scenario'}
+                                  </Badge>
+                                </>
+                              ) : (
+                                <>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    {row.agent.model}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    max_tokens: {row.agent.maxTokens}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    temperature: {resolveAgentTemperature(row.agent.temperature)}
+                                  </Badge>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </CardContent>
             </Card>

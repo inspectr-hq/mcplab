@@ -1071,7 +1071,7 @@ const RunEvaluation = () => {
                   {agentSelectionError}
                 </p>
               )}
-              {workspaceDefaultError && (
+              {workspaceDefaultError && !agentSelectionEdited && (
                 <p role="alert" className="text-sm text-destructive">
                   {workspaceDefaultError}{' '}
                   <Link to="/settings" className="underline">

@@ -278,6 +278,8 @@ describe('RunEvaluation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('must be an LLM agent');
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
+    expect(screen.queryByText(/must be an LLM agent/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
   });
   it('explains invalid evaluation defaults and prevents running them', async () => {
     configsRef.value = [
@@ -519,7 +521,9 @@ describe('RunEvaluation', () => {
     );
 
     expect(
-      await screen.findByText(/Could not load the workspace default agent/)
+      await screen.findByText(
+        'Could not load the workspace default agent. Select agents for this run.'
+      )
     ).toBeInTheDocument();
     const run = screen.getByRole('button', { name: 'Run' });
     expect(run).toBeDisabled();

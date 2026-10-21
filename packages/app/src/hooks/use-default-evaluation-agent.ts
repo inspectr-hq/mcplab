@@ -24,7 +24,7 @@ export function useDefaultEvaluationAgent() {
         setState((previous) => ({
           ...previous,
           loading: false,
-          error: 'Could not load the workspace default agent.'
+          error: 'Could not load the workspace default agent. Select agents for this run.'
         }));
       }
     };

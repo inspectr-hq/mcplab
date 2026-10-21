@@ -16,7 +16,8 @@ const { configRef, librariesRef, reloadMock, scenarioFormPropsRef, sourceMock } 
       value: {
         servers: [],
         agents: [],
-        scenarios: []
+        scenarios: [],
+        loading: false
       }
     },
     reloadMock: vi.fn(),
@@ -89,8 +90,31 @@ describe('ConfigEditor', () => {
     expect(await screen.findByText(/No workspace default agent is set/)).toBeInTheDocument();
   });
   it('shows missing referenced agents in view mode', async () => {
-    configRef.value!.agentEntries = [{ kind: 'referenced', ref: 'deleted-agent' }];
-    render(
+    configRef.value!.agentEntries = [
+      { kind: 'referenced', ref: 'available-agent' },
+      { kind: 'referenced', ref: 'deleted-agent' }
+    ];
+    librariesRef.value.agents = [
+      {
+        id: 'available-agent',
+        name: 'Available Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
+      }
+    ];
+    librariesRef.value.loading = true;
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Loading agents…')).toBeInTheDocument();
+
+    librariesRef.value.loading = false;
+    rerender(
       <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
         <Routes>
           <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
@@ -101,6 +125,7 @@ describe('ConfigEditor', () => {
     expect(
       await screen.findByText('Referenced agents not found: deleted-agent')
     ).toBeInTheDocument();
+    expect(screen.getByText('Available Agent')).toBeInTheDocument();
   });
   it.each(['/mcp-evaluations/cfg-1/agents', '/mcp-evaluations/cfg-1/edit?tab=agents'])(
     'shows the inherited workspace agent on %s without adding it to the evaluation',
@@ -163,7 +188,8 @@ describe('ConfigEditor', () => {
           evalRules: [],
           extractRules: []
         }
-      ]
+      ],
+      loading: false
     };
     scenarioFormPropsRef.value = null;
   });

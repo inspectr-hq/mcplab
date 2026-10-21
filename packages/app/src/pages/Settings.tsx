@@ -34,6 +34,7 @@ const SettingsPage = () => {
   const defaultAgentIsBrowser = agents.some(
     (agent) => agent.id === defaultEvaluationAgentName && agent.type === 'browser'
   );
+  const defaultAgentStatus = defaultAgentIsBrowser ? 'browser agent, not allowed' : 'unavailable';
 
   const effectiveAssistantAgentName = useMemo(
     () => assistantAgentName || agents[0]?.name || '',
@@ -208,8 +209,7 @@ const SettingsPage = () => {
                 {defaultEvaluationAgentName &&
                   !llmAgents.some((agent) => agent.id === defaultEvaluationAgentName) && (
                     <SelectItem value={defaultEvaluationAgentName} disabled>
-                      {defaultEvaluationAgentName} (
-                      {defaultAgentIsBrowser ? 'browser agent, not allowed' : 'unavailable'})
+                      {defaultEvaluationAgentName} ({defaultAgentStatus})
                     </SelectItem>
                   )}
                 {llmAgents.map((agent) => (
