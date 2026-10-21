@@ -47,6 +47,7 @@ import {
   ToolAlternativesEditor,
   ToolSequenceDisplay
 } from '@/components/config-editor/ToolAlternativesEditor';
+import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import {
@@ -656,7 +657,6 @@ function ScenarioCard({
     response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700',
     agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
   };
-  const isToolRule = newRuleType === 'required_tool' || newRuleType === 'forbidden_tool';
   const isToolInputRule = isToolInputRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
@@ -1631,6 +1631,16 @@ function ScenarioCard({
                                   Add step
                                 </Button>
                               </div>
+                            ) : newRuleType === 'forbidden_tool' ? (
+                              <ToolNameInput
+                                value={newRuleValue}
+                                onChange={setNewRuleValue}
+                                availableTools={availableToolNames}
+                                loading={toolNamesLoading}
+                                error={toolNamesError}
+                                canLoadTools={canLoadToolNames}
+                                onLoadTools={loadAvailableTools}
+                              />
                             ) : newRuleType === 'required_tool' ? (
                               <ToolAlternativesEditor
                                 value={newRuleValue}
@@ -1759,7 +1769,7 @@ function ScenarioCard({
                             )}
                           </div>
                         )}
-                        {isToolRule && (
+                        {newRuleType === 'required_tool' && (
                           <div className="space-y-1">
                             <div className="flex items-end gap-2">
                               <div className="min-w-0 flex-1">
