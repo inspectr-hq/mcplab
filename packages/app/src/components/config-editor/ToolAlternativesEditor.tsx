@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatToolAlternatives, isValidToolExpression } from '@/types/eval';
+import { isValidToolExpression, parseToolAlternatives } from '@/types/eval';
 import { ToolNameInput, type ToolNameInputProps } from '@/components/config-editor/ToolNameInput';
 
 function ToolAlternativeOrBadge() {
@@ -20,10 +20,10 @@ export function ToolAlternativesDisplay({
 }) {
   const displayClassName = `inline-flex flex-wrap items-center gap-x-1 font-mono break-all ${className}`;
   if (!isValidToolExpression(value)) {
-    return <span className={displayClassName}>{formatToolAlternatives(value)}</span>;
+    return <span className={displayClassName}>{value}</span>;
   }
 
-  const alternatives = value.split('|').map((name) => name.trim());
+  const alternatives = parseToolAlternatives(value);
   return (
     <span className={displayClassName}>
       {alternatives.map((name, index) => (

@@ -98,6 +98,7 @@ export {
   formatToolSequenceLabel,
   formatToolExpression,
   formatToolAlternatives,
+  parseToolAlternatives,
   isValidToolExpression,
   tallyCheckCounts
 } from '@inspectr/mcplab-core';

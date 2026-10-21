@@ -146,9 +146,8 @@ function parseEqualsValue(text: string): string | number | boolean | undefined {
 function getAddableToolExpression(value: string): string | null {
   const alternatives = value.split('|').map((alternative) => alternative.trim());
   while (alternatives.at(-1) === '') alternatives.pop();
-  if (alternatives.length === 0 || alternatives.some((alternative) => !alternative)) return null;
   const expression = alternatives.join('|');
-  return isValidToolExpression(expression) ? expression : null;
+  return expression && isValidToolExpression(expression) ? expression : null;
 }
 
 export function ScenarioForm({
@@ -1662,13 +1661,12 @@ function ScenarioCard({
                                 }
                               />
                             )}
-                            {!showToolSequenceEditor &&
-                              newRuleType === 'required_tool' && (
-                                <AddToolAlternativeButton
-                                  value={newRuleValue}
-                                  onChange={setNewRuleValue}
-                                />
-                              )}
+                            {newRuleType === 'required_tool' && (
+                              <AddToolAlternativeButton
+                                value={newRuleValue}
+                                onChange={setNewRuleValue}
+                              />
+                            )}
                             <Button
                               type="button"
                               variant="default"
