@@ -4,12 +4,10 @@ import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
-  formatToolSequenceText,
-  normalizeToolExpressionSafely
+  formatToolAlternatives
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
-import { formatToolAlternatives } from '@/lib/data-sources/types';
 
 const evaluatorProviderLabels: Record<string, string> = {
   openai: 'OpenAI',
@@ -172,6 +170,10 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   return `${rule.type} · ${rule.value}`;
 }
 
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
+
 export function matchFailureReasonForRule(
   rule: EvalRule,
   failureReasons: string[]
@@ -226,10 +228,7 @@ export function matchFailureReasonForRule(
   }
 
   const expectedPrefix = (() => {
-    if (rule.type === 'required_tool') {
-      const expression = String(rule.value ?? '');
-      return `Required tool not used: ${formatToolAlternatives(expression)}`;
-    }
+    if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
     if (rule.type === 'tool_sequence')
       return `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`;
@@ -252,12 +251,6 @@ export function matchFailureReasonForRule(
   })();
   if (!expectedPrefix) return undefined;
 
-  if (rule.type === 'required_tool') {
-    const legacyReason = `Required tool not used: ${String(rule.value ?? '')}`;
-    const legacyMatch = failureReasons.find((reason) => reason === legacyReason);
-    if (legacyMatch) return legacyMatch;
-  }
-
   const exact = failureReasons.find((reason) => reason === expectedPrefix);
   if (exact) return exact;
 
@@ -274,35 +267,13 @@ export function matchFailureReasonForRule(
   }
 
   if (rule.type === 'tool_sequence') {
-    const canonicalSequence = (rule.sequence ?? []).map(normalizeToolExpressionSafely);
-    const orderFailureReasons = [
-      `Tool sequence order was not satisfied: ${formatToolSequenceText(canonicalSequence)}`,
-      `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
-    ];
     return failureReasons.find(
       (reason) =>
-        orderFailureReasons.includes(reason) ||
-        matchesMissingSequenceStep(reason, rule.sequence ?? [])
+        reason.startsWith(
+          `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
+        ) || reason.startsWith('Required tool in sequence not used:')
     );
   }
 
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));
-}
-
-function matchesMissingSequenceStep(reason: string, sequence: string[]): boolean {
-  const prefix = 'Required tool in sequence not used: ';
-  if (!reason.startsWith(prefix)) return false;
-  const missingExpression = reason.slice(prefix.length);
-  return sequence.some((expression) => {
-    const canonical = normalizeToolExpressionSafely(expression);
-    // Older runs record the exposed tool name without its server prefix.
-    const unqualified = canonical
-      .split('|')
-      .map((name) => name.slice(name.lastIndexOf(':') + 1))
-      .join('|');
-    return [expression, canonical, unqualified].some(
-      (candidate) =>
-        missingExpression === candidate || missingExpression === formatToolAlternatives(candidate)
-    );
-  });
 }

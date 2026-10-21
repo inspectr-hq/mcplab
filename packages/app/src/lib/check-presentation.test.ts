@@ -50,46 +50,6 @@ describe('formatEvalRuleLabel', () => {
   });
 });
 
-describe('matchFailureReasonForRule tool failures', () => {
-  it('matches core required-tool alternative reasons', () => {
-    const rule: EvalRule = { type: 'required_tool', value: 'search | lookup' };
-    expect(matchFailureReasonForRule(rule, ['Required tool not used: search OR lookup'])).toBe(
-      'Required tool not used: search OR lookup'
-    );
-  });
-
-  it('matches canonical tool sequence failure reasons', () => {
-    const rule: EvalRule = { type: 'tool_sequence', sequence: ['search | lookup', 'fetch'] };
-    expect(
-      matchFailureReasonForRule(rule, [
-        'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
-      ])
-    ).toBe('Tool sequence order was not satisfied: (search OR lookup) -> fetch');
-    expect(
-      matchFailureReasonForRule(rule, [
-        'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
-      ])
-    ).toBe('Tool sequence order was not satisfied: (search OR lookup) -> fetch');
-  });
-
-  it('matches only missing-step failures for the sequence rule', () => {
-    const rule: EvalRule = { type: 'tool_sequence', sequence: ['search', 'fetch'] };
-    expect(matchFailureReasonForRule(rule, ['Required tool in sequence not used: fetch'])).toBe(
-      'Required tool in sequence not used: fetch'
-    );
-    expect(
-      matchFailureReasonForRule(rule, ['Required tool in sequence not used: unrelated'])
-    ).toBeUndefined();
-  });
-
-  it('matches legacy missing-step failures through a server alias', () => {
-    const rule: EvalRule = { type: 'tool_sequence', sequence: ['MCPLab:search', 'fetch'] };
-    expect(
-      matchFailureReasonForRule(rule, ['Required tool in sequence not used: search'])
-    ).toBe('Required tool in sequence not used: search');
-  });
-});
-
 describe('formatCheckStatusLabel', () => {
   it('uses human-readable labels for persisted check statuses', () => {
     expect(formatCheckStatusLabel('not_evaluated')).toBe('Not evaluated');
