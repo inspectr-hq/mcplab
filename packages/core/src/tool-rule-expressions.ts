@@ -14,19 +14,10 @@ export function parseToolAlternatives(expression: string): string[] {
 /** Canonicalize an expression and deduplicate names after optional alias mapping. */
 export function normalizeToolExpression(
   expression: string,
-  options: {
-    mapTool?: (name: string) => string;
-    allowTrailingEmpty?: boolean;
-  } = {}
+  options: { mapTool?: (name: string) => string } = {}
 ): string {
-  let input = expression;
-  if (options.allowTrailingEmpty) {
-    const alternatives = input.split('|').map((name) => name.trim());
-    while (alternatives.at(-1) === '') alternatives.pop();
-    input = alternatives.join('|');
-  }
   const mapTool = options.mapTool ?? ((name: string) => name);
-  return [...new Set(parseToolAlternatives(input).map(mapTool))].join('|');
+  return [...new Set(parseToolAlternatives(expression).map(mapTool))].join('|');
 }
 
 export function isValidToolExpression(expression: string): boolean {

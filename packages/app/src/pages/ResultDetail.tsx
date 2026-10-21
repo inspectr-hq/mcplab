@@ -54,11 +54,11 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
 import { CopyButton } from '@/components/CopyButton';
-import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -88,8 +88,7 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import {
   buildCheckItems,
-  formatCheckStatusLabel,
-  formatEvalRuleLabel
+  formatCheckStatusLabel
 } from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
@@ -1484,21 +1483,10 @@ const ResultDetail = () => {
                                                                 ) : (
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                                                 )}
-                                                                <span className="font-medium">
-                                                                  {check.rule.type ===
-                                                                  'required_tool' ? (
-                                                                    <span className="inline-flex flex-wrap items-center gap-x-1">
-                                                                      <span>Required tool ·</span>
-                                                                      <ToolAlternativesDisplay
-                                                                        value={String(
-                                                                          check.rule.value ?? ''
-                                                                        )}
-                                                                      />
-                                                                    </span>
-                                                                  ) : (
-                                                                    formatEvalRuleLabel(check.rule)
-                                                                  )}
-                                                                </span>
+                                                                <EvalRuleLabel
+                                                                  rule={check.rule}
+                                                                  className="font-medium"
+                                                                />
                                                               </div>
                                                               {check.decisionInput && (
                                                                 <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">

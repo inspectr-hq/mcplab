@@ -45,15 +45,13 @@ export function aggregateResults(params: {
       }
       if (entry.eval?.tool_constraints?.required_tools) {
         for (const tool of entry.eval.tool_constraints.required_tools) {
-          const alternatives =
-            typeof tool === 'string'
-              ? tool.split('|').map((name) => name.trim()).filter(Boolean)
-              : [];
-          const statsKey = alternatives.length > 0 ? alternatives.join('|') : String(tool);
+          const alternatives = typeof tool === 'string'
+            ? tool.split('|').map((name) => name.trim()).filter(Boolean)
+            : [];
           if (alternatives.some((name) => run.tool_usage[name])) {
-            requiredStats[statsKey] = (requiredStats[statsKey] ?? 0) + 1;
+            requiredStats[tool] = (requiredStats[tool] ?? 0) + 1;
           } else {
-            requiredStats[statsKey] ??= 0;
+            requiredStats[tool] ??= 0;
           }
         }
       }
