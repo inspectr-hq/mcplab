@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
@@ -74,11 +74,7 @@ const ConfigEditor = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
-  const {
-    servers: libServers,
-    agents: libAgents,
-    scenarios: libScenarios
-  } = useLibraries();
+  const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
   const defaultEvaluationAgent = useDefaultEvaluationAgent();
   const librariesReady = useLibrariesReady();
 

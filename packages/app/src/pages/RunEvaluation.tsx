@@ -325,12 +325,7 @@ const RunEvaluation = () => {
       return;
     }
     setSelectedAgentIds(defaultSelectedAgentIds);
-  }, [
-    agentsLoading,
-    agentSelectionEdited,
-    defaultSelection,
-    defaultSelectedAgentIds
-  ]);
+  }, [agentsLoading, agentSelectionEdited, defaultSelection, defaultSelectedAgentIds]);
 
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {

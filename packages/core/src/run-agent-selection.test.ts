@@ -104,9 +104,10 @@ describe('resolveLoadedRunAgents', () => {
         defaultEvaluationAgentName: 'library'
       })
     ).toEqual({ agentNames: ['library'], source: 'workspace_default' });
-    expect(
-      resolveLoadedRunAgents({ loaded: { declaredAgentNames: [] }, config })
-    ).toEqual({ agentNames: [], source: 'none' });
+    expect(resolveLoadedRunAgents({ loaded: { declaredAgentNames: [] }, config })).toEqual({
+      agentNames: [],
+      source: 'none'
+    });
     expect(
       resolveLoadedRunAgents({ loaded: { declaredAgentNames: ['declared'] }, config })
     ).toEqual({ agentNames: ['declared'], source: 'evaluation_agents' });
