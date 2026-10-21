@@ -39,9 +39,14 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { formatToolExpression, formatToolSequenceLabel, isValidToolExpression } from '@/types/eval';
+import { formatToolSequenceLabel, isValidToolExpression } from '@/types/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
-import { ToolAlternativesEditor } from '@/components/config-editor/ToolAlternativesEditor';
+import {
+  AddToolAlternativeButton,
+  ToolAlternativesDisplay,
+  ToolAlternativesEditor,
+  ToolSequenceDisplay
+} from '@/components/config-editor/ToolAlternativesEditor';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import {
@@ -135,6 +140,14 @@ function parseEqualsValue(text: string): string | number | boolean | undefined {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return Number.isNaN(Number(value)) ? value : Number(value);
+}
+
+function getAddableToolExpression(value: string): string | null {
+  const alternatives = value.split('|').map((alternative) => alternative.trim());
+  while (alternatives.at(-1) === '') alternatives.pop();
+  if (alternatives.length === 0 || alternatives.some((alternative) => !alternative)) return null;
+  const expression = alternatives.join('|');
+  return isValidToolExpression(expression) ? expression : null;
 }
 
 export function ScenarioForm({
@@ -439,18 +452,19 @@ function ScenarioCard({
     }
 
     if (newRuleType === 'tool_sequence') {
-      const nextSequence = toolSequenceDraft
-        .map((value) => value.trim())
-        .filter((value): value is string => typeof value === 'string' && value.length > 0);
-      if (nextSequence.length === 0) return;
+      const nextSequence = getAddableToolSequence();
+      if (!nextSequence) return;
       updateToolSequence(nextSequence);
       return;
     }
 
-    if (!newRuleValue.trim()) return;
-    if (newRuleType === 'required_tool' && !isValidToolExpression(newRuleValue)) return;
+    const value =
+      newRuleType === 'required_tool'
+        ? getAddableToolExpression(newRuleValue)
+        : newRuleValue.trim();
+    if (!value) return;
     const nextRules = [...scenario.evalRules];
-    const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
+    const nextRule = { type: newRuleType, value } as const;
     const editingIndex = findRuleIndex(valueRuleEditingRule);
     if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
     else nextRules.push(nextRule);
@@ -462,10 +476,18 @@ function ScenarioCard({
   };
 
   const addToolSequenceValue = () => {
-    const value = newToolSequenceValue.trim();
-    if (!isValidToolExpression(value)) return;
+    const value = getAddableToolExpression(newToolSequenceValue);
+    if (!value) return;
     setToolSequenceDraft((current) => [...current, value]);
     setNewToolSequenceValue('');
+  };
+
+  const getAddableToolSequence = () => {
+    const pendingValue = newToolSequenceValue.trim();
+    const pendingStep = pendingValue ? getAddableToolExpression(newToolSequenceValue) : null;
+    if (pendingValue && !pendingStep) return null;
+    const sequence = [...toolSequenceDraft, ...(pendingStep ? [pendingStep] : [])];
+    return sequence.length > 0 && sequence.every(isValidToolExpression) ? sequence : null;
   };
 
   const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
@@ -642,6 +664,26 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath_not_exists';
   const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
   const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
+  const canAddRule = () => {
+    if (isToolInputRule) {
+      return Boolean(
+        newRuleTool.trim() &&
+          (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
+      );
+    }
+    if (isJsonPathRule) return Boolean(newRulePath.trim());
+    if (newRuleType === 'agent_check') {
+      return Boolean(newRuleLabel.trim() && newRulePrompt.trim());
+    }
+    if (newRuleType === 'tool_sequence') {
+      return getAddableToolSequence() !== null;
+    }
+    if (newRuleType === 'required_tool') return getAddableToolExpression(newRuleValue) !== null;
+    if (newRuleType === 'forbidden_tool') {
+      return Boolean(newRuleValue.trim()) && !newRuleValue.includes('|');
+    }
+    return Boolean(newRuleValue.trim());
+  };
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
@@ -1367,9 +1409,7 @@ function ScenarioCard({
                                     )}
                                   </div>
                                 ) : rule.type === 'tool_sequence' ? (
-                                  <span className="font-mono break-all">
-                                    {formatToolSequenceText(rule.sequence ?? [])}
-                                  </span>
+                                  <ToolSequenceDisplay sequence={rule.sequence ?? []} />
                                 ) : isToolInputRuleType(rule.type) ? (
                                   <span className="font-mono break-all">
                                     {rule.type === 'tool_input_contains'
@@ -1389,7 +1429,7 @@ function ScenarioCard({
                                         ? `${rule.path} == ${String(rule.equals)}`
                                         : rule.path
                                       : rule.type === 'required_tool'
-                                        ? formatToolExpression(String(rule.value ?? ''))
+                                        ? <ToolAlternativesDisplay value={String(rule.value ?? '')} />
                                         : rule.value}
                                   </span>
                                 )}
@@ -1459,7 +1499,7 @@ function ScenarioCard({
                               <RuleTypeSelect
                                 value={newRuleType}
                                 onValueChange={setNewRuleType}
-                                className="h-8 w-58 shrink-0 text-xs"
+                                className="h-8 w-52 shrink-0 text-xs"
                               />
                               <Input
                                 value={newRuleLabel}
@@ -1469,12 +1509,13 @@ function ScenarioCard({
                               />
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="default"
                                 size="sm"
                                 className="h-8 shrink-0"
                                 onClick={addRule}
+                                disabled={!canAddRule()}
                               >
-                                {agentCheckEditingRule !== null ? 'Update check' : 'Add check'}
+                                {agentCheckEditingRule !== null ? 'Update check' : 'Add'}
                               </Button>
                             </div>
                             <Textarea
@@ -1485,11 +1526,11 @@ function ScenarioCard({
                             />
                           </div>
                         ) : (
-                          <div className="flex gap-2 items-end">
+                          <div className="flex items-start gap-2">
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
-                              className="h-8 w-58 shrink-0 text-xs"
+                              className="h-8 w-52 shrink-0 text-xs"
                               hideToolSequence={
                                 hasToolSequenceRule && newRuleType !== 'tool_sequence'
                               }
@@ -1569,12 +1610,16 @@ function ScenarioCard({
                                 )}
                               </>
                             ) : showToolSequenceEditor ? (
-                              <div className="min-w-0 flex-1 flex items-end gap-2">
+                              <div className="min-w-0 flex flex-1 items-start gap-2">
                                 <ToolAlternativesEditor
                                   value={newToolSequenceValue}
                                   onChange={setNewToolSequenceValue}
                                   onEnter={addToolSequenceValue}
                                   label="Sequence step alternatives"
+                                />
+                                <AddToolAlternativeButton
+                                  value={newToolSequenceValue}
+                                  onChange={setNewToolSequenceValue}
                                 />
                                 <Button
                                   type="button"
@@ -1604,12 +1649,21 @@ function ScenarioCard({
                                 }
                               />
                             )}
+                            {!showToolSequenceEditor && (
+                              newRuleType === 'required_tool' && (
+                                <AddToolAlternativeButton
+                                  value={newRuleValue}
+                                  onChange={setNewRuleValue}
+                                />
+                              )
+                            )}
                             <Button
                               type="button"
-                              variant="outline"
+                              variant="default"
                               size="sm"
                               className="h-8 shrink-0"
                               onClick={addRule}
+                              disabled={!canAddRule()}
                             >
                               {valueRuleEditingRule !== null ? 'Update check' : 'Add'}
                             </Button>
@@ -1659,9 +1713,10 @@ function ScenarioCard({
                                     className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
                                   >
                                     <span className="text-xs font-medium">{toolIndex + 1}.</span>
-                                    <span className="min-w-0 flex-1 font-mono text-xs break-all">
-                                      {formatToolExpression(toolName)}
-                                    </span>
+                                    <ToolAlternativesDisplay
+                                      value={toolName}
+                                      className="min-w-0 flex-1 text-xs"
+                                    />
                                     {!readOnly && (
                                       <div className="flex items-center gap-1">
                                         <Button

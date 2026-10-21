@@ -14,6 +14,7 @@ export {
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
   formatToolExpression,
+  formatToolAlternatives,
   isValidToolExpression,
   formatToolSequenceLabel
 } from '@/lib/data-sources/types';

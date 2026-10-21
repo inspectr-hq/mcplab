@@ -19,11 +19,17 @@ export function isValidToolExpression(expression: string): boolean {
   }
 }
 
+/** Display alternatives without the parentheses used when they are part of a sequence. */
+export function formatToolAlternatives(expression: string): string {
+  if (!isValidToolExpression(expression)) return expression;
+  return parseToolAlternatives(expression).join(' OR ');
+}
+
 /** Display form used in labels and reasons: `search` or `(search OR lookup)`. */
 export function formatToolExpression(expression: string): string {
   if (!isValidToolExpression(expression)) return expression;
   const alternatives = parseToolAlternatives(expression);
-  return alternatives.length > 1 ? `(${alternatives.join(' OR ')})` : alternatives[0];
+  return alternatives.length > 1 ? `(${formatToolAlternatives(expression)})` : alternatives[0];
 }
 
 /** Throw when a required tool or sequence step is malformed, or a forbidden tool is blank or uses `|`. */

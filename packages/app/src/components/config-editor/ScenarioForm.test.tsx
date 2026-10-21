@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEvalRulePreview, ScenarioForm } from './ScenarioForm';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
@@ -276,11 +276,13 @@ describe('ScenarioForm checks editor', () => {
     fireEvent.click(screen.getAllByRole('combobox')[1]);
     fireEvent.click(screen.getByText('Tool Sequence'));
     expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add step' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Add$/ })[0]).toBeEnabled();
     fireEvent.change(screen.getByPlaceholderText('Tool name'), {
       target: { value: 'search' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Add$/ })[0]);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -302,10 +304,22 @@ describe('ScenarioForm checks editor', () => {
       />
     );
 
+    const requiredToolInput = screen.getByLabelText('Required tool alternatives 1');
+    const requiredToolRow = requiredToolInput.closest(
+      '[aria-label="Required tool alternatives"]'
+    )?.parentElement as HTMLElement;
+    const addOrButton = within(requiredToolRow).getByRole('button', { name: 'OR' });
+    const addButton = within(requiredToolRow).getByRole('button', { name: 'Add', exact: true });
+    expect(addOrButton.parentElement).toBe(addButton.parentElement);
+    expect(addOrButton).toHaveClass('border-input', 'bg-background', 'h-8', 'shrink-0');
+
     fireEvent.change(screen.getByLabelText('Required tool alternatives 1'), {
       target: { value: 'search' }
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add alternative' }));
+    fireEvent.click(screen.getByRole('button', { name: 'OR' }));
+    expect(screen.getByText('OR', { selector: 'span' }).parentElement).not.toBe(
+      screen.getByRole('button', { name: 'Remove search' }).parentElement
+    );
     fireEvent.change(screen.getByLabelText('Required tool alternatives 2'), {
       target: { value: 'lookup|' }
     });
@@ -314,6 +328,32 @@ describe('ScenarioForm checks editor', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search|lookup' });
+  });
+
+  it('saves the filled required tool when the trailing OR option is empty', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Required tool alternatives 1'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OR' }));
+    const requiredToolRow = screen
+      .getByLabelText('Required tool alternatives 1')
+      .closest('[aria-label="Required tool alternatives"]')?.parentElement as HTMLElement;
+    fireEvent.click(within(requiredToolRow).getByRole('button', { name: 'Add', exact: true }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search' });
   });
 
   it('renders a tool_sequence rule safely even when sequence data is missing', async () => {
@@ -489,7 +529,8 @@ describe('ScenarioForm checks editor', () => {
         target: { value: 'Confirm the answer includes a valid logical time range.' }
       }
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add check' }));
+    const agentEditorRow = screen.getByPlaceholderText('Prompt name').parentElement as HTMLElement;
+    fireEvent.click(within(agentEditorRow).getByRole('button', { name: 'Add', exact: true }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
