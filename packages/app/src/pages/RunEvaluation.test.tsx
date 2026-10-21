@@ -415,7 +415,9 @@ describe('RunEvaluation', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Could not load the workspace default agent/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Could not load the workspace default agent/)
+    ).toBeInTheDocument();
     const run = screen.getByRole('button', { name: 'Run' });
     expect(run).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Manual Agent' }));
