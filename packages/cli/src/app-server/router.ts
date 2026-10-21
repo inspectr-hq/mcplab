@@ -106,7 +106,7 @@ import {
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import { OAuthSessionManager } from './oauth-session-manager.js';
-import { resolveRunSelectedAgents } from './run-agent-selection.js';
+import { resolveLoadedRunAgents } from '@inspectr/mcplab-core';
 import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
@@ -280,7 +280,7 @@ export async function startAppServer(options: AppServerOptions) {
     getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
-    resolveRunSelectedAgents,
+    resolveLoadedRunAgents,
     chatWithAgent,
     pkgVersion
   };

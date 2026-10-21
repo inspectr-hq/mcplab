@@ -786,12 +786,12 @@ async function executeSingleConfigRun(params: {
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
-  const selection = resolveLoadedRunAgents(
+  const selection = resolveLoadedRunAgents({
     loaded,
-    runtimeOverriddenConfig,
-    requestedAgents,
-    workspaceSettings.default_evaluation_agent_name
-  );
+    config: runtimeOverriddenConfig,
+    requestedAgentNames: requestedAgents,
+    defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
+  });
   const effectiveAgents = selection.agentNames;
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
   console.log(

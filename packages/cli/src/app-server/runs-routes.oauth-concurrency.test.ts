@@ -20,7 +20,7 @@ function makeDeps(eventSink: Array<{ jobId: string; type: string; message?: stri
         message: String(event?.payload?.message ?? '')
       });
     },
-    resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' })
+    resolveLoadedRunAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' })
   });
 }
 

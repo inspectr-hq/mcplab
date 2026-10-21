@@ -2080,12 +2080,11 @@ export function registerTools(server: McpServer): void {
         });
         const effectiveConfigHash = hashConfig(runtimeOverridden);
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
-        const selection = resolveLoadedRunAgents(
+        const selection = resolveLoadedRunAgents({
           loaded,
-          runtimeOverridden,
-          undefined,
-          workspaceSettings.default_evaluation_agent_name
-        );
+          config: runtimeOverridden,
+          defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
+        });
         const executable = expandConfigForAgents(runtimeOverridden, selection.agentNames);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,

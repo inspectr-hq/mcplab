@@ -47,7 +47,7 @@ export type RunsRouteDeps = Pick<
   | 'getScenarioRunTraceRecords'
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
-  | 'resolveRunSelectedAgents'
+  | 'resolveLoadedRunAgents'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'pkgVersion'
@@ -141,7 +141,7 @@ export async function handleRunsRoutes(params: {
     getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
-    resolveRunSelectedAgents,
+    resolveLoadedRunAgents,
     readLibraries,
     pickDefaultAssistantAgentName,
     pkgVersion
@@ -478,8 +478,10 @@ export async function handleRunsRoutes(params: {
 
     let selection;
     try {
-      selection = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
-        declaredAgentNames,
+      selection = deps.resolveLoadedRunAgents({
+        loaded: { declaredAgentNames },
+        config: selectedConfig,
+        requestedAgentNames: requestedAgents,
         defaultEvaluationAgentName: settings.defaultEvaluationAgentName
       });
     } catch (error) {

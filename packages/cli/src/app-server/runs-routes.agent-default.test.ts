@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleRunsRoutes } from './runs-routes.js';
 import { makeRunsRouteDeps } from './runs-routes.test-helpers.js';
-import { resolveRunSelectedAgents } from './run-agent-selection.js';
+import { resolveLoadedRunAgents } from '@inspectr/mcplab-core';
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -55,7 +55,7 @@ describe('workspace default evaluation agent', () => {
           scenarios: {},
           browserProviders: {}
         }),
-        resolveRunSelectedAgents,
+        resolveLoadedRunAgents,
         asJson
       }) as any
     });

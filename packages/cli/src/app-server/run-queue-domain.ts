@@ -32,7 +32,6 @@ export type QueueServiceDeps = Pick<
   | 'getScenarioRunTraceRecords'
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
-  | 'resolveRunSelectedAgents'
   | 'readLibraries'
   | 'pkgVersion'
   | 'getRunResults'

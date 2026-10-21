@@ -103,7 +103,6 @@ export {
   isValidToolExpression,
   tallyCheckCounts,
   isLlmAgent,
-  resolveLoadedRunAgents,
   resolveRunAgentSelection
 } from '@inspectr/mcplab-core';
 

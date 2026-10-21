@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRunAgentSelection } from './run-agent-selection.js';
+import { resolveLoadedRunAgents, resolveRunAgentSelection } from './run-agent-selection.js';
 import { expandConfigForAgents } from './config.js';
 import type { EvalConfig } from './types.js';
 
@@ -87,5 +87,55 @@ describe('resolveRunAgentSelection', () => {
       scenarios: []
     } as unknown as EvalConfig;
     expect(() => expandConfigForAgents(config, [])).toThrow('No evaluation agents selected');
+  });
+});
+
+describe('resolveLoadedRunAgents', () => {
+  const config = {
+    agents: { library: { provider: 'openai' as const, model: 'test' } },
+    scenarios: []
+  } as EvalConfig;
+
+  it('uses declared-agent provenance after library agents are merged', () => {
+    expect(
+      resolveLoadedRunAgents({
+        loaded: { declaredAgentNames: [] },
+        config,
+        defaultEvaluationAgentName: 'library'
+      })
+    ).toEqual({ agentNames: ['library'], source: 'workspace_default' });
+    expect(
+      resolveLoadedRunAgents({ loaded: { declaredAgentNames: [] }, config })
+    ).toEqual({ agentNames: [], source: 'none' });
+    expect(
+      resolveLoadedRunAgents({ loaded: { declaredAgentNames: ['declared'] }, config })
+    ).toEqual({ agentNames: ['declared'], source: 'evaluation_agents' });
+  });
+
+  it('accepts explicit requests and evaluation defaults through named parameters', () => {
+    expect(
+      resolveLoadedRunAgents({
+        loaded: { declaredAgentNames: ['declared'] },
+        config: { ...config, run_defaults: { selected_agents: ['declared'] } },
+        requestedAgentNames: ['library']
+      })
+    ).toEqual({ agentNames: ['library'], source: 'requested' });
+    expect(() =>
+      resolveLoadedRunAgents({
+        loaded: { declaredAgentNames: [] },
+        config: { ...config, run_defaults: { selected_agents: ['declared'] } }
+      })
+    ).toThrow('must be declared');
+  });
+
+  it('can defer validation until a prompt selection is made', () => {
+    expect(
+      resolveLoadedRunAgents({
+        loaded: { declaredAgentNames: [] },
+        config,
+        defaultEvaluationAgentName: 'not-loaded-yet',
+        validateAvailableAgents: false
+      })
+    ).toEqual({ agentNames: ['not-loaded-yet'], source: 'workspace_default' });
   });
 });

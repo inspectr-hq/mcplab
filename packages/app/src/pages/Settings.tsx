@@ -15,13 +15,12 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 
 const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
-  const hasLoadedLibraries = useRef(false);
-  if (!librariesLoading) hasLoadedLibraries.current = true;
-  const librariesReady = hasLoadedLibraries.current;
+  const librariesReady = useLibrariesReady();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [assistantAgentName, setAssistantAgentName] = useState<string>('');

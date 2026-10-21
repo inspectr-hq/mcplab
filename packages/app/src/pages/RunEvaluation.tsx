@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,9 +34,8 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
-import type { InspectrSession, RunAgentSelection } from '@/types/eval';
+import { isLlmAgent, type InspectrSession, type RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { isLlmAgent } from '@/types/eval';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 type ConversationMode = 'agent_default' | 'new' | 'same';
@@ -125,14 +125,11 @@ const RunEvaluation = () => {
   const defaultEvaluationAgent = useDefaultEvaluationAgent();
   const {
     agents: libraryAgents,
-    loading: librariesLoading,
     scenarios: libraryScenarios,
     servers: libraryServers,
     reload: reloadLibraries
   } = useLibraries();
-  const hasLoadedLibraries = useRef(false);
-  if (!librariesLoading) hasLoadedLibraries.current = true;
-  const librariesReady = hasLoadedLibraries.current;
+  const librariesReady = useLibrariesReady();
   const normalizedRunId = runId.trim();
   const resultsHref = normalizedRunId
     ? `/results/${encodeURIComponent(normalizedRunId)}${
@@ -257,11 +254,18 @@ const RunEvaluation = () => {
   const agentSelectionError =
     selectedConfig?.loadError ||
     defaultSelection.error ||
-    ((defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none') &&
-      defaultEvaluationAgent.error);
+    (defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none'
+      ? defaultEvaluationAgent.error
+      : undefined);
   const invalidWorkspaceDefault =
     defaultSelection.source === 'workspace_default' &&
     availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name && !isLlmAgent(agent));
+  const defaultSelectedAgentIds = useMemo(() => {
+    if (invalidWorkspaceDefault) return [];
+    return defaultSelection.agentNames.filter((id) =>
+      availableAgents.some((agent) => agent.id === id)
+    );
+  }, [invalidWorkspaceDefault, defaultSelection.agentNames, availableAgents]);
   const unavailableAgentNames = defaultSelection.agentNames.filter(
     (id) => !availableAgents.some((agent) => agent.id === id)
   );
@@ -296,10 +300,7 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredAgentIds = invalidWorkspaceDefault ? [] : defaultSelection.agentNames;
-    setSelectedAgentIds(
-      configuredAgentIds.filter((id) => availableAgents.some((agent) => agent.id === id))
-    );
+    setSelectedAgentIds(defaultSelectedAgentIds);
     setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
@@ -313,7 +314,7 @@ const RunEvaluation = () => {
     availableScenarios,
     agentsLoading,
     defaultSelection,
-    invalidWorkspaceDefault
+    defaultSelectedAgentIds
   ]);
   useEffect(() => {
     if (
@@ -323,16 +324,12 @@ const RunEvaluation = () => {
     ) {
       return;
     }
-    const selectedAgentNames = invalidWorkspaceDefault ? [] : defaultSelection.agentNames;
-    setSelectedAgentIds(
-      selectedAgentNames.filter((id) => availableAgents.some((agent) => agent.id === id))
-    );
+    setSelectedAgentIds(defaultSelectedAgentIds);
   }, [
     agentsLoading,
     agentSelectionEdited,
     defaultSelection,
-    invalidWorkspaceDefault,
-    availableAgents
+    defaultSelectedAgentIds
   ]);
 
   const startWorkspaceRun = async () => {

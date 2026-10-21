@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { aggregateResults, expandConfigForAgents } from '@inspectr/mcplab-core';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { resolveRunSelectedAgents } from './run-agent-selection.js';
 const { runAllMock } = vi.hoisted(() => ({ runAllMock: vi.fn() }));
 vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@inspectr/mcplab-core')>()),
@@ -70,7 +69,6 @@ describe('executeRunJob', () => {
             getScenarioRunTraceRecords: () => [],
             selectScenarioIds: (config: any) => config,
             expandConfigForAgents,
-            resolveRunSelectedAgents,
             readLibraries: () => ({
               agents: {
                 replacement: { provider: 'openai', model: 'new-default' },
@@ -180,7 +178,6 @@ describe('executeRunJob', () => {
                 }
               ]
             }),
-            resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
             readLibraries: () => ({
               agents: { mini: { provider: 'openai', model: 'test' } },
               servers: {},
@@ -268,7 +265,6 @@ describe('executeRunJob', () => {
             servers,
             scenarios: [{ id: 's1', prompt: 'hi', agent: 'mini', servers: ['inspected', 'plain'] }]
           }),
-          resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
           readLibraries: () => ({
             agents: { mini: { provider: 'openai', model: 'test' } },
             servers: {},
@@ -341,7 +337,6 @@ describe('executeRunJob', () => {
               { id: 's1', prompt: 'hi', agent: 'mini', servers: ['inspected', 'sibling'] }
             ]
           }),
-          resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
           readLibraries: () => ({
             agents: { mini: { provider: 'openai', model: 'test' } },
             servers: {},
@@ -426,7 +421,6 @@ describe('executeRunJob', () => {
               ]
             }),
             expandConfigForAgents: (config: any) => config,
-            resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
             readLibraries: () => ({
               agents: {
                 mini: { provider: 'openai', model: 'gpt-5-mini' },

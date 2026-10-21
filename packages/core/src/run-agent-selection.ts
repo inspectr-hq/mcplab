@@ -30,19 +30,19 @@ export function resolveRunAgentSelection(params: RunAgentSelectionParams): RunAg
   return { ...selection, agentNames: [...selection.agentNames] };
 }
 
-export function resolveLoadedRunAgents(
-  loaded: { declaredAgentNames: string[] },
-  config: Pick<EvalConfig, 'agents' | 'run_defaults'>,
-  requestedAgentNames?: string[],
-  defaultEvaluationAgentName?: string,
-  options: { validateAvailableAgents?: boolean } = {}
-): RunAgentSelection {
+export function resolveLoadedRunAgents(params: {
+  loaded: { declaredAgentNames: string[] };
+  config: Pick<EvalConfig, 'agents' | 'run_defaults'>;
+  requestedAgentNames?: string[] | null;
+  defaultEvaluationAgentName?: string;
+  validateAvailableAgents?: boolean;
+}): RunAgentSelection {
   return resolveRunAgentSelection({
-    declaredAgentNames: loaded.declaredAgentNames,
-    selectedAgentNames: config.run_defaults?.selected_agents,
-    requestedAgentNames,
-    availableAgents: options.validateAvailableAgents === false ? undefined : config.agents,
-    defaultEvaluationAgentName
+    declaredAgentNames: params.loaded.declaredAgentNames,
+    selectedAgentNames: params.config.run_defaults?.selected_agents,
+    requestedAgentNames: params.requestedAgentNames ?? undefined,
+    availableAgents: params.validateAvailableAgents === false ? undefined : params.config.agents,
+    defaultEvaluationAgentName: params.defaultEvaluationAgentName
   });
 }
 

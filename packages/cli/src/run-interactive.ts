@@ -57,13 +57,13 @@ export function loadInteractiveConfig(
 ): ReturnType<typeof loadConfig> & { agentSelection: RunAgentSelection } {
   const loaded = loadConfig(path);
   const libraries = readLibraries(loaded.bundleRoot);
-  const agentSelection = resolveLoadedRunAgents(
+  const agentSelection = resolveLoadedRunAgents({
     loaded,
-    loaded.config,
-    undefined,
-    loadWorkspaceSettingsOverrides(loaded.bundleRoot).default_evaluation_agent_name,
-    { validateAvailableAgents: false }
-  );
+    config: loaded.config,
+    defaultEvaluationAgentName:
+      loadWorkspaceSettingsOverrides(loaded.bundleRoot).default_evaluation_agent_name,
+    validateAvailableAgents: false
+  });
   // Keep the fallback visible in the prompt; validate it only if the user chooses it.
   return {
     ...loaded,

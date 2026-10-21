@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import {
@@ -76,13 +77,10 @@ const ConfigEditor = () => {
   const {
     servers: libServers,
     agents: libAgents,
-    scenarios: libScenarios,
-    loading: librariesLoading
+    scenarios: libScenarios
   } = useLibraries();
   const defaultEvaluationAgent = useDefaultEvaluationAgent();
-  const hasLoadedLibraries = useRef(false);
-  if (!librariesLoading) hasLoadedLibraries.current = true;
-  const librariesReady = hasLoadedLibraries.current;
+  const librariesReady = useLibrariesReady();
 
   const isNew = id === 'new';
   const isView = !isNew && !!id;
