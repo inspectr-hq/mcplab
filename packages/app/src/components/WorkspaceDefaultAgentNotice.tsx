@@ -40,9 +40,7 @@ export function WorkspaceDefaultAgentNotice(props: {
   return (
     <Card role="status">
       <CardContent className="flex items-start gap-3 p-4">
-        <span
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/30"
-        >
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/30">
           <AgentTypeIcon agent={agent} />
         </span>
         <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
