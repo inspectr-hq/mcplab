@@ -7,7 +7,7 @@ import type {
 } from './types.js';
 import { calculatePassRate } from './result-metrics.js';
 import { deriveRunOutcome } from './scenario-observation.js';
-import { normalizeToolExpression, parseToolAlternatives } from './tool-rule-expressions.js';
+import { parseToolAlternatives } from './tool-rule-expressions.js';
 
 export function aggregateResults(params: {
   runId: string;
@@ -36,14 +36,6 @@ export function aggregateResults(params: {
     const extractedValues: Record<string, Record<string, number>> = {};
     const requiredStats: Record<string, number> = {};
     const forbiddenStats: Record<string, number> = {};
-    const requiredExpressions = new Set(
-      (entry.eval?.tool_constraints?.required_tools ?? []).map((expression) =>
-        normalizeToolExpression(expression)
-      )
-    );
-    const forbiddenTools = new Set(
-      (entry.eval?.tool_constraints?.forbidden_tools ?? []).map((tool) => tool.trim())
-    );
     let lastFinalAnswer = '';
 
     for (const run of entry.runs) {
@@ -52,21 +44,21 @@ export function aggregateResults(params: {
       for (const [tool, count] of Object.entries(run.tool_usage)) {
         toolUsageFrequency[tool] = (toolUsageFrequency[tool] ?? 0) + count;
       }
-      if (requiredExpressions.size) {
-        for (const key of requiredExpressions) {
-          if (parseToolAlternatives(key).some((tool) => run.tool_usage[tool])) {
-            requiredStats[key] = (requiredStats[key] ?? 0) + 1;
+      if (entry.eval?.tool_constraints?.required_tools) {
+        for (const tool of entry.eval.tool_constraints.required_tools) {
+          if (parseToolAlternatives(tool).some((name) => run.tool_usage[name])) {
+            requiredStats[tool] = (requiredStats[tool] ?? 0) + 1;
           } else {
-            requiredStats[key] ??= 0;
+            requiredStats[tool] ??= 0;
           }
         }
       }
-      if (forbiddenTools.size) {
-        for (const key of forbiddenTools) {
-          if (run.tool_usage[key]) {
-            forbiddenStats[key] = (forbiddenStats[key] ?? 0) + 1;
+      if (entry.eval?.tool_constraints?.forbidden_tools) {
+        for (const tool of entry.eval.tool_constraints.forbidden_tools) {
+          if (run.tool_usage[tool]) {
+            forbiddenStats[tool] = (forbiddenStats[tool] ?? 0) + 1;
           } else {
-            forbiddenStats[key] ??= 0;
+            forbiddenStats[tool] ??= 0;
           }
         }
       }

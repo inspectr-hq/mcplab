@@ -1,14 +1,12 @@
 import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
-  CheckResult as CoreCheckResult,
   EvalConfig as CoreEvalConfig,
   SourceEvalConfig as CoreSourceEvalConfig,
   ResultsJson as CoreResultsJson,
   Scenario as CoreScenario,
   ScenarioAggregate as CoreScenarioAggregate,
   ScenarioAttachment,
-  SourceScenarioAttachment,
   ScenarioRunResult as CoreScenarioRun,
   ScenarioRunTraceRecord as CoreScenarioRunTraceRecord,
   ServerAuthBearer as CoreServerAuthBearer,
@@ -98,16 +96,9 @@ export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
-  formatToolSequenceText,
-  tallyCheckCounts,
+  formatToolExpression,
   isValidToolExpression,
-  isSingleToolName,
-  normalizeToolExpression,
-  normalizeToolExpressionSafely,
-  parseToolAlternatives,
-  resolveToolNameAlias,
-  formatToolAlternatives,
-  validateEvalToolRules
+  tallyCheckCounts
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -125,8 +116,7 @@ export type {
   HealthMcpConnectionInfo,
   ScenarioAttachment
 };
-export type { RunOutcome, ExecutionSource, RoverAgentProvider, BrowserProviderProfile };
-export type { CoreCheckResult, SourceScenarioAttachment };
+export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
 export type { AgentConnectionTestResult, ProviderModelsResponse };

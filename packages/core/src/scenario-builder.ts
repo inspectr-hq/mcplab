@@ -16,15 +16,12 @@ export type ScenarioBuildInput = {
 };
 
 /** Build the canonical source scenario shape used by draft and persistence flows. */
-export function buildScenarioEntry(
-  input: ScenarioBuildInput,
-  onWarnings?: (warnings: string[]) => void
-): SourceScenario {
+export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   const id = input.id?.trim() || slugify(input.name?.trim() || input.prompt.slice(0, 40));
   if (!id) throw new Error('Unable to derive scenario id. Provide id or name.');
-  const required = uniqueToolRules(input.required_tools);
-  const forbidden = uniqueToolRules(input.forbidden_tools);
-  const sequence = (input.tool_sequence ?? []).map((value) => value.trim());
+  const required = unique(input.required_tools);
+  const forbidden = unique(input.forbidden_tools);
+  const sequence = unique(input.tool_sequence);
   const patterns = unique(input.response_regex_patterns);
   const evalRules = mergeEvalRules(input.eval, {
     required,
@@ -32,8 +29,7 @@ export function buildScenarioEntry(
     sequence,
     patterns
   });
-  const warnings = validateEvalToolRules(evalRules);
-  onWarnings?.(warnings);
+  validateEvalToolRules(evalRules);
   return {
     id,
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
@@ -111,10 +107,6 @@ function mergeEvalRules(
 
 function unique(values?: string[]): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
-}
-function uniqueToolRules(values?: string[]): string[] {
-  // Retain empty entries so shared validation reports them instead of silently dropping them.
-  return [...new Set((values ?? []).map((value) => value.trim()))];
 }
 function slugify(input: string): string {
   return input

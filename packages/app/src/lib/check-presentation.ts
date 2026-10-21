@@ -3,8 +3,8 @@ import type { CheckResult, EvalRule } from '@/types/eval';
 import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
-  formatToolSequenceLabel,
-  formatToolAlternatives
+  formatToolExpression,
+  formatToolSequenceLabel
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
@@ -130,8 +130,8 @@ export function buildCheckItems({
 
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool')
-    return `Required tool · ${formatToolAlternatives(String(rule.value ?? ''))}`;
-  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${String(rule.value ?? '')}`;
+    return `Required tool · ${formatToolExpression(String(rule.value ?? ''))}`;
+  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
     return formatToolInputAssertionLabel({
@@ -231,7 +231,7 @@ export function matchFailureReasonForRule(
     if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
     if (rule.type === 'tool_sequence')
-      return `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`;
+      return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
     if (rule.type === 'response_contains') return `Contains assertion failed: ${comparableValue}`;
     if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${comparableValue}`;

@@ -390,11 +390,11 @@ describe('libraries-store test-case directory migration', () => {
           {
             id: 'invalid-case',
             prompt: 'test',
-            eval: { tool_constraints: { required_tools: ['search'], forbidden_tools: ['search'] } }
+            eval: { tool_constraints: { required_tools: ['search|'] } }
           }
         ]
       })
-    ).toThrow(/entirely forbidden/);
+    ).toThrow(/required_tools\[0\]/);
 
     expect(readFileSync(join(librariesDir, 'servers.yaml'), 'utf8')).toBe('existing: true\n');
     expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);

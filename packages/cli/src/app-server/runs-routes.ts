@@ -675,7 +675,7 @@ export async function handleRunsRoutes(params: {
     const previewWarnings: string[] = [];
     const coreEval = toCoreEvalRules(evalRules, previewWarnings);
     try {
-      previewWarnings.push(...validateEvalToolRules(coreEval, `Scenario "${scenarioId}"`));
+      validateEvalToolRules(coreEval, `Scenario "${scenarioId}"`);
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;

@@ -39,14 +39,8 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import {
-  formatToolSequenceText,
-  formatToolAlternatives,
-  isSingleToolName,
-  isValidToolExpression,
-  normalizeToolExpression,
-  validateEvalToolRules
-} from '@/types/eval';
+import { formatToolSequenceLabel } from '../../../../core/src/eval';
+import { formatToolExpression, isValidToolExpression } from '@/types/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { ToolAlternativesEditor } from '@/components/config-editor/ToolAlternativesEditor';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
@@ -127,7 +121,10 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
-const emptyToolSequence: string[] = [];
+
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
 
 function isToolInputRuleType(type: EvalRule['type']): boolean {
   return type.startsWith('tool_input_');
@@ -264,7 +261,6 @@ function ScenarioCard({
   const { source } = useDataSource();
   const [newRuleType, setNewRuleType] = useState<EvalRule['type']>('required_tool');
   const [newRuleValue, setNewRuleValue] = useState('');
-  const [requiredToolFieldInvalid, setRequiredToolFieldInvalid] = useState(false);
   const [newRuleTool, setNewRuleTool] = useState('');
   const [newRulePath, setNewRulePath] = useState('');
   const [newRuleEquals, setNewRuleEquals] = useState('');
@@ -272,8 +268,6 @@ function ScenarioCard({
   const [newRulePrompt, setNewRulePrompt] = useState('');
   const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
   const [toolSequenceDraft, setToolSequenceDraft] = useState<string[]>([]);
-  const [newSequenceFieldInvalid, setNewSequenceFieldInvalid] = useState(false);
-  const [toolSequenceStepInvalid, setToolSequenceStepInvalid] = useState<boolean[]>([]);
   const [toolSequenceEditorOpen, setToolSequenceEditorOpen] = useState(false);
   const [toolSequenceEditingRule, setToolSequenceEditingRule] = useState<EvalRule | null>(null);
   const [agentCheckEditingRule, setAgentCheckEditingRule] = useState<EvalRule | null>(null);
@@ -446,24 +440,18 @@ function ScenarioCard({
     }
 
     if (newRuleType === 'tool_sequence') {
-      if (!canSaveToolSequence) return;
-      const nextSequence = toolSequenceDraft.map((value) => normalizeToolExpression(value));
+      const nextSequence = toolSequenceDraft
+        .map((value) => value.trim())
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+      if (nextSequence.length === 0) return;
       updateToolSequence(nextSequence);
       return;
     }
 
     if (!newRuleValue.trim()) return;
+    if (newRuleType === 'required_tool' && !isValidToolExpression(newRuleValue)) return;
     const nextRules = [...scenario.evalRules];
-    let value = newRuleValue.trim();
-    if (newRuleType === 'forbidden_tool' && !isSingleToolName(value)) return;
-    if (newRuleType === 'required_tool') {
-      try {
-        value = normalizeToolExpression(value);
-      } catch {
-        return;
-      }
-    }
-    const nextRule = { type: newRuleType, value } as const;
+    const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
     const editingIndex = findRuleIndex(valueRuleEditingRule);
     if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
     else nextRules.push(nextRule);
@@ -476,22 +464,13 @@ function ScenarioCard({
 
   const addToolSequenceValue = () => {
     const value = newToolSequenceValue.trim();
-    if (!isValidToolExpression(value) || newSequenceFieldInvalid) return;
-    setToolSequenceDraft((current) => [...current, normalizeToolExpression(value)]);
-    setToolSequenceStepInvalid((current) => [...current, false]);
+    if (!isValidToolExpression(value)) return;
+    setToolSequenceDraft((current) => [...current, value]);
     setNewToolSequenceValue('');
-    setNewSequenceFieldInvalid(false);
   };
 
   const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
-    setToolSequenceStepInvalid((current) => {
-      if (nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item ?? false);
-      return next;
-    });
     setToolSequenceDraft((current) => {
       if (nextIndex < 0 || nextIndex >= current.length) return current;
       const next = [...current];
@@ -503,7 +482,6 @@ function ScenarioCard({
 
   const removeToolSequenceValue = (index: number) => {
     setToolSequenceDraft((current) => current.filter((_, i) => i !== index));
-    setToolSequenceStepInvalid((current) => current.filter((_, i) => i !== index));
   };
 
   const toolSequenceRuleIndex = scenario.evalRules.findIndex(
@@ -512,60 +490,13 @@ function ScenarioCard({
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
   const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence'
-      ? (toolSequenceRule.sequence ?? emptyToolSequence)
-      : emptyToolSequence;
-  const toolSequenceKey = toolSequence.join('\0');
+    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
-  const toolSequenceDraftInvalid =
-    toolSequenceDraft.some((step) => !isValidToolExpression(step)) ||
-    toolSequenceStepInvalid.some(Boolean);
-  const canSaveToolSequence =
-    toolSequenceDraft.length > 0 &&
-    !toolSequenceDraftInvalid &&
-    !newSequenceFieldInvalid &&
-    !newToolSequenceValue.trim();
-  const toolRuleWarnings = (() => {
-    const required_tools = scenario.evalRules
-      .filter((rule) => rule.type === 'required_tool')
-      .map((rule) => String(rule.value ?? ''));
-    const forbidden_tools = scenario.evalRules
-      .filter((rule) => rule.type === 'forbidden_tool')
-      .map((rule) => String(rule.value ?? ''));
-    const sequence = scenario.evalRules.find((rule) => rule.type === 'tool_sequence');
-    try {
-      return validateEvalToolRules(
-        {
-          ...(required_tools.length || forbidden_tools.length
-            ? {
-                tool_constraints: {
-                  ...(required_tools.length ? { required_tools } : {}),
-                  ...(forbidden_tools.length ? { forbidden_tools } : {})
-                }
-              }
-            : {}),
-          ...(sequence?.type === 'tool_sequence' && sequence.sequence?.length
-            ? { tool_sequence: sequence.sequence }
-            : {})
-        },
-        scenario.name || 'Scenario',
-        availableToolNames ?? undefined
-      );
-    } catch (error) {
-      return [error instanceof Error ? error.message : String(error)];
-    }
-  })();
 
   const updateToolSequence = (nextSequence: string[]) => {
-    if (nextSequence.some((step) => !isValidToolExpression(step))) return;
     const nextRules = [...scenario.evalRules];
     const nextRule =
-      nextSequence.length > 0
-        ? ({
-            type: 'tool_sequence',
-            sequence: nextSequence.map((step) => normalizeToolExpression(step))
-          } as const)
-        : null;
+      nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
     const editingIndex = findRuleIndex(toolSequenceEditingRule);
     const currentIndex = editingIndex >= 0 ? editingIndex : toolSequenceRuleIndex;
     if (currentIndex >= 0) {
@@ -577,9 +508,7 @@ function ScenarioCard({
     onUpdate({ evalRules: nextRules });
     setToolSequenceEditorOpen(false);
     setToolSequenceDraft([]);
-    setToolSequenceStepInvalid([]);
     setNewToolSequenceValue('');
-    setNewSequenceFieldInvalid(false);
     setToolSequenceEditingRule(null);
     if (newRuleType === 'tool_sequence') {
       setNewRuleType('required_tool');
@@ -588,15 +517,11 @@ function ScenarioCard({
 
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
-    const nextSequence = toolSequenceKey ? toolSequenceKey.split('\0') : [];
-    setToolSequenceDraft(nextSequence);
-    setToolSequenceStepInvalid(nextSequence.map((step) => !isValidToolExpression(step)));
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequenceKey]);
+    setToolSequenceDraft(toolSequence);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence.join('|')]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
-    setRequiredToolFieldInvalid(false);
-    setNewSequenceFieldInvalid(false);
   }, [newRuleType]);
 
   useEffect(() => {
@@ -1442,13 +1367,6 @@ function ScenarioCard({
                                       </div>
                                     )}
                                   </div>
-                                ) : rule.type === 'required_tool' ||
-                                  rule.type === 'forbidden_tool' ? (
-                                  <span className="font-mono break-all">
-                                    {rule.type === 'required_tool'
-                                      ? formatToolAlternatives(String(rule.value ?? ''))
-                                      : rule.value}
-                                  </span>
                                 ) : rule.type === 'tool_sequence' ? (
                                   <span className="font-mono break-all">
                                     {formatToolSequenceText(rule.sequence ?? [])}
@@ -1471,7 +1389,9 @@ function ScenarioCard({
                                       ? rule.equals !== undefined
                                         ? `${rule.path} == ${String(rule.equals)}`
                                         : rule.path
-                                      : rule.value}
+                                      : rule.type === 'required_tool'
+                                        ? formatToolExpression(String(rule.value ?? ''))
+                                        : rule.value}
                                   </span>
                                 )}
                               </div>
@@ -1490,11 +1410,6 @@ function ScenarioCard({
                                       if (rule.type === 'tool_sequence') {
                                         setNewRuleType('tool_sequence');
                                         setToolSequenceDraft(rule.sequence ?? []);
-                                        setToolSequenceStepInvalid(
-                                          (rule.sequence ?? []).map(
-                                            (step) => !isValidToolExpression(step)
-                                          )
-                                        );
                                         setToolSequenceEditingRule(rule);
                                         setToolSequenceEditorOpen(true);
                                         return;
@@ -1537,15 +1452,6 @@ function ScenarioCard({
                         ))
                       )}
                     </div>
-                    {toolRuleWarnings.map((warning, warningIndex) => (
-                      <p
-                        key={`${warning}-${warningIndex}`}
-                        role="note"
-                        className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200"
-                      >
-                        {warning}
-                      </p>
-                    ))}
                     {!readOnly && (
                       <div className="space-y-2">
                         {showAgentCheckEditor ? (
@@ -1580,15 +1486,11 @@ function ScenarioCard({
                             />
                           </div>
                         ) : (
-                          <div className="flex flex-wrap gap-2 items-end">
+                          <div className="flex gap-2 items-end">
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
-                              className={
-                                isToolRule || showToolSequenceEditor
-                                  ? 'h-8 w-full shrink-0 text-xs'
-                                  : 'h-8 w-58 shrink-0 text-xs'
-                              }
+                              className="h-8 w-58 shrink-0 text-xs"
                               hideToolSequence={
                                 hasToolSequenceRule && newRuleType !== 'tool_sequence'
                               }
@@ -1672,10 +1574,8 @@ function ScenarioCard({
                                 <ToolAlternativesEditor
                                   value={newToolSequenceValue}
                                   onChange={setNewToolSequenceValue}
-                                  onValidityChange={setNewSequenceFieldInvalid}
-                                  availableTools={availableToolNames}
-                                  label="Sequence step alternatives"
                                   onEnter={addToolSequenceValue}
+                                  label="Sequence step alternatives"
                                 />
                                 <Button
                                   type="button"
@@ -1683,10 +1583,6 @@ function ScenarioCard({
                                   size="sm"
                                   className="h-8 shrink-0"
                                   onClick={addToolSequenceValue}
-                                  disabled={
-                                    !isValidToolExpression(newToolSequenceValue) ||
-                                    newSequenceFieldInvalid
-                                  }
                                 >
                                   Add step
                                 </Button>
@@ -1695,18 +1591,14 @@ function ScenarioCard({
                               <ToolAlternativesEditor
                                 value={newRuleValue}
                                 onChange={setNewRuleValue}
-                                onValidityChange={setRequiredToolFieldInvalid}
-                                availableTools={availableToolNames}
-                                label="Required tool alternatives"
                                 onEnter={addRule}
+                                label="Required tool alternatives"
                               />
                             ) : (
                               <Input
                                 value={newRuleValue}
                                 onChange={(e) => setNewRuleValue(e.target.value)}
-                                placeholder={
-                                  newRuleType === 'forbidden_tool' ? 'Exact tool name' : 'Value'
-                                }
+                                placeholder="Value"
                                 className="h-8 text-xs font-mono"
                                 onKeyDown={(e) =>
                                   e.key === 'Enter' && (e.preventDefault(), addRule())
@@ -1719,16 +1611,6 @@ function ScenarioCard({
                               size="sm"
                               className="h-8 shrink-0"
                               onClick={addRule}
-                              disabled={
-                                showToolSequenceEditor
-                                  ? !canSaveToolSequence
-                                  : newRuleType === 'required_tool'
-                                    ? !isValidToolExpression(newRuleValue) ||
-                                      requiredToolFieldInvalid
-                                    : newRuleType === 'forbidden_tool'
-                                      ? !isSingleToolName(newRuleValue)
-                                      : false
-                              }
                             >
                               {valueRuleEditingRule !== null ? 'Update check' : 'Add'}
                             </Button>
@@ -1750,12 +1632,7 @@ function ScenarioCard({
                                     variant="ghost"
                                     size="sm"
                                     className="h-7 px-2 text-[11px]"
-                                    onClick={() => {
-                                      setToolSequenceDraft([]);
-                                      setToolSequenceStepInvalid([]);
-                                      setNewSequenceFieldInvalid(false);
-                                      setNewToolSequenceValue('');
-                                    }}
+                                    onClick={() => setToolSequenceDraft([])}
                                   >
                                     Clear
                                   </Button>
@@ -1765,7 +1642,6 @@ function ScenarioCard({
                                     size="sm"
                                     className="h-7 px-2 text-[11px]"
                                     onClick={() => updateToolSequence(toolSequenceDraft)}
-                                    disabled={!canSaveToolSequence}
                                   >
                                     {hasToolSequenceRule ? 'Update sequence' : 'Add sequence'}
                                   </Button>
@@ -1784,25 +1660,9 @@ function ScenarioCard({
                                     className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
                                   >
                                     <span className="text-xs font-medium">{toolIndex + 1}.</span>
-                                    <ToolAlternativesEditor
-                                      value={toolName}
-                                      onChange={(value) =>
-                                        setToolSequenceDraft((current) =>
-                                          current.map((step, index) =>
-                                            index === toolIndex ? value : step
-                                          )
-                                        )
-                                      }
-                                      onValidityChange={(invalid) =>
-                                        setToolSequenceStepInvalid((current) =>
-                                          current.map((value, index) =>
-                                            index === toolIndex ? invalid : value
-                                          )
-                                        )
-                                      }
-                                      availableTools={availableToolNames}
-                                      label={`Sequence step ${toolIndex + 1} alternatives`}
-                                    />
+                                    <span className="min-w-0 flex-1 font-mono text-xs break-all">
+                                      {formatToolExpression(toolName)}
+                                    </span>
                                     {!readOnly && (
                                       <div className="flex items-center gap-1">
                                         <Button
@@ -1845,47 +1705,49 @@ function ScenarioCard({
                             )}
                           </div>
                         )}
-                        {(isToolRule || showToolSequenceEditor) && (
+                        {isToolRule && (
                           <div className="space-y-1">
                             <div className="flex items-end gap-2">
-                              {newRuleType === 'forbidden_tool' && (
-                                <div className="min-w-0 flex-1">
-                                  <Label className="mb-1 block text-[11px] text-muted-foreground">
-                                    Pick from selected server tools (optional)
-                                  </Label>
-                                  <Select
-                                    value={toolPickerValue}
-                                    onValueChange={(value) => {
-                                      setToolPickerValue(value);
-                                      setNewRuleValue(value);
-                                    }}
-                                    disabled={
-                                      toolNamesLoading ||
-                                      !availableToolNames ||
-                                      availableToolNames.length === 0
-                                    }
-                                  >
-                                    <SelectTrigger className="h-8 text-xs">
-                                      <SelectValue
-                                        placeholder={
-                                          toolNamesLoading
-                                            ? 'Loading tools...'
-                                            : availableToolNames && availableToolNames.length > 0
-                                              ? 'Select tool to insert in value field'
-                                              : 'Load tools first'
-                                        }
-                                      />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {(availableToolNames ?? []).map((toolName) => (
-                                        <SelectItem key={toolName} value={toolName}>
-                                          {toolName}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
+                              <div className="min-w-0 flex-1">
+                                <Label className="mb-1 block text-[11px] text-muted-foreground">
+                                  Pick from selected server tools (optional)
+                                </Label>
+                                <Select
+                                  value={toolPickerValue}
+                                  onValueChange={(value) => {
+                                    setToolPickerValue(value);
+                                    setNewRuleValue(
+                                      newRuleType === 'required_tool'
+                                        ? [...newRuleValue.split('|').slice(0, -1), value].join('|')
+                                        : value
+                                    );
+                                  }}
+                                  disabled={
+                                    toolNamesLoading ||
+                                    !availableToolNames ||
+                                    availableToolNames.length === 0
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue
+                                      placeholder={
+                                        toolNamesLoading
+                                          ? 'Loading tools...'
+                                          : availableToolNames && availableToolNames.length > 0
+                                            ? 'Select tool to insert in value field'
+                                            : 'Load tools first'
+                                      }
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(availableToolNames ?? []).map((toolName) => (
+                                      <SelectItem key={toolName} value={toolName}>
+                                        {toolName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               <Button
                                 type="button"
                                 variant="outline"

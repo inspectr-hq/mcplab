@@ -46,7 +46,6 @@ import {
   updateTestCaseFile,
   buildScenarioEntry,
   isValidToolExpression,
-  isSingleToolName,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
@@ -391,10 +390,10 @@ const AgentContextSchema = z
   .describe('Shared context sent to every agent assertion.');
 const ToolExpressionSchema = z
   .string()
-  .refine(isValidToolExpression, 'Expected tool name or non-empty, unique tool alternatives separated by |.');
-const SingleToolNameSchema = z
-  .string()
-  .refine(isSingleToolName, 'Forbidden tool entries must be a single non-empty tool name.');
+  .refine(isValidToolExpression, 'Expected unique, non-empty tool names separated by |.')
+  .describe(
+    'Raw MCP tool name, or alternatives like `search | lookup` where any one satisfies it.'
+  );
 const EvalRulesSchema = z
   .object({
     tool_constraints: z
@@ -402,11 +401,9 @@ const EvalRulesSchema = z
         required_tools: z
           .array(ToolExpressionSchema)
           .optional()
-          .describe(
-            'Every entry is mandatory; each entry may use `a | b` to accept either raw MCP tool. Example: [authenticate, search | lookup].'
-          ),
+          .describe('Raw MCP tools that must be called.'),
         forbidden_tools: z
-          .array(SingleToolNameSchema)
+          .array(z.string())
           .optional()
           .describe('Raw MCP tools that must not be called.')
       })
@@ -416,9 +413,7 @@ const EvalRulesSchema = z
     tool_sequence: z
       .array(ToolExpressionSchema)
       .optional()
-      .describe(
-        'Flat ordered steps; every step is required in order, and each step may use `a | b`. Example: [authenticate, search | lookup].'
-      ),
+      .describe('Flat ordered list of raw MCP tool names that must be called.'),
     tool_input_assertions: z
       .array(ToolInputAssertionSchema)
       .optional()
@@ -1510,12 +1505,7 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Create one reviewed MCPLab Test Case in mcplab/test-cases/. Put evaluation checks in the eval object for full support of response, tool-input, and agent assertions. Simple shorthand fields are supported for basic cases; do not provide a shorthand field together with its equivalent eval field. This is a scoped YAML write and refuses duplicate IDs.',
-      outputSchema: {
-        id: z.string(),
-        path: z.string(),
-        test_case: ScenarioEntrySchema,
-        warnings: z.array(z.string())
-      },
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
       inputSchema: {
         id: z
           .string()
@@ -1535,20 +1525,20 @@ export function registerTools(server: McpServer): void {
           .array(ToolExpressionSchema)
           .optional()
           .describe(
-            'Every entry is mandatory, with `a | b` meaning either tool satisfies that entry. Example: [authenticate, search | lookup]. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         forbidden_tools: z
-          .array(SingleToolNameSchema)
+          .array(z.string())
           .optional()
           .describe(
-            'Tools that must not be called. Alternatives are not supported for forbidden tools. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
           .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(
-            'Ordered required steps; each step may use `a | b` to accept either tool. Example: [authenticate, search | lookup]. Repeated steps are allowed. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
           ),
         extract_rules: z
           .array(
@@ -1604,8 +1594,7 @@ export function registerTools(server: McpServer): void {
         return ok(`Created Test Case '${created.id}'`, {
           id: created.id,
           path: created.path,
-          test_case: created.testCase,
-          warnings: created.warnings
+          test_case: created.testCase
         });
       })
   );
@@ -1657,20 +1646,20 @@ export function registerTools(server: McpServer): void {
           .array(ToolExpressionSchema)
           .optional()
           .describe(
-            'Every entry is mandatory; each may use `search | lookup` to accept either tool. Example: [authenticate, search | lookup]. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         forbidden_tools: z
-          .array(SingleToolNameSchema)
+          .array(z.string())
           .optional()
           .describe(
-            'Single raw MCP tool names that must not be called. `|` alternatives are not supported. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
           .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(
-            'Ordered required steps; each may use `search | lookup` to accept either tool. Example: [search | lookup]. Repeated steps are valid. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
           ),
         extract_rules: z
           .array(
@@ -1691,12 +1680,7 @@ export function registerTools(server: McpServer): void {
           'Full evaluation-rule object. Use this for new authoring or whenever you need more than one rule type; do not combine it with equivalent shorthand fields.'
         )
       },
-      outputSchema: {
-        id: z.string(),
-        path: z.string(),
-        test_case: ScenarioEntrySchema,
-        warnings: z.array(z.string())
-      }
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
     },
     async ({
       file_path,
@@ -1734,8 +1718,7 @@ export function registerTools(server: McpServer): void {
         return ok(`Updated Test Case '${updated.id}'`, {
           id: updated.id,
           path: updated.path,
-          test_case: updated.testCase,
-          warnings: updated.warnings
+          test_case: updated.testCase
         });
       })
   );
@@ -1900,20 +1883,20 @@ export function registerTools(server: McpServer): void {
           .array(ToolExpressionSchema)
           .optional()
           .describe(
-            'Every entry is mandatory; each may use `search | lookup` to accept either tool. Example: [authenticate, search | lookup]. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         forbidden_tools: z
-          .array(SingleToolNameSchema)
+          .array(z.string())
           .optional()
           .describe(
-            'Single raw MCP tool names that must not be called. `|` alternatives are not supported. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
           .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(
-            'Ordered required steps; each may use `search | lookup` to accept either tool. Example: [search | lookup]. Repeated steps are valid. Do not provide both shorthand and equivalent eval field.'
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
           ),
         response_regex_patterns: z
           .array(z.string())
@@ -1943,12 +1926,11 @@ export function registerTools(server: McpServer): void {
     },
     async (input) => {
       return withToolHandling(async () => {
-        const warnings: string[] = [];
-        const scenario = buildScenario(input, warnings);
+        const scenario = buildScenario(input);
         const asLibraryFile = Boolean(input.as_library_file);
         const yamlLibraryFile = stringifyYaml(scenario).trimEnd();
         const yamlInlineListItem = indentBlock(stringifyYaml([scenario]).trimEnd(), 2);
-        warnings.unshift(...validateScenarioHeuristics(scenario));
+        const warnings = validateScenarioHeuristics(scenario);
         return ok(`Generated scenario '${scenario.id}'`, {
           scenario,
           yaml: asLibraryFile ? yamlLibraryFile : yamlInlineListItem,
@@ -2043,7 +2025,6 @@ export function registerTools(server: McpServer): void {
         passed_runs: z.number().int().nonnegative(),
         failed_runs: z.number().int().nonnegative(),
         skipped_runs: z.number().int().nonnegative(),
-        warnings: z.array(z.string()),
         duration_ms: z.number().nonnegative(),
         summary: ResultsSummarySchema,
         metadata: ResultsMetadataSchema,
@@ -2102,7 +2083,6 @@ export function registerTools(server: McpServer): void {
           runtimeOverridden.run_defaults?.selected_agents
         );
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
-        const warnings = loaded.warnings ?? [];
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
@@ -2142,7 +2122,6 @@ export function registerTools(server: McpServer): void {
           passed_runs: passedRuns,
           failed_runs: failedRuns,
           skipped_runs: skippedRuns,
-          warnings,
           duration_ms: durationMs,
           summary: results.summary,
           metadata: results.metadata,
@@ -3830,12 +3809,9 @@ function buildServerEntry(input: {
 }
 
 function buildScenario(
-  input: Parameters<typeof buildScenarioEntry>[0],
-  warnings: string[]
+  input: Parameters<typeof buildScenarioEntry>[0]
 ): EvalConfig['scenarios'][number] {
-  return buildScenarioEntry(input, (items) =>
-    warnings.push(...items)
-  ) as EvalConfig['scenarios'][number];
+  return buildScenarioEntry(input) as EvalConfig['scenarios'][number];
 }
 
 function validateScenarioHeuristics(scenario: EvalConfig['scenarios'][number]): string[] {

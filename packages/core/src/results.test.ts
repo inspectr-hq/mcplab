@@ -30,21 +30,6 @@ const BASE = {
 };
 
 describe('aggregateResults', () => {
-  it('counts equivalent required expression spellings once per run', () => {
-    const result = aggregateResults({
-      ...BASE,
-      scenarioRuns: [
-        {
-          scenario_id: 's1',
-          agent: 'agent',
-          eval: { tool_constraints: { required_tools: ['search | lookup', 'search|lookup'] } },
-          runs: [makeRun(true, ['search', 'lookup'], { search: 1, lookup: 1 })]
-        }
-      ]
-    });
-    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search|lookup': 1 });
-  });
-
   it('handles empty scenario runs', () => {
     const result = aggregateResults({ ...BASE, scenarioRuns: [] });
     expect(result.summary.total_scenarios).toBe(0);
@@ -146,6 +131,21 @@ describe('aggregateResults', () => {
       scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [] }]
     });
     expect(result.scenarios[0].pass_rate).toBeNull();
+  });
+
+  it('counts a required alternative group once per run', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'gpt-4',
+          eval: { tool_constraints: { required_tools: ['search|lookup'] } },
+          runs: [makeRun(true, ['search', 'lookup'], { search: 1, lookup: 1 }), makeRun(false)]
+        }
+      ]
+    });
+    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search|lookup': 1 });
   });
 
   it('accumulates tool_usage_frequency across runs', () => {
@@ -262,36 +262,6 @@ describe('aggregateResults', () => {
     const stats = result.scenarios[0].tool_constraints_stats!;
     expect(stats.required.search).toBe(1);
     expect(stats.forbidden.delete).toBe(0);
-  });
-
-  it('counts alternative required expression once per run', () => {
-    const result = aggregateResults({
-      ...BASE,
-      scenarioRuns: [
-        {
-          scenario_id: 's1',
-          agent: 'gpt-4',
-          eval: { tool_constraints: { required_tools: ['search | fetch'] } },
-          runs: [makeRun(true, ['fetch', 'search'], { fetch: 1, search: 1 }), makeRun(true, [], {})]
-        }
-      ]
-    });
-    expect(result.scenarios[0].tool_constraints_stats?.required['search|fetch']).toBe(1);
-  });
-
-  it('trims forbidden tool names in statistics', () => {
-    const result = aggregateResults({
-      ...BASE,
-      scenarioRuns: [
-        {
-          scenario_id: 's1',
-          agent: 'gpt-4',
-          eval: { tool_constraints: { forbidden_tools: [' delete '] } },
-          runs: [makeRun(false, ['delete'], { delete: 1 })]
-        }
-      ]
-    });
-    expect(result.scenarios[0].tool_constraints_stats?.forbidden.delete).toBe(1);
   });
 });
 

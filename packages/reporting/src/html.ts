@@ -1,7 +1,6 @@
 import {
-  formatToolSequenceText,
-  formatToolAlternatives,
-  normalizeToolExpressionSafely,
+  formatToolExpression,
+  formatToolSequenceLabel,
   type ResultsJson
 } from '@inspectr/mcplab-core';
 
@@ -65,7 +64,7 @@ export function renderHtml(results: ResultsJson): string {
       const toolSequence = scenario.eval?.tool_sequence ?? [];
       const toolSequenceRows = toolSequence.length
         ? `<tr><td><code class="sequence-code">${escapeHtml(
-            formatToolSequenceText(toolSequence)
+            formatToolSequenceLabel(toolSequence).replace(/^Tool sequence · /, '')
           )}</code></td></tr>`
         : '';
 
@@ -76,14 +75,14 @@ export function renderHtml(results: ResultsJson): string {
 
       const requiredRows = requiredTools
         .map((tool) => {
-          const count = requiredStats[canonicalToolKey(tool)] ?? requiredStats[tool] ?? 0;
-          return `<tr><td>${escapeHtml(formatToolAlternatives(tool))}</td><td>${count}/${scenario.runs.length}</td></tr>`;
+          const count = requiredStats[tool] ?? 0;
+          return `<tr><td>${escapeHtml(formatToolExpression(tool))}</td><td>${count}/${scenario.runs.length}</td></tr>`;
         })
         .join('\n');
 
       const forbiddenRows = forbiddenTools
         .map((tool) => {
-          const count = forbiddenStats[canonicalToolKey(tool)] ?? forbiddenStats[tool] ?? 0;
+          const count = forbiddenStats[tool] ?? 0;
           return `<tr><td>${escapeHtml(tool)}</td><td>${count}/${scenario.runs.length}</td></tr>`;
         })
         .join('\n');
@@ -420,8 +419,4 @@ export function renderHtml(results: ResultsJson): string {
 </body>
 </html>
   `.trim();
-}
-
-function canonicalToolKey(expression: string): string {
-  return normalizeToolExpressionSafely(expression);
 }

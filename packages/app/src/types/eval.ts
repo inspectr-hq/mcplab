@@ -13,14 +13,8 @@ export {
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
-  formatToolSequenceLabel,
-  formatToolSequenceText,
-  formatToolAlternatives,
-  parseToolAlternatives,
-  isValidToolExpression,
-  isSingleToolName,
-  normalizeToolExpression,
-  validateEvalToolRules
+  formatToolExpression,
+  isValidToolExpression
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 

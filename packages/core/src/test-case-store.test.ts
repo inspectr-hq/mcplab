@@ -58,47 +58,6 @@ describe('createTestCaseFile', () => {
     ]);
   });
 
-  it('canonicalizes alternatives on writes and preserves repeated sequence steps', () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
-    roots.push(root);
-    const created = createTestCaseFile({
-      librariesDir: root,
-      knownServerIds: ['mcp-lab'],
-      testCase: {
-        id: 'alternatives',
-        servers: ['mcp-lab'],
-        prompt: 'Search twice.',
-        requiredTools: [' authenticate |  login '],
-        toolSequence: ['search | lookup', 'search | lookup']
-      }
-    });
-    expect(created.testCase.eval?.tool_constraints?.required_tools).toEqual(['authenticate|login']);
-    expect(created.testCase.eval?.tool_sequence).toEqual(['search|lookup', 'search|lookup']);
-  });
-
-  it('returns static tool-rule warnings from the validation already done while building', () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
-    roots.push(root);
-    const created = createTestCaseFile({
-      librariesDir: root,
-      knownServerIds: ['mcp-lab'],
-      testCase: {
-        id: 'partial-overlap',
-        servers: ['mcp-lab'],
-        prompt: 'Search.',
-        eval: {
-          tool_constraints: {
-            required_tools: ['search | lookup'],
-            forbidden_tools: ['search']
-          }
-        }
-      }
-    });
-    expect(created.warnings).toEqual([
-      'tool_constraints.required_tools[0] expression "search | lookup" includes forbidden alternative: search.'
-    ]);
-  });
-
   it('persists canonical evaluation assertion types', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);

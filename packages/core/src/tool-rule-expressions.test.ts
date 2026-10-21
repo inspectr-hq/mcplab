@@ -1,133 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
-  formatToolAlternatives,
-  formatToolSequenceText,
-  isSingleToolName,
+  formatToolExpression,
   isValidToolExpression,
-  normalizeToolExpression,
   parseToolAlternatives,
   validateEvalToolRules
 } from './tool-rule-expressions.js';
 
 describe('tool rule expressions', () => {
-  it('shares syntax checks and sequence display formatting', () => {
-    expect(isValidToolExpression(' search | lookup ')).toBe(true);
+  it('parses and formats trimmed alternatives', () => {
+    expect(parseToolAlternatives(' search | lookup ')).toEqual(['search', 'lookup']);
+    expect(formatToolExpression('search | lookup')).toBe('(search OR lookup)');
+    expect(formatToolExpression('search')).toBe('search');
+  });
+
+  it('rejects empty and duplicate alternatives', () => {
     expect(isValidToolExpression('search|')).toBe(false);
     expect(isValidToolExpression('search|search')).toBe(false);
-    expect(isSingleToolName(' search ')).toBe(true);
-    expect(isSingleToolName('search|lookup')).toBe(false);
-    expect(isSingleToolName(' ')).toBe(false);
-    expect(formatToolSequenceText(['search | lookup', 'fetch'])).toBe(
-      '(search OR lookup) -> fetch'
+    expect(formatToolExpression('search|')).toBe('search|');
+  });
+
+  it('validates required tools, sequence steps and forbidden tools with rule paths', () => {
+    expect(() =>
+      validateEvalToolRules({ tool_constraints: { required_tools: ['a', 'b|'] } }, 'S')
+    ).toThrow('S: tool_constraints.required_tools[1]');
+    expect(() => validateEvalToolRules({ tool_sequence: ['a|a'] })).toThrow('tool_sequence[0]');
+    expect(() => validateEvalToolRules({ tool_constraints: { forbidden_tools: ['a|b'] } })).toThrow(
+      'forbidden_tools[0]'
     );
-  });
-
-  it('schema patterns reject empty alternatives and forbidden expressions', () => {
-    const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
-    const schema = JSON.parse(readFileSync(resolve(root, 'config-schema.json'), 'utf8'));
-    const scenario = schema.properties.scenarios.items.oneOf[1];
-    const evalSchema = scenario.properties.eval;
-    const constraints = evalSchema.properties.tool_constraints.properties;
-    const required = new RegExp(constraints.required_tools.items.pattern);
-    const forbidden = new RegExp(constraints.forbidden_tools.items.pattern);
-    const sequence = new RegExp(evalSchema.properties.tool_sequence.items.pattern);
-    for (const valid of ['search', 'search | lookup']) {
-      expect(required.test(valid)).toBe(true);
-      expect(sequence.test(valid)).toBe(true);
-    }
-    for (const invalid of [
-      '',
-      '   ',
-      '|search',
-      'search|',
-      'search||lookup',
-      'search|   |lookup'
-    ]) {
-      expect(required.test(invalid)).toBe(false);
-      expect(sequence.test(invalid)).toBe(false);
-    }
-    expect(forbidden.test('delete')).toBe(true);
-    expect(forbidden.test('delete|remove')).toBe(false);
-  });
-  it('parses and formats trimmed alternatives', () => {
-    expect(parseToolAlternatives(' a | b ')).toEqual(['a', 'b']);
-    expect(formatToolAlternatives(' a | b ')).toBe('a OR b');
-    expect(formatToolAlternatives('search|')).toBe('search|');
-    expect(formatToolAlternatives('a|a')).toBe('a|a');
-  });
-  it('rejects empty and authored duplicate alternatives', () => {
-    expect(() => parseToolAlternatives('a||b')).toThrow();
-    expect(() => parseToolAlternatives('a|a')).toThrow();
-    expect(normalizeToolExpression('x|y', () => 'z')).toBe('z');
-  });
-  it('validates forbidden alternatives and warns on partial overlap', () => {
     expect(() =>
-      validateEvalToolRules({ tool_constraints: { forbidden_tools: ['a'], required_tools: ['a'] } })
-    ).toThrow();
-    expect(
       validateEvalToolRules({
-        tool_constraints: { forbidden_tools: ['a'], required_tools: ['a|b'] }
+        tool_constraints: { required_tools: ['a | b'], forbidden_tools: ['c'] },
+        tool_sequence: ['a', 'b | c']
       })
-    ).toHaveLength(1);
-  });
-
-  it('resolves aliases before checking forbidden contradictions', () => {
-    expect(() =>
-      validateEvalToolRules(
-        {
-          tool_constraints: { forbidden_tools: ['server:delete'], required_tools: ['delete'] }
-        },
-        'scenario',
-        ['delete']
-      )
-    ).toThrow(/entirely forbidden/);
-    expect(
-      validateEvalToolRules(
-        {
-          tool_constraints: {
-            forbidden_tools: ['server:delete'],
-            required_tools: ['search|delete']
-          }
-        },
-        'scenario',
-        ['delete', 'search']
-      )
-    ).toHaveLength(1);
-    expect(
-      validateEvalToolRules(
-        { tool_constraints: { required_tools: ['server:lookup|lookup'] } },
-        'scenario',
-        ['lookup']
-      )
-    ).toEqual([]);
-    expect(() =>
-      validateEvalToolRules({ tool_constraints: { required_tools: ['lookup|lookup'] } })
-    ).toThrow(/Duplicate tool alternative/);
-  });
-  it('names the resolved forbidden tool in alias-aware warnings', () => {
-    const rules = {
-      tool_constraints: {
-        required_tools: ['server:search | lookup'],
-        forbidden_tools: ['server:search']
-      }
-    };
-    expect(validateEvalToolRules(rules, 'Scenario "test"', ['search', 'lookup'])).toEqual([
-      expect.stringContaining('includes forbidden alternative: search.')
-    ]);
-  });
-
-  it('reports malformed runtime arrays with rule paths', () => {
-    expect(() =>
-      validateEvalToolRules({ tool_sequence: ['ok', 3] as unknown as string[] }, 'case')
-    ).toThrow(/case: tool_sequence\[1\]/);
-    expect(() =>
-      validateEvalToolRules(
-        { tool_constraints: { required_tools: 'bad' as unknown as string[] } },
-        'case'
-      )
-    ).toThrow(/case: tool_constraints.required_tools must be an array/);
+    ).not.toThrow();
   });
 });

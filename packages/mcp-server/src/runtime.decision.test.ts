@@ -116,33 +116,6 @@ describe('immediate MCP decision evaluation', () => {
     );
   });
 
-  it('returns loaded config warnings without logging them', async () => {
-    const consoleWarning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const duplicateWarning =
-      'Scenario "semantic": tool_constraints.required_tools[0] includes forbidden alternative.';
-    mocks.loadConfig.mockReturnValue({
-      config: { servers: {}, agents: {}, scenarios: [] },
-      warnings: [duplicateWarning, 'Unrelated warning']
-    });
-    mocks.runAll.mockImplementation(async () => {
-      return {
-        runDir: '/tmp/mcplab-mcp-test',
-        results: aggregateResults({
-          runId: 'test',
-          timestamp: '2026-10-13T00:00:00Z',
-          configHash: 'test',
-          cliVersion: 'test',
-          scenarioRuns: []
-        })
-      };
-    });
-
-    const result = await runTool({ config_path: '/tmp/eval.yaml' });
-    expect(result.structuredContent.warnings).toEqual([duplicateWarning, 'Unrelated warning']);
-    expect(consoleWarning).not.toHaveBeenCalled();
-    consoleWarning.mockRestore();
-  });
-
   it('preserves legacy judge-only workspaces', async () => {
     mocks.loadWorkspaceSettingsOverrides.mockReturnValue({ evaluation_judge_agent_name: 'judge' });
     await runTool({ config_path: '/tmp/eval.yaml' });

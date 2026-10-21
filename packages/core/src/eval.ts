@@ -11,14 +11,7 @@ import type {
   ToolCall,
   ToolInputAssertion
 } from './types.js';
-import {
-  formatToolAlternatives,
-  formatToolSequenceText,
-  normalizeEvalToolRules,
-  normalizeToolExpression,
-  parseToolAlternatives,
-  resolveToolNameAlias
-} from './tool-rule-expressions.js';
+import { formatToolExpression, parseToolAlternatives } from './tool-rule-expressions.js';
 
 export interface EvalResult {
   pass: boolean;
@@ -47,9 +40,7 @@ export interface EvaluateScenarioWithAgentChecksOptions {
   scenarioPrompt?: string;
 }
 
-export function buildNotExecutedCheckResults(
-  evalRules?: EvalRules
-): CheckResult[] {
+export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
   for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
@@ -57,19 +48,16 @@ export function buildNotExecutedCheckResults(
       type: rule.type,
       label: rule.label,
       status: 'not_executed',
-      reason: undefined,
-      metadata: rule.metadata
+      reason: undefined
     });
   }
-  const sequence = (evalRules.tool_sequence ?? []).map((expression) =>
-    normalizeToolExpression(expression)
-  );
+  const sequence = evalRules.tool_sequence ?? [];
   if (sequence.length > 0) {
     results.push({
       type: 'tool_sequence',
       label: formatToolSequenceLabel(sequence),
       status: 'not_executed',
-      metadata: { actual: [], expected: sequence, source_expected: sequence }
+      metadata: { actual: [], expected: sequence }
     });
   }
   for (const rule of (evalRules.response_assertions ?? []).map(
@@ -102,20 +90,16 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       type: rule.type,
       label: rule.label,
       status: 'not_evaluated',
-      reason: 'Tool telemetry is not available for this execution source.',
-      metadata: rule.metadata
+      reason: 'Tool telemetry is not available for this execution source.'
     });
   }
   if (evalRules.tool_sequence?.length) {
-    const sequence = evalRules.tool_sequence.map((expression) =>
-      normalizeToolExpression(expression)
-    );
     results.push({
       type: 'tool_sequence',
-      label: formatToolSequenceLabel(sequence),
+      label: formatToolSequenceLabel(evalRules.tool_sequence),
       status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.',
-      metadata: { actual: [], expected: sequence, source_expected: sequence }
+      metadata: { actual: [], expected: evalRules.tool_sequence }
     });
   }
   for (const rule of evalRules.tool_input_assertions ?? []) {
@@ -136,33 +120,15 @@ export function evaluateScenario(
   evalRules?: EvalRules,
   toolCalls: ToolCall[] = []
 ): EvalResult {
-  return evaluateScenarioInternal(finalText, toolSequence, evalRules, evalRules, toolCalls);
-}
-
-function evaluateScenarioInternal(
-  finalText: string,
-  toolSequence: string[],
-  evalRules: EvalRules | undefined,
-  authoredRules: EvalRules | undefined,
-  toolCalls: ToolCall[]
-): EvalResult {
   const failures: string[] = [];
   const check_results: CheckResult[] = [];
   if (evalRules?.tool_constraints) {
-    const results = evaluateToolConstraints(
-      toolSequence,
-      evalRules.tool_constraints,
-      authoredRules?.tool_constraints
-    );
+    const results = evaluateToolConstraints(toolSequence, evalRules.tool_constraints);
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
   if (evalRules?.tool_sequence?.length) {
-    const results = evaluateToolSequence(
-      toolSequence,
-      evalRules.tool_sequence,
-      authoredRules?.tool_sequence
-    );
+    const results = evaluateToolSequence(toolSequence, evalRules.tool_sequence);
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
@@ -176,11 +142,7 @@ function evaluateScenarioInternal(
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
-  return {
-    pass: failures.length === 0,
-    failures,
-    check_results
-  };
+  return { pass: failures.length === 0, failures, check_results };
 }
 
 export async function evaluateScenarioWithAgentChecks(
@@ -190,15 +152,9 @@ export async function evaluateScenarioWithAgentChecks(
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
   const normalizedRules = normalizeToolConstraintAliases(evalRules, options?.availableToolNames);
-  const base = evaluateScenarioInternal(
-    finalText,
-    toolSequence,
-    normalizedRules,
-    evalRules,
-    options?.toolCalls ?? []
-  );
+  const base = evaluateScenario(finalText, toolSequence, normalizedRules, options?.toolCalls ?? []);
   const failures = [...base.failures];
-  const check_results = base.check_results;
+  const check_results = [...base.check_results];
 
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
@@ -285,43 +241,69 @@ export function normalizeToolConstraintAliases(
   evalRules: EvalRules | undefined,
   availableToolNames: string[] | undefined
 ): EvalRules | undefined {
-  if (!availableToolNames?.length) return normalizeEvalToolRules(evalRules);
-  const resolve = (name: string): string => resolveToolNameAlias(name, availableToolNames);
-  return normalizeEvalToolRules(evalRules, resolve);
+  if (!evalRules || !availableToolNames?.length) return evalRules;
+  const available = new Set(availableToolNames);
+  const resolve = (name: string): string => {
+    if (available.has(name)) return name;
+    const separator = name.lastIndexOf(':');
+    if (separator < 0) return name;
+    const suffix = name.slice(separator + 1);
+    return available.has(suffix) ? suffix : name;
+  };
+  const resolveExpression = (expression: string): string =>
+    [...new Set(parseToolAlternatives(expression).map(resolve))].join('|');
+  const constraints = evalRules.tool_constraints;
+  return {
+    ...evalRules,
+    ...(constraints
+      ? {
+          tool_constraints: {
+            ...constraints,
+            ...(constraints.required_tools
+              ? { required_tools: constraints.required_tools.map(resolveExpression) }
+              : {}),
+            ...(constraints.forbidden_tools
+              ? { forbidden_tools: constraints.forbidden_tools.map(resolve) }
+              : {})
+          }
+        }
+      : {}),
+    ...(evalRules.tool_sequence
+      ? { tool_sequence: evalRules.tool_sequence.map(resolveExpression) }
+      : {}),
+    ...(evalRules.tool_input_assertions
+      ? {
+          tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({
+            ...a,
+            tool: resolve(a.tool)
+          }))
+        }
+      : {})
+  };
 }
 
 function evaluateToolConstraints(
   toolSequence: string[],
-  constraints: ToolConstraints,
-  authoredConstraints: ToolConstraints | undefined = constraints
+  constraints: ToolConstraints
 ): Pick<EvalResult, 'failures' | 'check_results'> {
   const failures: string[] = [];
   const unique = new Set(toolSequence);
-  const check_results: CheckResult[] = buildToolConstraintCheckResults(
-    constraints,
-    authoredConstraints
-  ).map(
+  const check_results: CheckResult[] = buildToolConstraintCheckResults(constraints).map(
     (template): CheckResult => {
-      const alternatives =
-        template.type === 'required_tool'
-          ? parseToolAlternatives(template.expression)
-          : [template.tool];
-      const matchedTools = alternatives.filter((tool) => unique.has(tool));
       const reason =
         template.type === 'forbidden_tool'
           ? unique.has(template.tool)
             ? `Forbidden tool used: ${template.tool}`
             : undefined
-          : matchedTools.length === 0
-            ? `Required tool not used: ${formatToolAlternatives(template.expression)}`
+          : !parseToolAlternatives(template.tool).some((tool) => unique.has(tool))
+            ? `Required tool not used: ${formatToolExpression(template.tool)}`
             : undefined;
       if (reason) failures.push(reason);
       return {
         type: template.type,
         label: template.label,
         status: reason ? 'failed' : 'passed',
-        reason,
-        metadata: template.metadata
+        reason
       };
     }
   );
@@ -330,14 +312,9 @@ function evaluateToolConstraints(
 
 function evaluateToolSequence(
   actual: string[],
-  expected: string[],
-  authoredExpected: string[] | undefined = expected
+  expected: string[]
 ): Pick<EvalResult, 'failures' | 'check_results'> {
-  const canonicalExpected = expected.map((expression) => normalizeToolExpression(expression));
-  const sourceExpected = (authoredExpected ?? expected).map((expression) =>
-    normalizeToolExpression(expression)
-  );
-  const label = formatToolSequenceLabel(canonicalExpected);
+  const label = formatToolSequenceLabel(expected);
   if (expected.length === 0) {
     return {
       failures: [],
@@ -346,27 +323,20 @@ function evaluateToolSequence(
           type: 'tool_sequence',
           label,
           status: 'passed',
-          metadata: { actual, expected: canonicalExpected, source_expected: sourceExpected }
+          metadata: { actual, expected }
         }
       ]
     };
   }
 
   let cursor = 0;
-  for (const expression of canonicalExpected) {
-    const alternatives = parseToolAlternatives(expression);
-    let index = -1;
-    for (let i = cursor; i < actual.length; i += 1) {
-      const found = alternatives.find((tool) => tool === actual[i]);
-      if (found) {
-        index = i;
-        break;
-      }
-    }
+  for (const step of expected) {
+    const alternatives = parseToolAlternatives(step);
+    const index = actual.findIndex((tool, i) => i >= cursor && alternatives.includes(tool));
     if (index < 0) {
       const reason = alternatives.some((tool) => actual.includes(tool))
-        ? `Tool sequence order was not satisfied: ${formatToolSequenceText(canonicalExpected)}`
-        : `Required tool in sequence not used: ${formatToolAlternatives(expression)}`;
+        ? `Tool sequence order was not satisfied: ${expected.join(' -> ')}`
+        : `Required tool in sequence not used: ${formatToolExpression(step)}`;
       return {
         failures: [reason],
         check_results: [
@@ -375,11 +345,7 @@ function evaluateToolSequence(
             label,
             status: 'failed',
             reason,
-            metadata: {
-              actual,
-              expected: canonicalExpected,
-              source_expected: sourceExpected
-            }
+            metadata: { actual, expected }
           }
         ]
       };
@@ -394,7 +360,7 @@ function evaluateToolSequence(
         type: 'tool_sequence',
         label,
         status: 'passed',
-        metadata: { actual, expected: canonicalExpected, source_expected: sourceExpected }
+        metadata: { actual, expected }
       }
     ]
   };
@@ -690,58 +656,22 @@ function assertNever(value: never): never {
 }
 
 function buildToolConstraintCheckResults(
-  constraints: ToolConstraints,
-  authoredConstraints: ToolConstraints | undefined = constraints
-): Array<
-  | { type: 'forbidden_tool'; tool: string; label: string; metadata: Record<string, unknown> }
-  | {
-      type: 'required_tool';
-      expression: string;
-      label: string;
-      metadata: Record<string, unknown>;
-    }
-> {
-  const results: Array<
-    | {
-        type: 'forbidden_tool';
-        tool: string;
-        label: string;
-        metadata: Record<string, unknown>;
-      }
-    | {
-        type: 'required_tool';
-        expression: string;
-        label: string;
-        metadata: Record<string, unknown>;
-      }
-  > = [];
-  for (const [index, tool] of (constraints.forbidden_tools ?? []).entries()) {
-    const normalizedTool = tool.trim();
+  constraints: ToolConstraints
+): Array<{ type: 'forbidden_tool' | 'required_tool'; tool: string; label: string }> {
+  const results: Array<{ type: 'forbidden_tool' | 'required_tool'; tool: string; label: string }> =
+    [];
+  for (const tool of constraints.forbidden_tools ?? []) {
     results.push({
       type: 'forbidden_tool',
-      tool: normalizedTool,
-      label: `Forbidden tool · ${normalizedTool}`,
-      metadata: {
-        source_expression: (authoredConstraints?.forbidden_tools?.[index] ?? tool).trim()
-      }
+      tool,
+      label: `Forbidden tool · ${tool}`
     });
   }
-  for (const [index, tool] of (constraints.required_tools ?? []).entries()) {
-    const expression = normalizeToolExpression(tool);
-    const alternatives = parseToolAlternatives(expression);
-    const display = alternatives.join(' OR ');
+  for (const tool of constraints.required_tools ?? []) {
     results.push({
       type: 'required_tool',
-      expression,
-      label:
-        alternatives.length > 1
-          ? `Required tool · (${display})`
-          : `Required tool · ${alternatives[0]}`,
-      metadata: {
-        source_expression: normalizeToolExpression(
-          authoredConstraints?.required_tools?.[index] ?? tool
-        )
-      }
+      tool,
+      label: `Required tool · ${formatToolExpression(tool)}`
     });
   }
   return results;
@@ -815,5 +745,7 @@ function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion)
 }
 
 export function formatToolSequenceLabel(sequence: string[]): string {
-  return sequence.length > 0 ? `Tool sequence · ${formatToolSequenceText(sequence)}` : 'Tool sequence';
+  return sequence.length > 0
+    ? `Tool sequence · ${sequence.map(formatToolExpression).join(' -> ')}`
+    : 'Tool sequence';
 }

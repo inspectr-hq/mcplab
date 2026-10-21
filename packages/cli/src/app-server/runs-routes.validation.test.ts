@@ -444,8 +444,6 @@ describe('run request validation', () => {
 
   it('returns a warning when preview eval rules include multiple tool_sequence checks', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];
-    const toolWarning =
-      'Scenario "scn-1": tool_constraints.required_tools[0] expression "search | lookup" includes forbidden alternative: search.';
     const handled = await handleRunsRoutes({
       req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
       res: {} as any,
@@ -469,9 +467,7 @@ describe('run request validation', () => {
             serverNames: ['server-1'],
             evalRules: [
               { type: 'tool_sequence', sequence: ['search_tags', 'value_based_search'] },
-              { type: 'tool_sequence', sequence: ['lookup', 'fetch'] },
-              { type: 'required_tool', value: 'search | lookup' },
-              { type: 'forbidden_tool', value: 'search' }
+              { type: 'tool_sequence', sequence: ['lookup', 'fetch'] }
             ],
             extractRules: []
           }
@@ -498,10 +494,8 @@ describe('run request validation', () => {
     expect(handled).toBe(true);
     expect(responses[0]?.status).toBe(200);
     expect((responses[0]?.payload as any)?.warnings).toEqual([
-      'Multiple tool_sequence checks were provided; only the last valid sequence was used.',
-      toolWarning
+      'Multiple tool_sequence checks were provided; only the last valid sequence was used.'
     ]);
-    expect(vi.mocked(runAll).mock.calls.at(-1)?.[1]).not.toHaveProperty('onWarning');
     expect(vi.mocked(runAll).mock.calls.at(-1)?.[0].scenarios[0]?.eval?.tool_sequence).toEqual([
       'lookup',
       'fetch'

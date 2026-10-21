@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
-import { createEvaluationConfigFile } from './evaluation-config-store.js';
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -27,24 +26,6 @@ describe('tool expression config boundaries', () => {
   it.each(['search|', '|lookup', 'search|search'])('rejects malformed %s at load', (expression) => {
     const { path } = fixture(expression);
     expect(() => loadConfig(path)).toThrow();
-  });
-  it('rejects impossible groups and warns for partial forbidden overlap', () => {
-    expect(() => loadConfig(fixture('search | lookup', 'search, lookup').path)).toThrow();
-    expect(loadConfig(fixture('search | lookup', 'search').path).warnings.join(' ')).toContain(
-      'search'
-    );
-  });
-  it('canonicalizes persisted expressions only on writes', () => {
-    const { path, root } = fixture('search | lookup');
-    const created = createEvaluationConfigFile({
-      evalsDir: join(root, 'evals'),
-      fileName: 'saved',
-      config: loadConfig(path).sourceConfig
-    });
-    expect(readFileSync(created.path, 'utf8')).toContain('search|lookup');
-    expect(created.config.scenarios[0]).toMatchObject({
-      eval: { tool_sequence: ['search|lookup', 'fetch'] }
-    });
   });
   it('validates referenced test cases at load without altering library files', () => {
     const { root, path } = fixture('search');

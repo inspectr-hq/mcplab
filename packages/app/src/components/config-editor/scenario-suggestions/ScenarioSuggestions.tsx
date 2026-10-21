@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/hooks/use-toast';
 import { formatEvalRuleLabel } from '@/lib/check-presentation';
-import { formatToolSequenceText } from '@/types/eval';
 import type { EvalRule, Scenario } from '@/types/eval';
 import type { ScenarioAssistantSuggestionBundle } from '@/lib/data-sources/types';
 
@@ -58,7 +57,7 @@ function formatSuggestedEvalRuleLabel(rule: SuggestedEvalRule): string {
   if (rule.type === 'tool_sequence') {
     const sequence = sequenceFromSuggestedRule(rule);
     return sequence.length > 0
-      ? `Tool sequence · ${formatToolSequenceText(sequence)}`
+      ? `Tool sequence · ${sequence.join(' -> ')}`
       : 'Tool sequence · No tool steps';
   }
   return formatEvalRuleLabel(rule);

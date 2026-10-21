@@ -349,7 +349,7 @@ export async function runAll(
             runResult.availableToolNames
           );
           const scenarioRun = await evaluateScenarioObservation({
-            scenario,
+            scenario: { ...scenario, eval: effectiveScenarioEval },
             runIndex,
             observation: {
               finalText: runResult.finalText,

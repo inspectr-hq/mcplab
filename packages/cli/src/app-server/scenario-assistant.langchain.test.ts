@@ -232,7 +232,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
                       { type: 'response_regex', value: '^ok$' },
                       { type: 'response_regex', value: '^ok$' },
                       { type: 'required_tool', value: 'server-1__lookup' },
-                      { type: 'forbidden_tool', value: 'server-1__update' }
+                      { type: 'forbidden_tool', value: 'server-1__lookup' }
                     ]
                   },
                   extractRules: { replacement: [{ name: 'key', pattern: 'key=(.+)' }] },
@@ -327,8 +327,7 @@ describe('Scenario Assistant LangGraph HTTP runtime', () => {
     expect(denied?.body.response.suggestions.evalRules.replacement).toEqual([
       { type: 'tool_sequence', sequence: ['lookup'] },
       { type: 'response_equals', value: 'ok' },
-      { type: 'required_tool', value: 'lookup' },
-      { type: 'forbidden_tool', value: 'update' }
+      { type: 'required_tool', value: 'lookup' }
     ]);
     expect(denied?.body.response.suggestions.extractRules.replacement).toEqual([
       { name: 'key', pattern: 'key=(.+)' }
