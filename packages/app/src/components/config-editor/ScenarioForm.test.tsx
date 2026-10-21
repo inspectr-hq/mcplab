@@ -358,6 +358,43 @@ describe('ScenarioForm checks editor', () => {
     expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search|lookup' });
   });
 
+  it('preserves spaces while typing a tool alternative', () => {
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    const input = screen.getByLabelText('Required tool alternatives 1');
+    fireEvent.change(input, { target: { value: 'custom tool' } });
+    expect(input).toHaveValue('custom tool');
+  });
+
+  it('clears an OR expression when switching to a single-name rule', async () => {
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Required tool alternatives 1'), {
+      target: { value: 'search|lookup' }
+    });
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Forbidden Tool'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Forbidden tool name')).toHaveValue('');
+      expect(screen.getAllByRole('button', { name: /^Add$/ })[0]).toBeDisabled();
+    });
+  });
+
   it('splits pasted required tool alternatives into separate inputs', async () => {
     const onChange = vi.fn();
 

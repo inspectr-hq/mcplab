@@ -501,6 +501,25 @@ describe('decision connection probe', () => {
     expect(JSON.stringify(result)).not.toContain('Bearer test-key');
     expect(chatMock).not.toHaveBeenCalled();
   });
+  it('redacts credentials and query parameters from provider endpoints', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+    );
+    const [answer] = await requestDecisionAnswers({
+      ...input,
+      config: {
+        ...config,
+        provider: 'ollama',
+        baseUrl: 'https://user:pass@ollama.example/v1?token=secret'
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://user:pass@ollama.example/v1?token=secret/v1/systemone',
+      expect.anything()
+    );
+    expect(answer.providerResponse?.endpoint).toBe('https://ollama.example/v1');
+    expect(JSON.stringify(answer.providerResponse)).not.toMatch(/user|pass|secret/);
+  });
   it.each([
     ['connection_error', () => Promise.reject(new Error('private connection details'))],
     ['missing_answer', () => Promise.resolve(response([]))],

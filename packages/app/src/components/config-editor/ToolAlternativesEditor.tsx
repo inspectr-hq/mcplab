@@ -43,14 +43,16 @@ export function ToolAlternativesEditor({
   const names = alternatives.map((name) => name.trim()).filter(Boolean);
   const duplicate = new Set(names).size !== names.length;
   const setAlternatives = (next: string[]) => onChange(next.join('|'));
-  const updateAlternative = (index: number, name: string) =>
+  const updateAlternative = (index: number, name: string) => {
+    const replacements = name.includes('|')
+      ? name.split('|').map((alternative) => alternative.trim())
+      : [name];
     setAlternatives(
       alternatives.flatMap((current, currentIndex) =>
-        currentIndex === index
-          ? name.split('|').map((alternative) => alternative.trim())
-          : [current]
+        currentIndex === index ? replacements : [current]
       )
     );
+  };
   return (
     <div className="min-w-0 flex-1" aria-label={label}>
       {alternatives.map((tool, index) => (

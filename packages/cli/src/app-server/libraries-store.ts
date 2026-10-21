@@ -151,16 +151,16 @@ export function writeBrowserProviderAndAgent(
     provider: profile.id,
     url: agent.url
   };
-  const persistedProfiles = writeBrowserProviderProfiles(librariesDir, {
-    ...current.browserProviders,
-    [profile.id]: profile
-  });
   writeLibraries(librariesDir, {
     servers: current.servers,
     agents: { ...current.agents, [agent.id]: browserAgent },
-    scenarios: current.scenarios
+    scenarios: current.scenarios,
+    browserProviders: { ...current.browserProviders, [profile.id]: profile }
   });
-  return { profile: persistedProfiles[profile.id] ?? profile, agent: browserAgent };
+  return {
+    profile: readLibraries(librariesDir).browserProviders[profile.id] ?? profile,
+    agent: browserAgent
+  };
 }
 
 export function writeBrowserProviderLearningArtifact(

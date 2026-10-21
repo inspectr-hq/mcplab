@@ -125,6 +125,18 @@ function formatProviderResponseFailure(response?: DecisionProviderResponse): str
     .join(' ');
 }
 
+function sanitizeProviderEndpoint(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return '[invalid endpoint]';
+  }
+}
+
 function systemOneBody({ config, evidence, checks }: DecisionRequest) {
   return {
     model: config.model,
@@ -299,7 +311,7 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
       throwIfAborted(params.signal);
       return unavailable('http_error', Date.now() - started, {
         providerResponse: {
-          endpoint,
+          endpoint: sanitizeProviderEndpoint(endpoint),
           status: response.status,
           ...(response.statusText ? { statusText: response.statusText } : {}),
           ...(body !== undefined ? { body } : {})
@@ -318,7 +330,7 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
           ? 'invalid_response'
           : 'connection_error',
       Date.now() - started,
-      endpoint ? { providerResponse: { endpoint } } : {}
+      endpoint ? { providerResponse: { endpoint: sanitizeProviderEndpoint(endpoint) } } : {}
     );
   } finally {
     timeout.dispose();

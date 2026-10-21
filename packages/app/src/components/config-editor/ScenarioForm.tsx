@@ -719,6 +719,7 @@ function ScenarioCard({
   useEffect(() => {
     setNewRulePath('');
     setNewRuleEquals('');
+    setNewRuleValue('');
     setNewToolSequenceValue('');
   }, [newRuleType]);
 
