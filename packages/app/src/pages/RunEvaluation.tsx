@@ -34,7 +34,7 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
-import { isLlmAgent, type InspectrSession, type RunAgentSelection } from '@/types/eval';
+import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -254,12 +254,15 @@ const RunEvaluation = () => {
   const agentSelectionError =
     selectedConfig?.loadError ||
     defaultSelection.error ||
-    (defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none'
+    (!agentSelectionEdited &&
+    (defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none')
       ? defaultEvaluationAgent.error
       : undefined);
   const invalidWorkspaceDefault =
     defaultSelection.source === 'workspace_default' &&
-    availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name && !isLlmAgent(agent));
+    availableAgents.some(
+      (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
+    );
   const defaultSelectedAgentIds = useMemo(() => {
     if (invalidWorkspaceDefault) return [];
     return defaultSelection.agentNames.filter((id) =>

@@ -378,6 +378,51 @@ describe('RunEvaluation', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Other Agent' }));
     expect(screen.queryByText(/Workspace default agent:/)).not.toBeInTheDocument();
   });
+  it('allows an explicit agent after workspace settings fail to load', async () => {
+    configsRef.value = [
+      {
+        id: 'empty',
+        name: 'Empty',
+        sourcePath: '/empty.yaml',
+        agents: [],
+        scenarios: [
+          {
+            id: 'scenario-1',
+            name: 'Scenario 1',
+            prompt: 'test',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    libraryAgentsRef.value = [
+      {
+        id: 'manual-agent',
+        name: 'Manual Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
+      }
+    ];
+    sourceMock.getWorkspaceSettings.mockRejectedValueOnce(new Error('settings unavailable'));
+    render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Could not load the workspace default agent/)).toBeInTheDocument();
+    const run = screen.getByRole('button', { name: 'Run' });
+    expect(run).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Manual Agent' }));
+    await waitFor(() => expect(run).toBeEnabled());
+    fireEvent.click(run);
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+  });
   it('shows the result card when the final attached job completes', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-final');
     let onEvent: ((event: any) => void) | undefined;

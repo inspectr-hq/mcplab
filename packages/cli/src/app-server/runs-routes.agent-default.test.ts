@@ -84,6 +84,14 @@ describe('workspace default evaluation agent', () => {
     const override = await request({ defaultName: 'workspace', requested: ['other'] });
     expect(override.enqueueRun.mock.calls[0]?.[0]).toMatchObject({ requestedAgents: ['other'] });
   });
+  it('falls back to the workspace default when the request contains only blank agent names', async () => {
+    const { enqueueRun, asJson } = await request({ defaultName: 'workspace', requested: [' '] });
+    expect(asJson).toHaveBeenCalledWith(expect.anything(), 202, expect.anything());
+    expect(enqueueRun.mock.calls[0]?.[0]).toMatchObject({
+      requestedAgents: ['workspace'],
+      agentSelectionSource: 'workspace_default'
+    });
+  });
   it('rejects inherited browser defaults but preserves explicit Rover selections', async () => {
     const inherited = await request({
       defaultName: 'browser',

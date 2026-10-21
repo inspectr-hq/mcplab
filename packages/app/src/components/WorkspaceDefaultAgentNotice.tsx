@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { isLlmAgent, type AgentConfig } from '@/types/eval';
+import type { AgentConfig } from '@/types/eval';
 
 export function WorkspaceDefaultAgentNotice(props: {
   name?: string;
@@ -10,7 +10,7 @@ export function WorkspaceDefaultAgentNotice(props: {
   const agent = props.agents.find((item) => item.id === props.name);
   const error =
     props.error ??
-    (agent && !isLlmAgent(agent)
+    (agent?.type === 'browser'
       ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
       : undefined);
   return (

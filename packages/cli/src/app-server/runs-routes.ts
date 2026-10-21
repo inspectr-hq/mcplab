@@ -382,9 +382,10 @@ export async function handleRunsRoutes(params: {
     const scenarioIds = Array.isArray(body.scenarioIds)
       ? body.scenarioIds.map((id: unknown) => String(id).trim()).filter(Boolean)
       : undefined;
-    const requestedAgents = Array.isArray(body.agents)
+    const requestedAgentsFromBody = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
+    const requestedAgents = requestedAgentsFromBody?.length ? requestedAgentsFromBody : undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
