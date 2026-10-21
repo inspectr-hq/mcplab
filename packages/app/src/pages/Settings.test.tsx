@@ -64,6 +64,20 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('option', { name: /Browser Agent/ })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Assistant One/ })).toBeInTheDocument();
   });
+  it('labels a saved browser default as disallowed rather than unavailable', async () => {
+    agentsRef.value.push({ id: 'browser', name: 'Browser Agent', model: '', type: 'browser' });
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      defaultEvaluationAgentName: 'browser'
+    });
+    render(<SettingsPage />);
+
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    fireEvent.click(select);
+
+    expect(
+      screen.getByRole('option', { name: 'browser (browser agent, not allowed)' })
+    ).toBeInTheDocument();
+  });
   it('restores the agent setting after a failed save', async () => {
     sourceMock.updateWorkspaceSettings.mockRejectedValueOnce(new Error('Save failed'));
     render(<SettingsPage />);

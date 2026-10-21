@@ -390,12 +390,12 @@ const Configurations = () => {
       }
 
       const outcomes = await Promise.allSettled(
-        runnable.map(async (cfg) => {
-          return source.startRun({
+        runnable.map((cfg) =>
+          source.startRun({
             configPath: String(cfg.sourcePath),
             runsPerScenario: 1
-          });
-        })
+          })
+        )
       );
       const successCount = outcomes.filter((item) => item.status === 'fulfilled').length;
       const failureCount = outcomes.length - successCount;

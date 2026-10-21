@@ -88,6 +88,20 @@ describe('ConfigEditor', () => {
     );
     expect(await screen.findByText(/No workspace default agent is set/)).toBeInTheDocument();
   });
+  it('shows missing referenced agents in view mode', async () => {
+    configRef.value!.agentEntries = [{ kind: 'referenced', ref: 'deleted-agent' }];
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText('Referenced agents not found: deleted-agent')
+    ).toBeInTheDocument();
+  });
   it.each(['/mcp-evaluations/cfg-1/agents', '/mcp-evaluations/cfg-1/edit?tab=agents'])(
     'shows the inherited workspace agent on %s without adding it to the evaluation',
     async (path) => {

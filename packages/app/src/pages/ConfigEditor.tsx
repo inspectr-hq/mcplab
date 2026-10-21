@@ -1305,6 +1305,11 @@ const ConfigEditor = () => {
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">
+                  {librariesReady && agentViewRows.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      Referenced agents not found: {missingAgentRefs.join(', ')}
+                    </p>
+                  )}
                   {agentViewRows.map((row, index) => {
                     const name = safeText(row.agent.name, row.agent.id);
                     const isDefault = defaultRunAgentNames.includes(
