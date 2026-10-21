@@ -909,7 +909,9 @@ describe('RunEvaluation', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Agent A')).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'Agent A' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Agent B' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Library Only Agent' })).not.toBeChecked();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
@@ -917,13 +919,12 @@ describe('RunEvaluation', () => {
     await waitFor(() => {
       expect(sourceMock.startRun).toHaveBeenCalledTimes(1);
     });
-    expect(sourceMock.startRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        configPath: '/path/to/test.yaml',
-        scenarioIds: ['scenario-1'],
-        agents: ['agent-a', 'agent-b']
-      })
-    );
+    const request = sourceMock.startRun.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      configPath: '/path/to/test.yaml',
+      scenarioIds: ['scenario-1']
+    });
+    expect(request).not.toHaveProperty('agents');
   });
 
   it('trims referenced agent ids when initializing selected agents', async () => {
