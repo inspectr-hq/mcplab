@@ -994,3 +994,28 @@ describe('evaluateScenario — tool alternatives', () => {
     ]);
   });
 });
+
+describe('evaluateScenarioWithAgentChecks — aliases', () => {
+  it('evaluates resolved names but keeps authored names in check identities', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      '',
+      ['search'],
+      {
+        tool_constraints: { required_tools: ['MCPLab:search | lookup'] },
+        tool_sequence: ['MCPLab:search'],
+        tool_input_assertions: [{ type: 'contains', tool: 'MCPLab:search', value: 'paris' }]
+      },
+      {
+        availableToolNames: ['search', 'lookup'],
+        toolCalls: [{ name: 'search', arguments: { q: 'Paris' } }]
+      }
+    );
+    expect(result.pass).toBe(true);
+    expect(result.check_results.map((check) => check.label)).toEqual([
+      'Required tool · (MCPLab:search OR lookup)',
+      'Tool sequence · MCPLab:search',
+      expect.stringContaining('MCPLab:search')
+    ]);
+    expect(result.check_results[2]?.metadata?.tool).toBe('MCPLab:search');
+  });
+});

@@ -151,10 +151,17 @@ export async function evaluateScenarioWithAgentChecks(
   evalRules?: EvalRules,
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
+  const toolCalls = options?.toolCalls ?? [];
   const normalizedRules = normalizeToolConstraintAliases(evalRules, options?.availableToolNames);
-  const base = evaluateScenario(finalText, toolSequence, normalizedRules, options?.toolCalls ?? []);
+  const base = evaluateScenario(finalText, toolSequence, normalizedRules, toolCalls);
   const failures = [...base.failures];
-  const check_results = [...base.check_results];
+  const check_results =
+    normalizedRules === evalRules
+      ? [...base.check_results]
+      : withAuthoredToolNames(
+          base.check_results,
+          evaluateScenario(finalText, toolSequence, evalRules, toolCalls).check_results
+        );
 
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
@@ -234,6 +241,23 @@ export async function evaluateScenarioWithAgentChecks(
   }
 
   return { pass: failures.length === 0, failures, check_results };
+}
+
+/**
+ * Alias resolution maps rules 1:1, so authored and resolved evaluations yield checks in the same
+ * order. Keep the authored labels and tool names so results match the rules the user wrote.
+ */
+function withAuthoredToolNames(resolved: CheckResult[], authored: CheckResult[]): CheckResult[] {
+  return resolved.map((check, index) => {
+    const source = authored[index];
+    if (source?.type !== check.type) return check;
+    const tool = source.metadata?.tool;
+    return {
+      ...check,
+      label: source.label,
+      ...(check.metadata && tool !== undefined ? { metadata: { ...check.metadata, tool } } : {})
+    };
+  });
 }
 
 /** Resolve client display aliases such as `MCPLab:tool_name` to exposed MCP names. */
