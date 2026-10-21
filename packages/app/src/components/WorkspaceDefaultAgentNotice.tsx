@@ -5,6 +5,26 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ProviderBadge } from '@/components/ProviderBadge';
 import type { AgentConfig } from '@/types/eval';
 
+function getNoticeTitle(loading: boolean, name: string | undefined, agent?: AgentConfig): string {
+  if (loading) return 'Workspace default agent';
+  if (!name) return 'No workspace default agent is set.';
+  return `Workspace default agent: ${agent?.name || name}`;
+}
+
+function getNoticeDescription(
+  loading: boolean,
+  error: string | undefined,
+  name: string | undefined,
+  agent?: AgentConfig
+): string | undefined {
+  if (loading) return 'Loading workspace default agent...';
+  if (error) return error;
+  if (!name) return 'Select an agent for the run or configure a workspace default.';
+  if (!agent) {
+    return 'This agent is no longer available. Choose another workspace default or select an agent for the run.';
+  }
+}
+
 export function WorkspaceDefaultAgentNotice(props: {
   name?: string;
   loading: boolean;
@@ -19,14 +39,8 @@ export function WorkspaceDefaultAgentNotice(props: {
     (isBrowserAgent
       ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
       : undefined);
-  const description = props.loading
-    ? 'Loading workspace default agent...'
-    : (error ??
-      (props.name
-        ? agent
-          ? undefined
-          : 'This agent is no longer available. Choose another workspace default or select an agent for the run.'
-        : 'Select an agent for the run or configure a workspace default.'));
+  const title = getNoticeTitle(props.loading, props.name, agent);
+  const description = getNoticeDescription(props.loading, error, props.name, agent);
   return (
     <Card role="status">
       <CardContent className="flex items-start gap-3 p-4">
@@ -42,13 +56,7 @@ export function WorkspaceDefaultAgentNotice(props: {
         <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
           <div className="min-w-0 space-y-1.5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-medium">
-                {props.loading
-                  ? 'Workspace default agent'
-                  : props.name
-                    ? `Workspace default agent: ${agent?.name || props.name}`
-                    : 'No workspace default agent is set.'}
-              </p>
+              <p className="font-medium">{title}</p>
             </div>
             {agent && (
               <div className="flex flex-wrap items-center gap-1.5">

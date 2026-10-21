@@ -237,8 +237,6 @@ const RunEvaluation = () => {
 
   const prevConfigKeyRef = useRef('');
   const pendingAgentConfigKeyRef = useRef('');
-  const pendingScenarioConfigKeyRef = useRef('');
-  const scenarioSelectionEditedRef = useRef(false);
   const configKey = selectedConfig
     ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
     : '';
@@ -291,11 +289,10 @@ const RunEvaluation = () => {
     unavailableAgentNames.length > 0 &&
     defaultSelection.source !== 'workspace_default';
   useEffect(() => {
+    if (!librariesReady) return;
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
     pendingAgentConfigKeyRef.current = configKey;
-    pendingScenarioConfigKeyRef.current = configKey;
-    scenarioSelectionEditedRef.current = false;
     setAgentSelectionEdited(false);
     if (!selectedConfig) {
       setSelectedAgentIds([]);
@@ -313,19 +310,12 @@ const RunEvaluation = () => {
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
-  }, [configKey, selectedConfig, availableScenarios]);
+  }, [configKey, selectedConfig, availableScenarios, librariesReady]);
   useEffect(() => {
     if (agentsLoading || !pendingAgentConfigKeyRef.current) return;
     setSelectedAgentIds(defaultSelectedAgentIds);
     pendingAgentConfigKeyRef.current = '';
   }, [configKey, agentsLoading, defaultSelectedAgentIds]);
-  useEffect(() => {
-    if (!librariesReady || !pendingScenarioConfigKeyRef.current) return;
-    if (!scenarioSelectionEditedRef.current) {
-      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
-    }
-    pendingScenarioConfigKeyRef.current = '';
-  }, [configKey, librariesReady, availableScenarios]);
   useEffect(() => {
     if (
       agentsLoading ||
@@ -1188,27 +1178,23 @@ const RunEvaluation = () => {
             </fieldset>
           )}
           {selectedConfig && (
-            <div className="space-y-2">
+            <fieldset disabled={!librariesReady} className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Tests</Label>
                 <div className="flex items-center gap-3 text-xs">
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => {
-                      scenarioSelectionEditedRef.current = true;
-                      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
-                    }}
+                    onClick={() =>
+                      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id))
+                    }
                   >
                     Select all
                   </button>
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => {
-                      scenarioSelectionEditedRef.current = true;
-                      setSelectedScenarioIds([]);
-                    }}
+                    onClick={() => setSelectedScenarioIds([])}
                   >
                     Clear
                   </button>
@@ -1239,7 +1225,6 @@ const RunEvaluation = () => {
                         setSelectedScenarioIds((prev) =>
                           checked ? prev.filter((id) => id !== scenario.id) : [...prev, scenario.id]
                         );
-                        scenarioSelectionEditedRef.current = true;
                       }}
                     >
                       <div className="flex items-start gap-2">
@@ -1247,7 +1232,6 @@ const RunEvaluation = () => {
                           checked={checked}
                           onCheckedChange={(value) => {
                             const isChecked = value === true;
-                            scenarioSelectionEditedRef.current = true;
                             setSelectedScenarioIds((prev) =>
                               isChecked
                                 ? [...prev, scenario.id]
@@ -1384,7 +1368,7 @@ const RunEvaluation = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </fieldset>
           )}
           <div className="flex gap-2">
             <Button

@@ -339,7 +339,7 @@ describe('RunEvaluation', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Replacement Agent' }));
     expect(runButton).toBeEnabled();
   });
-  it('preserves test selection while the agent libraries are loading', async () => {
+  it('waits for libraries before enabling and initializing test selection', async () => {
     configsRef.value = [
       {
         id: 'loading',
@@ -380,10 +380,7 @@ describe('RunEvaluation', () => {
       expect(checkboxes).toHaveLength(2);
       return checkboxes;
     });
-    await waitFor(() => expect(scenarioCheckboxes[0]).toBeChecked());
-    const scenarioCheckbox = scenarioCheckboxes[0];
-    fireEvent.click(scenarioCheckbox);
-    expect(scenarioCheckbox).not.toBeChecked();
+    scenarioCheckboxes.forEach((checkbox) => expect(checkbox).toBeDisabled());
 
     libraryAgentsRef.value = [
       {
@@ -401,10 +398,12 @@ describe('RunEvaluation', () => {
       </MemoryRouter>
     );
 
-    await waitFor(() =>
-      expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
-    );
-    expect(scenarioCheckbox).not.toBeChecked();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked();
+      expect(scenarioCheckboxes[0]).toBeChecked();
+      expect(scenarioCheckboxes[1]).toBeChecked();
+      scenarioCheckboxes.forEach((checkbox) => expect(checkbox).toBeEnabled());
+    });
   });
   it('waits for the library before preselecting an inherited agent', async () => {
     configsRef.value = [
