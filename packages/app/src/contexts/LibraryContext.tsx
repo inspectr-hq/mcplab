@@ -64,8 +64,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   const save = useCallback(
     async (next: LibraryState) => {
-      setState(next);
       await source.saveLibraries(next);
+      setState(next);
     },
     [source]
   );

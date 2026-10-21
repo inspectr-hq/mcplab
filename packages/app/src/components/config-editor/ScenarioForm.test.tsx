@@ -304,6 +304,9 @@ describe('ScenarioForm checks editor', () => {
       target: { value: 'lookup|search' }
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Use Add alternative');
+    expect((screen.getByPlaceholderText('Tool name') as HTMLInputElement).value).toBe(
+      'lookup|search'
+    );
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText('Tool name'), { target: { value: 'lookup' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add alternative' }));

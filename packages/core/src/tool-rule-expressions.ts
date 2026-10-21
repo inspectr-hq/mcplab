@@ -9,6 +9,19 @@ export function parseToolAlternatives(expression: string): string[] {
   return alternatives;
 }
 
+export function isValidToolExpression(expression: string): boolean {
+  try {
+    parseToolAlternatives(expression);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isSingleToolName(name: string): boolean {
+  return Boolean(name.trim()) && !name.includes('|');
+}
+
 export function normalizeToolExpression(
   expression: string,
   resolveName: (name: string) => string = (name) => name
@@ -23,6 +36,14 @@ export function formatToolAlternatives(expression: string): string {
   } catch {
     return expression;
   }
+}
+
+export function formatToolSequenceText(sequence: string[]): string {
+  return sequence
+    .map((expression) =>
+      expression.includes('|') ? `(${formatToolAlternatives(expression)})` : expression
+    )
+    .join(' -> ');
 }
 
 export function normalizeToolExpressionSafely(expression: string): string {
@@ -60,7 +81,7 @@ export function validateEvalToolRules(
     availableToolNames?.length ? resolveToolNameAlias(name, availableToolNames) : name;
   const forbidden = new Set(
     (rules.tool_constraints?.forbidden_tools ?? []).map((name, index) => {
-      if (typeof name !== 'string' || name.includes('|') || !name.trim())
+      if (typeof name !== 'string' || !isSingleToolName(name))
         throw new Error(
           `${ruleContext}: tool_constraints.forbidden_tools[${index}] must be a non-empty single tool name.`
         );

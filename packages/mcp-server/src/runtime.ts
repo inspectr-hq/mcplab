@@ -45,7 +45,8 @@ import {
   readTestCaseFile,
   updateTestCaseFile,
   buildScenarioEntry,
-  parseToolAlternatives,
+  isValidToolExpression,
+  isSingleToolName,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
@@ -388,20 +389,12 @@ const AgentContextSchema = z
       .describe('Include raw MCP tool arguments in judge context.')
   })
   .describe('Shared context sent to every agent assertion.');
-const ToolExpressionSchema = z.string().refine((expression) => {
-  try {
-    parseToolAlternatives(expression);
-    return true;
-  } catch {
-    return false;
-  }
-}, 'Expected tool name or non-empty, unique tool alternatives separated by |.');
+const ToolExpressionSchema = z
+  .string()
+  .refine(isValidToolExpression, 'Expected tool name or non-empty, unique tool alternatives separated by |.');
 const SingleToolNameSchema = z
   .string()
-  .refine(
-    (name) => Boolean(name.trim()) && !name.includes('|'),
-    'Forbidden tool entries must be a single non-empty tool name.'
-  );
+  .refine(isSingleToolName, 'Forbidden tool entries must be a single non-empty tool name.');
 const EvalRulesSchema = z
   .object({
     tool_constraints: z

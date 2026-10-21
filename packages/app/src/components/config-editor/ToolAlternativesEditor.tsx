@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isValidToolExpression } from '@/types/eval';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -25,28 +26,29 @@ export function ToolAlternativesEditor({
   onEnter?: () => void;
 }) {
   const alternatives = value.split('|');
-  const [pipeError, setPipeError] = useState(false);
+  const [pipeInput, setPipeInput] = useState<{ index: number; value: string } | null>(null);
   const duplicate = alternatives.some(
     (tool, index) =>
       tool.trim() && alternatives.findIndex((name) => name.trim() === tool.trim()) !== index
   );
-  const invalid = alternatives.some((tool) => !tool.trim() || tool.includes('|')) || duplicate;
+  const invalid = !isValidToolExpression(value);
   const update = (index: number, tool: string) => {
     if (tool.includes('|')) {
-      setPipeError(true);
+      setPipeInput({ index, value: tool });
       onValidityChange?.(true);
       return;
     }
-    setPipeError(false);
-    onValidityChange?.(false);
-    onChange(alternatives.map((current, i) => (i === index ? tool : current)).join('|'));
+    setPipeInput(null);
+    const next = alternatives.map((current, i) => (i === index ? tool : current)).join('|');
+    onValidityChange?.(!isValidToolExpression(next));
+    onChange(next);
   };
   return (
     <div className="min-w-0 flex-1 space-y-1.5" aria-label={label}>
       {alternatives.map((tool, index) => (
         <div key={`${index}-${alternatives.length}`} className="flex flex-wrap items-center gap-2">
           <Input
-            value={tool}
+            value={pipeInput?.index === index ? pipeInput.value : tool}
             onChange={(event) => update(index, event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && onEnter) {
@@ -83,9 +85,10 @@ export function ToolAlternativesEditor({
               className="h-7 w-7"
               aria-label={`Remove ${tool || `alternative ${index + 1}`}`}
               onClick={() => {
-                setPipeError(false);
-                onValidityChange?.(false);
-                onChange(alternatives.filter((_, i) => i !== index).join('|'));
+                setPipeInput(null);
+                const next = alternatives.filter((_, i) => i !== index).join('|');
+                onValidityChange?.(!isValidToolExpression(next));
+                onChange(next);
               }}
             >
               ×
@@ -101,11 +104,16 @@ export function ToolAlternativesEditor({
         variant="outline"
         size="sm"
         className="h-7"
-        onClick={() => onChange([...alternatives, ''].join('|'))}
+        onClick={() => {
+          setPipeInput(null);
+          const next = [...alternatives, ''].join('|');
+          onValidityChange?.(!isValidToolExpression(next));
+          onChange(next);
+        }}
       >
         Add alternative
       </Button>
-      {pipeError && (
+      {pipeInput && (
         <p className="text-xs text-destructive" role="alert">
           Enter one exact tool name per field. Use Add alternative to add another.
         </p>
@@ -115,7 +123,7 @@ export function ToolAlternativesEditor({
           Tool already added.
         </p>
       )}
-      {!pipeError && !duplicate && invalid && (
+      {!pipeInput && !duplicate && invalid && (
         <p className="text-xs text-destructive" role="alert">
           Enter one exact tool name per alternative.
         </p>

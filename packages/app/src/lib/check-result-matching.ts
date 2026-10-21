@@ -1,6 +1,6 @@
 import type { EvalRule, CheckResult } from '@/types/eval';
 import { toComparableString } from './value-normalization';
-import { normalizeToolExpressionSafely } from '@/lib/data-sources/types';
+import { formatToolSequenceText, normalizeToolExpressionSafely } from '@/lib/data-sources/types';
 
 function sameExpression(left: string, right: string): boolean {
   return normalizeToolExpressionSafely(left) === normalizeToolExpressionSafely(right);
@@ -38,7 +38,8 @@ export function matchStructuredCheckResult(
         (result) =>
           result.type === rule.type &&
           !Array.isArray(result.metadata?.source_expected) &&
-          result.label === `Tool sequence · ${sequence.join(' -> ')}`
+          (result.label === `Tool sequence · ${formatToolSequenceText(sequence)}` ||
+            result.label === `Tool sequence · ${sequence.join(' -> ')}`)
       )
     );
   }

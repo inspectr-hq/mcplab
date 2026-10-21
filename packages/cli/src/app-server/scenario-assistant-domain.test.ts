@@ -518,22 +518,42 @@ describe('Scenario Assistant runtime definition', () => {
     ]);
   });
 
-  it('rejects contradictory required and forbidden tools before lint normalization', () => {
+  it('normalizes a forbidden tool that contradicts a required tool before validation', () => {
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
+            { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
+            { type: 'required_tool', value: 'srv__refund_tool' },
+            { type: 'forbidden_tool', value: 'srv__refund_tool' }
+          ]
+        }
+      },
+      new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
+    );
+    expect(output.evalRules?.replacement).toEqual([
+      { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] },
+      { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
+      { type: 'required_tool', value: 'refund_tool' }
+    ]);
+  });
+
+  it('returns a structured error for a required group fully covered by forbidden tools', () => {
     expect(() =>
       validateScenarioAssistantProposal(
         {
           evalRules: {
             replacement: [
-              { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] },
-              { type: 'tool_input_contains', tool: ' srv__refund_tool ', value: 'Paris' },
-              { type: 'required_tool', value: 'srv__refund_tool' },
-              { type: 'forbidden_tool', value: 'srv__refund_tool' }
+              { type: 'required_tool', value: 'search | lookup' },
+              { type: 'forbidden_tool', value: 'search' },
+              { type: 'forbidden_tool', value: 'lookup' }
             ]
           }
         },
-        new Map([['srv__refund_tool', { server: 'srv', tool: 'refund_tool' }]])
+        new Map()
       )
-    ).toThrow(/fully forbidden|forbidden/);
+    ).toThrow(/Invalid scenario proposal at evalRules\.replacement:.*entirely forbidden/);
   });
 
   it('maps each alternative and preserves OR expressions in native proposals', () => {

@@ -11,7 +11,11 @@ import {
   type ToolDef
 } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
-import { parseToolAlternatives, validateEvalToolRules } from '@inspectr/mcplab-core';
+import {
+  isSingleToolName,
+  parseToolAlternatives,
+  validateEvalToolRules
+} from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
   assistantToolDisplay,
@@ -875,7 +879,7 @@ export function validateScenarioAssistantProposal(
       if (
         type === 'forbidden_tool' &&
         typeof r.value === 'string' &&
-        (!r.value.trim() || r.value.includes('|'))
+        !isSingleToolName(r.value)
       )
         return invalid(
           `${path}.value`,
@@ -935,12 +939,20 @@ export function validateScenarioAssistantProposal(
     const sequence = bundle.evalRules.replacement
       .filter((rule) => rule.type === 'tool_sequence')
       .flatMap((rule) => rule.sequence ?? []);
-    const warnings = validateEvalToolRules({
-      ...(required.length || forbidden.length
-        ? { tool_constraints: { required_tools: required, forbidden_tools: forbidden } }
-        : {}),
-      ...(sequence.length ? { tool_sequence: sequence } : {})
-    });
+    let warnings: string[];
+    try {
+      warnings = validateEvalToolRules({
+        ...(required.length || forbidden.length
+          ? { tool_constraints: { required_tools: required, forbidden_tools: forbidden } }
+          : {}),
+        ...(sequence.length ? { tool_sequence: sequence } : {})
+      });
+    } catch (error) {
+      return invalid(
+        'evalRules.replacement',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
     result.evalRules = {
       ...bundle.evalRules,
       ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })

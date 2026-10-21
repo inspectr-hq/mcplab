@@ -1,5 +1,5 @@
 import {
-  formatToolSequenceLabel,
+  formatToolSequenceText,
   formatToolAlternatives,
   normalizeToolExpressionSafely,
   type ResultsJson
@@ -65,7 +65,7 @@ export function renderHtml(results: ResultsJson): string {
       const toolSequence = scenario.eval?.tool_sequence ?? [];
       const toolSequenceRows = toolSequence.length
         ? `<tr><td><code class="sequence-code">${escapeHtml(
-            formatToolSequenceLabel(toolSequence).replace(/^Tool sequence · /, '')
+            formatToolSequenceText(toolSequence)
           )}</code></td></tr>`
         : '';
 

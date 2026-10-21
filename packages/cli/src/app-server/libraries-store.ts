@@ -17,7 +17,8 @@ import {
   readLibraryAgentsAndServers,
   readBrowserProviderProfiles,
   validateBrowserProviderProfile,
-  serializeBrowserProviderProfile
+  serializeBrowserProviderProfile,
+  validateEvalToolRules
 } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 import { sanitizeBrowserProviderProposalDiagnostics } from './browser-provider-learning.js';
@@ -208,6 +209,9 @@ export function writeLibraries(
     browserProviders?: Record<string, BrowserProviderProfile>;
   }
 ) {
+  for (const scenario of libraries.scenarios ?? []) {
+    validateEvalToolRules(scenario.eval, `Test case "${scenario.id}"`);
+  }
   const browserProviders = libraries.browserProviders
     ? Object.fromEntries(
         Object.entries(libraries.browserProviders).map(([id, profile]) => [

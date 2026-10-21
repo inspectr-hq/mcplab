@@ -4,6 +4,7 @@ import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
+  formatToolSequenceText,
   normalizeToolExpressionSafely
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
@@ -171,10 +172,6 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   return `${rule.type} · ${rule.value}`;
 }
 
-function formatToolSequenceText(sequence: string[]): string {
-  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
-}
-
 export function matchFailureReasonForRule(
   rule: EvalRule,
   failureReasons: string[]
@@ -278,9 +275,6 @@ export function matchFailureReasonForRule(
 
   if (rule.type === 'tool_sequence') {
     const canonicalSequence = (rule.sequence ?? []).map(normalizeToolExpressionSafely);
-    const missingStepReasons = (rule.sequence ?? []).map(
-      (expression) => `Required tool in sequence not used: ${formatToolAlternatives(expression)}`
-    );
     const orderFailureReasons = [
       `Tool sequence order was not satisfied: ${formatToolSequenceText(canonicalSequence)}`,
       `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
@@ -288,10 +282,27 @@ export function matchFailureReasonForRule(
     return failureReasons.find(
       (reason) =>
         orderFailureReasons.includes(reason) ||
-        missingStepReasons.includes(reason) ||
-        reason.startsWith('Required tool in sequence not used:')
+        matchesMissingSequenceStep(reason, rule.sequence ?? [])
     );
   }
 
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));
+}
+
+function matchesMissingSequenceStep(reason: string, sequence: string[]): boolean {
+  const prefix = 'Required tool in sequence not used: ';
+  if (!reason.startsWith(prefix)) return false;
+  const missingExpression = reason.slice(prefix.length);
+  return sequence.some((expression) => {
+    const canonical = normalizeToolExpressionSafely(expression);
+    // Older runs record the exposed tool name without its server prefix.
+    const unqualified = canonical
+      .split('|')
+      .map((name) => name.slice(name.lastIndexOf(':') + 1))
+      .join('|');
+    return [expression, canonical, unqualified].some(
+      (candidate) =>
+        missingExpression === candidate || missingExpression === formatToolAlternatives(candidate)
+    );
+  });
 }

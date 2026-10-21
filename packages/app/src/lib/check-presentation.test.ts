@@ -81,6 +81,13 @@ describe('matchFailureReasonForRule tool failures', () => {
       matchFailureReasonForRule(rule, ['Required tool in sequence not used: unrelated'])
     ).toBeUndefined();
   });
+
+  it('matches legacy missing-step failures through a server alias', () => {
+    const rule: EvalRule = { type: 'tool_sequence', sequence: ['MCPLab:search', 'fetch'] };
+    expect(
+      matchFailureReasonForRule(rule, ['Required tool in sequence not used: search'])
+    ).toBe('Required tool in sequence not used: search');
+  });
 });
 
 describe('formatCheckStatusLabel', () => {

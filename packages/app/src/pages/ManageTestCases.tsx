@@ -27,9 +27,32 @@ import {
 import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2, FileCode } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Scenario } from '@/types/eval';
+import { validateEvalToolRules, type Scenario } from '@/types/eval';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
+
+function validateScenarioToolRules(scenario: Scenario): string | undefined {
+  const required_tools = scenario.evalRules
+    .filter((rule) => rule.type === 'required_tool')
+    .map((rule) => String(rule.value ?? ''));
+  const forbidden_tools = scenario.evalRules
+    .filter((rule) => rule.type === 'forbidden_tool')
+    .map((rule) => String(rule.value ?? ''));
+  const sequence = scenario.evalRules.find((rule) => rule.type === 'tool_sequence');
+  try {
+    validateEvalToolRules(
+      {
+        ...(required_tools.length || forbidden_tools.length
+          ? { tool_constraints: { required_tools, forbidden_tools } }
+          : {}),
+        ...(sequence?.type === 'tool_sequence' ? { tool_sequence: sequence.sequence ?? [] } : {})
+      },
+      `Test case "${scenario.id}"`
+    );
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
 
 const ManageTestCases = () => {
   const { testCaseId } = useParams<{ testCaseId?: string }>();
@@ -81,6 +104,12 @@ const ManageTestCases = () => {
   const flushScenarioSave = async () => {
     const nextScenario = latestDraftRef.current;
     if (!nextScenario || !selectedScenario) return;
+    const validationError = validateScenarioToolRules(nextScenario);
+    if (validationError) {
+      setSaveStatus('error');
+      setSaveError(validationError);
+      return;
+    }
     if (saveInFlightRef.current) {
       saveQueuedRef.current = true;
       return;
@@ -117,11 +146,18 @@ const ManageTestCases = () => {
 
   const scheduleScenarioSave = (nextScenario: Scenario) => {
     latestDraftRef.current = nextScenario;
-    setSaveStatus('dirty');
-    setSaveError('');
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
+    const validationError = validateScenarioToolRules(nextScenario);
+    if (validationError) {
+      setSaveStatus('error');
+      setSaveError(validationError);
+      return;
+    }
+    setSaveStatus('dirty');
+    setSaveError('');
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
       void flushScenarioSave();

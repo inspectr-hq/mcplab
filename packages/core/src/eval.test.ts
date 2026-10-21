@@ -37,13 +37,11 @@ describe('evaluateScenario — tool_constraints', () => {
     expect(
       result.check_results.find((check) => check.type === 'required_tool')?.metadata
     ).toMatchObject({
-      expression: 'lookup|search',
       source_expression: 'server:lookup|server:search'
     });
     expect(
       result.check_results.find((check) => check.type === 'forbidden_tool')?.metadata
     ).toMatchObject({
-      expression: 'delete',
       source_expression: 'server:delete'
     });
     expect(
@@ -52,12 +50,10 @@ describe('evaluateScenario — tool_constraints', () => {
       expected: ['lookup|search', 'search'],
       source_expected: ['server:lookup|server:search', 'server:search']
     });
-    const skipped = buildNotExecutedCheckResults(
-      { tool_constraints: { required_tools: ['server:lookup | server:search'] } },
-      ['lookup', 'search']
-    );
+    const skipped = buildNotExecutedCheckResults({
+      tool_constraints: { required_tools: ['server:lookup | server:search'] }
+    });
     expect(skipped[0].metadata).toMatchObject({
-      expression: 'lookup|search',
       source_expression: 'server:lookup|server:search'
     });
   });
@@ -92,17 +88,13 @@ describe('evaluateScenario — tool_constraints', () => {
       reason: 'Forbidden tool used: delete'
     });
   });
-  it('accepts any required alternative and exposes matched tool metadata', () => {
+  it('accepts any required alternative and records its authored identity', () => {
     const result = evaluateScenario('response', ['fetch'], {
       tool_constraints: { required_tools: ['search | fetch'] }
     });
     expect(result.pass).toBe(true);
     expect(result.check_results[0]).toMatchObject({
-      metadata: {
-        expression: 'search|fetch',
-        alternatives: ['search', 'fetch'],
-        matched_tools: ['fetch']
-      }
+      metadata: { source_expression: 'search|fetch' }
     });
   });
 
@@ -113,18 +105,13 @@ describe('evaluateScenario — tool_constraints', () => {
     expect(result.check_results[0]).toMatchObject({
       label: 'Required tool · (search OR lookup)',
       metadata: {
-        expression: 'search|lookup',
-        source_expression: 'search|lookup',
-        alternatives: ['search', 'lookup'],
-        matched_tools: ['lookup']
+        source_expression: 'search|lookup'
       }
     });
     expect(buildNotExecutedCheckResults(rules)[0]).toMatchObject({
       label: 'Required tool · (search OR lookup)',
       metadata: {
-        expression: 'search|lookup',
-        alternatives: ['search', 'lookup'],
-        matched_tools: []
+        source_expression: 'search|lookup'
       }
     });
   });
@@ -150,9 +137,6 @@ describe('evaluateScenario — tool_constraints', () => {
     expect(result.check_results[0]).toMatchObject({
       status: 'passed',
       metadata: {
-        expression: 'search',
-        alternatives: ['search'],
-        matched_tools: ['search'],
         source_expression: 'srv:search|search'
       }
     });
@@ -233,13 +217,13 @@ describe('evaluateScenario — tool_sequence', () => {
     expect(result.pass).toBe(pass);
     expect(result.check_results).toHaveLength(1);
   });
-  it('matches spaced alternatives in order and records actual matches', () => {
+  it('matches spaced alternatives in order and records canonical sequence metadata', () => {
     const result = evaluateScenario('response', ['fetch', 'write'], {
       tool_sequence: ['search | fetch', 'store | write']
     });
     expect(result.pass).toBe(true);
     expect(result.check_results[0]).toMatchObject({
-      metadata: { expected: ['search|fetch', 'store|write'], matched_tools: ['fetch', 'write'] }
+      metadata: { expected: ['search|fetch', 'store|write'], actual: ['fetch', 'write'] }
     });
   });
   it('passes when the required tools appear in order with tools in between', () => {
@@ -1014,9 +998,7 @@ describe('buildNotExecutedCheckResults', () => {
       const rules = { tool_sequence: ['search | lookup', 'search'] };
       expect(buildChecks(rules)[0]?.metadata).toMatchObject({
         expected: ['search|lookup', 'search'],
-        alternatives: [['search', 'lookup'], ['search']],
-        actual: [],
-        matched_tools: []
+        actual: []
       });
       expect(rules.tool_sequence).toEqual(['search | lookup', 'search']);
     }
@@ -1067,19 +1049,14 @@ describe('buildNotExecutedCheckResults', () => {
         label: 'Forbidden tool · delete',
         status: 'not_executed',
         reason: undefined,
-        metadata: { expression: 'delete', source_expression: 'delete' }
+        metadata: { source_expression: 'delete' }
       },
       {
         type: 'required_tool',
         label: 'Required tool · search',
         status: 'not_executed',
         reason: undefined,
-        metadata: {
-          expression: 'search',
-          source_expression: 'search',
-          alternatives: ['search'],
-          matched_tools: []
-        }
+        metadata: { source_expression: 'search' }
       }
     ]);
   });

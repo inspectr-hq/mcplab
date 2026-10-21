@@ -378,6 +378,28 @@ describe('libraries-store test-case directory migration', () => {
     expect(existsSync(join(librariesDir, 'test-cases', 'tc-1.yaml'))).toBe(true);
   });
 
+  it('rejects invalid tool rules before changing library files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(join(librariesDir, 'servers.yaml'), 'existing: true\n', 'utf8');
+
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: { next: { transport: 'http', url: 'http://next.example' } },
+        agents: {},
+        scenarios: [
+          {
+            id: 'invalid-case',
+            prompt: 'test',
+            eval: { tool_constraints: { required_tools: ['search'], forbidden_tools: ['search'] } }
+          }
+        ]
+      })
+    ).toThrow(/entirely forbidden/);
+
+    expect(readFileSync(join(librariesDir, 'servers.yaml'), 'utf8')).toBe('existing: true\n');
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
+  });
+
   it('persists browser provider profiles when writing the complete library bundle', () => {
     const librariesDir = makeTempLibrariesDir();
     const profile = {

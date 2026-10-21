@@ -40,9 +40,10 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import {
-  formatToolSequenceLabel,
+  formatToolSequenceText,
   formatToolAlternatives,
-  parseToolAlternatives,
+  isSingleToolName,
+  isValidToolExpression,
   normalizeToolExpression,
   validateEvalToolRules
 } from '@/types/eval';
@@ -127,18 +128,6 @@ const emptyScenario = (): Scenario => ({
   extractRules: []
 });
 const emptyToolSequence: string[] = [];
-
-function formatToolSequenceText(sequence: string[]): string {
-  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
-}
-
-function isValidToolExpression(expression: string): boolean {
-  try {
-    return parseToolAlternatives(expression).every((tool) => tool.length > 0);
-  } catch {
-    return false;
-  }
-}
 
 function isToolInputRuleType(type: EvalRule['type']): boolean {
   return type.startsWith('tool_input_');
@@ -466,7 +455,7 @@ function ScenarioCard({
     if (!newRuleValue.trim()) return;
     const nextRules = [...scenario.evalRules];
     let value = newRuleValue.trim();
-    if (newRuleType === 'forbidden_tool' && value.includes('|')) return;
+    if (newRuleType === 'forbidden_tool' && !isSingleToolName(value)) return;
     if (newRuleType === 'required_tool') {
       try {
         value = normalizeToolExpression(value);
@@ -488,11 +477,7 @@ function ScenarioCard({
   const addToolSequenceValue = () => {
     const value = newToolSequenceValue.trim();
     if (!isValidToolExpression(value) || newSequenceFieldInvalid) return;
-    try {
-      setToolSequenceDraft((current) => [...current, normalizeToolExpression(value)]);
-    } catch {
-      return;
-    }
+    setToolSequenceDraft((current) => [...current, normalizeToolExpression(value)]);
     setToolSequenceStepInvalid((current) => [...current, false]);
     setNewToolSequenceValue('');
     setNewSequenceFieldInvalid(false);
@@ -1741,7 +1726,7 @@ function ScenarioCard({
                                     ? !isValidToolExpression(newRuleValue) ||
                                       requiredToolFieldInvalid
                                     : newRuleType === 'forbidden_tool'
-                                      ? !newRuleValue.trim() || newRuleValue.includes('|')
+                                      ? !isSingleToolName(newRuleValue)
                                       : false
                               }
                             >

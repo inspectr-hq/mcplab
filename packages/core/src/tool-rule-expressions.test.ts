@@ -4,12 +4,27 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   formatToolAlternatives,
+  formatToolSequenceText,
+  isSingleToolName,
+  isValidToolExpression,
   normalizeToolExpression,
   parseToolAlternatives,
   validateEvalToolRules
 } from './tool-rule-expressions.js';
 
 describe('tool rule expressions', () => {
+  it('shares syntax checks and sequence display formatting', () => {
+    expect(isValidToolExpression(' search | lookup ')).toBe(true);
+    expect(isValidToolExpression('search|')).toBe(false);
+    expect(isValidToolExpression('search|search')).toBe(false);
+    expect(isSingleToolName(' search ')).toBe(true);
+    expect(isSingleToolName('search|lookup')).toBe(false);
+    expect(isSingleToolName(' ')).toBe(false);
+    expect(formatToolSequenceText(['search | lookup', 'fetch'])).toBe(
+      '(search OR lookup) -> fetch'
+    );
+  });
+
   it('schema patterns reject empty alternatives and forbidden expressions', () => {
     const root = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
     const schema = JSON.parse(readFileSync(resolve(root, 'config-schema.json'), 'utf8'));

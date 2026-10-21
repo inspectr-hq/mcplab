@@ -69,7 +69,6 @@ describe('runAll agent dispatch', () => {
         expect.arrayContaining([
           expect.objectContaining({
             metadata: expect.objectContaining({
-              expression: 'search',
               source_expression: 'srv:search|search'
             })
           })
