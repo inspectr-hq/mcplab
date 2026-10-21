@@ -42,7 +42,7 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
-import { normalizeToolExpression, tallyCheckCounts } from './types';
+import { normalizeToolExpressionSafely, tallyCheckCounts } from './types';
 import { toComparableString } from '../value-normalization';
 
 const coreLlmProvider = {
@@ -265,14 +265,8 @@ function buildCoreEvalBlock(
       agent_context?: AgentContext;
     }
   | undefined {
-  const normalizeExpressionForSave = (expression: string): string => {
-    const trimmed = expression.trim();
-    try {
-      return normalizeToolExpression(trimmed);
-    } catch {
-      return trimmed;
-    }
-  };
+  const normalizeExpressionForSave = (expression: string): string =>
+    normalizeToolExpressionSafely(expression.trim());
   const required_tools = evalRules
     .filter(
       (rule) => rule.type === 'required_tool' && typeof rule.value === 'string' && rule.value.trim()

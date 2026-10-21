@@ -47,6 +47,7 @@ import {
   validateEvalToolRules
 } from '@/types/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
+import { ToolAlternativesEditor } from '@/components/config-editor/ToolAlternativesEditor';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import {
@@ -125,6 +126,7 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
+const emptyToolSequence: string[] = [];
 
 function formatToolSequenceText(sequence: string[]): string {
   return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
@@ -139,118 +141,7 @@ function isValidToolExpression(expression: string): boolean {
 }
 
 function formatToolExpressionForDisplay(expression: string): string {
-  try {
-    return formatToolAlternatives(expression);
-  } catch {
-    return expression;
-  }
-}
-
-function ToolAlternativesEditor({
-  value,
-  onChange,
-  onValidityChange,
-  availableTools,
-  label
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onValidityChange?: (invalid: boolean) => void;
-  availableTools?: string[] | null;
-  label: string;
-}) {
-  const alternatives = value.split('|');
-  const [pipeError, setPipeError] = useState(false);
-  const duplicate = alternatives.some(
-    (tool, index) =>
-      tool.trim() && alternatives.findIndex((name) => name.trim() === tool.trim()) !== index
-  );
-  const invalid = alternatives.some((tool) => !tool.trim() || tool.includes('|')) || duplicate;
-  const update = (index: number, tool: string) => {
-    if (tool.includes('|')) {
-      setPipeError(true);
-      onValidityChange?.(true);
-      return;
-    }
-    setPipeError(false);
-    onValidityChange?.(false);
-    onChange(alternatives.map((current, i) => (i === index ? tool : current)).join('|'));
-  };
-  return (
-    <div className="min-w-0 flex-1 space-y-1.5" aria-label={label}>
-      {alternatives.map((tool, index) => (
-        <div key={`${index}-${alternatives.length}`} className="flex flex-wrap items-center gap-2">
-          <Input
-            value={tool}
-            onChange={(event) => update(index, event.target.value)}
-            placeholder="Tool name"
-            aria-label={`${label} ${index + 1}`}
-            className="h-8 min-w-32 flex-1 text-xs font-mono"
-          />
-          {availableTools?.length ? (
-            <Select
-              value={availableTools.includes(tool) ? tool : ''}
-              onValueChange={(next) => update(index, next)}
-            >
-              <SelectTrigger className="h-8 w-48 max-w-full text-xs font-mono">
-                <SelectValue placeholder="Pick discovered tool" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableTools.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          {alternatives.length > 1 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              aria-label={`Remove ${tool || `alternative ${index + 1}`}`}
-              onClick={() => {
-                setPipeError(false);
-                onValidityChange?.(false);
-                onChange(alternatives.filter((_, i) => i !== index).join('|'));
-              }}
-            >
-              ×
-            </Button>
-          )}
-          {index < alternatives.length - 1 && (
-            <span className="text-xs text-muted-foreground">OR</span>
-          )}
-        </div>
-      ))}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7"
-        onClick={() => onChange([...alternatives, ''].join('|'))}
-      >
-        Add alternative
-      </Button>
-      {pipeError && (
-        <p className="text-xs text-destructive" role="alert">
-          Enter one exact tool name per field. Use Add alternative to add another.
-        </p>
-      )}
-      {duplicate && (
-        <p className="text-xs text-destructive" role="alert">
-          Tool already added.
-        </p>
-      )}
-      {!pipeError && !duplicate && invalid && (
-        <p className="text-xs text-destructive" role="alert">
-          Enter one exact tool name per alternative.
-        </p>
-      )}
-    </div>
-  );
+  return formatToolAlternatives(expression);
 }
 
 function isToolInputRuleType(type: EvalRule['type']): boolean {
@@ -640,8 +531,9 @@ function ScenarioCard({
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
   const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
-  const toolSequenceSerialized = JSON.stringify(toolSequence);
+    toolSequenceRule?.type === 'tool_sequence'
+      ? (toolSequenceRule.sequence ?? emptyToolSequence)
+      : emptyToolSequence;
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
   const toolSequenceDraftInvalid =
     toolSequenceDraft.some((step) => !isValidToolExpression(step)) ||
@@ -714,10 +606,10 @@ function ScenarioCard({
 
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
-    const nextSequence = JSON.parse(toolSequenceSerialized) as string[];
+    const nextSequence = [...toolSequence];
     setToolSequenceDraft(nextSequence);
     setToolSequenceStepInvalid(nextSequence.map((step) => !isValidToolExpression(step)));
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequenceSerialized]);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -1801,6 +1693,7 @@ function ScenarioCard({
                                   onValidityChange={setNewSequenceFieldInvalid}
                                   availableTools={availableToolNames}
                                   label="Sequence step alternatives"
+                                  onEnter={addToolSequenceValue}
                                 />
                                 <Button
                                   type="button"

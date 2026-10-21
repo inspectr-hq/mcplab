@@ -1,7 +1,7 @@
 import {
   formatToolSequenceLabel,
   formatToolAlternatives,
-  normalizeToolExpression,
+  normalizeToolExpressionSafely,
   type ResultsJson
 } from '@inspectr/mcplab-core';
 
@@ -423,9 +423,5 @@ export function renderHtml(results: ResultsJson): string {
 }
 
 function canonicalToolKey(expression: string): string {
-  try {
-    return normalizeToolExpression(expression);
-  } catch {
-    return expression;
-  }
+  return normalizeToolExpressionSafely(expression);
 }

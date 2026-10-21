@@ -40,6 +40,8 @@ describe('tool rule expressions', () => {
   it('parses and formats trimmed alternatives', () => {
     expect(parseToolAlternatives(' a | b ')).toEqual(['a', 'b']);
     expect(formatToolAlternatives(' a | b ')).toBe('a OR b');
+    expect(formatToolAlternatives('search|')).toBe('search|');
+    expect(formatToolAlternatives('a|a')).toBe('a|a');
   });
   it('rejects empty and authored duplicate alternatives', () => {
     expect(() => parseToolAlternatives('a||b')).toThrow();
@@ -90,16 +92,16 @@ describe('tool rule expressions', () => {
       validateEvalToolRules({ tool_constraints: { required_tools: ['lookup|lookup'] } })
     ).toThrow(/Duplicate tool alternative/);
   });
-  it('keeps equivalent static and discovered warnings identical for authored aliases', () => {
+  it('names the resolved forbidden tool in alias-aware warnings', () => {
     const rules = {
       tool_constraints: {
         required_tools: ['server:search | lookup'],
         forbidden_tools: ['server:search']
       }
     };
-    expect(validateEvalToolRules(rules, 'Scenario "test"', ['search', 'lookup'])).toEqual(
-      validateEvalToolRules(rules, 'Scenario "test"')
-    );
+    expect(validateEvalToolRules(rules, 'Scenario "test"', ['search', 'lookup'])).toEqual([
+      expect.stringContaining('includes forbidden alternative: search.')
+    ]);
   });
 
   it('reports malformed runtime arrays with rule paths', () => {

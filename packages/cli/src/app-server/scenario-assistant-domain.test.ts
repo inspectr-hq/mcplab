@@ -597,13 +597,12 @@ describe('Scenario Assistant runtime definition', () => {
     expect(output.notes?.join(' ')).toContain('includes forbidden alternative');
   });
 
-  it('rejects alternatives that map to the same public tool alias', () => {
-    expect(() =>
-      validateScenarioAssistantProposal(
-        { evalRules: { replacement: [{ type: 'required_tool', value: 'srv__search | search' }] } },
-        new Map([['srv__search', { server: 'srv', tool: 'search' }]])
-      )
-    ).toThrow(/Duplicate tool alternative/);
+  it('deduplicates alternatives that map to the same public tool alias', () => {
+    const output = validateScenarioAssistantProposal(
+      { evalRules: { replacement: [{ type: 'required_tool', value: 'srv__search | search' }] } },
+      new Map([['srv__search', { server: 'srv', tool: 'search' }]])
+    );
+    expect(output.evalRules?.replacement?.[0]?.value).toBe('search');
   });
 
   it('omits unchanged placeholders while preserving proposed checks', () => {

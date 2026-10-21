@@ -7,7 +7,7 @@ import type {
 } from './types.js';
 import { calculatePassRate } from './result-metrics.js';
 import { deriveRunOutcome } from './scenario-observation.js';
-import { normalizeToolExpression } from './tool-rule-expressions.js';
+import { normalizeToolExpression, parseToolAlternatives } from './tool-rule-expressions.js';
 
 export function aggregateResults(params: {
   runId: string;
@@ -54,7 +54,7 @@ export function aggregateResults(params: {
       }
       if (requiredExpressions.size) {
         for (const key of requiredExpressions) {
-          if (key.split('|').some((tool) => run.tool_usage[tool])) {
+          if (parseToolAlternatives(key).some((tool) => run.tool_usage[tool])) {
             requiredStats[key] = (requiredStats[key] ?? 0) + 1;
           } else {
             requiredStats[key] ??= 0;

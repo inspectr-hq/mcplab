@@ -58,18 +58,18 @@ describe('matchFailureReasonForRule tool failures', () => {
     );
   });
 
-  it('matches canonical and legacy tool sequence failure reasons', () => {
+  it('matches canonical tool sequence failure reasons', () => {
     const rule: EvalRule = { type: 'tool_sequence', sequence: ['search | lookup', 'fetch'] };
     expect(
       matchFailureReasonForRule(rule, [
-        'Tool sequence order was not satisfied: search|lookup -> fetch'
+        'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
       ])
-    ).toBe('Tool sequence order was not satisfied: search|lookup -> fetch');
+    ).toBe('Tool sequence order was not satisfied: (search OR lookup) -> fetch');
     expect(
       matchFailureReasonForRule(rule, [
-        'Tool sequence order was not satisfied: search | lookup -> fetch'
+        'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
       ])
-    ).toBe('Tool sequence order was not satisfied: search | lookup -> fetch');
+    ).toBe('Tool sequence order was not satisfied: (search OR lookup) -> fetch');
   });
 
   it('matches only missing-step failures for the sequence rule', () => {

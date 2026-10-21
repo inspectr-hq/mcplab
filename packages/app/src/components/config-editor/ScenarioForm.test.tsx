@@ -347,7 +347,9 @@ describe('ScenarioForm checks editor', () => {
     fireEvent.change(screen.getByPlaceholderText('Tool name'), {
       target: { value: 'search' }
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Sequence step alternatives 1' }), {
+      key: 'Enter'
+    });
     fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]!);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());

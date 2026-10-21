@@ -100,6 +100,7 @@ export {
   formatToolSequenceLabel,
   tallyCheckCounts,
   normalizeToolExpression,
+  normalizeToolExpressionSafely,
   parseToolAlternatives,
   resolveToolNameAlias,
   formatToolAlternatives,

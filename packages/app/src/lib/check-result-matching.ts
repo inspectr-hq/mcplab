@@ -1,13 +1,9 @@
 import type { EvalRule, CheckResult } from '@/types/eval';
 import { toComparableString } from './value-normalization';
-import { normalizeToolExpression } from '@/lib/data-sources/types';
+import { normalizeToolExpressionSafely } from '@/lib/data-sources/types';
 
 function sameExpression(left: string, right: string): boolean {
-  try {
-    return normalizeToolExpression(left) === normalizeToolExpression(right);
-  } catch {
-    return false;
-  }
+  return normalizeToolExpressionSafely(left) === normalizeToolExpressionSafely(right);
 }
 
 function sameSequence(left: unknown, right: string[]): boolean {

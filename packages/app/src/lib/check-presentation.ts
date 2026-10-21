@@ -4,7 +4,7 @@ import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
-  normalizeToolExpression
+  normalizeToolExpressionSafely
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 import { toComparableString } from './value-normalization';
@@ -172,11 +172,7 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
 }
 
 function formatToolExpression(expression: string): string {
-  try {
-    return formatToolAlternatives(expression);
-  } catch {
-    return expression;
-  }
+  return formatToolAlternatives(expression);
 }
 
 function formatToolSequenceText(sequence: string[]): string {
@@ -239,15 +235,11 @@ export function matchFailureReasonForRule(
   const expectedPrefix = (() => {
     if (rule.type === 'required_tool') {
       const expression = String(rule.value ?? '');
-      try {
-        return `Required tool not used: ${formatToolAlternatives(expression)}`;
-      } catch {
-        return `Required tool not used: ${expression}`;
-      }
+      return `Required tool not used: ${formatToolAlternatives(expression)}`;
     }
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
     if (rule.type === 'tool_sequence')
-      return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
+      return `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`;
     if (rule.type === 'response_contains') return `Contains assertion failed: ${comparableValue}`;
     if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${comparableValue}`;
@@ -289,26 +281,13 @@ export function matchFailureReasonForRule(
   }
 
   if (rule.type === 'tool_sequence') {
-    const canonicalSequence = (rule.sequence ?? []).map((expression) => {
-      try {
-        return normalizeToolExpression(expression);
-      } catch {
-        return expression;
-      }
-    });
-    const missingStepReasons = (rule.sequence ?? []).flatMap((expression) => {
-      const reasons = new Set<string>([`Required tool in sequence not used: ${expression}`]);
-      try {
-        reasons.add(`Required tool in sequence not used: ${formatToolAlternatives(expression)}`);
-      } catch {
-        // Keep legacy raw-expression matching for malformed historical rules.
-      }
-      return [...reasons];
-    });
+    const canonicalSequence = (rule.sequence ?? []).map(normalizeToolExpressionSafely);
+    const missingStepReasons = (rule.sequence ?? []).map(
+      (expression) => `Required tool in sequence not used: ${formatToolAlternatives(expression)}`
+    );
     const orderFailureReasons = [
-      `Tool sequence order was not satisfied: ${canonicalSequence.join(' -> ')}`,
-      `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`,
-      `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`
+      `Tool sequence order was not satisfied: ${formatToolSequenceText(canonicalSequence)}`,
+      `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
     ];
     return failureReasons.find(
       (reason) => orderFailureReasons.includes(reason) || missingStepReasons.includes(reason)

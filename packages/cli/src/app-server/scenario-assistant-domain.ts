@@ -362,7 +362,9 @@ function normalizeEvalRuleToolNames(
       rule.value
     ) {
       const alternatives = parseToolAlternatives(rule.value);
-      const mapped = alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name);
+      const mapped = [
+        ...new Set(alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name))
+      ];
       if (mapped.some((name, index) => name !== alternatives[index])) {
         rule.value = mapped.join(' | ');
       }
@@ -370,7 +372,9 @@ function normalizeEvalRuleToolNames(
     if (rule.type === 'tool_sequence' && Array.isArray(rule.sequence)) {
       rule.sequence = rule.sequence.map((expression) => {
         const alternatives = parseToolAlternatives(expression);
-        const mapped = alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name);
+        const mapped = [
+          ...new Set(alternatives.map((name) => toolPublicMap.get(name)?.tool ?? name))
+        ];
         return mapped.some((name, index) => name !== alternatives[index])
           ? mapped.join(' | ')
           : expression;

@@ -18,7 +18,19 @@ export function normalizeToolExpression(
 }
 
 export function formatToolAlternatives(expression: string): string {
-  return parseToolAlternatives(expression).join(' OR ');
+  try {
+    return parseToolAlternatives(expression).join(' OR ');
+  } catch {
+    return expression;
+  }
+}
+
+export function normalizeToolExpressionSafely(expression: string): string {
+  try {
+    return normalizeToolExpression(expression);
+  } catch {
+    return expression;
+  }
 }
 
 export function resolveToolNameAlias(name: string, availableToolNames: string[]): string {
@@ -33,51 +45,45 @@ export function validateEvalToolRules(
   availableToolNames?: string[]
 ): string[] {
   const warnings: string[] = [];
+  const ruleContext = context ?? 'Eval rules';
   if (!rules) return warnings;
   const requiredRules = rules.tool_constraints?.required_tools ?? [];
   const forbiddenRules = rules.tool_constraints?.forbidden_tools ?? [];
   const sequenceRules = rules.tool_sequence ?? [];
   if (!Array.isArray(requiredRules))
-    throw new Error(
-      `${context ?? 'Eval rules'}: tool_constraints.required_tools must be an array.`
-    );
+    throw new Error(`${ruleContext}: tool_constraints.required_tools must be an array.`);
   if (!Array.isArray(forbiddenRules))
-    throw new Error(
-      `${context ?? 'Eval rules'}: tool_constraints.forbidden_tools must be an array.`
-    );
+    throw new Error(`${ruleContext}: tool_constraints.forbidden_tools must be an array.`);
   if (!Array.isArray(sequenceRules))
-    throw new Error(`${context ?? 'Eval rules'}: tool_sequence must be an array.`);
+    throw new Error(`${ruleContext}: tool_sequence must be an array.`);
   const resolve = (name: string) =>
     availableToolNames?.length ? resolveToolNameAlias(name, availableToolNames) : name;
   const forbidden = new Set(
     (rules.tool_constraints?.forbidden_tools ?? []).map((name, index) => {
       if (typeof name !== 'string' || name.includes('|') || !name.trim())
         throw new Error(
-          `${context ?? 'Eval rules'}: tool_constraints.forbidden_tools[${index}] must be a non-empty single tool name.`
+          `${ruleContext}: tool_constraints.forbidden_tools[${index}] must be a non-empty single tool name.`
         );
       return resolve(name.trim());
     })
   );
   const validateRequired = (expression: string, path: string) => {
     if (typeof expression !== 'string')
-      throw new Error(`${context ?? 'Eval rules'}: ${path} must be a tool expression string.`);
+      throw new Error(`${ruleContext}: ${path} must be a tool expression string.`);
     let normalized: string;
     try {
       normalized = normalizeToolExpression(expression, resolve);
     } catch (error) {
       throw new Error(
-        `${context ?? 'Eval rules'}: ${path}: ${error instanceof Error ? error.message : String(error)}`
+        `${ruleContext}: ${path}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    const names = normalized.split('|');
+    const names = parseToolAlternatives(normalized);
     const blocked = names.filter((name) => forbidden.has(name));
     if (blocked.length === names.length)
-      throw new Error(
-        `${context ?? 'Eval rules'}: ${path} expression "${expression}" is entirely forbidden.`
-      );
+      throw new Error(`${ruleContext}: ${path} expression "${expression}" is entirely forbidden.`);
     if (blocked.length) {
-      const authoredNames = expression.split('|').map((name) => name.trim());
-      const blockedNames = authoredNames.filter((_, index) => forbidden.has(names[index]));
+      const blockedNames = blocked;
       warnings.push(
         `${context ? `${context}: ` : ''}${path} expression "${expression}" includes forbidden alternative${blocked.length > 1 ? 's' : ''}: ${blockedNames.join(', ')}.`
       );
@@ -90,7 +96,10 @@ export function validateEvalToolRules(
   return warnings;
 }
 
-export function normalizeEvalToolRules(rules: EvalRules | undefined): EvalRules | undefined {
+export function normalizeEvalToolRules(
+  rules: EvalRules | undefined,
+  resolveName: (name: string) => string = (name) => name
+): EvalRules | undefined {
   if (!rules) return undefined;
   return {
     ...rules,
@@ -101,18 +110,22 @@ export function normalizeEvalToolRules(rules: EvalRules | undefined): EvalRules 
             ...(rules.tool_constraints.required_tools
               ? {
                   required_tools: rules.tool_constraints.required_tools.map((x) =>
-                    normalizeToolExpression(x)
+                    normalizeToolExpression(x, resolveName)
                   )
                 }
               : {}),
             ...(rules.tool_constraints.forbidden_tools
-              ? { forbidden_tools: rules.tool_constraints.forbidden_tools.map((x) => x.trim()) }
+              ? {
+                  forbidden_tools: rules.tool_constraints.forbidden_tools.map((x) =>
+                    resolveName(x.trim())
+                  )
+                }
               : {})
           }
         }
       : {}),
     ...(rules.tool_sequence
-      ? { tool_sequence: rules.tool_sequence.map((x) => normalizeToolExpression(x)) }
+      ? { tool_sequence: rules.tool_sequence.map((x) => normalizeToolExpression(x, resolveName)) }
       : {})
   };
 }

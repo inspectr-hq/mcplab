@@ -6,6 +6,7 @@ import {
   evaluateScenario,
   evaluateScenarioWithAgentChecks,
   extractValues,
+  formatToolSequenceLabel,
   normalizeToolConstraintAliases,
   toJudgeErrorResults
 } from './eval.js';
@@ -113,6 +114,7 @@ describe('evaluateScenario — tool_constraints', () => {
       label: 'Required tool · (search OR lookup)',
       metadata: {
         expression: 'search|lookup',
+        source_expression: 'search|lookup',
         alternatives: ['search', 'lookup'],
         matched_tools: ['lookup']
       }
@@ -253,6 +255,19 @@ describe('evaluateScenario — tool_sequence', () => {
     });
     expect(result.pass).toBe(false);
     expect(result.failures).toContain('Tool sequence order was not satisfied: search -> fetch');
+    expect(result.check_results[0]?.label).toBe('Tool sequence · search -> fetch');
+  });
+
+  it('formats alternative order failures the same way as the sequence label', () => {
+    const result = evaluateScenario('response', ['fetch', 'search'], {
+      tool_sequence: ['search | lookup', 'fetch']
+    });
+    expect(result.failures[0]).toBe(
+      'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
+    );
+    expect(result.check_results[0]?.reason).toBe(
+      'Tool sequence order was not satisfied: (search OR lookup) -> fetch'
+    );
   });
 
   it('fails when a required tool is missing', () => {
@@ -1028,6 +1043,19 @@ describe('buildNotExecutedCheckResults', () => {
     expect(results.every((result) => result.status === 'not_executed')).toBe(true);
   });
 
+  it('keeps authored identities on skipped alternative checks without tool discovery', () => {
+    const results = buildNotExecutedCheckResults({
+      tool_constraints: { required_tools: ['search | lookup'] },
+      tool_sequence: ['search | lookup']
+    });
+    expect(results[0]?.metadata).toMatchObject({ source_expression: 'search|lookup' });
+    expect(results[1]?.metadata).toMatchObject({ source_expected: ['search|lookup'] });
+  });
+
+  it('formats malformed historical sequence expressions without throwing', () => {
+    expect(() => formatToolSequenceLabel(['search|', 'a|a'])).not.toThrow();
+  });
+
   it('preserves tool-constraint labels without evaluating against an empty tool sequence', () => {
     const results = buildNotExecutedCheckResults({
       tool_constraints: { forbidden_tools: ['delete'], required_tools: ['search'] }
@@ -1038,14 +1066,20 @@ describe('buildNotExecutedCheckResults', () => {
         type: 'forbidden_tool',
         label: 'Forbidden tool · delete',
         status: 'not_executed',
-        reason: undefined
+        reason: undefined,
+        metadata: { expression: 'delete', source_expression: 'delete' }
       },
       {
         type: 'required_tool',
         label: 'Required tool · search',
         status: 'not_executed',
         reason: undefined,
-        metadata: { expression: 'search', alternatives: ['search'], matched_tools: [] }
+        metadata: {
+          expression: 'search',
+          source_expression: 'search',
+          alternatives: ['search'],
+          matched_tools: []
+        }
       }
     ]);
   });

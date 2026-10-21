@@ -3,6 +3,23 @@ import { aggregateResults, type ScenarioRunResult } from '@inspectr/mcplab-core'
 import { renderHtml } from '../../../reporting/src/html.js';
 
 describe('tool alternatives report', () => {
+  it('renders malformed historical expressions safely', () => {
+    const result = aggregateResults({
+      runId: 'malformed-report',
+      timestamp: '2026-10-20T10:00:00Z',
+      configHash: 'test',
+      cliVersion: 'test',
+      scenarioRuns: [{ scenario_id: 'case', agent: 'agent', runs: [] }]
+    });
+    result.scenarios[0]!.eval = {
+      tool_constraints: { required_tools: ['search|'] },
+      tool_sequence: ['a|a']
+    };
+    expect(() => renderHtml(result)).not.toThrow();
+    expect(renderHtml(result)).toContain('search|');
+    expect(renderHtml(result)).toContain('a|a');
+  });
+
   it.each(['search | lookup', 'search< | lookup>'])(
     'looks up canonical group counts and escapes %s',
     (expression) => {

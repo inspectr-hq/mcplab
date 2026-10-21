@@ -13,6 +13,7 @@ import type {
 } from './types.js';
 import {
   formatToolAlternatives,
+  normalizeEvalToolRules,
   normalizeToolExpression,
   parseToolAlternatives,
   resolveToolNameAlias
@@ -77,10 +78,7 @@ export function buildNotExecutedCheckResults(
       label: formatToolSequenceLabel(sequence),
       status: 'not_executed',
       metadata: {
-        actual: [],
-        expected: sequence,
-        alternatives: sequence.map(parseToolAlternatives),
-        matched_tools: []
+        ...toolSequenceMetadata([], sequence, [])
       }
     });
   }
@@ -103,7 +101,7 @@ export function buildNotExecutedCheckResults(
   for (const assertion of evalRules.agent_assertions ?? []) {
     results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
   }
-  return results;
+  return withSourceToolRuleMetadata(results, evalRules, evalRules);
 }
 
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
@@ -128,10 +126,7 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.',
       metadata: {
-        actual: [],
-        expected: sequence,
-        alternatives: sequence.map(parseToolAlternatives),
-        matched_tools: []
+        ...toolSequenceMetadata([], sequence, [])
       }
     });
   }
@@ -144,7 +139,7 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
     });
   }
-  return results;
+  return withSourceToolRuleMetadata(results, evalRules, evalRules);
 }
 
 export function evaluateScenario(
@@ -175,7 +170,11 @@ export function evaluateScenario(
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
-  return { pass: failures.length === 0, failures, check_results };
+  return {
+    pass: failures.length === 0,
+    failures,
+    check_results: withSourceToolRuleMetadata(check_results, evalRules, evalRules)
+  };
 }
 
 export async function evaluateScenarioWithAgentChecks(
@@ -280,21 +279,25 @@ function withSourceToolRuleMetadata(
     if (check.type === 'required_tool' || check.type === 'forbidden_tool') {
       const key = check.type === 'required_tool' ? 'required_tools' : 'forbidden_tools';
       const index = check.type === 'required_tool' ? requiredIndex++ : forbiddenIndex++;
+      const sourceExpression = authored?.tool_constraints?.[key]?.[index];
+      const expression = resolved?.tool_constraints?.[key]?.[index];
+      if (typeof sourceExpression !== 'string' || typeof expression !== 'string') return check;
       return {
         ...check,
         metadata: {
           ...check.metadata,
-          source_expression: normalizeToolExpression(authored!.tool_constraints![key]![index]),
-          expression: normalizeToolExpression(resolved!.tool_constraints![key]![index])
+          source_expression: normalizeToolExpression(sourceExpression),
+          expression: normalizeToolExpression(expression)
         }
       };
     }
     if (check.type === 'tool_sequence') {
+      if (!authored?.tool_sequence) return check;
       return {
         ...check,
         metadata: {
           ...check.metadata,
-          source_expected: authored!.tool_sequence!.map((expression) =>
+          source_expected: authored.tool_sequence.map((expression) =>
             normalizeToolExpression(expression)
           )
         }
@@ -309,32 +312,9 @@ export function normalizeToolConstraintAliases(
   evalRules: EvalRules | undefined,
   availableToolNames: string[] | undefined
 ): EvalRules | undefined {
-  if (!evalRules || !availableToolNames?.length) return evalRules;
+  if (!availableToolNames?.length) return normalizeEvalToolRules(evalRules);
   const resolve = (name: string): string => resolveToolNameAlias(name, availableToolNames);
-  const constraints = evalRules.tool_constraints;
-  return {
-    ...evalRules,
-    ...(constraints
-      ? {
-          tool_constraints: {
-            ...constraints,
-            ...(constraints.required_tools
-              ? {
-                  required_tools: constraints.required_tools.map((x) =>
-                    normalizeToolExpression(x, resolve)
-                  )
-                }
-              : {}),
-            ...(constraints.forbidden_tools
-              ? { forbidden_tools: constraints.forbidden_tools.map((x) => resolve(x.trim())) }
-              : {})
-          }
-        }
-      : {}),
-    ...(evalRules.tool_sequence
-      ? { tool_sequence: evalRules.tool_sequence.map((x) => normalizeToolExpression(x, resolve)) }
-      : {}),
-  };
+  return normalizeEvalToolRules(evalRules, resolve);
 }
 
 function evaluateToolConstraints(
@@ -393,7 +373,7 @@ function evaluateToolSequence(
           type: 'tool_sequence',
           label,
           status: 'passed',
-          metadata: { actual, expected }
+          metadata: toolSequenceMetadata(actual, expected, [])
         }
       ]
     };
@@ -415,7 +395,7 @@ function evaluateToolSequence(
     }
     if (index < 0) {
       const reason = alternatives.some((tool) => actual.includes(tool))
-        ? `Tool sequence order was not satisfied: ${expected.join(' -> ')}`
+        ? `Tool sequence order was not satisfied: ${label.replace(/^Tool sequence · /, '')}`
         : `Required tool in sequence not used: ${formatToolAlternatives(expression)}`;
       return {
         failures: [reason],
@@ -425,12 +405,7 @@ function evaluateToolSequence(
             label,
             status: 'failed',
             reason,
-            metadata: {
-              actual,
-              expected: canonicalExpected,
-              alternatives: canonicalExpected.map(parseToolAlternatives),
-              matched_tools: matchedTools
-            }
+            metadata: toolSequenceMetadata(actual, canonicalExpected, matchedTools)
           }
         ]
       };
@@ -446,14 +421,18 @@ function evaluateToolSequence(
         type: 'tool_sequence',
         label,
         status: 'passed',
-        metadata: {
-          actual,
-          expected: canonicalExpected,
-          alternatives: canonicalExpected.map(parseToolAlternatives),
-          matched_tools: matchedTools
-        }
+        metadata: toolSequenceMetadata(actual, canonicalExpected, matchedTools)
       }
     ]
+  };
+}
+
+function toolSequenceMetadata(actual: string[], expected: string[], matchedTools: string[]) {
+  return {
+    actual,
+    expected,
+    alternatives: expected.map(parseToolAlternatives),
+    matched_tools: matchedTools
   };
 }
 
