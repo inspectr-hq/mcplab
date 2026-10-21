@@ -61,7 +61,6 @@ Source of truth: `config-schema.json`.
 - Every required tool entry is mandatory; `search | lookup` means either alternative satisfies that entry. All entries remain mandatory.
 - Every sequence entry is a required ordered step; `search | lookup` accepts either tool for that step. Repeated steps are valid.
 - `forbidden_tools` entries name one tool and reject `|` alternatives.
-- Fully forbidden required or sequence alternatives are invalid. Partly forbidden alternatives produce a warning.
 - `tool_input_assertions`:
   - contains assertion: `{ type: "contains", tool: string, value: string }`
   - regex assertion: `{ type: "regex", tool: string, pattern: string }`

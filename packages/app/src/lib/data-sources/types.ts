@@ -97,7 +97,7 @@ export {
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
   formatToolExpression,
-  formatToolAlternatives,
+  normalizeToolExpression,
   parseToolAlternatives,
   isValidToolExpression,
   tallyCheckCounts

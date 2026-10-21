@@ -10,7 +10,11 @@ import {
   type McpServerFeatures,
   type ToolDef
 } from '@inspectr/mcplab-core';
-import { McpClientManager, isValidToolExpression } from '@inspectr/mcplab-core';
+import {
+  McpClientManager,
+  isValidToolExpression,
+  normalizeToolExpression
+} from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
   assistantToolDisplay,
@@ -356,11 +360,9 @@ function normalizeEvalRuleToolNames(
   if (!suggestions?.evalRules?.replacement) return;
   // Map each `a | b` alternative from its public name to the raw MCP tool name.
   const toRawTools = (expression: string): string =>
-    [
-      ...new Set(
-        expression.split('|').map((name) => toolPublicMap.get(name.trim())?.tool ?? name.trim())
-      )
-    ].join('|');
+    normalizeToolExpression(expression, {
+      mapTool: (name) => toolPublicMap.get(name)?.tool ?? name
+    });
   for (const rule of suggestions.evalRules.replacement) {
     if (
       (rule.type === 'required_tool' || rule.type === 'forbidden_tool') &&

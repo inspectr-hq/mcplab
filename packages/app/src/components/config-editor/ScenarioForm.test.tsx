@@ -84,7 +84,7 @@ describe('ScenarioForm checks editor', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load tool suggestions' }));
 
     await waitFor(() =>
       expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
@@ -225,12 +225,18 @@ describe('ScenarioForm checks editor', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load tools' }));
-    await waitFor(() => expect(screen.getByText('Refresh tools')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Load tool suggestions' }));
+    await waitFor(() =>
+      expect(mockSource.discoverToolsForAnalysis).toHaveBeenCalledWith({
+        serverNames: ['server-1']
+      })
+    );
+    await screen.findByRole('option', { name: 'search_tags' });
     fireEvent.click(screen.getAllByRole('combobox')[1]);
     fireEvent.click(screen.getByText('Tool input contains'));
-    fireEvent.click(screen.getByText('Select tool'));
-    expect(screen.getByText('search_tags')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Tool input check tool name'));
+    fireEvent.click(screen.getByRole('option', { name: 'search_tags' }));
+    expect(screen.getByLabelText('Tool input check tool name')).toHaveValue('search_tags');
   });
 
   it('edits response_contains checks in place', async () => {
@@ -277,7 +283,7 @@ describe('ScenarioForm checks editor', () => {
     fireEvent.click(screen.getByText('Tool Sequence'));
     expect(screen.getByText('Sequence steps')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add step' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^Add$/ })[0]).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: /^Add$/ })[0]).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText('Tool name'), {
       target: { value: 'search' }
     });
@@ -290,6 +296,29 @@ describe('ScenarioForm checks editor', () => {
       type: 'tool_sequence',
       sequence: ['search']
     });
+  });
+
+  it('adds a forbidden tool when Enter is pressed in its named input', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Forbidden Tool'));
+    const input = screen.getByLabelText('Forbidden tool name');
+    fireEvent.change(input, { target: { value: 'delete' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules[0]).toEqual({ type: 'forbidden_tool', value: 'delete' });
   });
 
   it('adds required tool alternatives as one OR group', async () => {
@@ -324,6 +353,30 @@ describe('ScenarioForm checks editor', () => {
     });
     fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
 
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search|lookup' });
+  });
+
+  it('splits pasted required tool alternatives into separate inputs', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Required tool alternatives 1'), {
+      target: { value: 'search|lookup' }
+    });
+    expect(screen.getByLabelText('Required tool alternatives 1')).toHaveValue('search');
+    expect(screen.getByLabelText('Required tool alternatives 2')).toHaveValue('lookup');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add', exact: true })[0]);
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search|lookup' });

@@ -14,7 +14,7 @@ export {
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
   formatToolExpression,
-  formatToolAlternatives,
+  normalizeToolExpression,
   parseToolAlternatives,
   isValidToolExpression,
   formatToolSequenceLabel

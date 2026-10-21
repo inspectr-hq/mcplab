@@ -11,7 +11,11 @@ import type {
   ToolCall,
   ToolInputAssertion
 } from './types.js';
-import { formatToolExpression, parseToolAlternatives } from './tool-rule-expressions.js';
+import {
+  formatToolExpression,
+  normalizeToolExpression,
+  parseToolAlternatives
+} from './tool-rule-expressions.js';
 
 export interface EvalResult {
   pass: boolean;
@@ -275,7 +279,7 @@ export function normalizeToolConstraintAliases(
     return available.has(suffix) ? suffix : name;
   };
   const resolveExpression = (expression: string): string =>
-    [...new Set(parseToolAlternatives(expression).map(resolve))].join('|');
+    normalizeToolExpression(expression, { mapTool: resolve });
   const constraints = evalRules.tool_constraints;
   return {
     ...evalRules,

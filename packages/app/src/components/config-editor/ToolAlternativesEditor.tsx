@@ -1,40 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { isValidToolExpression, parseToolAlternatives } from '@/types/eval';
+import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ToolNameInput, type ToolNameInputProps } from '@/components/config-editor/ToolNameInput';
-
-function ToolAlternativeOrBadge() {
-  return (
-    <span className="rounded border bg-muted px-1 text-[9px] font-semibold leading-3 text-muted-foreground">
-      OR
-    </span>
-  );
-}
-
-export function ToolAlternativesDisplay({
-  value,
-  className = ''
-}: {
-  value: string;
-  className?: string;
-}) {
-  const displayClassName = `inline-flex flex-wrap items-center gap-x-1 font-mono break-all ${className}`;
-  if (!isValidToolExpression(value)) {
-    return <span className={displayClassName}>{value}</span>;
-  }
-
-  const alternatives = parseToolAlternatives(value);
-  return (
-    <span className={displayClassName}>
-      {alternatives.map((name, index) => (
-        <span key={`${index}-${name}`} className="inline-flex items-center gap-1">
-          {index > 0 && <ToolAlternativeOrBadge />}
-          {name}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export function ToolSequenceDisplay({
   sequence,
@@ -75,8 +42,10 @@ export function ToolAlternativesEditor({
   const setAlternatives = (next: string[]) => onChange(next.join('|'));
   const updateAlternative = (index: number, name: string) =>
     setAlternatives(
-      alternatives.map((current, currentIndex) =>
-        currentIndex === index ? name.replaceAll('|', '') : current
+      alternatives.flatMap((current, currentIndex) =>
+        currentIndex === index
+          ? name.split('|').map((alternative) => alternative.trim())
+          : [current]
       )
     );
   return (

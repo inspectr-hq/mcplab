@@ -39,11 +39,15 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { formatToolSequenceLabel, isValidToolExpression } from '@/types/eval';
+import {
+  formatToolSequenceLabel,
+  isValidToolExpression,
+  normalizeToolExpression
+} from '@/types/eval';
+import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import {
   AddToolAlternativeButton,
-  ToolAlternativesDisplay,
   ToolAlternativesEditor,
   ToolSequenceDisplay
 } from '@/components/config-editor/ToolAlternativesEditor';
@@ -144,10 +148,11 @@ function parseEqualsValue(text: string): string | number | boolean | undefined {
 }
 
 function getAddableToolExpression(value: string): string | null {
-  const alternatives = value.split('|').map((alternative) => alternative.trim());
-  while (alternatives.at(-1) === '') alternatives.pop();
-  const expression = alternatives.join('|');
-  return expression && isValidToolExpression(expression) ? expression : null;
+  try {
+    return normalizeToolExpression(value, { allowTrailingEmpty: true });
+  } catch {
+    return null;
+  }
 }
 
 export function ScenarioForm({
@@ -381,18 +386,16 @@ function ScenarioCard({
   };
 
   const addRule = () => {
+    if (!canAddRule()) return;
     if (isToolInputRuleType(newRuleType)) {
       const tool = newRuleTool.trim();
-      if (!tool) return;
       let nextRule: EvalRule;
       if (newRuleType === 'tool_input_jsonpath') {
         const path = newRulePath.trim();
-        if (!path) return;
         const equals = parseEqualsValue(newRuleEquals);
         nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
       } else {
         const value = newRuleValue.trim();
-        if (!value) return;
         nextRule = { type: newRuleType, tool, value };
       }
       const nextRules = [...scenario.evalRules];
@@ -415,7 +418,6 @@ function ScenarioCard({
       newRuleType === 'response_jsonpath_not_exists'
     ) {
       const path = newRulePath.trim();
-      if (!path) return;
       if (newRuleType === 'response_jsonpath') {
         const equals = parseEqualsValue(newRuleEquals);
         onUpdate({
@@ -435,7 +437,6 @@ function ScenarioCard({
     if (newRuleType === 'agent_check') {
       const label = newRuleLabel.trim();
       const prompt = newRulePrompt.trim();
-      if (!label || !prompt) return;
       const nextRules = [...scenario.evalRules];
       const nextRule = { type: 'agent_check', label, prompt } as const;
       const editingIndex = findRuleIndex(agentCheckEditingRule);
@@ -451,17 +452,14 @@ function ScenarioCard({
     }
 
     if (newRuleType === 'tool_sequence') {
-      const nextSequence = getAddableToolSequence();
-      if (!nextSequence) return;
-      updateToolSequence(nextSequence);
+      updateToolSequence(getAddableToolSequence()!);
       return;
     }
 
     const value =
       newRuleType === 'required_tool'
-        ? getAddableToolExpression(newRuleValue)
+        ? getAddableToolExpression(newRuleValue)!
         : newRuleValue.trim();
-    if (!value) return;
     const nextRules = [...scenario.evalRules];
     const nextRule = { type: newRuleType, value } as const;
     const editingIndex = findRuleIndex(valueRuleEditingRule);
@@ -537,7 +535,7 @@ function ScenarioCard({
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
     setToolSequenceDraft(toolSequence);
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence.join('|')]);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, JSON.stringify(toolSequence)]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -831,6 +829,14 @@ function ScenarioCard({
     } finally {
       setToolNamesLoading(false);
     }
+  };
+
+  const toolSuggestions = {
+    availableTools: availableToolNames,
+    loading: toolNamesLoading,
+    error: toolNamesError,
+    canLoadTools: canLoadToolNames,
+    onLoadTools: loadAvailableTools
   };
 
   return (
@@ -1604,13 +1610,7 @@ function ScenarioCard({
                                   onChange={setNewToolSequenceValue}
                                   onEnter={addToolSequenceValue}
                                   label="Sequence step alternatives"
-                                  toolSuggestions={{
-                                    availableTools: availableToolNames,
-                                    loading: toolNamesLoading,
-                                    error: toolNamesError,
-                                    canLoadTools: canLoadToolNames,
-                                    onLoadTools: loadAvailableTools
-                                  }}
+                                  toolSuggestions={toolSuggestions}
                                 />
                                 <AddToolAlternativeButton
                                   value={newToolSequenceValue}
@@ -1630,11 +1630,9 @@ function ScenarioCard({
                               <ToolNameInput
                                 value={newRuleValue}
                                 onChange={setNewRuleValue}
-                                availableTools={availableToolNames}
-                                loading={toolNamesLoading}
-                                error={toolNamesError}
-                                canLoadTools={canLoadToolNames}
-                                onLoadTools={loadAvailableTools}
+                                onEnter={addRule}
+                                inputLabel="Forbidden tool name"
+                                {...toolSuggestions}
                               />
                             ) : newRuleType === 'required_tool' ? (
                               <ToolAlternativesEditor
@@ -1642,13 +1640,7 @@ function ScenarioCard({
                                 onChange={setNewRuleValue}
                                 onEnter={addRule}
                                 label="Required tool alternatives"
-                                toolSuggestions={{
-                                  availableTools: availableToolNames,
-                                  loading: toolNamesLoading,
-                                  error: toolNamesError,
-                                  canLoadTools: canLoadToolNames,
-                                  onLoadTools: loadAvailableTools
-                                }}
+                                toolSuggestions={toolSuggestions}
                               />
                             ) : (
                               <Input

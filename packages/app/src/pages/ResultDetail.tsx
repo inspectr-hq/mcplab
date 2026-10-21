@@ -58,6 +58,7 @@ import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
 import { CopyButton } from '@/components/CopyButton';
+import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -1484,7 +1485,19 @@ const ResultDetail = () => {
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                                                 )}
                                                                 <span className="font-medium">
-                                                                  {formatEvalRuleLabel(check.rule)}
+                                                                  {check.rule.type ===
+                                                                  'required_tool' ? (
+                                                                    <span className="inline-flex flex-wrap items-center gap-x-1">
+                                                                      <span>Required tool ·</span>
+                                                                      <ToolAlternativesDisplay
+                                                                        value={String(
+                                                                          check.rule.value ?? ''
+                                                                        )}
+                                                                      />
+                                                                    </span>
+                                                                  ) : (
+                                                                    formatEvalRuleLabel(check.rule)
+                                                                  )}
                                                                 </span>
                                                               </div>
                                                               {check.decisionInput && (

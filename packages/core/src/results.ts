@@ -7,7 +7,6 @@ import type {
 } from './types.js';
 import { calculatePassRate } from './result-metrics.js';
 import { deriveRunOutcome } from './scenario-observation.js';
-import { parseToolAlternatives } from './tool-rule-expressions.js';
 
 export function aggregateResults(params: {
   runId: string;
@@ -46,10 +45,15 @@ export function aggregateResults(params: {
       }
       if (entry.eval?.tool_constraints?.required_tools) {
         for (const tool of entry.eval.tool_constraints.required_tools) {
-          if (parseToolAlternatives(tool).some((name) => run.tool_usage[name])) {
-            requiredStats[tool] = (requiredStats[tool] ?? 0) + 1;
+          const alternatives =
+            typeof tool === 'string'
+              ? tool.split('|').map((name) => name.trim()).filter(Boolean)
+              : [];
+          const statsKey = alternatives.length > 0 ? alternatives.join('|') : String(tool);
+          if (alternatives.some((name) => run.tool_usage[name])) {
+            requiredStats[statsKey] = (requiredStats[statsKey] ?? 0) + 1;
           } else {
-            requiredStats[tool] ??= 0;
+            requiredStats[statsKey] ??= 0;
           }
         }
       }
