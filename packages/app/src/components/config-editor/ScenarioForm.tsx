@@ -60,10 +60,7 @@ import {
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
   SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
 } from '@/lib/attachment-policy';
-import {
-  buildCheckItems,
-  formatCheckStatusLabel
-} from '@/lib/check-presentation';
+import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {

@@ -86,10 +86,7 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import {
-  buildCheckItems,
-  formatCheckStatusLabel
-} from '@/lib/check-presentation';
+import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
