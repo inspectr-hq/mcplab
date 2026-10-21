@@ -87,6 +87,11 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [agentSelectionEdited, setAgentSelectionEdited] = useState(false);
+  const changeSelectedAgents: typeof setSelectedAgentIds = (next) => {
+    setAgentSelectionEdited(true);
+    setSelectedAgentIds(next);
+  };
   const [conversationMode, setConversationMode] = useState<ConversationMode>('agent_default');
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
@@ -257,7 +262,7 @@ const RunEvaluation = () => {
   const showUnavailableAgents =
     !agentsLoading &&
     unavailableAgentNames.length > 0 &&
-    (selectedAgentIds.length === 0 || defaultSelection.source !== 'workspace_default');
+    defaultSelection.source !== 'workspace_default';
   const inheritsWorkspaceAgent =
     defaultSelection.source === 'workspace_default' ||
     (!agentSelectionError && defaultSelection.source === 'none');
@@ -274,6 +279,7 @@ const RunEvaluation = () => {
       : '';
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
+    setAgentSelectionEdited(false);
     if (!selectedConfig) {
       setSelectedAgentIds([]);
       setConversationMode('agent_default');
@@ -443,6 +449,7 @@ const RunEvaluation = () => {
         configPath: selectedConfig.sourcePath,
         runsPerScenario,
         agents: selectedAgents.map((agent) => agent.id),
+        agentSelectionSource: agentSelectionEdited ? 'requested' : defaultSelection.source,
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
@@ -1047,14 +1054,14 @@ const RunEvaluation = () => {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedAgentIds(availableAgents.map((agent) => agent.id))}
+                    onClick={() => changeSelectedAgents(availableAgents.map((agent) => agent.id))}
                   >
                     Select all
                   </button>
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedAgentIds([])}
+                    onClick={() => changeSelectedAgents([])}
                   >
                     Clear
                   </button>
@@ -1073,7 +1080,7 @@ const RunEvaluation = () => {
                             aria-label={`Select all ${group.label}`}
                             onClick={() => {
                               const groupIds = new Set(group.agents.map((agent) => agent.id));
-                              setSelectedAgentIds((prev) => [
+                              changeSelectedAgents((prev) => [
                                 ...prev.filter((id) => !groupIds.has(id)),
                                 ...groupIds
                               ]);
@@ -1087,7 +1094,9 @@ const RunEvaluation = () => {
                             aria-label={`Clear ${group.label}`}
                             onClick={() => {
                               const groupIds = new Set(group.agents.map((agent) => agent.id));
-                              setSelectedAgentIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                              changeSelectedAgents((prev) =>
+                                prev.filter((id) => !groupIds.has(id))
+                              );
                             }}
                           >
                             Clear
@@ -1106,7 +1115,7 @@ const RunEvaluation = () => {
                                 checked={checked}
                                 onCheckedChange={(value) => {
                                   const isChecked = value === true;
-                                  setSelectedAgentIds((prev) =>
+                                  changeSelectedAgents((prev) =>
                                     isChecked
                                       ? [...prev, agent.id]
                                       : prev.filter((id) => id !== agent.id)

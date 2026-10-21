@@ -11,7 +11,13 @@ afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true
 
 describe('workspace default evaluation agent', () => {
   async function request(
-    params: { declared?: boolean; defaultName?: string; requested?: string[] } = {}
+    params: {
+      declared?: boolean;
+      defaultName?: string;
+      requested?: string[];
+      selectionSource?: string;
+      browser?: boolean;
+    } = {}
   ) {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-agent-default-'));
     roots.push(root);
@@ -20,7 +26,10 @@ describe('workspace default evaluation agent', () => {
     writeFileSync(configPath, source);
     const libraryAgents = {
       workspace: { provider: 'openai' as const, model: 'workspace-model' },
-      other: { provider: 'openai' as const, model: 'other-model' }
+      other: { provider: 'openai' as const, model: 'other-model' },
+      ...(params.browser
+        ? { browser: { type: 'browser' as const, provider: 'chatgpt', url: 'https://chatgpt.com' } }
+        : {})
     };
     const enqueueRun = vi.fn(() => ({ jobId: 'queued' }));
     const asJson = vi.fn();
@@ -37,8 +46,17 @@ describe('workspace default evaluation agent', () => {
       runQueueService: { enqueueRun } as any,
       oauthSessionManager: {} as any,
       deps: makeRunsRouteDeps({
-        parseBody: async () => ({ configPath, agents: params.requested }),
-        readLibraries: () => ({ agents: libraryAgents, servers: {}, scenarios: {} }),
+        parseBody: async () => ({
+          configPath,
+          agents: params.requested,
+          agentSelectionSource: params.selectionSource
+        }),
+        readLibraries: () => ({
+          agents: libraryAgents,
+          servers: {},
+          scenarios: {},
+          browserProviders: {}
+        }),
         resolveRunSelectedAgents,
         asJson
       }) as any
@@ -67,6 +85,51 @@ describe('workspace default evaluation agent', () => {
     expect(declared.enqueueRun.mock.calls[0]?.[0]).toMatchObject({ requestedAgents: ['declared'] });
     const override = await request({ defaultName: 'workspace', requested: ['other'] });
     expect(override.enqueueRun.mock.calls[0]?.[0]).toMatchObject({ requestedAgents: ['other'] });
+  });
+  it('preserves inherited client intent and rejects stale or forged origins', async () => {
+    const inherited = await request({
+      defaultName: 'workspace',
+      requested: ['workspace'],
+      selectionSource: 'workspace_default'
+    });
+    expect(inherited.enqueueRun.mock.calls[0]?.[0]).toMatchObject({
+      requestedAgents: ['workspace'],
+      agentSelectionSource: 'workspace_default'
+    });
+    for (const selectionSource of ['workspace_default', 'not-a-source']) {
+      const invalid = await request({
+        defaultName: 'other',
+        requested: ['workspace'],
+        selectionSource
+      });
+      expect(invalid.enqueueRun).not.toHaveBeenCalled();
+      expect(invalid.asJson).toHaveBeenCalledWith(expect.anything(), 400, {
+        error: expect.any(String)
+      });
+    }
+  });
+  it('rejects inherited browser defaults but preserves explicit Rover selections', async () => {
+    const inherited = await request({
+      defaultName: 'browser',
+      requested: ['browser'],
+      selectionSource: 'workspace_default',
+      browser: true
+    });
+    expect(inherited.enqueueRun).not.toHaveBeenCalled();
+    expect(inherited.asJson).toHaveBeenCalledWith(expect.anything(), 400, {
+      error: expect.stringContaining('must be an LLM agent')
+    });
+    const explicit = await request({
+      defaultName: 'browser',
+      requested: ['browser'],
+      selectionSource: 'requested',
+      browser: true
+    });
+    expect(explicit.enqueueRun.mock.calls[0]?.[0]).toMatchObject({
+      requestedAgents: ['browser'],
+      executionType: 'rover',
+      agentSelectionSource: 'requested'
+    });
   });
   it.each([undefined, 'deleted'])(
     'rejects an empty evaluation with unavailable default %s',

@@ -195,7 +195,8 @@ describe('Configurations suites', () => {
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/trendminer/tags/tag-search.yaml',
       runsPerScenario: 1,
-      agents: ['claude-sonnet-46']
+      agents: ['claude-sonnet-46'],
+      agentSelectionSource: 'evaluation_agents'
     });
   });
 
@@ -215,7 +216,8 @@ describe('Configurations suites', () => {
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/root.yaml',
       runsPerScenario: 1,
-      agents: ['root-agent']
+      agents: ['root-agent'],
+      agentSelectionSource: 'evaluation_agents'
     });
   });
 
@@ -257,12 +259,14 @@ describe('Configurations suites', () => {
     expect(sourceMock.startRun).toHaveBeenNthCalledWith(1, {
       configPath: '/path/trendminer/alerts/alert-check.yaml',
       runsPerScenario: 1,
-      agents: ['agent-b']
+      agents: ['agent-b'],
+      agentSelectionSource: 'evaluation_default'
     });
     expect(sourceMock.startRun).toHaveBeenNthCalledWith(2, {
       configPath: '/path/trendminer/tags/tag-search.yaml',
       runsPerScenario: 1,
-      agents: ['claude-sonnet-46']
+      agents: ['claude-sonnet-46'],
+      agentSelectionSource: 'evaluation_agents'
     });
   });
 });

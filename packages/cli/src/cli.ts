@@ -12,7 +12,6 @@ import {
   runAll,
   resolveWorkspaceEvaluation,
   resolveRunAgentSelection,
-  resolveDefaultEvaluationAgent,
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
@@ -789,17 +788,12 @@ async function executeSingleConfigRun(params: {
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
   const selection = resolveRunAgentSelection({
     declaredAgentNames: loaded.declaredAgentNames,
+    availableAgents: runtimeOverriddenConfig.agents,
     selectedAgentNames: runtimeOverriddenConfig.run_defaults?.selected_agents,
     requestedAgentNames: requestedAgents,
     defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
   });
   const effectiveAgents = selection.agentNames;
-  if (selection.source === 'workspace_default') {
-    resolveDefaultEvaluationAgent({
-      agents: runtimeOverriddenConfig.agents,
-      defaultEvaluationAgentName: effectiveAgents[0]
-    });
-  }
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
   console.log(
     kleur.cyan(

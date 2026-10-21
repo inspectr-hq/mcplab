@@ -19,6 +19,27 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
+  it('normalizes assistant settings and the legacy alias inside the atomic patch', () => {
+    const settings = fixture();
+    for (const key of ['assistantAgentName', 'scenarioAssistantAgentName']) {
+      expect(() => applyEvaluationSettingsPatch(settings, { [key]: 123 }, agents)).toThrow(
+        'must be an agent name or null'
+      );
+      expect(
+        applyEvaluationSettingsPatch(settings, { [key]: ' judge ' }, agents).assistantAgentName
+      ).toBe('judge');
+      expect(
+        applyEvaluationSettingsPatch(settings, { [key]: null }, agents).assistantAgentName
+      ).toBeUndefined();
+    }
+    expect(
+      applyEvaluationSettingsPatch(
+        settings,
+        { assistantAgentName: 'judge', scenarioAssistantAgentName: 'old' },
+        agents
+      ).assistantAgentName
+    ).toBe('judge');
+  });
   it('persists, reloads, and clears the workspace default evaluation agent', () => {
     const settings = fixture();
     const next = applyEvaluationSettingsPatch(

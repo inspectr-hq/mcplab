@@ -124,6 +124,72 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it.each([false, true])(
+    'sends inherited intent unless the user changes the selection, edited=%s',
+    async (edited) => {
+      configsRef.value = [
+        {
+          id: 'empty',
+          name: 'Empty',
+          sourcePath: '/empty.yaml',
+          agents: [],
+          scenarios: [
+            {
+              id: 's1',
+              name: 'Test',
+              prompt: 'test',
+              serverIds: [],
+              evalRules: [],
+              extractRules: []
+            }
+          ],
+          createdAt: '',
+          updatedAt: ''
+        }
+      ];
+      libraryAgentsRef.value = [
+        {
+          id: 'workspace-agent',
+          name: 'Workspace Agent',
+          provider: 'openai',
+          model: 'test',
+          maxTokens: 100
+        }
+      ];
+      render(
+        <MemoryRouter initialEntries={['/run?configId=empty']}>
+          <RunEvaluation />
+        </MemoryRouter>
+      );
+      const run = screen.getByRole('button', { name: 'Run' });
+      await waitFor(() => expect(run).toBeEnabled());
+      if (edited) {
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Workspace Agent' }));
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Workspace Agent' }));
+      }
+      fireEvent.click(run);
+      await waitFor(() =>
+        expect(sourceMock.startRun).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agents: ['workspace-agent'],
+            agentSelectionSource: edited ? 'requested' : 'workspace_default'
+          })
+        )
+      );
+    }
+  );
+  it('shows only the workspace repair notice when its default was deleted', async () => {
+    configsRef.value = [
+      { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/This agent is no longer available/)).toBeInTheDocument();
+    expect(screen.queryByText(/Unavailable agents:/)).not.toBeInTheDocument();
+  });
   it('does not inherit a persisted browser default, but allows explicit browser selection', async () => {
     configsRef.value = [
       { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }

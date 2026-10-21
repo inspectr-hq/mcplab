@@ -68,6 +68,15 @@ export function applyEvaluationSettingsPatch(
   agents: EvalConfig['agents'] | (() => EvalConfig['agents'])
 ): AppSettings {
   const candidate = { ...settings };
+  // Older clients send the assistant setting under its previous name.
+  const assistantAgentKey = Object.prototype.hasOwnProperty.call(body, 'assistantAgentName')
+    ? 'assistantAgentName'
+    : Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')
+      ? 'scenarioAssistantAgentName'
+      : undefined;
+  if (assistantAgentKey) {
+    candidate.assistantAgentName = normalizeAgentName(body[assistantAgentKey], 'Assistant agent');
+  }
   let libraryAgents: EvalConfig['agents'] | undefined;
   const getAgents = () => (libraryAgents ??= typeof agents === 'function' ? agents() : agents);
   if (Object.prototype.hasOwnProperty.call(body, 'defaultEvaluationAgentName')) {

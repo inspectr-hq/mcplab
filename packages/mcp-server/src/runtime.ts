@@ -23,7 +23,6 @@ import {
   loadConfig,
   expandConfigForAgents,
   resolveRunAgentSelection,
-  resolveDefaultEvaluationAgent,
   hashConfig,
   runAll,
   loadWorkspaceSettingsOverrides,
@@ -53,7 +52,6 @@ import {
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
   type EvalConfig,
-  type ExecutableEvalConfig,
   type ResultsJson,
   type SearchDoc,
   type SearchHit,
@@ -2084,15 +2082,10 @@ export function registerTools(server: McpServer): void {
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
         const selection = resolveRunAgentSelection({
           declaredAgentNames: loaded.declaredAgentNames,
+          availableAgents: runtimeOverridden.agents,
           selectedAgentNames: runtimeOverridden.run_defaults?.selected_agents,
           defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
         });
-        if (selection.source === 'workspace_default') {
-          resolveDefaultEvaluationAgent({
-            agents: runtimeOverridden.agents,
-            defaultEvaluationAgentName: selection.agentNames[0]
-          });
-        }
         const executable = expandConfigForAgents(runtimeOverridden, selection.agentNames);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,

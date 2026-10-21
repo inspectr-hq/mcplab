@@ -6,7 +6,6 @@ import { isAbsolute, join, resolve } from 'node:path';
 import {
   McpClientManager,
   NO_EVALUATION_AGENTS_MESSAGE,
-  resolveDefaultEvaluationAgent,
   loadConfig,
   hashConfig,
   createRunId,
@@ -16,6 +15,8 @@ import {
   applyRuntimeServerOverrides,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
+  type EvaluationRunRequest,
+  type RunAgentSelectionSource,
   type WorkspaceEvaluation,
   type BrowserAgentConfig,
   type ScenarioAttachment,
@@ -80,18 +81,7 @@ export function applyLibraryAgents(
   applyLibraryEntries(loaded, libraryAgents, {});
 }
 
-type RunRequestBody = {
-  configPath?: unknown;
-  runsPerScenario?: unknown;
-  scenarioId?: unknown;
-  scenarioIds?: unknown;
-  agents?: unknown;
-  runNote?: unknown;
-  newConversationBetweenScenarios?: unknown;
-  newConversationBeforeStart?: unknown;
-  serverOverrideAll?: unknown;
-  scenarioServerOverrides?: unknown;
-};
+type RunRequestBody = Partial<Record<keyof EvaluationRunRequest, unknown>>;
 
 type PreviewRunRequestBody = {
   selectedAgentName?: unknown;
@@ -396,6 +386,17 @@ export async function handleRunsRoutes(params: {
     const requestedAgents = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
+    if (
+      body.agentSelectionSource !== undefined &&
+      (typeof body.agentSelectionSource !== 'string' ||
+        !['requested', 'evaluation_default', 'evaluation_agents', 'workspace_default'].includes(
+          body.agentSelectionSource
+        ))
+    ) {
+      asJson(res, 400, { error: 'Invalid agent selection source.' });
+      return true;
+    }
+    const requestedAgentSource = body.agentSelectionSource as RunAgentSelectionSource | undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -491,14 +492,9 @@ export async function handleRunsRoutes(params: {
     try {
       selection = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
         declaredAgentNames,
+        requestedAgentSource,
         defaultEvaluationAgentName: settings.defaultEvaluationAgentName
       });
-      if (selection.source === 'workspace_default') {
-        resolveDefaultEvaluationAgent({
-          agents: selectedConfig.agents,
-          defaultEvaluationAgentName: settings.defaultEvaluationAgentName
-        });
-      }
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;

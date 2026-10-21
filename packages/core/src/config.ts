@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { NO_EVALUATION_AGENTS_MESSAGE } from './run-agent-selection.js';
+import {
+  NO_EVALUATION_AGENTS_MESSAGE,
+  findUndeclaredDefaultAgents
+} from './run-agent-selection.js';
 import { validateEvalToolRules } from './tool-rule-expressions.js';
 import {
   ATTACHMENT_MEDIA_TYPE_BY_EXTENSION,
@@ -377,7 +380,10 @@ function resolveReferences(
     missingMessages.push(`scenarios refs: ${missingScenarioRefs.join(', ')}`);
   }
   const defaultAgents = sourceConfig.run_defaults?.selected_agents ?? [];
-  const missingDefaultAgents = defaultAgents.filter((agent) => !resolvedAgents[agent]);
+  const missingDefaultAgents = findUndeclaredDefaultAgents(
+    Object.keys(resolvedAgents),
+    defaultAgents
+  );
   if (missingDefaultAgents.length > 0) {
     missingMessages.push(`run_defaults.selected_agents: ${missingDefaultAgents.join(', ')}`);
   }

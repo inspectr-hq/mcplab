@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from 'react';
@@ -27,44 +28,59 @@ interface LibraryContextValue extends LibraryState {
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
+const emptyLibraries: LibraryState = {
+  servers: [],
+  agents: [],
+  scenarios: [],
+  browserProviders: {}
+};
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const { source } = useDataSource();
-  const [state, setState] = useState<LibraryState>({
-    servers: [],
-    agents: [],
-    scenarios: [],
-    browserProviders: {}
-  });
-  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState({ source, libraries: emptyLibraries, loading: true });
+  const state = snapshot.source === source ? snapshot.libraries : emptyLibraries;
+  const loading = snapshot.source !== source || snapshot.loading;
+  const activeSource = useRef(source);
+  activeSource.current = source;
+  const requestVersion = useRef(0);
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    const version = ++requestVersion.current;
     try {
       const libraries = await source.getLibraries();
-      setState(libraries);
-    } finally {
-      setLoading(false);
+      if (activeSource.current === source && version === requestVersion.current) {
+        setSnapshot({ source, libraries, loading: false });
+      }
+    } catch (error) {
+      if (activeSource.current === source && version === requestVersion.current) {
+        setSnapshot((current) => ({
+          source,
+          libraries: current.source === source ? current.libraries : emptyLibraries,
+          loading: false
+        }));
+      }
+      throw error;
     }
   }, [source]);
 
   useEffect(() => {
-    void reload();
-  }, [source]);
+    void reload().catch(() => undefined);
+  }, [reload]);
 
   useEffect(() => {
     const handleFocus = () => {
-      void reload();
+      void reload().catch(() => undefined);
     };
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [source]);
+  }, [reload]);
 
   const save = useCallback(
     async (next: LibraryState) => {
-      setState(next);
+      ++requestVersion.current;
+      setSnapshot({ source, libraries: next, loading: false });
       await source.saveLibraries(next);
     },
     [source]

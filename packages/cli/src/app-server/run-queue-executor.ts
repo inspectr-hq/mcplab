@@ -6,7 +6,6 @@ import {
   loadConfig,
   runAll,
   resolveWorkspaceEvaluation,
-  resolveDefaultEvaluationAgent,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -282,16 +281,13 @@ export async function executeRunJob(params: {
     });
     const selection = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents, {
       declaredAgentNames: loaded.declaredAgentNames,
+      resolvedSelection: requestedAgents?.length
+        ? { agentNames: requestedAgents, source: job.runParams.agentSelectionSource ?? 'requested' }
+        : undefined,
       defaultEvaluationAgentName: settings.defaultEvaluationAgentName
     });
     const resolvedAgents = selection.agentNames;
-    const source = job.runParams.agentSelectionSource ?? selection.source;
-    if (source === 'workspace_default') {
-      resolveDefaultEvaluationAgent({
-        agents: runtimeOverriddenConfig.agents,
-        defaultEvaluationAgentName: resolvedAgents[0]
-      });
-    }
+    const source = selection.source;
     const sourceLabel = {
       requested: 'requested',
       evaluation_default: 'run default',

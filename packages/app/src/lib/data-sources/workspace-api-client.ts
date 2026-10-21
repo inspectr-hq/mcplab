@@ -1,4 +1,5 @@
 import type {
+  EvaluationRunRequest,
   AssistantRuntimeEvent,
   CoreEvalConfig,
   CoreSourceEvalConfig,
@@ -364,18 +365,7 @@ export const workspaceApiClient = {
       method: 'PUT',
       body: JSON.stringify(libraries)
     }),
-  startRun: (params: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioId?: string;
-    scenarioIds?: string[];
-    agents?: string[];
-    runNote?: string;
-    newConversationBetweenScenarios?: boolean;
-    newConversationBeforeStart?: boolean;
-    serverOverrideAll?: string[];
-    scenarioServerOverrides?: Record<string, string[]>;
-  }) =>
+  startRun: (params: EvaluationRunRequest) =>
     request<{ jobId: string; queued?: boolean; position?: number }>('/api/runs', {
       method: 'POST',
       body: JSON.stringify(params)

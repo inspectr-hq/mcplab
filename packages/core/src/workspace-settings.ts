@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { validateWorkspaceDefaultAgent } from './run-agent-selection.js';
 import {
   isLlmAgent,
   type EvalConfig,
@@ -54,37 +55,22 @@ export function resolveEvaluationJudge(params: {
   agents: EvalConfig['agents'];
   evaluationJudgeAgentName?: string;
 }): EvaluationJudge | undefined {
-  return resolveLlmAgent(
-    params.agents,
-    params.evaluationJudgeAgentName,
-    'Evaluation judge',
-    'Evaluation judge agent'
-  );
+  const selected = params.evaluationJudgeAgentName?.trim();
+  if (!selected) return undefined;
+  const agent = params.agents[selected];
+  if (!agent) throw new Error(`Evaluation judge agent not found: ${selected}`);
+  if (!isLlmAgent(agent)) throw new Error(`Evaluation judge must be an LLM agent: ${selected}`);
+  return { name: selected, agent };
 }
 
 export function resolveDefaultEvaluationAgent(params: {
   agents: EvalConfig['agents'];
   defaultEvaluationAgentName?: string;
 }): LlmAgentConfig | undefined {
-  return resolveLlmAgent(
-    params.agents,
-    params.defaultEvaluationAgentName,
-    'Default evaluation agent'
-  )?.agent;
-}
-
-function resolveLlmAgent(
-  agents: EvalConfig['agents'],
-  name: string | undefined,
-  label: string,
-  missingLabel = label
-) {
-  const selected = name?.trim();
+  const selected = params.defaultEvaluationAgentName?.trim();
   if (!selected) return undefined;
-  const agent = agents[selected];
-  if (!agent) throw new Error(`${missingLabel} not found: ${selected}`);
-  if (!isLlmAgent(agent)) throw new Error(`${label} must be an LLM agent: ${selected}`);
-  return { name: selected, agent };
+  validateWorkspaceDefaultAgent(params.agents, selected);
+  return params.agents[selected] as LlmAgentConfig;
 }
 
 /** Resolve evaluation services only when selected scenarios need semantic checks. */

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRunAgentNames, resolveRunAgentSelection } from './run-agent-selection.js';
+import { resolveRunAgentSelection } from './run-agent-selection.js';
 import { expandConfigForAgents } from './config.js';
 import type { EvalConfig } from './types.js';
 
-describe('resolveRunAgentNames', () => {
+describe('resolveRunAgentSelection', () => {
   const base = {
     declaredAgentNames: ['eval-a', 'eval-b'],
     selectedAgentNames: ['eval-b'],
@@ -11,28 +11,83 @@ describe('resolveRunAgentNames', () => {
   };
 
   it('prefers explicit run selection over every default', () => {
-    expect(resolveRunAgentNames({ ...base, requestedAgentNames: ['override'] })).toEqual([
-      'override'
-    ]);
+    expect(
+      resolveRunAgentSelection({ ...base, requestedAgentNames: ['override'] }).agentNames
+    ).toEqual(['override']);
   });
   it('prefers evaluation defaults over declared agents and workspace defaults', () => {
-    expect(resolveRunAgentNames(base)).toEqual(['eval-b']);
+    expect(resolveRunAgentSelection(base).agentNames).toEqual(['eval-b']);
   });
   it('keeps all evaluation agents when no evaluation defaults are marked', () => {
-    expect(resolveRunAgentNames({ ...base, selectedAgentNames: [] })).toEqual(['eval-a', 'eval-b']);
+    expect(resolveRunAgentSelection({ ...base, selectedAgentNames: [] }).agentNames).toEqual([
+      'eval-a',
+      'eval-b'
+    ]);
   });
   it('inherits the workspace default only for an evaluation without agents', () => {
     expect(
-      resolveRunAgentNames({ declaredAgentNames: [], defaultEvaluationAgentName: 'workspace' })
+      resolveRunAgentSelection({ declaredAgentNames: [], defaultEvaluationAgentName: 'workspace' })
+        .agentNames
     ).toEqual(['workspace']);
   });
   it('returns no agents when nothing is configured, without selecting the whole library', () => {
-    expect(resolveRunAgentNames({ declaredAgentNames: [] })).toEqual([]);
+    expect(resolveRunAgentSelection({ declaredAgentNames: [] }).agentNames).toEqual([]);
   });
   it('rejects evaluation defaults outside declared agents instead of silently substituting', () => {
-    expect(() => resolveRunAgentNames({ ...base, selectedAgentNames: ['deleted'] })).toThrow(
+    expect(() => resolveRunAgentSelection({ ...base, selectedAgentNames: ['deleted'] })).toThrow(
       'Evaluation default agents must be declared in the evaluation: deleted'
     );
+  });
+  it('validates inherited intent against current defaults and available agent definitions', () => {
+    const params = {
+      declaredAgentNames: [],
+      defaultEvaluationAgentName: 'workspace',
+      requestedAgentNames: ['workspace'],
+      requestedAgentSource: 'workspace_default' as const,
+      availableAgents: { workspace: { type: 'llm' as const } }
+    };
+    expect(resolveRunAgentSelection(params)).toEqual({
+      agentNames: ['workspace'],
+      source: 'workspace_default'
+    });
+    expect(() =>
+      resolveRunAgentSelection({ ...params, defaultEvaluationAgentName: 'changed' })
+    ).toThrow('Agent defaults changed');
+    expect(() =>
+      resolveRunAgentSelection({
+        declaredAgentNames: ['a', 'b'],
+        requestedAgentNames: ['a', 'a'],
+        requestedAgentSource: 'evaluation_agents'
+      })
+    ).toThrow('Agent defaults changed');
+    expect(() =>
+      resolveRunAgentSelection({ ...params, availableAgents: { workspace: { type: 'browser' } } })
+    ).toThrow('must be an LLM agent');
+    expect(
+      resolveRunAgentSelection({
+        ...params,
+        requestedAgentSource: 'requested',
+        availableAgents: { workspace: { type: 'browser' } }
+      }).source
+    ).toBe('requested');
+  });
+  it('validates a pinned selection without retargeting it to later defaults', () => {
+    const resolvedSelection = { agentNames: ['original'], source: 'workspace_default' as const };
+    expect(
+      resolveRunAgentSelection({
+        declaredAgentNames: [],
+        defaultEvaluationAgentName: 'changed',
+        resolvedSelection,
+        availableAgents: { original: { type: 'llm' } }
+      })
+    ).toEqual(resolvedSelection);
+    expect(() =>
+      resolveRunAgentSelection({
+        declaredAgentNames: [],
+        resolvedSelection,
+        availableAgents: { original: { type: 'browser' } }
+      })
+    ).toThrow('LLM');
   });
   it('retains the origin of each selection tier', () => {
     expect(resolveRunAgentSelection({ ...base, requestedAgentNames: ['override'] })).toEqual({

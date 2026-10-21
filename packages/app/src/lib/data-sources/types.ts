@@ -53,7 +53,8 @@ import type {
   AgentConnectionTestResult,
   ProviderModelsResponse,
   WorkspaceSettingsPatch,
-  WorkspaceEvaluationSettings
+  WorkspaceEvaluationSettings,
+  EvaluationRunRequest
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -122,7 +123,11 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
-export type { RunAgentSelection } from '@inspectr/mcplab-core';
+export type {
+  RunAgentSelection,
+  RunAgentSelectionSource,
+  EvaluationRunRequest
+} from '@inspectr/mcplab-core';
 export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 
@@ -692,18 +697,7 @@ export interface EvalDataSource {
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
-  startRun: (params: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioId?: string;
-    scenarioIds?: string[];
-    agents?: string[];
-    runNote?: string;
-    newConversationBetweenScenarios?: boolean;
-    newConversationBeforeStart?: boolean;
-    serverOverrideAll?: string[];
-    scenarioServerOverrides?: Record<string, string[]>;
-  }) => Promise<StartRunResponse>;
+  startRun: (params: EvaluationRunRequest) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
   stopScenario: (
     jobId: string,
