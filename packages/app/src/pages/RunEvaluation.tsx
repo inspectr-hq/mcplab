@@ -313,11 +313,7 @@ const RunEvaluation = () => {
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
-  }, [
-    configKey,
-    selectedConfig,
-    availableScenarios
-  ]);
+  }, [configKey, selectedConfig, availableScenarios]);
   useEffect(() => {
     if (agentsLoading || !pendingAgentConfigKeyRef.current) return;
     setSelectedAgentIds(defaultSelectedAgentIds);

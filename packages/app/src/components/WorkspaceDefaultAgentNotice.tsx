@@ -21,12 +21,12 @@ export function WorkspaceDefaultAgentNotice(props: {
       : undefined);
   const description = props.loading
     ? 'Loading workspace default agent...'
-    : error ??
+    : (error ??
       (props.name
         ? agent
           ? undefined
           : 'This agent is no longer available. Choose another workspace default or select an agent for the run.'
-        : 'Select an agent for the run or configure a workspace default.');
+        : 'Select an agent for the run or configure a workspace default.'));
   return (
     <Card role="status">
       <CardContent className="flex items-start gap-3 p-4">
@@ -53,19 +53,17 @@ export function WorkspaceDefaultAgentNotice(props: {
             {agent && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <ProviderBadge provider={agent.provider} />
-                {isBrowserAgent ? (
-                  agent.url && (
-                    <Badge variant="outline" className="max-w-full truncate font-mono text-xs">
-                      {agent.url}
-                    </Badge>
-                  )
-                ) : (
-                  agent.model && (
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {agent.model}
-                    </Badge>
-                  )
-                )}
+                {isBrowserAgent
+                  ? agent.url && (
+                      <Badge variant="outline" className="max-w-full truncate font-mono text-xs">
+                        {agent.url}
+                      </Badge>
+                    )
+                  : agent.model && (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {agent.model}
+                      </Badge>
+                    )}
               </div>
             )}
             {description && (
