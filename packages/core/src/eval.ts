@@ -65,8 +65,7 @@ export function buildNotExecutedCheckResults(
       type: rule.type,
       label: rule.label,
       status: 'not_executed',
-      reason: undefined,
-      ...(rule.type === 'required_tool' ? { metadata: rule.metadata } : {})
+      reason: undefined
     });
   }
   const sequence = (evalRules.tool_sequence ?? []).map((expression) =>
@@ -78,7 +77,7 @@ export function buildNotExecutedCheckResults(
       label: formatToolSequenceLabel(sequence),
       status: 'not_executed',
       metadata: {
-        ...toolSequenceMetadata([], sequence, [])
+        ...toolSequenceMetadata([], sequence)
       }
     });
   }
@@ -112,8 +111,7 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       type: rule.type,
       label: rule.label,
       status: 'not_evaluated',
-      reason: 'Tool telemetry is not available for this execution source.',
-      ...(rule.type === 'required_tool' ? { metadata: rule.metadata } : {})
+      reason: 'Tool telemetry is not available for this execution source.'
     });
   }
   if (evalRules.tool_sequence?.length) {
@@ -126,7 +124,7 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       status: 'not_evaluated',
       reason: 'Tool telemetry is not available for this execution source.',
       metadata: {
-        ...toolSequenceMetadata([], sequence, [])
+        ...toolSequenceMetadata([], sequence)
       }
     });
   }
@@ -286,8 +284,7 @@ function withSourceToolRuleMetadata(
         ...check,
         metadata: {
           ...check.metadata,
-          source_expression: normalizeToolExpression(sourceExpression),
-          expression: normalizeToolExpression(expression)
+          source_expression: normalizeToolExpression(sourceExpression)
         }
       };
     }
@@ -344,15 +341,7 @@ function evaluateToolConstraints(
         label: template.label,
         status: reason ? 'failed' : 'passed',
         reason,
-        ...(template.type === 'required_tool'
-          ? {
-              metadata: {
-                expression: template.expression,
-                alternatives,
-                matched_tools: matchedTools
-              }
-            }
-          : {})
+        ...(template.type === 'required_tool' ? { metadata: {} } : {})
       };
     }
   );
@@ -373,23 +362,20 @@ function evaluateToolSequence(
           type: 'tool_sequence',
           label,
           status: 'passed',
-          metadata: toolSequenceMetadata(actual, expected, [])
+          metadata: toolSequenceMetadata(actual, expected)
         }
       ]
     };
   }
 
   let cursor = 0;
-  const matchedTools: string[] = [];
   for (const expression of canonicalExpected) {
     const alternatives = parseToolAlternatives(expression);
     let index = -1;
-    let matched = '';
     for (let i = cursor; i < actual.length; i += 1) {
       const found = alternatives.find((tool) => tool === actual[i]);
       if (found) {
         index = i;
-        matched = found;
         break;
       }
     }
@@ -405,13 +391,12 @@ function evaluateToolSequence(
             label,
             status: 'failed',
             reason,
-            metadata: toolSequenceMetadata(actual, canonicalExpected, matchedTools)
+            metadata: toolSequenceMetadata(actual, canonicalExpected)
           }
         ]
       };
     }
     cursor = index + 1;
-    matchedTools.push(matched);
   }
 
   return {
@@ -421,19 +406,14 @@ function evaluateToolSequence(
         type: 'tool_sequence',
         label,
         status: 'passed',
-        metadata: toolSequenceMetadata(actual, canonicalExpected, matchedTools)
+        metadata: toolSequenceMetadata(actual, canonicalExpected)
       }
     ]
   };
 }
 
-function toolSequenceMetadata(actual: string[], expected: string[], matchedTools: string[]) {
-  return {
-    actual,
-    expected,
-    alternatives: expected.map(parseToolAlternatives),
-    matched_tools: matchedTools
-  };
+function toolSequenceMetadata(actual: string[], expected: string[]) {
+  return { actual, expected };
 }
 
 function toolInputAssertionType(assertion: ToolInputAssertion): string {
@@ -729,7 +709,7 @@ function buildToolConstraintCheckResults(
   constraints: ToolConstraints
 ): Array<
   | { type: 'forbidden_tool'; tool: string; label: string }
-  | { type: 'required_tool'; expression: string; label: string; metadata: Record<string, unknown> }
+  | { type: 'required_tool'; expression: string; label: string }
 > {
   const results: Array<
     | { type: 'forbidden_tool'; tool: string; label: string }
@@ -737,7 +717,6 @@ function buildToolConstraintCheckResults(
         type: 'required_tool';
         expression: string;
         label: string;
-        metadata: Record<string, unknown>;
       }
   > = [];
   for (const tool of constraints.forbidden_tools ?? []) {
@@ -758,8 +737,7 @@ function buildToolConstraintCheckResults(
       label:
         alternatives.length > 1
           ? `Required tool · (${display})`
-          : `Required tool · ${alternatives[0]}`,
-      metadata: { expression, alternatives, matched_tools: [] }
+          : `Required tool · ${alternatives[0]}`
     });
   }
   return results;

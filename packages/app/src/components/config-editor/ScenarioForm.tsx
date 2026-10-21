@@ -140,10 +140,6 @@ function isValidToolExpression(expression: string): boolean {
   }
 }
 
-function formatToolExpressionForDisplay(expression: string): string {
-  return formatToolAlternatives(expression);
-}
-
 function isToolInputRuleType(type: EvalRule['type']): boolean {
   return type.startsWith('tool_input_');
 }
@@ -534,6 +530,7 @@ function ScenarioCard({
     toolSequenceRule?.type === 'tool_sequence'
       ? (toolSequenceRule.sequence ?? emptyToolSequence)
       : emptyToolSequence;
+  const toolSequenceKey = toolSequence.join('\0');
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
   const toolSequenceDraftInvalid =
     toolSequenceDraft.some((step) => !isValidToolExpression(step)) ||
@@ -606,10 +603,10 @@ function ScenarioCard({
 
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
-    const nextSequence = [...toolSequence];
+    const nextSequence = toolSequenceKey ? toolSequenceKey.split('\0') : [];
     setToolSequenceDraft(nextSequence);
     setToolSequenceStepInvalid(nextSequence.map((step) => !isValidToolExpression(step)));
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence]);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequenceKey]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -1464,7 +1461,7 @@ function ScenarioCard({
                                   rule.type === 'forbidden_tool' ? (
                                   <span className="font-mono break-all">
                                     {rule.type === 'required_tool'
-                                      ? formatToolExpressionForDisplay(String(rule.value ?? ''))
+                                      ? formatToolAlternatives(String(rule.value ?? ''))
                                       : rule.value}
                                   </span>
                                 ) : rule.type === 'tool_sequence' ? (
@@ -1716,6 +1713,7 @@ function ScenarioCard({
                                 onValidityChange={setRequiredToolFieldInvalid}
                                 availableTools={availableToolNames}
                                 label="Required tool alternatives"
+                                onEnter={addRule}
                               />
                             ) : (
                               <Input

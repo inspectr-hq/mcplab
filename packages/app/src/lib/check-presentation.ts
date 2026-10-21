@@ -131,7 +131,7 @@ export function buildCheckItems({
 
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool')
-    return `Required tool · ${formatToolExpression(String(rule.value ?? ''))}`;
+    return `Required tool · ${formatToolAlternatives(String(rule.value ?? ''))}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${String(rule.value ?? '')}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
@@ -169,10 +169,6 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
   if (rule.type === 'agent_check') return `Agent check · ${rule.label}`;
   return `${rule.type} · ${rule.value}`;
-}
-
-function formatToolExpression(expression: string): string {
-  return formatToolAlternatives(expression);
 }
 
 function formatToolSequenceText(sequence: string[]): string {
@@ -290,7 +286,10 @@ export function matchFailureReasonForRule(
       `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
     ];
     return failureReasons.find(
-      (reason) => orderFailureReasons.includes(reason) || missingStepReasons.includes(reason)
+      (reason) =>
+        orderFailureReasons.includes(reason) ||
+        missingStepReasons.includes(reason) ||
+        reason.startsWith('Required tool in sequence not used:')
     );
   }
 

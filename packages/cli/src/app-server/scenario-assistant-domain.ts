@@ -431,9 +431,14 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.tool ?? ''}::${rule.value ?? ''}::${(rule.sequence ?? []).join(
-    '|'
-  )}::${rule.path ?? ''}::${rule.equals === undefined ? '' : String(rule.equals)}`;
+  return JSON.stringify([
+    rule.type,
+    rule.tool ?? '',
+    rule.value ?? '',
+    rule.sequence ?? [],
+    rule.path ?? '',
+    rule.equals === undefined ? '' : String(rule.equals)
+  ]);
 }
 
 function hasEquivalentLiteralRule(
@@ -918,6 +923,9 @@ export function validateScenarioAssistantProposal(
     const rules = structuredClone(e.replacement) as ScenarioAssistantEvalRuleSuggestion[];
     const bundle = { evalRules: { replacement: rules } };
     normalizeEvalRuleToolNames(bundle, toolPublicMap);
+    bundle.evalRules.replacement = normalizeScenarioAssistantEvalRules(
+      bundle.evalRules.replacement
+    );
     const required = bundle.evalRules.replacement
       .filter((rule) => rule.type === 'required_tool')
       .map((rule) => String(rule.value));
@@ -933,9 +941,6 @@ export function validateScenarioAssistantProposal(
         : {}),
       ...(sequence.length ? { tool_sequence: sequence } : {})
     });
-    bundle.evalRules.replacement = normalizeScenarioAssistantEvalRules(
-      bundle.evalRules.replacement
-    );
     result.evalRules = {
       ...bundle.evalRules,
       ...(e.rationale === undefined ? {} : { rationale: e.rationale as string })
