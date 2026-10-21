@@ -563,6 +563,15 @@ describe('Scenario Assistant runtime definition', () => {
     ).toThrow(/non-empty and unique/);
   });
 
+  it('returns a path-aware validation error for a blank forbidden tool', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'forbidden_tool', value: '  ' }] } },
+        new Map()
+      )
+    ).toThrow('Invalid scenario proposal at evalRules.replacement[0].value');
+  });
+
   it('omits unchanged placeholders while preserving proposed checks', () => {
     const evalRules = { replacement: [{ type: 'response_contains', value: 'answer' }] };
     expect(

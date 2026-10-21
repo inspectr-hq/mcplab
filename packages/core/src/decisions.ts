@@ -50,8 +50,40 @@ function asRecord(raw: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-async function readProviderResponseBody(response: Response): Promise<unknown> {
+function requestCredentials(requestHeaders: Record<string, string>): string[] {
+  return Object.entries(requestHeaders).flatMap(([name, value]) => {
+    if (!/(authorization|api[-_]?key|token|secret)/i.test(name) || !value) return [];
+    const credential = value.match(/^\S+\s+(.+)$/)?.[1];
+    return credential ? [value, credential] : [value];
+  });
+}
+
+function redactSensitiveText(text: string, secrets: string[]): string {
+  return [...new Set(secrets)]
+    .sort((left, right) => right.length - left.length)
+    .reduce((safeText, secret) => safeText.replaceAll(secret, '[redacted]'), text);
+}
+
+function redactProviderValue(value: unknown, secrets: string[]): unknown {
+  if (typeof value === 'string') return redactSensitiveText(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactProviderValue(item, secrets));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        redactSensitiveText(key, secrets),
+        redactProviderValue(item, secrets)
+      ])
+    );
+  }
+  return value;
+}
+
+async function readProviderResponseBody(
+  response: Response,
+  requestHeaders: Record<string, string>
+): Promise<unknown> {
   let text: string;
+  const secrets = requestCredentials(requestHeaders);
   try {
     text = (await response.text()).trim();
   } catch {
@@ -61,9 +93,10 @@ async function readProviderResponseBody(response: Response): Promise<unknown> {
 
   let body: unknown = text;
   try {
-    body = JSON.parse(text);
+    body = redactProviderValue(JSON.parse(text), secrets);
   } catch {
     // Keep non-JSON provider responses as text.
+    body = redactSensitiveText(text, secrets);
   }
   const limit = 1000;
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
@@ -262,7 +295,7 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
     });
     throwIfAborted(params.signal);
     if (!response.ok) {
-      const body = await readProviderResponseBody(response);
+      const body = await readProviderResponseBody(response, headers);
       throwIfAborted(params.signal);
       return unavailable('http_error', Date.now() - started, {
         providerResponse: {

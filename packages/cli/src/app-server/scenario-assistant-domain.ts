@@ -858,8 +858,11 @@ export function validateScenarioAssistantProposal(
       }
       if (type === 'required_tool' && !isValidToolExpression(r.value as string))
         return invalid(`${path}.value`, 'tool alternatives must be non-empty and unique');
-      if (type === 'forbidden_tool' && (r.value as string).includes('|'))
-        return invalid(`${path}.value`, 'alternatives are not supported for forbidden_tool');
+      if (
+        type === 'forbidden_tool' &&
+        ((r.value as string).includes('|') || !(r.value as string).trim())
+      )
+        return invalid(`${path}.value`, 'expected one non-empty tool name');
       if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
         return invalid(`${path}.sequence`, 'required and must be a non-empty array');
       // Blank names are dropped when the rule is normalized, which could empty the sequence.

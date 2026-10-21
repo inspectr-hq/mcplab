@@ -7,6 +7,52 @@ import { listConfigs, readConfigRecord, readConfigRecordOrInvalid } from './conf
 import { decodeEvalId, ensureInsideRoot, encodeEvalId, safeFileName } from './store-utils.js';
 
 describe('handleEvalsRoutes', () => {
+  it('keeps the original config when validation rejects a renamed PUT', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-evals-routes-'));
+    const evalsDir = join(root, 'mcplab', 'evals');
+    mkdirSync(evalsDir, { recursive: true });
+
+    const originalPath = join(evalsDir, 'original.yaml');
+    const renamedPath = join(evalsDir, 'renamed.yaml');
+    writeFileSync(originalPath, 'name: Original\nagents: []\nscenarios: []\n', 'utf8');
+    const captured: Array<{ status: number; body: unknown }> = [];
+    const handled = await handleEvalsRoutes({
+      req: {} as any,
+      res: {} as any,
+      pathname: `/api/evals/${encodeEvalId(originalPath, evalsDir)}`,
+      method: 'PUT',
+      settings: { evalsDir, librariesDir: join(root, 'mcplab') } as any,
+      deps: {
+        parseBody: async () => ({
+          fileName: 'renamed',
+          config: {
+            name: 'Renamed',
+            agents: [],
+            scenarios: [
+              {
+                id: 'scenario-1',
+                prompt: 'Check this config',
+                eval: { tool_constraints: { required_tools: ['search|'] } }
+              }
+            ]
+          }
+        }),
+        asJson: (_res, status, responseBody) => captured.push({ status, body: responseBody }),
+        listConfigs,
+        safeFileName,
+        ensureInsideRoot,
+        decodeEvalId,
+        readConfigRecord,
+        readConfigRecordOrInvalid
+      }
+    });
+
+    expect(handled).toBe(true);
+    expect(captured[0]?.status).toBe(400);
+    expect(existsSync(originalPath)).toBe(true);
+    expect(existsSync(renamedPath)).toBe(false);
+  });
+
   it('keeps renamed config inside the original nested directory on PUT', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-evals-routes-'));
     const evalsDir = join(root, 'mcplab', 'evals');

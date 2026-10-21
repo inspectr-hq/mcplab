@@ -7,8 +7,7 @@ export function EvalRuleLabel({ rule, className }: { rule: EvalRule; className?:
     const label = rule.type === 'required_tool' ? 'Required tool' : 'Forbidden tool';
     return (
       <span className={`inline-flex flex-wrap items-center gap-x-1 ${className ?? ''}`}>
-        {label} ·{' '}
-        <ToolAlternativesDisplay value={String(rule.value ?? '')} />
+        {label} · <ToolAlternativesDisplay value={String(rule.value ?? '')} />
       </span>
     );
   }
@@ -23,8 +22,7 @@ export function EvalRuleLabel({ rule, className }: { rule: EvalRule; className?:
     const prefix = `Tool input · ${tool}`;
     return (
       <span className={className}>
-        Tool input ·{' '}
-        <span className="font-mono">{tool}</span>
+        Tool input · <span className="font-mono">{tool}</span>
         {label.slice(prefix.length)}
       </span>
     );

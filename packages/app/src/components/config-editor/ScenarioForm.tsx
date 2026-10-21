@@ -490,6 +490,11 @@ function ScenarioCard({
     return sequence.length > 0 && sequence.every(isValidToolExpression) ? sequence : null;
   };
 
+  const saveToolSequence = () => {
+    const sequence = getAddableToolSequence();
+    if (sequence) updateToolSequence(sequence);
+  };
+
   const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
     setToolSequenceDraft((current) => {
@@ -1698,7 +1703,8 @@ function ScenarioCard({
                                     variant="outline"
                                     size="sm"
                                     className="h-7 px-2 text-[11px]"
-                                    onClick={() => updateToolSequence(toolSequenceDraft)}
+                                    onClick={saveToolSequence}
+                                    disabled={!getAddableToolSequence()}
                                   >
                                     {hasToolSequenceRule ? 'Update sequence' : 'Add sequence'}
                                   </Button>

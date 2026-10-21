@@ -38,20 +38,42 @@ export function formatToolExpression(expression: string): string {
 
 /** Throw when a required tool or sequence step is malformed, or a forbidden tool is blank or uses `|`. */
 export function validateEvalToolRules(rules: EvalRules | undefined, context = 'Eval rules'): void {
-  const check = (expression: string, path: string) => {
+  if (rules === undefined) return;
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) {
+    throw new Error(`${context} must be an object.`);
+  }
+  const rawRules = rules as unknown as Record<string, unknown>;
+  const rawConstraints = rawRules.tool_constraints;
+  if (
+    rawConstraints !== undefined &&
+    (!rawConstraints || typeof rawConstraints !== 'object' || Array.isArray(rawConstraints))
+  ) {
+    throw new Error(`${context}: tool_constraints must be an object.`);
+  }
+  const constraints = rawConstraints as Record<string, unknown> | undefined;
+  const requiredTools = constraints?.required_tools;
+  const sequence = rawRules.tool_sequence;
+  const forbiddenTools = constraints?.forbidden_tools;
+  const requireArray = (value: unknown, path: string): unknown[] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) throw new Error(`${context}: ${path} must be an array.`);
+    return value;
+  };
+  const requiredToolList = requireArray(requiredTools, 'tool_constraints.required_tools');
+  const sequenceList = requireArray(sequence, 'tool_sequence');
+  const forbiddenToolList = requireArray(forbiddenTools, 'tool_constraints.forbidden_tools');
+  const check = (expression: unknown, path: string) => {
     try {
-      parseToolAlternatives(expression);
+      parseToolAlternatives(expression as string);
     } catch (error) {
       throw new Error(`${context}: ${path}: ${(error as Error).message}`);
     }
   };
-  rules?.tool_constraints?.required_tools?.forEach((expression, index) =>
+  requiredToolList?.forEach((expression, index) =>
     check(expression, `tool_constraints.required_tools[${index}]`)
   );
-  rules?.tool_sequence?.forEach((expression, index) =>
-    check(expression, `tool_sequence[${index}]`)
-  );
-  rules?.tool_constraints?.forbidden_tools?.forEach((name, index) => {
+  sequenceList?.forEach((expression, index) => check(expression, `tool_sequence[${index}]`));
+  forbiddenToolList?.forEach((name, index) => {
     if (typeof name !== 'string' || name.includes('|') || !name.trim())
       throw new Error(
         `${context}: tool_constraints.forbidden_tools[${index}] must be one non-empty tool name.`

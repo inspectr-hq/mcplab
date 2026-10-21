@@ -37,4 +37,18 @@ describe('tool rule expressions', () => {
       })
     ).not.toThrow();
   });
+
+  it.each([
+    [
+      { tool_constraints: { required_tools: 'search' } },
+      'tool_constraints.required_tools must be an array'
+    ],
+    [{ tool_sequence: 'search' }, 'tool_sequence must be an array'],
+    [
+      { tool_constraints: { forbidden_tools: 'delete' } },
+      'tool_constraints.forbidden_tools must be an array'
+    ]
+  ])('reports malformed tool rule collections with paths', (rules, message) => {
+    expect(() => validateEvalToolRules(rules as never, 'Config')).toThrow(`Config: ${message}`);
+  });
 });

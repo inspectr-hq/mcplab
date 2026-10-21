@@ -474,6 +474,37 @@ describe('ScenarioForm checks editor', () => {
     expect(screen.getByLabelText('Sequence step alternatives')).toBeInTheDocument();
   });
 
+  it('includes the sequence step still being typed when updating', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'tool_sequence', sequence: ['search'] }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'lookup' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update sequence' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules[0]).toEqual({
+      type: 'tool_sequence',
+      sequence: ['search', 'lookup']
+    });
+  });
+
   it('adds response_jsonpath checks with optional equals', async () => {
     const onChange = vi.fn();
 
