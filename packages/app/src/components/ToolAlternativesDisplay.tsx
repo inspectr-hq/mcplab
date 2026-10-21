@@ -1,6 +1,6 @@
 import { isValidToolExpression, parseToolAlternatives } from '@/types/eval';
 
-function ToolAlternativeOrBadge() {
+export function ToolAlternativeOrBadge() {
   return (
     <span className="rounded border bg-muted px-1 text-[9px] font-semibold leading-3 text-muted-foreground">
       OR

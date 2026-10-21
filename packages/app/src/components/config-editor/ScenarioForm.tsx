@@ -53,6 +53,7 @@ import {
 } from '@/components/config-editor/ToolAlternativesEditor';
 import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
+import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import {
   isSupportedAttachmentMediaType,
@@ -61,8 +62,7 @@ import {
 } from '@/lib/attachment-policy';
 import {
   buildCheckItems,
-  formatCheckStatusLabel,
-  formatEvalRuleLabel
+  formatCheckStatusLabel
 } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
@@ -149,7 +149,12 @@ function parseEqualsValue(text: string): string | number | boolean | undefined {
 
 function getAddableToolExpression(value: string): string | null {
   try {
-    return normalizeToolExpression(value, { allowTrailingEmpty: true });
+    const filledAlternatives = value
+      .split('|')
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .join('|');
+    return normalizeToolExpression(filledAlternatives);
   } catch {
     return null;
   }
@@ -452,14 +457,16 @@ function ScenarioCard({
     }
 
     if (newRuleType === 'tool_sequence') {
-      updateToolSequence(getAddableToolSequence()!);
+      const sequence = getAddableToolSequence();
+      if (!sequence) return;
+      updateToolSequence(sequence);
       return;
     }
 
-    const value =
-      newRuleType === 'required_tool'
-        ? getAddableToolExpression(newRuleValue)!
-        : newRuleValue.trim();
+    const requiredExpression =
+      newRuleType === 'required_tool' ? getAddableToolExpression(newRuleValue) : null;
+    if (newRuleType === 'required_tool' && !requiredExpression) return;
+    const value = requiredExpression ?? newRuleValue.trim();
     const nextRules = [...scenario.evalRules];
     const nextRule = { type: newRuleType, value } as const;
     const editingIndex = findRuleIndex(valueRuleEditingRule);
@@ -1268,9 +1275,7 @@ function ScenarioCard({
                                         ) : (
                                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                         )}
-                                        <span className="font-medium">
-                                          {formatPreviewEvalRuleLabel(check.rule)}
-                                        </span>
+                                        <EvalRuleLabel rule={check.rule} className="font-medium" />
                                       </div>
                                       {check.failureReason && (
                                         <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
@@ -2012,8 +2017,6 @@ function renderEvalRuleValue(rule: EvalRule): string {
       : rule.path
     : String(rule.value ?? '');
 }
-
-const formatPreviewEvalRuleLabel = formatEvalRuleLabel;
 
 function formatPreviewFailureReason(reason: string): string {
   const trimmed = String(reason ?? '').trim();

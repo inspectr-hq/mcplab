@@ -337,7 +337,7 @@ describe('ScenarioForm checks editor', () => {
     const requiredToolRow = requiredToolInput.closest('[aria-label="Required tool alternatives"]')
       ?.parentElement as HTMLElement;
     const addOrButton = within(requiredToolRow).getByRole('button', { name: 'OR' });
-    const addButton = within(requiredToolRow).getByRole('button', { name: 'Add', exact: true });
+    const addButton = within(requiredToolRow).getByRole('button', { name: /^Add$/ });
     expect(addOrButton.parentElement).toBe(addButton.parentElement);
     expect(addOrButton).toHaveClass('border-input', 'bg-background', 'h-8', 'shrink-0');
 
@@ -376,7 +376,7 @@ describe('ScenarioForm checks editor', () => {
     expect(screen.getByLabelText('Required tool alternatives 1')).toHaveValue('search');
     expect(screen.getByLabelText('Required tool alternatives 2')).toHaveValue('lookup');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add', exact: true })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Add$/ })[0]);
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules[0]).toEqual({ type: 'required_tool', value: 'search|lookup' });
@@ -401,7 +401,7 @@ describe('ScenarioForm checks editor', () => {
     const requiredToolRow = screen
       .getByLabelText('Required tool alternatives 1')
       .closest('[aria-label="Required tool alternatives"]')?.parentElement as HTMLElement;
-    fireEvent.click(within(requiredToolRow).getByRole('button', { name: 'Add', exact: true }));
+    fireEvent.click(within(requiredToolRow).getByRole('button', { name: /^Add$/ }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -582,7 +582,7 @@ describe('ScenarioForm checks editor', () => {
       }
     );
     const agentEditorRow = screen.getByPlaceholderText('Prompt name').parentElement as HTMLElement;
-    fireEvent.click(within(agentEditorRow).getByRole('button', { name: 'Add', exact: true }));
+    fireEvent.click(within(agentEditorRow).getByRole('button', { name: /^Add$/ }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];

@@ -140,12 +140,12 @@ describe('aggregateResults', () => {
         {
           scenario_id: 's1',
           agent: 'gpt-4',
-          eval: { tool_constraints: { required_tools: ['search|lookup'] } },
+          eval: { tool_constraints: { required_tools: ['search | lookup'] } },
           runs: [makeRun(true, ['search', 'lookup'], { search: 1, lookup: 1 }), makeRun(false)]
         }
       ]
     });
-    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search|lookup': 1 });
+    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search | lookup': 1 });
   });
 
   it('accumulates tool_usage_frequency across runs', () => {

@@ -1083,7 +1083,13 @@ describe('ResultDetail conversation toggle', () => {
     expect(
       screen.getByText('Checks were not executed because this run ended before evaluation.')
     ).toBeInTheDocument();
-    expect(screen.getByText('Required tool · navigate_asset_hierarchy')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.textContent?.replace(/\s+/g, ' ').trim() ===
+          'Required tool · navigate_asset_hierarchy'
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();
     expect(container.querySelector('svg.lucide-clock3')).toBeTruthy();
   });

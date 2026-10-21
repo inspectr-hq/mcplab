@@ -1,6 +1,9 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
+import {
+  ToolAlternativeOrBadge,
+  ToolAlternativesDisplay
+} from '@/components/ToolAlternativesDisplay';
 import { ToolNameInput, type ToolNameInputProps } from '@/components/config-editor/ToolNameInput';
 
 export function ToolSequenceDisplay({
