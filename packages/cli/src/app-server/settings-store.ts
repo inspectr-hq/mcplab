@@ -6,6 +6,7 @@ import {
   loadWorkspaceSettingsOverrides,
   normalizeEvaluationDecisionConfig,
   resolveEvaluationJudge,
+  resolveDefaultEvaluationAgent,
   type EvalConfig,
   type WorkspaceSettingsOverrides
 } from '@inspectr/mcplab-core';
@@ -53,6 +54,13 @@ export function applySettingsOverrides(settings: AppSettings): void {
   settings.evaluationDecision = overrides.evaluation_decision;
 }
 
+function normalizeAgentName(value: unknown, label: string): string | undefined {
+  if (value !== null && value !== undefined && typeof value !== 'string') {
+    throw new Error(`${label} must be an agent name or null.`);
+  }
+  return value?.trim() || undefined;
+}
+
 /** Validate the combined evaluation patch before changing settings or writing files. */
 export function applyEvaluationSettingsPatch(
   settings: AppSettings,
@@ -60,26 +68,27 @@ export function applyEvaluationSettingsPatch(
   agents: EvalConfig['agents'] | (() => EvalConfig['agents'])
 ): AppSettings {
   const candidate = { ...settings };
+  let libraryAgents: EvalConfig['agents'] | undefined;
+  const getAgents = () => (libraryAgents ??= typeof agents === 'function' ? agents() : agents);
   if (Object.prototype.hasOwnProperty.call(body, 'defaultEvaluationAgentName')) {
-    const value = body.defaultEvaluationAgentName;
-    if (value !== null && value !== undefined && typeof value !== 'string') {
-      throw new Error('Default evaluation agent must be an agent name or null.');
-    }
-    candidate.defaultEvaluationAgentName = value?.trim() || undefined;
+    candidate.defaultEvaluationAgentName = normalizeAgentName(
+      body.defaultEvaluationAgentName,
+      'Default evaluation agent'
+    );
     if (candidate.defaultEvaluationAgentName) {
-      const libraryAgents = typeof agents === 'function' ? agents() : agents;
-      if (!libraryAgents[candidate.defaultEvaluationAgentName]) {
-        throw new Error(
-          `Default evaluation agent not found: ${candidate.defaultEvaluationAgentName}`
-        );
-      }
+      resolveDefaultEvaluationAgent({
+        agents: getAgents(),
+        defaultEvaluationAgentName: candidate.defaultEvaluationAgentName
+      });
     }
   }
   const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
   const hasDecision = Object.prototype.hasOwnProperty.call(body, 'evaluationDecision');
   if (hasJudge) {
-    candidate.evaluationJudgeAgentName =
-      String(body.evaluationJudgeAgentName ?? '').trim() || undefined;
+    candidate.evaluationJudgeAgentName = normalizeAgentName(
+      body.evaluationJudgeAgentName,
+      'Evaluation judge'
+    );
   }
   if (hasDecision) {
     candidate.evaluationDecision =
@@ -90,7 +99,7 @@ export function applyEvaluationSettingsPatch(
   const engineEnabled = isDecisionEngineEnabled(candidate.evaluationDecision);
   if (hasJudge || (hasDecision && engineEnabled)) {
     const judge = resolveEvaluationJudge({
-      agents: typeof agents === 'function' ? agents() : agents,
+      agents: candidate.evaluationJudgeAgentName ? getAgents() : {},
       evaluationJudgeAgentName: candidate.evaluationJudgeAgentName
     });
     if (engineEnabled && !judge) {

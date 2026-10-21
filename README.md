@@ -448,7 +448,7 @@ Turn **Use Decision Engine** off and click **Save Decision Engine** to use the L
 
 Workspace settings are shared by CLI runs, queued app runs, Rover/live evaluations, and immediate MCP runs. They are stored in `mcplab/.mcplab-app-settings.yaml` (or the configured library directory).
 
-Set **Default Evaluation Agent** on the Settings page to let evaluations without agents inherit a library agent. The evaluation's Agents tab shows the inherited agent, and the Run Evaluation page preselects it. Run selection takes precedence over evaluation defaults, then evaluation agents, then the workspace default. If none are available, the run requires an agent selection. Queued runs retain their selected agents and agent configurations even if the workspace default changes. The evaluation YAML is left unchanged.
+Set **Default Evaluation Agent** on the Settings page to let evaluations without agents inherit an LLM library agent. The shared default must be an LLM agent so it works across the CLI, app, and immediate MCP runs. Browser agents remain available through explicit selections in the app's Rover queue. The evaluation's Agents tab shows the inherited agent, and the Run Evaluation page preselects it. Run selection takes precedence over evaluation defaults, then evaluation agents, then the workspace default. Evaluation defaults must name agents declared in that evaluation; invalid defaults produce an error. If no agents are available, the run requires an agent selection. Queued runs retain their selected agents and agent configurations even if the workspace default changes. The evaluation YAML is left unchanged.
 
 ```yaml
 default_evaluation_agent_name: my-agent

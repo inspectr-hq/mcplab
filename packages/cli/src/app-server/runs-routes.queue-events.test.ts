@@ -103,7 +103,7 @@ describe('browser agent variance', () => {
             }
           }
         }),
-        resolveRunSelectedAgents: () => ['browser']
+        resolveRunSelectedAgents: () => ({ agentNames: ['browser'], source: 'evaluation_agents' })
       });
       try {
         await handleRunsRoutes({
@@ -153,7 +153,7 @@ describe('browser agent variance', () => {
         response.body = body;
       },
       readLibraries: () => ({ agents: {}, servers: {}, browserProviders: {} }),
-      resolveRunSelectedAgents: () => ['browser']
+      resolveRunSelectedAgents: () => ({ agentNames: ['browser'], source: 'evaluation_agents' })
     });
     const service = createRunQueueServiceForTest({ settings: fixture, deps });
     try {
@@ -684,7 +684,7 @@ describe('queue event emission', () => {
             addJobEvent: (job: any, event: any) => {
               events.push({ jobId: job.id, type: event.type });
             },
-            resolveRunSelectedAgents: () => ['mini']
+            resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' })
           })
         }),
         oauthSessionManager: {
@@ -707,7 +707,7 @@ describe('queue event emission', () => {
           addJobEvent: (job: any, event: any) => {
             events.push({ jobId: job.id, type: event.type });
           },
-          resolveRunSelectedAgents: () => ['mini']
+          resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' })
         }) as any
       });
 

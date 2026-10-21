@@ -31,9 +31,9 @@ import {
   formatQueueConfigPath,
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
-import { resolveConfigRunAgents } from '@/lib/config-run-agents';
+import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
-import type { InspectrSession } from '@/types/eval';
+import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -231,8 +231,44 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   const prevConfigKeyRef = useRef('');
+  const agentsLoading = defaultEvaluationAgent.loading || librariesLoading;
+  const defaultSelection = useMemo<RunAgentSelection & { error?: string }>(() => {
+    try {
+      return selectedConfig
+        ? resolveConfigRunAgentSelection(selectedConfig, defaultEvaluationAgent.name)
+        : { agentNames: [], source: 'none' as const };
+    } catch (error) {
+      return {
+        agentNames: [],
+        source: 'none' as const,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }, [selectedConfig, defaultEvaluationAgent.name]);
+  const agentSelectionError = selectedConfig?.loadError || defaultSelection.error;
+  const invalidWorkspaceDefault =
+    defaultSelection.source === 'workspace_default' &&
+    availableAgents.some(
+      (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
+    );
+  const unavailableAgentNames = defaultSelection.agentNames.filter(
+    (id) => !availableAgents.some((agent) => agent.id === id)
+  );
+  const showUnavailableAgents =
+    !agentsLoading &&
+    unavailableAgentNames.length > 0 &&
+    (selectedAgentIds.length === 0 || defaultSelection.source !== 'workspace_default');
+  const inheritsWorkspaceAgent =
+    defaultSelection.source === 'workspace_default' ||
+    (!agentSelectionError && defaultSelection.source === 'none');
+  const showWorkspaceDefaultNotice =
+    inheritsWorkspaceAgent &&
+    (selectedAgentIds.length === 0 ||
+      (!invalidWorkspaceDefault &&
+        selectedAgentIds.length === 1 &&
+        selectedAgentIds[0] === defaultEvaluationAgent.name));
   useEffect(() => {
-    if (defaultEvaluationAgent.loading || librariesLoading) return;
+    if (agentsLoading) return;
     const configKey = selectedConfig
       ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
       : '';
@@ -248,7 +284,7 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredAgentIds = resolveConfigRunAgents(selectedConfig, defaultEvaluationAgent.name);
+    const configuredAgentIds = invalidWorkspaceDefault ? [] : defaultSelection.agentNames;
     setSelectedAgentIds(
       configuredAgentIds.filter((id) => availableAgents.some((agent) => agent.id === id))
     );
@@ -263,9 +299,9 @@ const RunEvaluation = () => {
     selectedConfig?.sourcePath,
     availableAgents,
     availableScenarios,
-    defaultEvaluationAgent.loading,
-    defaultEvaluationAgent.name,
-    librariesLoading
+    agentsLoading,
+    defaultSelection,
+    invalidWorkspaceDefault
   ]);
 
   const startWorkspaceRun = async () => {
@@ -986,20 +1022,25 @@ const RunEvaluation = () => {
             />
           </div>
           {selectedConfig && (
-            <fieldset
-              className="space-y-2"
-              disabled={defaultEvaluationAgent.loading || librariesLoading}
-            >
-              {resolveConfigRunAgents(selectedConfig).length === 0 &&
-                (selectedAgentIds.length === 0 ||
-                  (selectedAgentIds.length === 1 &&
-                    selectedAgentIds[0] === defaultEvaluationAgent.name)) && (
-                  <WorkspaceDefaultAgentNotice
-                    {...defaultEvaluationAgent}
-                    loading={defaultEvaluationAgent.loading || librariesLoading}
-                    agents={libraryAgents}
-                  />
-                )}
+            <fieldset className="space-y-2" disabled={agentsLoading}>
+              {agentSelectionError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {agentSelectionError}
+                </p>
+              )}
+              {showUnavailableAgents && (
+                <p role="alert" className="text-sm text-destructive">
+                  Unavailable agents: {unavailableAgentNames.join(', ')}. Repair the evaluation or
+                  select an available agent for this run.
+                </p>
+              )}
+              {showWorkspaceDefaultNotice && (
+                <WorkspaceDefaultAgentNotice
+                  {...defaultEvaluationAgent}
+                  loading={agentsLoading}
+                  agents={libraryAgents}
+                />
+              )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <div className="flex items-center gap-3 text-xs">
@@ -1308,8 +1349,8 @@ const RunEvaluation = () => {
               onClick={startRun}
               disabled={
                 !configId ||
-                defaultEvaluationAgent.loading ||
-                librariesLoading ||
+                agentsLoading ||
+                Boolean(agentSelectionError) ||
                 oauthAuthInProgress ||
                 selectedAgentIds.length === 0 ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)

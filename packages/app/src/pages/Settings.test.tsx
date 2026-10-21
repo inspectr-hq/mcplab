@@ -55,6 +55,25 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 describe('SettingsPage', () => {
+  it('offers only LLM agents as the shared evaluation default', async () => {
+    agentsRef.value.push({ id: 'browser', name: 'Browser Agent', model: '', type: 'browser' });
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    await waitFor(() => expect(select).toBeEnabled());
+    fireEvent.click(select);
+    expect(screen.queryByRole('option', { name: /Browser Agent/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Assistant One/ })).toBeInTheDocument();
+  });
+  it('restores the agent setting after a failed save', async () => {
+    sourceMock.updateWorkspaceSettings.mockRejectedValueOnce(new Error('Save failed'));
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    await waitFor(() => expect(select).toBeEnabled());
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: /Assistant One/ }));
+    await waitFor(() => expect(select).toHaveTextContent('None'));
+    await waitFor(() => expect(select).toBeEnabled());
+  });
   it('selects and clears the workspace default evaluation agent', async () => {
     render(<SettingsPage />);
     const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });

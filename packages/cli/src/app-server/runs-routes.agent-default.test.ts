@@ -54,6 +54,7 @@ describe('workspace default evaluation agent', () => {
     expect(asJson).toHaveBeenCalledWith(expect.anything(), 202, expect.anything());
     expect(enqueueRun.mock.calls[0]?.[0]).toMatchObject({
       requestedAgents: ['workspace'],
+      agentSelectionSource: 'workspace_default',
       agentSnapshot: { workspace: libraryAgents.workspace }
     });
     libraryAgents.workspace.model = 'changed-later';

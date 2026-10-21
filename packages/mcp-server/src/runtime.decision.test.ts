@@ -27,6 +27,7 @@ describe('immediate MCP decision evaluation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadConfig.mockReturnValue({
+      declaredAgentNames: ['main'],
       config: {
         name: 'test',
         servers: {},
@@ -65,6 +66,7 @@ describe('immediate MCP decision evaluation', () => {
     'runs deterministic checks despite a %s workspace judge',
     async (name) => {
       mocks.loadConfig.mockReturnValue({
+        declaredAgentNames: ['main'],
         config: {
           servers: {},
           agents: { main: agent },
@@ -118,6 +120,7 @@ describe('immediate MCP decision evaluation', () => {
 
   it('inherits only the workspace default for an agent-less evaluation', async () => {
     mocks.loadConfig.mockReturnValue({
+      declaredAgentNames: [],
       config: { servers: {}, agents: {}, scenarios: [{ id: 's1', prompt: 'test', servers: [] }] }
     });
     mocks.loadWorkspaceSettingsOverrides.mockReturnValue({
@@ -133,11 +136,29 @@ describe('immediate MCP decision evaluation', () => {
       'workspace'
     ]);
   });
+  it('rejects a persisted browser workspace default before execution', async () => {
+    mocks.loadConfig.mockReturnValue({
+      declaredAgentNames: [],
+      config: { servers: {}, agents: {}, scenarios: [{ id: 's1', prompt: 'test', servers: [] }] }
+    });
+    mocks.loadWorkspaceSettingsOverrides.mockReturnValue({
+      default_evaluation_agent_name: 'browser'
+    });
+    mocks.readLibraryAgentsAndServers.mockReturnValue({
+      agents: { browser: { type: 'browser', provider: 'chatgpt', url: 'https://chatgpt.com' } },
+      servers: {}
+    });
+    const result = await runTool({ config_path: '/tmp/eval.yaml' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Default evaluation agent must be an LLM agent');
+    expect(mocks.runAll).not.toHaveBeenCalled();
+  });
 
   it.each([undefined, 'deleted'])(
     'rejects an unavailable fallback %s before running',
     async (name) => {
       mocks.loadConfig.mockReturnValue({
+        declaredAgentNames: [],
         config: { servers: {}, agents: {}, scenarios: [{ id: 's1', prompt: 'test', servers: [] }] }
       });
       mocks.loadWorkspaceSettingsOverrides.mockReturnValue({ default_evaluation_agent_name: name });

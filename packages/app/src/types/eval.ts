@@ -17,7 +17,8 @@ export {
   normalizeToolExpression,
   parseToolAlternatives,
   isValidToolExpression,
-  formatToolSequenceLabel
+  formatToolSequenceLabel,
+  resolveRunAgentSelection
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
@@ -28,6 +29,7 @@ export type {
   AgentConnectionTestResult,
   ProviderModelsResponse,
   WorkspaceSettingsPatch,
+  RunAgentSelection,
   InspectrSession
 } from '@/lib/data-sources/types';
 

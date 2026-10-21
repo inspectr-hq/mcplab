@@ -124,6 +124,75 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it('does not inherit a persisted browser default, but allows explicit browser selection', async () => {
+    configsRef.value = [
+      { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
+    ];
+    libraryAgentsRef.value = [
+      {
+        id: 'workspace-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com'
+      }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    const checkbox = await screen.findByRole('checkbox', { name: 'Browser Agent' });
+    await waitFor(() => expect(checkbox).not.toBeDisabled());
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent('must be an LLM agent');
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+  });
+  it('explains invalid evaluation defaults and prevents running them', async () => {
+    configsRef.value = [
+      {
+        id: 'invalid',
+        name: 'Invalid',
+        agents: [],
+        agentEntries: [{ kind: 'referenced', ref: 'declared' }],
+        runDefaults: { selectedAgentNames: ['library-only'] },
+        scenarios: [],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=invalid']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Evaluation default agents must be declared in the evaluation: library-only'
+    );
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+  });
+  it('explains why missing declared agents cannot be preselected', async () => {
+    configsRef.value = [
+      {
+        id: 'missing',
+        name: 'Missing',
+        agents: [],
+        agentEntries: [{ kind: 'referenced', ref: 'deleted' }],
+        scenarios: [],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=missing']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unavailable agents: deleted');
+  });
   it('waits for the library before preselecting an inherited agent', async () => {
     configsRef.value = [
       { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }

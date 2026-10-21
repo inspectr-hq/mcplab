@@ -4,6 +4,7 @@ import { parse as parseYaml } from 'yaml';
 import {
   isLlmAgent,
   type EvalConfig,
+  type LlmAgentConfig,
   type EvaluationJudge,
   type ResolveWorkspaceEvaluationParams,
   type WorkspaceEvaluation,
@@ -43,6 +44,7 @@ export function toWorkspaceEvaluationSettings(
   settings: WorkspaceSettingsOverrides
 ): WorkspaceEvaluationSettings {
   return {
+    defaultEvaluationAgentName: settings.default_evaluation_agent_name,
     evaluationJudgeAgentName: settings.evaluation_judge_agent_name,
     evaluationDecision: settings.evaluation_decision
   };
@@ -52,11 +54,36 @@ export function resolveEvaluationJudge(params: {
   agents: EvalConfig['agents'];
   evaluationJudgeAgentName?: string;
 }): EvaluationJudge | undefined {
-  const selected = params.evaluationJudgeAgentName?.trim();
+  return resolveLlmAgent(
+    params.agents,
+    params.evaluationJudgeAgentName,
+    'Evaluation judge',
+    'Evaluation judge agent'
+  );
+}
+
+export function resolveDefaultEvaluationAgent(params: {
+  agents: EvalConfig['agents'];
+  defaultEvaluationAgentName?: string;
+}): LlmAgentConfig | undefined {
+  return resolveLlmAgent(
+    params.agents,
+    params.defaultEvaluationAgentName,
+    'Default evaluation agent'
+  )?.agent;
+}
+
+function resolveLlmAgent(
+  agents: EvalConfig['agents'],
+  name: string | undefined,
+  label: string,
+  missingLabel = label
+) {
+  const selected = name?.trim();
   if (!selected) return undefined;
-  const agent = params.agents[selected];
-  if (!agent) throw new Error(`Evaluation judge agent not found: ${selected}`);
-  if (!isLlmAgent(agent)) throw new Error(`Evaluation judge must be an LLM agent: ${selected}`);
+  const agent = agents[selected];
+  if (!agent) throw new Error(`${missingLabel} not found: ${selected}`);
+  if (!isLlmAgent(agent)) throw new Error(`${label} must be an LLM agent: ${selected}`);
   return { name: selected, agent };
 }
 

@@ -9,8 +9,28 @@ export interface EvaluationDecisionConfig {
 }
 
 export interface WorkspaceEvaluationSettings {
+  defaultEvaluationAgentName?: string;
   evaluationJudgeAgentName?: string;
   evaluationDecision?: EvaluationDecisionConfig;
+}
+
+export type RunAgentSelectionSource =
+  | 'requested'
+  | 'evaluation_default'
+  | 'evaluation_agents'
+  | 'workspace_default'
+  | 'none';
+
+export interface RunAgentSelection {
+  agentNames: string[];
+  source: RunAgentSelectionSource;
+}
+
+export interface RunAgentSelectionParams {
+  declaredAgentNames: string[];
+  selectedAgentNames?: string[];
+  requestedAgentNames?: string[];
+  defaultEvaluationAgentName?: string;
 }
 
 export interface WorkspaceSettingsOverrides {

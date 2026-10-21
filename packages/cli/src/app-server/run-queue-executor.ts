@@ -6,6 +6,7 @@ import {
   loadConfig,
   runAll,
   resolveWorkspaceEvaluation,
+  resolveDefaultEvaluationAgent,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -202,10 +203,11 @@ export async function executeRunJob(params: {
       bundleRoot: settings.librariesDir,
       agentOverrides: job.runParams.agentSnapshot
     });
-    const configuredAgentNames = Object.keys(loaded.config.agents);
     const { agents: libraryAgents, servers: libraryServers } = readLibraries(settings.librariesDir);
     applyLibraryEntries(loaded, libraryAgents, libraryServers);
     if (job.runParams.agentSnapshot) {
+      // loadConfig uses snapshots to resolve declared refs. This merge also restores
+      // selected library agents, including a workspace fallback absent from the evaluation.
       loaded.config = {
         ...loaded.config,
         agents: { ...loaded.config.agents, ...job.runParams.agentSnapshot }
@@ -278,21 +280,30 @@ export async function executeRunJob(params: {
         message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
       }
     });
-    const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents, {
-      configuredAgentNames,
+    const selection = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents, {
+      declaredAgentNames: loaded.declaredAgentNames,
       defaultEvaluationAgentName: settings.defaultEvaluationAgentName
     });
+    const resolvedAgents = selection.agentNames;
+    const source = job.runParams.agentSelectionSource ?? selection.source;
+    if (source === 'workspace_default') {
+      resolveDefaultEvaluationAgent({
+        agents: runtimeOverriddenConfig.agents,
+        defaultEvaluationAgentName: resolvedAgents[0]
+      });
+    }
+    const sourceLabel = {
+      requested: 'requested',
+      evaluation_default: 'run default',
+      evaluation_agents: 'config-declared',
+      workspace_default: 'workspace default',
+      none: 'selected'
+    }[source];
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
       payload: {
-        message:
-          requestedAgents && requestedAgents.length > 0
-            ? `Using requested agents: ${resolvedAgents.join(', ')}`
-            : runtimeOverriddenConfig.run_defaults?.selected_agents &&
-                runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
-              ? `Using run default agents: ${resolvedAgents.join(', ')}`
-              : `Using config-declared agents: ${resolvedAgents.join(', ')}`
+        message: `Using ${sourceLabel} agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);

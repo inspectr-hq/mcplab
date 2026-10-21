@@ -1,10 +1,21 @@
-import type { AgentEntry, EvalConfig } from '@/types/eval';
-import { resolveRunAgentNames } from '@inspectr/mcplab-core';
+import {
+  resolveRunAgentSelection,
+  type AgentEntry,
+  type EvalConfig,
+  type RunAgentSelection
+} from '@/types/eval';
 
 export function resolveConfigRunAgents(
   cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>,
   defaultEvaluationAgentName?: string
 ): string[] {
+  return resolveConfigRunAgentSelection(cfg, defaultEvaluationAgentName).agentNames;
+}
+
+export function resolveConfigRunAgentSelection(
+  cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>,
+  defaultEvaluationAgentName?: string
+): RunAgentSelection {
   const entries: AgentEntry[] =
     cfg.agentEntries && cfg.agentEntries.length > 0
       ? cfg.agentEntries
@@ -13,8 +24,8 @@ export function resolveConfigRunAgents(
     .map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
     .map((agentId) => agentId.trim())
     .filter(Boolean);
-  return resolveRunAgentNames({
-    configuredAgentNames: configuredAgents,
+  return resolveRunAgentSelection({
+    declaredAgentNames: configuredAgents,
     selectedAgentNames: cfg.runDefaults?.selectedAgentNames,
     defaultEvaluationAgentName
   });

@@ -6,6 +6,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import {
   McpClientManager,
   NO_EVALUATION_AGENTS_MESSAGE,
+  resolveDefaultEvaluationAgent,
   loadConfig,
   hashConfig,
   createRunId,
@@ -456,11 +457,11 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     let selectedConfig: EvalConfig;
-    let configuredAgentNames: string[];
+    let declaredAgentNames: string[];
     let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
-      configuredAgentNames = Object.keys(loaded.config.agents);
+      declaredAgentNames = loaded.declaredAgentNames;
       const libraries = readLibraries(settings.librariesDir);
       browserProviders = libraries.browserProviders;
       applyLibraryEntries(loaded, libraries.agents, libraries.servers);
@@ -486,10 +487,23 @@ export async function handleRunsRoutes(params: {
     // Resolve lazily in advanceQueue so runtime overrides are always reflected.
     const oauthServerNames: string[] | undefined = undefined;
 
-    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
-      configuredAgentNames,
-      defaultEvaluationAgentName: settings.defaultEvaluationAgentName
-    });
+    let selection;
+    try {
+      selection = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
+        declaredAgentNames,
+        defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+      });
+      if (selection.source === 'workspace_default') {
+        resolveDefaultEvaluationAgent({
+          agents: selectedConfig.agents,
+          defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+        });
+      }
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const selectedAgentNames = selection.agentNames;
     if (selectedAgentNames.length === 0) {
       asJson(res, 400, { error: NO_EVALUATION_AGENTS_MESSAGE });
       return true;
@@ -545,9 +559,10 @@ export async function handleRunsRoutes(params: {
     }
     const evaluationRunId = createRunId();
     const baseRunParams = {
+      agentSelectionSource: selection.source,
       agentSnapshot: structuredClone(
         Object.fromEntries(
-          [...new Set([...configuredAgentNames, ...selectedAgentNames])].map((name) => [
+          [...new Set([...declaredAgentNames, ...selectedAgentNames])].map((name) => [
             name,
             selectedConfig.agents[name]!
           ])

@@ -2,8 +2,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import kleur from 'kleur';
-import type { EvalConfig } from '@inspectr/mcplab-core';
+import {
+  resolveRunAgentSelection,
+  loadConfig,
+  loadWorkspaceSettingsOverrides,
+  type EvalConfig,
+  type RunAgentSelection
+} from '@inspectr/mcplab-core';
 import { parse } from 'yaml';
+import { readLibraries } from './app-server/libraries-store.js';
 import {
   deriveConfigRelativePath,
   deriveSuitePathFromRelativePath,
@@ -39,7 +46,33 @@ export interface RunInteractiveSelectionOptions {
   defaultEvalsDir?: string;
   cwd?: string;
   promptAgentSelection?: boolean;
-  loadConfigForValidation: (path: string) => { config: EvalConfig };
+  loadConfigForValidation: (path: string) => {
+    config: EvalConfig;
+    agentSelection?: RunAgentSelection;
+  };
+}
+
+export function loadInteractiveConfig(
+  path: string
+): ReturnType<typeof loadConfig> & { agentSelection: RunAgentSelection } {
+  const loaded = loadConfig(path);
+  const libraries = readLibraries(loaded.bundleRoot);
+  const agentSelection = resolveRunAgentSelection({
+    declaredAgentNames: loaded.declaredAgentNames,
+    selectedAgentNames: loaded.config.run_defaults?.selected_agents,
+    defaultEvaluationAgentName: loadWorkspaceSettingsOverrides(loaded.bundleRoot)
+      .default_evaluation_agent_name
+  });
+  // Keep the fallback visible in the prompt; validate it only if the user chooses it.
+  return {
+    ...loaded,
+    agentSelection,
+    config: {
+      ...loaded.config,
+      agents: { ...libraries.agents, ...loaded.config.agents },
+      servers: { ...libraries.servers, ...loaded.config.servers }
+    }
+  };
 }
 
 export function parseNumberSelection(input: string, max: number): number[] {
@@ -178,8 +211,13 @@ export async function runInteractiveSelection(
 
     const loaded = opts.loadConfigForValidation(configPath);
     const agentIds = Object.keys(loaded.config.agents);
-    const defaults = loaded.config.run_defaults?.selected_agents ?? [];
-    const agentMode = await promptForAgentMode(ask, agentIds, defaults);
+    const selection =
+      loaded.agentSelection ??
+      resolveRunAgentSelection({
+        declaredAgentNames: agentIds,
+        selectedAgentNames: loaded.config.run_defaults?.selected_agents
+      });
+    const agentMode = await promptForAgentMode(ask, agentIds, selection);
 
     if (agentMode === 'specific') {
       const agents = await promptForSpecificAgents(ask, agentIds);
@@ -268,23 +306,47 @@ function readConfigName(configPath: string): string | undefined {
   }
 }
 
+export function getAgentModeOptions(
+  agentIds: string[],
+  selection: RunAgentSelection
+): Array<{ mode: InteractiveAgentMode; label: string }> {
+  const choices: Array<{ mode: InteractiveAgentMode; label: string }> = [
+    { mode: 'all', label: 'All available agents' }
+  ];
+  const differsFromAll =
+    selection.agentNames.length !== agentIds.length ||
+    selection.agentNames.some((name) => !agentIds.includes(name));
+  if (
+    selection.agentNames.length &&
+    (selection.source === 'workspace_default' ||
+      selection.source === 'evaluation_default' ||
+      differsFromAll)
+  ) {
+    const label =
+      selection.source === 'workspace_default'
+        ? 'Workspace default agent'
+        : selection.source === 'evaluation_default'
+          ? 'Run defaults from config'
+          : 'Evaluation agents';
+    choices.push({ mode: 'defaults', label: `${label} (${selection.agentNames.join(', ')})` });
+  }
+  choices.push({ mode: 'specific', label: 'Choose specific agents' });
+  return choices;
+}
+
 async function promptForAgentMode(
   ask: (question: string) => Promise<string>,
   agentIds: string[],
-  defaults: string[]
+  selection: RunAgentSelection
 ): Promise<InteractiveAgentMode> {
   if (agentIds.length === 0) {
     throw new Error('Config has no resolved agents.');
   }
 
   console.log(kleur.cyan('\nSelect agent mode:'));
-  console.log('1. All configured agents');
-  if (defaults.length > 0) {
-    console.log(`2. Run defaults from config (${defaults.join(', ')})`);
-  }
-  console.log(defaults.length > 0 ? '3. Choose specific agents' : '2. Choose specific agents');
-
-  const max = defaults.length > 0 ? 3 : 2;
+  const choices = getAgentModeOptions(agentIds, selection);
+  choices.forEach((choice, index) => console.log(`${index + 1}. ${choice.label}`));
+  const max = choices.length;
   while (true) {
     const input = (await ask('Choice: ')).trim();
     try {
@@ -293,9 +355,7 @@ async function promptForAgentMode(
         throw new Error('Choose exactly one option.');
       }
       const selected = selections[0] as number;
-      if (selected === 0) return 'all';
-      if (defaults.length > 0 && selected === 1) return 'defaults';
-      return 'specific';
+      return choices[selected]!.mode;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.log(kleur.yellow(message));

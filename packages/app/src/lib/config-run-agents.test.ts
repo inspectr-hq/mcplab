@@ -3,6 +3,15 @@ import { resolveConfigRunAgents } from './config-run-agents';
 import type { EvalConfig } from '@/types/eval';
 
 describe('resolveConfigRunAgents', () => {
+  it('rejects an undeclared default even when it could exist in the library', () => {
+    expect(() =>
+      resolveConfigRunAgents({
+        agents: [],
+        agentEntries: [{ kind: 'referenced', ref: 'declared' }],
+        runDefaults: { selectedAgentNames: ['library-only'] }
+      })
+    ).toThrow('must be declared');
+  });
   it('inherits a workspace default only when the evaluation has no agents', () => {
     expect(resolveConfigRunAgents({ agents: [], agentEntries: [] }, 'workspace')).toEqual([
       'workspace'

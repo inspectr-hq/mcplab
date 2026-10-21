@@ -1299,7 +1299,7 @@ const ConfigEditor = () => {
               </CardContent>
             </Card>
           )}
-          {readOnly && agentEntries.length === 0 ? null : readOnly ? (
+          {readOnly && agentEntries.length > 0 && (
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">
@@ -1377,15 +1377,10 @@ const ConfigEditor = () => {
                       </div>
                     );
                   })}
-                  {agentViewRows.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6">
-                      No agents configured.
-                    </p>
-                  )}
                 </div>
               </CardContent>
             </Card>
-          ) : null}
+          )}
         </TabsContent>
 
         <TabsContent value="scenarios">

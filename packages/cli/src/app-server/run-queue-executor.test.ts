@@ -45,6 +45,7 @@ describe('executeRunJob', () => {
         );
         const job = createQueuedJob(fixture.configPath);
         job.runParams.requestedAgents = ['original'];
+        job.runParams.agentSelectionSource = 'workspace_default';
         job.runParams.agentSnapshot = { original: { provider: 'openai', model: 'queued-model' } };
         runAllMock.mockReset().mockResolvedValueOnce({
           runDir: fixture.runsDir,
@@ -65,7 +66,7 @@ describe('executeRunJob', () => {
           },
           oauthSessionManager: {} as any,
           deps: {
-            addJobEvent: () => {},
+            addJobEvent: (target: typeof job, event: unknown) => target.events.push(event),
             getScenarioRunTraceRecords: () => [],
             selectScenarioIds: (config: any) => config,
             expandConfigForAgents,
@@ -85,6 +86,12 @@ describe('executeRunJob', () => {
         const config = runAllMock.mock.calls[0][0];
         expect(config.scenarios.map((scenario: any) => scenario.agent)).toEqual(['original']);
         expect(config.agents.original.model).toBe('queued-model');
+        expect(
+          job.events.some(
+            (event: { payload: { message?: string } }) =>
+              event.payload.message === 'Using workspace default agents: original'
+          )
+        ).toBe(true);
       } finally {
         runAllMock.mockReset();
         cleanupFixtureRoot(fixture.root);
@@ -173,7 +180,7 @@ describe('executeRunJob', () => {
                 }
               ]
             }),
-            resolveRunSelectedAgents: () => ['mini'],
+            resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
             readLibraries: () => ({
               agents: { mini: { provider: 'openai', model: 'test' } },
               servers: {},
@@ -261,7 +268,7 @@ describe('executeRunJob', () => {
             servers,
             scenarios: [{ id: 's1', prompt: 'hi', agent: 'mini', servers: ['inspected', 'plain'] }]
           }),
-          resolveRunSelectedAgents: () => ['mini'],
+          resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
           readLibraries: () => ({
             agents: { mini: { provider: 'openai', model: 'test' } },
             servers: {},
@@ -334,7 +341,7 @@ describe('executeRunJob', () => {
               { id: 's1', prompt: 'hi', agent: 'mini', servers: ['inspected', 'sibling'] }
             ]
           }),
-          resolveRunSelectedAgents: () => ['mini'],
+          resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
           readLibraries: () => ({
             agents: { mini: { provider: 'openai', model: 'test' } },
             servers: {},
@@ -419,7 +426,7 @@ describe('executeRunJob', () => {
               ]
             }),
             expandConfigForAgents: (config: any) => config,
-            resolveRunSelectedAgents: () => ['mini'],
+            resolveRunSelectedAgents: () => ({ agentNames: ['mini'], source: 'evaluation_agents' }),
             readLibraries: () => ({
               agents: {
                 mini: { provider: 'openai', model: 'gpt-5-mini' },

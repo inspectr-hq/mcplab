@@ -8,12 +8,17 @@ export function WorkspaceDefaultAgentNotice(props: {
   agents: AgentConfig[];
 }) {
   const agent = props.agents.find((item) => item.id === props.name);
+  const error =
+    props.error ??
+    (agent?.type === 'browser'
+      ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
+      : undefined);
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-1 text-sm" role="status">
       {props.loading ? (
         <p>Loading workspace default agent...</p>
-      ) : props.error ? (
-        <p className="text-destructive">{props.error}</p>
+      ) : error ? (
+        <p className="text-destructive">{error}</p>
       ) : props.name ? (
         <>
           <p className="font-medium">Workspace default agent: {agent?.name || props.name}</p>

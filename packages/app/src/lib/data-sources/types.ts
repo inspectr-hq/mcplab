@@ -100,7 +100,8 @@ export {
   normalizeToolExpression,
   parseToolAlternatives,
   isValidToolExpression,
-  tallyCheckCounts
+  tallyCheckCounts,
+  resolveRunAgentSelection
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -121,6 +122,7 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { RunAgentSelection } from '@inspectr/mcplab-core';
 export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 
@@ -233,7 +235,6 @@ export interface WorkspaceHealthResponse {
 }
 
 export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
-  defaultEvaluationAgentName?: string;
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;

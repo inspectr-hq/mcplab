@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import type {
   EvalConfig,
+  RunAgentSelectionSource,
   QueueChildProgress,
   RoverAgentRef,
   Scenario
@@ -17,6 +18,7 @@ type RunParamsBase = {
   requestedAgents?: string[];
   /** Resolved at enqueue time so later settings and library changes cannot retarget jobs. */
   agentSnapshot?: EvalConfig['agents'];
+  agentSelectionSource?: RunAgentSelectionSource;
   runNote?: string;
   oauthServerNames?: string[];
   serverOverrideAll?: string[];

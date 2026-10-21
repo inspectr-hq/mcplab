@@ -334,9 +334,9 @@ const Configurations = () => {
   const runConfig = async (configId: string, sourcePath: string, configName: string) => {
     if (queuingConfigIds.has(configId)) return;
     const config = configs.find((cfg) => cfg.id === configId);
-    const agents = config ? resolveConfigRunAgents(config) : [];
     setQueuingConfigIds((prev) => new Set(prev).add(configId));
     try {
+      const agents = config ? resolveConfigRunAgents(config) : [];
       await source.startRun({
         configPath: sourcePath,
         runsPerScenario: 1,
@@ -394,7 +394,7 @@ const Configurations = () => {
       }
 
       const outcomes = await Promise.allSettled(
-        runnable.map((cfg) => {
+        runnable.map(async (cfg) => {
           const agents = resolveConfigRunAgents(cfg);
           return source.startRun({
             configPath: String(cfg.sourcePath),

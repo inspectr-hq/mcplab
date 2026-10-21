@@ -11,7 +11,8 @@ import {
   selectScenarios,
   runAll,
   resolveWorkspaceEvaluation,
-  resolveRunAgentNames,
+  resolveRunAgentSelection,
+  resolveDefaultEvaluationAgent,
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
@@ -31,6 +32,7 @@ import { migrateSourceConfig } from './migrate-utils.js';
 import {
   resolveRunOptions,
   runInteractiveSelection,
+  loadInteractiveConfig,
   type ResolveRunOptionsResult
 } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
@@ -136,25 +138,7 @@ program
               defaultEvalsDir: 'mcplab/evals',
               cwd: process.cwd(),
               promptAgentSelection: needsAgentPrompt,
-              loadConfigForValidation: (path: string) => {
-                const loaded = loadConfig(path);
-                const defaultAgents = resolveRunAgentNames({
-                  configuredAgentNames: Object.keys(loaded.config.agents),
-                  selectedAgentNames: loaded.config.run_defaults?.selected_agents,
-                  defaultEvaluationAgentName: loadWorkspaceSettingsOverrides(loaded.bundleRoot)
-                    .default_evaluation_agent_name
-                });
-                const { agents: libraryAgents, servers: libraryServers } = readLibraries(
-                  loaded.bundleRoot
-                );
-                loaded.config = {
-                  ...loaded.config,
-                  run_defaults: { ...loaded.config.run_defaults, selected_agents: defaultAgents },
-                  agents: { ...libraryAgents, ...loaded.config.agents },
-                  servers: { ...libraryServers, ...loaded.config.servers }
-                };
-                return loaded;
-              }
+              loadConfigForValidation: loadInteractiveConfig
             })
           : undefined;
 
@@ -767,7 +751,6 @@ async function executeSingleConfigRun(params: {
 }): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
   const { configPath, options, resolvedOptions } = params;
   const loaded = loadConfig(resolve(configPath));
-  const configuredAgentNames = Object.keys(loaded.config.agents);
   const { agents: libraryAgents, servers: libraryServers } = readLibraries(loaded.bundleRoot);
   loaded.config = {
     ...loaded.config,
@@ -804,21 +787,25 @@ async function executeSingleConfigRun(params: {
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
-  const effectiveAgents = resolveRunAgentNames({
-    configuredAgentNames,
+  const selection = resolveRunAgentSelection({
+    declaredAgentNames: loaded.declaredAgentNames,
     selectedAgentNames: runtimeOverriddenConfig.run_defaults?.selected_agents,
     requestedAgentNames: requestedAgents,
     defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
   });
-  const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
-  if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
-    const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
-    console.log(
-      kleur.cyan(
-        `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${expanded.scenarios.length} total tests`
-      )
-    );
+  const effectiveAgents = selection.agentNames;
+  if (selection.source === 'workspace_default') {
+    resolveDefaultEvaluationAgent({
+      agents: runtimeOverriddenConfig.agents,
+      defaultEvaluationAgentName: effectiveAgents[0]
+    });
   }
+  const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
+  console.log(
+    kleur.cyan(
+      `📊 Testing ${beforeExpandCount} scenarios × ${effectiveAgents.length} selected agents = ${expanded.scenarios.length} total tests`
+    )
+  );
 
   const runsPerScenario = Number(options.runs);
   if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {

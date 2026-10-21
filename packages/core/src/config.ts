@@ -100,6 +100,7 @@ export function loadConfig(
   options?: { bundleRoot?: string; agentOverrides?: EvalConfig['agents'] }
 ): {
   config: EvalConfig;
+  declaredAgentNames: string[];
   sourceConfig: SourceEvalConfig;
   hash: string;
   raw: string;
@@ -124,6 +125,7 @@ export function loadConfig(
   const hash = createHash('sha256').update(stableStringify(config)).digest('hex');
   return {
     config,
+    declaredAgentNames: Object.keys(config.agents),
     sourceConfig: normalizedSource,
     hash,
     raw,
