@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Bot, Globe2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProviderBadge } from '@/components/ProviderBadge';
+import { AgentTypeIcon } from '@/components/AgentTypeIcon';
+import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type { AgentConfig } from '@/types/eval';
 
 function getNoticeTitle(loading: boolean, name: string | undefined, agent?: AgentConfig): string {
@@ -33,12 +34,7 @@ export function WorkspaceDefaultAgentNotice(props: {
 }) {
   const agent = props.agents.find((item) => item.id === props.name);
   const isBrowserAgent = agent?.type === 'browser';
-  const AgentIcon = isBrowserAgent ? Globe2 : Bot;
-  const error =
-    props.error ??
-    (isBrowserAgent
-      ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
-      : undefined);
+  const error = props.error ?? (isBrowserAgent ? WORKSPACE_DEFAULT_LLM_AGENT_ERROR : undefined);
   const title = getNoticeTitle(props.loading, props.name, agent);
   const description = getNoticeDescription(props.loading, error, props.name, agent);
   return (
@@ -46,12 +42,8 @@ export function WorkspaceDefaultAgentNotice(props: {
       <CardContent className="flex items-start gap-3 p-4">
         <span
           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/30"
-          title={isBrowserAgent ? 'Browser agent' : 'LLM agent'}
         >
-          <AgentIcon
-            className={`h-4 w-4 ${isBrowserAgent ? 'text-sky-600' : 'text-muted-foreground'}`}
-            aria-hidden="true"
-          />
+          <AgentTypeIcon agent={agent} />
         </span>
         <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
           <div className="min-w-0 space-y-1.5 text-sm">

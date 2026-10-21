@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AgentTypeIcon } from '@/components/AgentTypeIcon';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
@@ -7,7 +8,6 @@ import {
   ArrowLeft,
   Save,
   Bot,
-  Globe2,
   FileSpreadsheet,
   FileText,
   Play,
@@ -1077,28 +1077,8 @@ const ConfigEditor = () => {
                               </Button>
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <span
-                              className="inline-flex min-w-0 items-center gap-2"
-                              title={
-                                rowAgent
-                                  ? rowAgent.type === 'browser'
-                                    ? 'Browser agent'
-                                    : 'LLM agent'
-                                  : undefined
-                              }
-                            >
-                              {rowAgent &&
-                                (rowAgent.type === 'browser' ? (
-                                  <Globe2
-                                    className="h-4 w-4 shrink-0 text-sky-600"
-                                    aria-hidden="true"
-                                  />
-                                ) : (
-                                  <Bot
-                                    className="h-4 w-4 shrink-0 text-muted-foreground"
-                                    aria-hidden="true"
-                                  />
-                                ))}
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              {rowAgent && <AgentTypeIcon agent={rowAgent} />}
                               <span className="truncate font-medium">{rowName}</span>
                             </span>
                             <Badge
@@ -1340,21 +1320,8 @@ const ConfigEditor = () => {
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <span
-                              className="inline-flex min-w-0 items-center gap-2"
-                              title={row.agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
-                            >
-                              {row.agent.type === 'browser' ? (
-                                <Globe2
-                                  className="h-4 w-4 shrink-0 text-sky-600"
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <Bot
-                                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                                  aria-hidden="true"
-                                />
-                              )}
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              <AgentTypeIcon agent={row.agent} />
                               <span className="truncate font-medium text-sm">{name}</span>
                             </span>
                           </div>

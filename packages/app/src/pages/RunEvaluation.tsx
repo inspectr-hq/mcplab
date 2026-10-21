@@ -32,6 +32,7 @@ import {
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
+import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
 import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
@@ -54,6 +55,27 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
 
 function nowTime(): string {
   return new Date().toLocaleTimeString();
+}
+
+function getWorkspaceDefaultError({
+  agentsLoading,
+  selectionSource,
+  invalidWorkspaceDefault,
+  agentName,
+  agentAvailable
+}: {
+  agentsLoading: boolean;
+  selectionSource: RunAgentSelection['source'];
+  invalidWorkspaceDefault: boolean;
+  agentName?: string;
+  agentAvailable: boolean;
+}): string | undefined {
+  if (agentsLoading || selectionSource !== 'workspace_default') return undefined;
+  if (invalidWorkspaceDefault) return WORKSPACE_DEFAULT_LLM_AGENT_ERROR;
+  if (agentName && !agentAvailable) {
+    return `Workspace default agent ${agentName} is no longer available. Choose another workspace default.`;
+  }
+  return undefined;
 }
 
 // Assignment marks a Rover job running before its first scenario starts.
@@ -266,15 +288,13 @@ const RunEvaluation = () => {
     availableAgents.some(
       (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
     );
-  const workspaceDefaultError =
-    !agentsLoading && defaultSelection.source === 'workspace_default'
-      ? invalidWorkspaceDefault
-        ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
-        : defaultEvaluationAgent.name &&
-            !availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name)
-          ? `Workspace default agent ${defaultEvaluationAgent.name} is no longer available. Choose another workspace default.`
-          : undefined
-      : undefined;
+  const workspaceDefaultError = getWorkspaceDefaultError({
+    agentsLoading,
+    selectionSource: defaultSelection.source,
+    invalidWorkspaceDefault,
+    agentName: defaultEvaluationAgent.name,
+    agentAvailable: availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name)
+  });
   const defaultSelectedAgentIds = useMemo(() => {
     if (invalidWorkspaceDefault) return [];
     return defaultSelection.agentNames.filter((id) =>
