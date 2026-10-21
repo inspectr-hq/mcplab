@@ -3,6 +3,18 @@ import { resolveConfigRunAgents } from './config-run-agents';
 import type { EvalConfig } from '@/types/eval';
 
 describe('resolveConfigRunAgents', () => {
+  it('inherits a workspace default only when the evaluation has no agents', () => {
+    expect(resolveConfigRunAgents({ agents: [], agentEntries: [] }, 'workspace')).toEqual([
+      'workspace'
+    ]);
+    expect(resolveConfigRunAgents({ agents: [], agentEntries: [] })).toEqual([]);
+    expect(
+      resolveConfigRunAgents(
+        { agents: [], agentEntries: [{ kind: 'referenced', ref: 'local' }] },
+        'workspace'
+      )
+    ).toEqual(['local']);
+  });
   it('returns trimmed configured agent ids when no run default subset is present', () => {
     const config: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'> = {
       agents: [

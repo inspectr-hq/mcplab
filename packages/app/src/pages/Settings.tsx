@@ -22,6 +22,7 @@ const SettingsPage = () => {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [assistantAgentName, setAssistantAgentName] = useState<string>('');
+  const [defaultEvaluationAgentName, setDefaultEvaluationAgentName] = useState('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
@@ -39,11 +40,13 @@ const SettingsPage = () => {
     try {
       const settings = await source.getWorkspaceSettings();
       setAssistantAgentName(settings?.assistantAgentName ?? '');
+      setDefaultEvaluationAgentName(settings?.defaultEvaluationAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       setSavedDecision(settings?.evaluationDecision);
     } catch (error: unknown) {
       setAssistantAgentName('');
+      setDefaultEvaluationAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
       setSavedDecision(undefined);
@@ -60,6 +63,30 @@ const SettingsPage = () => {
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  const saveDefaultEvaluationAgent = async (name: string) => {
+    const previous = defaultEvaluationAgentName;
+    setDefaultEvaluationAgentName(name);
+    setSavingSettings(true);
+    try {
+      await source.updateWorkspaceSettings({ defaultEvaluationAgentName: name || null });
+      toast({
+        title: 'Settings updated',
+        description: name
+          ? `Default evaluation agent set to ${name}.`
+          : 'Default evaluation agent cleared.'
+      });
+    } catch (error: unknown) {
+      setDefaultEvaluationAgentName(previous);
+      toast({
+        title: 'Could not save settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
     const previousAgentName = assistantAgentName;
@@ -170,6 +197,54 @@ const SettingsPage = () => {
           Refresh
         </Button>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Evaluation Defaults</CardTitle>
+          <CardDescription>Agent used when an evaluation has no agents configured.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="default-evaluation-agent">
+              Default Evaluation Agent
+            </Label>
+            <Select
+              value={defaultEvaluationAgentName || '__none__'}
+              onValueChange={(value) =>
+                void saveDefaultEvaluationAgent(value === '__none__' ? '' : value)
+              }
+              disabled={savingSettings || loadingSettings || librariesLoading}
+            >
+              <SelectTrigger
+                id="default-evaluation-agent"
+                className="h-9 text-sm"
+                aria-describedby="default-evaluation-agent-help"
+              >
+                <SelectValue placeholder="Select evaluation agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {defaultEvaluationAgentName &&
+                  !agents.some((agent) => agent.id === defaultEvaluationAgentName) && (
+                    <SelectItem value={defaultEvaluationAgentName} disabled>
+                      {defaultEvaluationAgentName} (unavailable)
+                    </SelectItem>
+                  )}
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name || agent.id} · {agent.model || agent.provider}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p id="default-evaluation-agent-help" className="text-xs text-muted-foreground">
+              Evaluation agents and explicit run selections take precedence. Inheritance is resolved
+              when a run is created.
+            </p>
+          </div>
+          <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">

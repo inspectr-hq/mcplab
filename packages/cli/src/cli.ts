@@ -11,6 +11,7 @@ import {
   selectScenarios,
   runAll,
   resolveWorkspaceEvaluation,
+  resolveRunAgentNames,
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
@@ -137,11 +138,18 @@ program
               promptAgentSelection: needsAgentPrompt,
               loadConfigForValidation: (path: string) => {
                 const loaded = loadConfig(path);
+                const defaultAgents = resolveRunAgentNames({
+                  configuredAgentNames: Object.keys(loaded.config.agents),
+                  selectedAgentNames: loaded.config.run_defaults?.selected_agents,
+                  defaultEvaluationAgentName: loadWorkspaceSettingsOverrides(loaded.bundleRoot)
+                    .default_evaluation_agent_name
+                });
                 const { agents: libraryAgents, servers: libraryServers } = readLibraries(
                   loaded.bundleRoot
                 );
                 loaded.config = {
                   ...loaded.config,
+                  run_defaults: { ...loaded.config.run_defaults, selected_agents: defaultAgents },
                   agents: { ...libraryAgents, ...loaded.config.agents },
                   servers: { ...libraryServers, ...loaded.config.servers }
                 };
@@ -759,6 +767,7 @@ async function executeSingleConfigRun(params: {
 }): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
   const { configPath, options, resolvedOptions } = params;
   const loaded = loadConfig(resolve(configPath));
+  const configuredAgentNames = Object.keys(loaded.config.agents);
   const { agents: libraryAgents, servers: libraryServers } = readLibraries(loaded.bundleRoot);
   loaded.config = {
     ...loaded.config,
@@ -795,7 +804,12 @@ async function executeSingleConfigRun(params: {
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
-  const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
+  const effectiveAgents = resolveRunAgentNames({
+    configuredAgentNames,
+    selectedAgentNames: runtimeOverriddenConfig.run_defaults?.selected_agents,
+    requestedAgentNames: requestedAgents,
+    defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
+  });
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
   if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
     const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;

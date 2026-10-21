@@ -73,7 +73,10 @@ export type AdmissionResult =
 export function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] {
   if (job.runParams.oauthServerNames !== undefined) return job.runParams.oauthServerNames;
   try {
-    const loaded = loadConfig(job.runParams.configPath, { bundleRoot: librariesDir });
+    const loaded = loadConfig(job.runParams.configPath, {
+      bundleRoot: librariesDir,
+      agentOverrides: job.runParams.agentSnapshot
+    });
     const libraries = readLibrariesFromStore(librariesDir);
     applyLibraryEntries(loaded, libraries.agents, libraries.servers);
     const selected = job.runParams.scenarioIds?.length
@@ -162,6 +165,7 @@ export async function executeRunJob(params: {
     | 'workspaceRoot'
     | 'evaluationJudgeAgentName'
     | 'evaluationDecision'
+    | 'defaultEvaluationAgentName'
   >;
   oauthSessionManager: OAuthSessionManager;
   inspectrSessionManager?: InspectrSessionManager;
@@ -194,9 +198,19 @@ export async function executeRunJob(params: {
       ts: new Date().toISOString(),
       payload: { message: `Loading MCP Evaluation config: ${configPath}` }
     });
-    const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+    const loaded = loadConfig(configPath, {
+      bundleRoot: settings.librariesDir,
+      agentOverrides: job.runParams.agentSnapshot
+    });
+    const configuredAgentNames = Object.keys(loaded.config.agents);
     const { agents: libraryAgents, servers: libraryServers } = readLibraries(settings.librariesDir);
     applyLibraryEntries(loaded, libraryAgents, libraryServers);
+    if (job.runParams.agentSnapshot) {
+      loaded.config = {
+        ...loaded.config,
+        agents: { ...loaded.config.agents, ...job.runParams.agentSnapshot }
+      };
+    }
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -264,7 +278,10 @@ export async function executeRunJob(params: {
         message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
       }
     });
-    const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents);
+    const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents, {
+      configuredAgentNames,
+      defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+    });
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),

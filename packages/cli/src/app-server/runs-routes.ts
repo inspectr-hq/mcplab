@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import {
   McpClientManager,
+  NO_EVALUATION_AGENTS_MESSAGE,
   loadConfig,
   hashConfig,
   createRunId,
@@ -455,9 +456,11 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     let selectedConfig: EvalConfig;
+    let configuredAgentNames: string[];
     let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+      configuredAgentNames = Object.keys(loaded.config.agents);
       const libraries = readLibraries(settings.librariesDir);
       browserProviders = libraries.browserProviders;
       applyLibraryEntries(loaded, libraries.agents, libraries.servers);
@@ -483,7 +486,14 @@ export async function handleRunsRoutes(params: {
     // Resolve lazily in advanceQueue so runtime overrides are always reflected.
     const oauthServerNames: string[] | undefined = undefined;
 
-    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents);
+    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
+      configuredAgentNames,
+      defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+    });
+    if (selectedAgentNames.length === 0) {
+      asJson(res, 400, { error: NO_EVALUATION_AGENTS_MESSAGE });
+      return true;
+    }
     const selectedAgents = selectedAgentNames.map((name) => ({
       name,
       agent: selectedConfig.agents[name]
@@ -535,6 +545,14 @@ export async function handleRunsRoutes(params: {
     }
     const evaluationRunId = createRunId();
     const baseRunParams = {
+      agentSnapshot: structuredClone(
+        Object.fromEntries(
+          [...new Set([...configuredAgentNames, ...selectedAgentNames])].map((name) => [
+            name,
+            selectedConfig.agents[name]!
+          ])
+        )
+      ),
       evaluationRunId,
       evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,
@@ -550,7 +568,7 @@ export async function handleRunsRoutes(params: {
     };
     const runParamsList =
       browserAgents.length === 0
-        ? [{ ...baseRunParams, requestedAgents }]
+        ? [{ ...baseRunParams, requestedAgents: selectedAgentNames }]
         : [
             ...(llmAgentNames.length > 0
               ? [{ ...baseRunParams, requestedAgents: llmAgentNames }]

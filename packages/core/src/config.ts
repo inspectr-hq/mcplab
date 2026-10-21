@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
+import { NO_EVALUATION_AGENTS_MESSAGE } from './run-agent-selection.js';
 import { validateEvalToolRules } from './tool-rule-expressions.js';
 import {
   ATTACHMENT_MEDIA_TYPE_BY_EXTENSION,
@@ -96,7 +97,7 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
 
 export function loadConfig(
   path: string,
-  options?: { bundleRoot?: string }
+  options?: { bundleRoot?: string; agentOverrides?: EvalConfig['agents'] }
 ): {
   config: EvalConfig;
   sourceConfig: SourceEvalConfig;
@@ -117,7 +118,8 @@ export function loadConfig(
   const { config, warnings: resolveWarnings } = resolveReferences(
     normalizedSource,
     path,
-    options?.bundleRoot
+    options?.bundleRoot,
+    options?.agentOverrides
   );
   const hash = createHash('sha256').update(stableStringify(config)).digest('hex');
   return {
@@ -145,14 +147,16 @@ export function selectScenarios<T extends { scenarios: Array<{ id: string }> }>(
 function resolveReferences(
   sourceConfig: SourceEvalConfig,
   configPath: string,
-  bundleRootOverride?: string
+  bundleRootOverride?: string,
+  agentOverrides?: EvalConfig['agents']
 ): { config: EvalConfig; warnings: string[] } {
   const bundleRoot = bundleRootOverride
     ? resolve(bundleRootOverride)
     : detectBundleRoot(configPath);
   const warnings: string[] = [];
-  const { servers: libraryServers, agents: libraryAgents } =
+  const { servers: libraryServers, agents: storedLibraryAgents } =
     readLibraryAgentsAndServers(bundleRoot);
+  const libraryAgents = { ...storedLibraryAgents, ...agentOverrides };
   const resolvedScenarioLibrary = resolveScenarioLibraryDir(bundleRoot);
   if (resolvedScenarioLibrary.usedLegacy) {
     warnings.push("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
@@ -814,8 +818,10 @@ export function expandConfigForAgents(
   config: EvalConfig,
   requestedAgents?: string[]
 ): ExecutableEvalConfig {
-  const selectedAgents =
-    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
+  const selectedAgents = requestedAgents ?? Object.keys(config.agents);
+  if (selectedAgents.length === 0) {
+    throw new Error(NO_EVALUATION_AGENTS_MESSAGE);
+  }
   const missing = selectedAgents.filter((agent) => !config.agents[agent]);
   if (missing.length > 0) {
     throw new Error(

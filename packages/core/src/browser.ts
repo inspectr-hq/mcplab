@@ -1,4 +1,5 @@
 export { tallyCheckCounts } from './check-counts.js';
+export { resolveRunAgentNames } from './run-agent-selection.js';
 export {
   normalizeEvaluationDecisionConfig,
   isDecisionEngineEnabled,

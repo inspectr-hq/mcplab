@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { resolveRunSelectedAgents } from './run-agent-selection.js';
 
 describe('resolveRunSelectedAgents', () => {
+  it('uses declared names before library merging and inherits only for an empty evaluation', () => {
+    const config = {
+      agents: { library: { provider: 'openai', model: 'test' } },
+      scenarios: []
+    } as any;
+    expect(
+      resolveRunSelectedAgents(config, undefined, {
+        configuredAgentNames: [],
+        defaultEvaluationAgentName: 'library'
+      })
+    ).toEqual(['library']);
+    expect(resolveRunSelectedAgents(config, undefined, { configuredAgentNames: [] })).toEqual([]);
+    expect(
+      resolveRunSelectedAgents(config, undefined, {
+        configuredAgentNames: ['declared'],
+        defaultEvaluationAgentName: 'library'
+      })
+    ).toEqual(['declared']);
+  });
   it('prefers explicitly requested agents', () => {
     const resolved = resolveRunSelectedAgents(
       {

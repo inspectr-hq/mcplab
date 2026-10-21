@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { aggregateResults } from '@inspectr/mcplab-core';
+import { aggregateResults, expandConfigForAgents } from '@inspectr/mcplab-core';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolveRunSelectedAgents } from './run-agent-selection.js';
 const { runAllMock } = vi.hoisted(() => ({ runAllMock: vi.fn() }));
 vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@inspectr/mcplab-core')>()),
   runAll: runAllMock
 }));
-import { executeRunJob, getCompletedRunId } from './run-queue-executor.js';
+import {
+  executeRunJob,
+  getCompletedRunId,
+  resolveOAuthServersForJob
+} from './run-queue-executor.js';
 import {
   createQueuedJob,
   createOauthEvalFixture,
@@ -13,6 +19,78 @@ import {
 } from './runs-routes.test-helpers.js';
 
 describe('executeRunJob', () => {
+  it('resolves OAuth admission using saved agent refs after library deletion', () => {
+    const fixture = createOauthEvalFixture();
+    try {
+      const yaml = readFileSync(fixture.configPath, 'utf8').replace(
+        '  - id: mini\n    provider: openai\n    model: gpt-5-mini',
+        '  - ref: original'
+      );
+      writeFileSync(fixture.configPath, yaml);
+      const job = createQueuedJob(fixture.configPath);
+      job.runParams.agentSnapshot = { original: { provider: 'openai', model: 'queued' } };
+      expect(resolveOAuthServersForJob(job, fixture.librariesDir)).toEqual(['oauth-server']);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+  it.each([false, true])(
+    'runs the queued agent snapshot after library changes, referenced=%s',
+    async (referenced) => {
+      const fixture = createOauthEvalFixture();
+      try {
+        writeFileSync(
+          fixture.configPath,
+          `${referenced ? 'agents:\n  - ref: original\n' : ''}scenarios:\n  - id: s1\n    prompt: test\n    servers: []\n`
+        );
+        const job = createQueuedJob(fixture.configPath);
+        job.runParams.requestedAgents = ['original'];
+        job.runParams.agentSnapshot = { original: { provider: 'openai', model: 'queued-model' } };
+        runAllMock.mockReset().mockResolvedValueOnce({
+          runDir: fixture.runsDir,
+          results: aggregateResults({
+            runId: 'snapshot',
+            timestamp: '2026-10-21T00:00:00Z',
+            configHash: 'test',
+            cliVersion: 'test',
+            scenarioRuns: []
+          })
+        });
+        const outcome = await executeRunJob({
+          job,
+          settings: {
+            ...fixture,
+            workspaceRoot: fixture.root,
+            defaultEvaluationAgentName: 'replacement'
+          },
+          oauthSessionManager: {} as any,
+          deps: {
+            addJobEvent: () => {},
+            getScenarioRunTraceRecords: () => [],
+            selectScenarioIds: (config: any) => config,
+            expandConfigForAgents,
+            resolveRunSelectedAgents,
+            readLibraries: () => ({
+              agents: {
+                replacement: { provider: 'openai', model: 'new-default' },
+                original: { provider: 'openai', model: 'changed-library-model' }
+              },
+              servers: {},
+              scenarios: {}
+            }),
+            pkgVersion: 'test'
+          } as any
+        });
+        expect(outcome.status).toBe('completed');
+        const config = runAllMock.mock.calls[0][0];
+        expect(config.scenarios.map((scenario: any) => scenario.agent)).toEqual(['original']);
+        expect(config.agents.original.model).toBe('queued-model');
+      } finally {
+        runAllMock.mockReset();
+        cleanupFixtureRoot(fixture.root);
+      }
+    }
+  );
   it.each([
     [1, true],
     [3, true],

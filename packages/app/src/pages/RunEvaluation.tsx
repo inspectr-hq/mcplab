@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
@@ -114,8 +116,10 @@ const RunEvaluation = () => {
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
+  const defaultEvaluationAgent = useDefaultEvaluationAgent();
   const {
     agents: libraryAgents,
+    loading: librariesLoading,
     scenarios: libraryScenarios,
     servers: libraryServers,
     reload: reloadLibraries
@@ -228,6 +232,7 @@ const RunEvaluation = () => {
 
   const prevConfigKeyRef = useRef('');
   useEffect(() => {
+    if (defaultEvaluationAgent.loading || librariesLoading) return;
     const configKey = selectedConfig
       ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
       : '';
@@ -243,9 +248,9 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredAgentIds = resolveConfigRunAgents(selectedConfig);
+    const configuredAgentIds = resolveConfigRunAgents(selectedConfig, defaultEvaluationAgent.name);
     setSelectedAgentIds(
-      configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
+      configuredAgentIds.filter((id) => availableAgents.some((agent) => agent.id === id))
     );
     setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
@@ -253,7 +258,15 @@ const RunEvaluation = () => {
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
-  }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
+  }, [
+    selectedConfig?.id,
+    selectedConfig?.sourcePath,
+    availableAgents,
+    availableScenarios,
+    defaultEvaluationAgent.loading,
+    defaultEvaluationAgent.name,
+    librariesLoading
+  ]);
 
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {
@@ -973,7 +986,20 @@ const RunEvaluation = () => {
             />
           </div>
           {selectedConfig && (
-            <div className="space-y-2">
+            <fieldset
+              className="space-y-2"
+              disabled={defaultEvaluationAgent.loading || librariesLoading}
+            >
+              {resolveConfigRunAgents(selectedConfig).length === 0 &&
+                (selectedAgentIds.length === 0 ||
+                  (selectedAgentIds.length === 1 &&
+                    selectedAgentIds[0] === defaultEvaluationAgent.name)) && (
+                  <WorkspaceDefaultAgentNotice
+                    {...defaultEvaluationAgent}
+                    loading={defaultEvaluationAgent.loading || librariesLoading}
+                    agents={libraryAgents}
+                  />
+                )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <div className="flex items-center gap-3 text-xs">
@@ -1082,7 +1108,7 @@ const RunEvaluation = () => {
                   in this config.
                 </p>
               )}
-            </div>
+            </fieldset>
           )}
           {selectedConfig && (
             <div className="space-y-2">
@@ -1282,8 +1308,10 @@ const RunEvaluation = () => {
               onClick={startRun}
               disabled={
                 !configId ||
+                defaultEvaluationAgent.loading ||
+                librariesLoading ||
                 oauthAuthInProgress ||
-                (availableAgents.length > 0 && selectedAgentIds.length === 0) ||
+                selectedAgentIds.length === 0 ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
               }
             >

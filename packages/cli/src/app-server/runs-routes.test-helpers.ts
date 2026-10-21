@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRunQueueService } from './run-queue-domain.js';
 import type { RoverSocketMessage } from './rover-connection.js';
+import { resolveRunSelectedAgents } from './run-agent-selection.js';
 
 export function createRunQueueState(overrides: Record<string, unknown> = {}) {
   return {
@@ -67,7 +68,7 @@ export function makeRunsRouteDeps(overrides: Record<string, unknown> = {}) {
         ? { ...config, scenarios: config.scenarios.filter((s: any) => ids.includes(s.id)) }
         : config,
     expandConfigForAgents: (config: any) => config,
-    resolveRunSelectedAgents: () => [],
+    resolveRunSelectedAgents,
     readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
     pickDefaultAssistantAgentName: () => undefined,
     pkgVersion: 'test',

@@ -14,6 +14,7 @@ const {
   sourceMock,
   configsRef,
   libraryAgentsRef,
+  libraryLoadingRef,
   queueEventHandlerRef
 } = vi.hoisted(() => {
   const getRunQueue = vi.fn().mockResolvedValue({ active: null, queued: [] });
@@ -23,12 +24,16 @@ const {
   const libraryAgentsRef = { value: [] as AgentConfig[] };
   const queueEventHandlerRef: { current: ((event: unknown) => void) | null } = { current: null };
   return {
+    libraryLoadingRef: { value: false },
     configReloadMock,
     librariesReloadMock,
     configsRef,
     libraryAgentsRef,
     queueEventHandlerRef,
     sourceMock: {
+      getWorkspaceSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultEvaluationAgentName: 'workspace-agent' }),
       getRunQueue,
       getResult: vi.fn(),
       subscribeRunQueue: vi.fn((callback: (event: unknown) => void) => {
@@ -69,7 +74,7 @@ vi.mock('@/contexts/LibraryContext', () => ({
     servers: [],
     agents: libraryAgentsRef.value,
     scenarios: [],
-    loading: false,
+    loading: libraryLoadingRef.value,
     setServers: vi.fn(),
     setAgents: vi.fn(),
     setScenarios: vi.fn(),
@@ -86,6 +91,7 @@ beforeEach(() => {
   });
   configsRef.value = [];
   libraryAgentsRef.value = [];
+  libraryLoadingRef.value = false;
   sourceMock.startRun.mockReset();
   sourceMock.startRun.mockResolvedValue({ jobId: 'job-1' });
   sourceMock.getResult.mockReset().mockResolvedValue(undefined);
@@ -118,6 +124,72 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it('waits for the library before preselecting an inherited agent', async () => {
+    configsRef.value = [
+      { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
+    ];
+    libraryLoadingRef.value = true;
+    const view = render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    libraryAgentsRef.value = [
+      {
+        id: 'workspace-agent',
+        name: 'Workspace Agent',
+        provider: 'openai',
+        model: 'test',
+        temperature: 0,
+        maxTokens: 100
+      }
+    ];
+    libraryLoadingRef.value = false;
+    view.rerender(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
+    );
+  });
+  it('preselects the workspace default for an evaluation without agents', async () => {
+    configsRef.value = [
+      { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
+    ];
+    libraryAgentsRef.value = [
+      {
+        id: 'workspace-agent',
+        name: 'Workspace Agent',
+        provider: 'openai',
+        model: 'test',
+        temperature: 0,
+        maxTokens: 100
+      },
+      {
+        id: 'other',
+        name: 'Other Agent',
+        provider: 'openai',
+        model: 'test',
+        temperature: 0,
+        maxTokens: 100
+      }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=empty']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/Workspace default agent: Workspace Agent/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
+    );
+    expect(screen.getByRole('checkbox', { name: 'Other Agent' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Other Agent' }));
+    expect(screen.queryByText(/Workspace default agent:/)).not.toBeInTheDocument();
+  });
   it('shows the result card when the final attached job completes', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-final');
     let onEvent: ((event: any) => void) | undefined;

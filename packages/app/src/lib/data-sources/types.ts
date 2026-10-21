@@ -233,6 +233,7 @@ export interface WorkspaceHealthResponse {
 }
 
 export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
+  defaultEvaluationAgentName?: string;
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;

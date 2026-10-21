@@ -554,6 +554,7 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(join(candidate.librariesDir, 'test-cases'), { recursive: true });
         }
         const settingsChanged = [
+          'defaultEvaluationAgentName',
           'assistantAgentName',
           'scenarioAssistantAgentName',
           'evaluationJudgeAgentName',

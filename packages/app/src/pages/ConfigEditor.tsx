@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -71,7 +73,13 @@ const ConfigEditor = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
-  const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
+  const {
+    servers: libServers,
+    agents: libAgents,
+    scenarios: libScenarios,
+    loading: librariesLoading
+  } = useLibraries();
+  const defaultEvaluationAgent = useDefaultEvaluationAgent();
 
   const isNew = id === 'new';
   const isView = !isNew && !!id;
@@ -948,6 +956,15 @@ const ConfigEditor = () => {
         </TabsList>
 
         <TabsContent value="agents">
+          {agentEntries.length === 0 && (
+            <div className="mb-4">
+              <WorkspaceDefaultAgentNotice
+                {...defaultEvaluationAgent}
+                loading={defaultEvaluationAgent.loading || librariesLoading}
+                agents={libAgents}
+              />
+            </div>
+          )}
           {!readOnly && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
@@ -1282,7 +1299,7 @@ const ConfigEditor = () => {
               </CardContent>
             </Card>
           )}
-          {readOnly ? (
+          {readOnly && agentEntries.length === 0 ? null : readOnly ? (
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">

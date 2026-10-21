@@ -55,6 +55,24 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 describe('SettingsPage', () => {
+  it('selects and clears the workspace default evaluation agent', async () => {
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: /Assistant One/ }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        defaultEvaluationAgentName: 'assistant-1'
+      })
+    );
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: 'None' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        defaultEvaluationAgentName: null
+      })
+    );
+  });
   it('allows repairing an unsupported provider in persisted decision settings', async () => {
     sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
       evaluationJudgeAgentName: 'assistant-1',

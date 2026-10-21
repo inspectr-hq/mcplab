@@ -21,6 +21,7 @@ export interface AppSettings extends WorkspaceEvaluationSettings {
   librariesDir: string;
   defaultQueueWorkers: number;
   assistantAgentName?: string;
+  defaultEvaluationAgentName?: string;
 }
 
 // Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo

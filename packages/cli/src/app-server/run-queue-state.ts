@@ -1,5 +1,10 @@
 import type { ServerResponse } from 'node:http';
-import type { QueueChildProgress, RoverAgentRef, Scenario } from '@inspectr/mcplab-core';
+import type {
+  EvalConfig,
+  QueueChildProgress,
+  RoverAgentRef,
+  Scenario
+} from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
 type RunParamsBase = {
@@ -10,6 +15,8 @@ type RunParamsBase = {
   scenarioId?: string;
   scenarioIds?: string[];
   requestedAgents?: string[];
+  /** Resolved at enqueue time so later settings and library changes cannot retarget jobs. */
+  agentSnapshot?: EvalConfig['agents'];
   runNote?: string;
   oauthServerNames?: string[];
   serverOverrideAll?: string[];

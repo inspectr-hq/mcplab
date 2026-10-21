@@ -23,6 +23,10 @@ export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceS
     const assistantAgentName = current.assistant_agent_name ?? legacyAssistantAgentName;
     return {
       ...current,
+      default_evaluation_agent_name:
+        typeof parsed.default_evaluation_agent_name === 'string'
+          ? parsed.default_evaluation_agent_name.trim() || undefined
+          : undefined,
       assistant_agent_name:
         typeof assistantAgentName === 'string' ? assistantAgentName.trim() || undefined : undefined,
       evaluation_judge_agent_name:

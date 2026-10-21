@@ -19,6 +19,36 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
+  it('persists, reloads, and clears the workspace default evaluation agent', () => {
+    const settings = fixture();
+    const next = applyEvaluationSettingsPatch(
+      settings,
+      { defaultEvaluationAgentName: ' judge ' },
+      agents
+    );
+    persistSettingsOverrides(next);
+    applySettingsOverrides(settings);
+    expect(settings.defaultEvaluationAgentName).toBe('judge');
+    expect(
+      loadWorkspaceSettingsOverrides(settings.librariesDir).default_evaluation_agent_name
+    ).toBe('judge');
+    persistSettingsOverrides(
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: null }, agents)
+    );
+    applySettingsOverrides(settings);
+    expect(settings.defaultEvaluationAgentName).toBeUndefined();
+  });
+  it('rejects a deleted default atomically and allows browser evaluation agents', () => {
+    const settings = fixture();
+    expect(() =>
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: 'deleted' }, agents)
+    ).toThrow('Default evaluation agent not found');
+    expect(settings.defaultEvaluationAgentName).toBeUndefined();
+    expect(
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: 'browser' }, agents)
+        .defaultEvaluationAgentName
+    ).toBe('browser');
+  });
   it.each(['deleted', undefined])(
     'does not revalidate %s judge when saving unrelated settings',
     (name) => {

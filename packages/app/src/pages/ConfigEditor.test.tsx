@@ -4,18 +4,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigEditor from './ConfigEditor';
 import type { EvalConfig } from '@/types/eval';
 
-const { configRef, librariesRef, reloadMock, scenarioFormPropsRef } = vi.hoisted(() => ({
-  configRef: { value: null as EvalConfig | null },
-  librariesRef: {
-    value: {
-      servers: [],
-      agents: [],
-      scenarios: []
-    }
-  },
-  reloadMock: vi.fn(),
-  scenarioFormPropsRef: { value: null as { servers?: Array<{ id: string }> } | null }
-}));
+const { configRef, librariesRef, reloadMock, scenarioFormPropsRef, sourceMock } = vi.hoisted(
+  () => ({
+    sourceMock: {
+      getWorkspaceSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultEvaluationAgentName: 'workspace-agent' })
+    },
+    configRef: { value: null as EvalConfig | null },
+    librariesRef: {
+      value: {
+        servers: [],
+        agents: [],
+        scenarios: []
+      }
+    },
+    reloadMock: vi.fn(),
+    scenarioFormPropsRef: { value: null as { servers?: Array<{ id: string }> } | null }
+  })
+);
 
 vi.mock('@/contexts/ConfigContext', () => ({
   useConfigs: () => ({
@@ -39,7 +46,7 @@ vi.mock('@/contexts/LibraryContext', () => ({
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
-    source: {}
+    source: sourceMock
   })
 }));
 
@@ -56,6 +63,47 @@ function LocationProbe() {
 }
 
 describe('ConfigEditor', () => {
+  it('explains when the workspace default is unavailable', async () => {
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/This agent is no longer available/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Workspace settings' })).toHaveAttribute(
+      'href',
+      '/settings'
+    );
+  });
+  it('explains how to choose a default when none is configured', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({});
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/No workspace default agent is set/)).toBeInTheDocument();
+  });
+  it.each(['/mcp-evaluations/cfg-1/agents', '/mcp-evaluations/cfg-1/edit?tab=agents'])(
+    'shows the inherited workspace agent on %s without adding it to the evaluation',
+    async (path) => {
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      expect(
+        await screen.findByText(/Workspace default agent: workspace-agent/)
+      ).toBeInTheDocument();
+      expect(configRef.value!.agentEntries).toEqual([]);
+    }
+  );
   beforeEach(() => {
     reloadMock.mockClear();
     configRef.value = {

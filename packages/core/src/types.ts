@@ -14,6 +14,7 @@ export interface WorkspaceEvaluationSettings {
 }
 
 export interface WorkspaceSettingsOverrides {
+  default_evaluation_agent_name?: string;
   /** The agent every assistant uses unless a session picks another. */
   assistant_agent_name?: string;
   evaluation_judge_agent_name?: string;
@@ -22,6 +23,7 @@ export interface WorkspaceSettingsOverrides {
 }
 
 export interface WorkspaceSettingsPatch {
+  defaultEvaluationAgentName?: string | null;
   defaultQueueWorkers?: number;
   assistantAgentName?: string | null;
   evaluationJudgeAgentName?: string | null;

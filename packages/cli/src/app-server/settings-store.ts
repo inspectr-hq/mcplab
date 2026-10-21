@@ -48,6 +48,7 @@ export function applySettingsOverrides(settings: AppSettings): void {
   const envQueueWorkers = resolveEnvQueueWorkers();
   if (envQueueWorkers !== undefined) settings.defaultQueueWorkers = envQueueWorkers;
   settings.assistantAgentName = overrides.assistant_agent_name?.trim() || undefined;
+  settings.defaultEvaluationAgentName = overrides.default_evaluation_agent_name;
   settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
   settings.evaluationDecision = overrides.evaluation_decision;
 }
@@ -59,6 +60,21 @@ export function applyEvaluationSettingsPatch(
   agents: EvalConfig['agents'] | (() => EvalConfig['agents'])
 ): AppSettings {
   const candidate = { ...settings };
+  if (Object.prototype.hasOwnProperty.call(body, 'defaultEvaluationAgentName')) {
+    const value = body.defaultEvaluationAgentName;
+    if (value !== null && value !== undefined && typeof value !== 'string') {
+      throw new Error('Default evaluation agent must be an agent name or null.');
+    }
+    candidate.defaultEvaluationAgentName = value?.trim() || undefined;
+    if (candidate.defaultEvaluationAgentName) {
+      const libraryAgents = typeof agents === 'function' ? agents() : agents;
+      if (!libraryAgents[candidate.defaultEvaluationAgentName]) {
+        throw new Error(
+          `Default evaluation agent not found: ${candidate.defaultEvaluationAgentName}`
+        );
+      }
+    }
+  }
   const hasJudge = Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName');
   const hasDecision = Object.prototype.hasOwnProperty.call(body, 'evaluationDecision');
   if (hasJudge) {
@@ -86,6 +102,9 @@ export function applyEvaluationSettingsPatch(
 
 export function persistSettingsOverrides(settings: AppSettings): void {
   const payload: WorkspaceSettingsOverrides = {
+    ...(settings.defaultEvaluationAgentName
+      ? { default_evaluation_agent_name: settings.defaultEvaluationAgentName }
+      : {}),
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
     ...(settings.assistantAgentName ? { assistant_agent_name: settings.assistantAgentName } : {}),
     ...(settings.evaluationJudgeAgentName

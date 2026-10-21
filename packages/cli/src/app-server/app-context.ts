@@ -122,7 +122,7 @@ export interface RunDeps {
   getScenarioRunTraceRecords: typeof getScenarioRunTraceRecords;
   selectScenarioIds: typeof selectScenarioIds;
   expandConfigForAgents: (config: EvalConfig, requestedAgents?: string[]) => ExecutableEvalConfig;
-  resolveRunSelectedAgents: (config: EvalConfig, requestedAgents?: string[]) => string[];
+  resolveRunSelectedAgents: typeof import('./run-agent-selection.js').resolveRunSelectedAgents;
   readLibraries: typeof readLibraries;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
