@@ -299,10 +299,30 @@ describe('RunEvaluation', () => {
         id: 'missing',
         name: 'Missing',
         agents: [],
-        agentEntries: [{ kind: 'referenced', ref: 'deleted' }],
+        agentEntries: [
+          { kind: 'referenced', ref: 'available' },
+          { kind: 'referenced', ref: 'deleted' }
+        ],
+        runDefaults: { selectedAgentNames: ['available', 'deleted'] },
         scenarios: [],
         createdAt: '',
         updatedAt: ''
+      }
+    ];
+    libraryAgentsRef.value = [
+      {
+        id: 'available',
+        name: 'Available Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
+      },
+      {
+        id: 'replacement',
+        name: 'Replacement Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
       }
     ];
     render(
@@ -311,6 +331,77 @@ describe('RunEvaluation', () => {
       </MemoryRouter>
     );
     expect(await screen.findByRole('alert')).toHaveTextContent('Unavailable agents: deleted');
+    const runButton = screen.getByRole('button', { name: 'Run' });
+    expect(runButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Replacement Agent' }));
+    expect(runButton).toBeEnabled();
+  });
+  it('preserves test selection while the agent libraries are loading', async () => {
+    configsRef.value = [
+      {
+        id: 'loading',
+        name: 'Loading',
+        sourcePath: '/loading.yaml',
+        agents: [],
+        scenarios: [
+          {
+            id: 'scenario-1',
+            name: 'Scenario 1',
+            prompt: 'test',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          },
+          {
+            id: 'scenario-2',
+            name: 'Scenario 2',
+            prompt: 'test',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    libraryLoadingRef.value = true;
+    const view = render(
+      <MemoryRouter initialEntries={['/run?configId=loading']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+
+    const scenarioCheckboxes = await waitFor(() => {
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(2);
+      return checkboxes;
+    });
+    await waitFor(() => expect(scenarioCheckboxes[0]).toBeChecked());
+    const scenarioCheckbox = scenarioCheckboxes[0];
+    fireEvent.click(scenarioCheckbox);
+    expect(scenarioCheckbox).not.toBeChecked();
+
+    libraryAgentsRef.value = [
+      {
+        id: 'workspace-agent',
+        name: 'Workspace Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
+      }
+    ];
+    libraryLoadingRef.value = false;
+    view.rerender(
+      <MemoryRouter initialEntries={['/run?configId=loading']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
+    );
+    expect(scenarioCheckbox).not.toBeChecked();
   });
   it('waits for the library before preselecting an inherited agent', async () => {
     configsRef.value = [

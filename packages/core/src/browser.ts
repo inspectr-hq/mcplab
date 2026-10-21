@@ -1,5 +1,5 @@
 export { tallyCheckCounts } from './check-counts.js';
-export { resolveRunAgentSelection, resolveLoadedRunAgents } from './run-agent-selection.js';
+export { resolveRunAgentSelection } from './run-agent-selection.js';
 export { isLlmAgent } from './types.js';
 export {
   normalizeEvaluationDecisionConfig,

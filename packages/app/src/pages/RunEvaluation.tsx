@@ -237,6 +237,12 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   const prevConfigKeyRef = useRef('');
+  const pendingAgentConfigKeyRef = useRef('');
+  const pendingScenarioConfigKeyRef = useRef('');
+  const scenarioSelectionEditedRef = useRef(false);
+  const configKey = selectedConfig
+    ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
+    : '';
   const agentsLoading = defaultEvaluationAgent.loading || !librariesReady;
   const defaultSelection = useMemo<RunAgentSelection & { error?: string }>(() => {
     try {
@@ -286,12 +292,11 @@ const RunEvaluation = () => {
         selectedAgentIds.length === 1 &&
         selectedAgentIds[0] === defaultEvaluationAgent.name));
   useEffect(() => {
-    if (agentsLoading) return;
-    const configKey = selectedConfig
-      ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
-      : '';
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
+    pendingAgentConfigKeyRef.current = configKey;
+    pendingScenarioConfigKeyRef.current = configKey;
+    scenarioSelectionEditedRef.current = false;
     setAgentSelectionEdited(false);
     if (!selectedConfig) {
       setSelectedAgentIds([]);
@@ -303,7 +308,6 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    setSelectedAgentIds(defaultSelectedAgentIds);
     setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
@@ -311,14 +315,22 @@ const RunEvaluation = () => {
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
   }, [
-    selectedConfig?.id,
-    selectedConfig?.sourcePath,
-    availableAgents,
-    availableScenarios,
-    agentsLoading,
-    defaultSelection,
-    defaultSelectedAgentIds
+    configKey,
+    selectedConfig,
+    availableScenarios
   ]);
+  useEffect(() => {
+    if (agentsLoading || !pendingAgentConfigKeyRef.current) return;
+    setSelectedAgentIds(defaultSelectedAgentIds);
+    pendingAgentConfigKeyRef.current = '';
+  }, [configKey, agentsLoading, defaultSelectedAgentIds]);
+  useEffect(() => {
+    if (!librariesReady || !pendingScenarioConfigKeyRef.current) return;
+    if (!scenarioSelectionEditedRef.current) {
+      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
+    }
+    pendingScenarioConfigKeyRef.current = '';
+  }, [configKey, librariesReady, availableScenarios]);
   useEffect(() => {
     if (
       agentsLoading ||
@@ -1187,16 +1199,20 @@ const RunEvaluation = () => {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() =>
-                      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id))
-                    }
+                    onClick={() => {
+                      scenarioSelectionEditedRef.current = true;
+                      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
+                    }}
                   >
                     Select all
                   </button>
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedScenarioIds([])}
+                    onClick={() => {
+                      scenarioSelectionEditedRef.current = true;
+                      setSelectedScenarioIds([]);
+                    }}
                   >
                     Clear
                   </button>
@@ -1227,6 +1243,7 @@ const RunEvaluation = () => {
                         setSelectedScenarioIds((prev) =>
                           checked ? prev.filter((id) => id !== scenario.id) : [...prev, scenario.id]
                         );
+                        scenarioSelectionEditedRef.current = true;
                       }}
                     >
                       <div className="flex items-start gap-2">
@@ -1234,6 +1251,7 @@ const RunEvaluation = () => {
                           checked={checked}
                           onCheckedChange={(value) => {
                             const isChecked = value === true;
+                            scenarioSelectionEditedRef.current = true;
                             setSelectedScenarioIds((prev) =>
                               isChecked
                                 ? [...prev, scenario.id]
@@ -1379,6 +1397,7 @@ const RunEvaluation = () => {
                 !configId ||
                 agentsLoading ||
                 Boolean(agentSelectionError) ||
+                (showUnavailableAgents && !agentSelectionEdited) ||
                 oauthAuthInProgress ||
                 selectedAgentIds.length === 0 ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
