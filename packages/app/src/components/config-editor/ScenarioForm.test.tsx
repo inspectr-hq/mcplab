@@ -305,9 +305,8 @@ describe('ScenarioForm checks editor', () => {
     );
 
     const requiredToolInput = screen.getByLabelText('Required tool alternatives 1');
-    const requiredToolRow = requiredToolInput.closest(
-      '[aria-label="Required tool alternatives"]'
-    )?.parentElement as HTMLElement;
+    const requiredToolRow = requiredToolInput.closest('[aria-label="Required tool alternatives"]')
+      ?.parentElement as HTMLElement;
     const addOrButton = within(requiredToolRow).getByRole('button', { name: 'OR' });
     const addButton = within(requiredToolRow).getByRole('button', { name: 'Add', exact: true });
     expect(addOrButton.parentElement).toBe(addButton.parentElement);

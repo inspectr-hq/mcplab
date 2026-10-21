@@ -4,15 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-export function ToolNameInput({
-  value,
-  onChange,
-  availableTools,
-  loading,
-  error,
-  canLoadTools,
-  onLoadTools
-}: {
+export type ToolNameInputProps = {
   value: string;
   onChange: (value: string) => void;
   availableTools: string[] | null;
@@ -20,7 +12,21 @@ export function ToolNameInput({
   error: string | null;
   canLoadTools: boolean;
   onLoadTools: () => Promise<void>;
-}) {
+  onEnter?: () => void;
+  inputLabel?: string;
+};
+
+export function ToolNameInput({
+  value,
+  onChange,
+  availableTools,
+  loading,
+  error,
+  canLoadTools,
+  onLoadTools,
+  onEnter,
+  inputLabel
+}: ToolNameInputProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const loadInFlight = useRef(false);
@@ -30,21 +36,32 @@ export function ToolNameInput({
   );
   const showList = open && availableTools !== null && !error && matches.length > 0;
   const selectedIndex = activeIndex < matches.length ? activeIndex : -1;
+  const browseLabel = loading
+    ? 'Loading tool suggestions'
+    : availableTools === null && canLoadTools && !error
+      ? 'Load tool suggestions'
+      : open
+        ? 'Hide tool suggestions'
+        : 'Show tool suggestions';
   const selectTool = (tool: string) => {
     onChange(tool);
     setOpen(false);
     setActiveIndex(-1);
   };
-  const showSuggestions = () => {
-    setOpen(true);
-    if (availableTools === null && canLoadTools && !loading && !error && !loadInFlight.current) {
-      loadInFlight.current = true;
-      void onLoadTools()
-        .catch(() => undefined)
-        .finally(() => {
-          loadInFlight.current = false;
-        });
-    }
+  const startToolLoad = () => {
+    if (!canLoadTools || loading || loadInFlight.current) return;
+    loadInFlight.current = true;
+    void onLoadTools()
+      .catch(() => undefined)
+      .finally(() => {
+        loadInFlight.current = false;
+      });
+  };
+  const loadSuggestions = () => {
+    if (availableTools === null && !error) startToolLoad();
+  };
+  const openCachedSuggestions = () => {
+    if (availableTools !== null) setOpen(true);
   };
 
   return (
@@ -52,7 +69,8 @@ export function ToolNameInput({
       open={open}
       onOpenChange={(nextOpen) => {
         if (nextOpen) {
-          showSuggestions();
+          setOpen(true);
+          loadSuggestions();
         } else {
           setOpen(false);
           setActiveIndex(-1);
@@ -63,6 +81,7 @@ export function ToolNameInput({
         <div className="relative min-w-0 flex-1">
           <Input
             value={value}
+            aria-label={inputLabel}
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={open}
@@ -70,16 +89,16 @@ export function ToolNameInput({
             aria-activedescendant={
               showList && selectedIndex >= 0 ? `${listId}-option-${selectedIndex}` : undefined
             }
-            onFocus={showSuggestions}
+            onClick={openCachedSuggestions}
             onChange={(event) => {
               onChange(event.target.value);
               setActiveIndex(-1);
-              showSuggestions();
+              openCachedSuggestions();
             }}
             onKeyDown={(event) => {
               if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault();
-                if (!open) showSuggestions();
+                if (!open && availableTools !== null) setOpen(true);
                 if (matches.length > 0) {
                   const direction = event.key === 'ArrowDown' ? 1 : -1;
                   setActiveIndex((current) => {
@@ -89,9 +108,14 @@ export function ToolNameInput({
                     return (current + direction + matches.length) % matches.length;
                   });
                 }
-              } else if (event.key === 'Enter' && showList && selectedIndex >= 0) {
-                event.preventDefault();
-                selectTool(matches[selectedIndex]);
+              } else if (event.key === 'Enter') {
+                if (showList && selectedIndex >= 0) {
+                  event.preventDefault();
+                  selectTool(matches[selectedIndex]);
+                } else if (onEnter) {
+                  event.preventDefault();
+                  onEnter();
+                }
               } else if (event.key === 'Escape' && open) {
                 event.preventDefault();
                 setOpen(false);
@@ -107,8 +131,8 @@ export function ToolNameInput({
               variant="ghost"
               size="icon"
               className="absolute right-0.5 top-0.5 h-7 w-7"
-              aria-label={open ? 'Hide tool suggestions' : 'Show tool suggestions'}
-              title={open ? 'Hide tool suggestions' : 'Show tool suggestions'}
+              aria-label={browseLabel}
+              title={browseLabel}
               onMouseDown={(event) => event.preventDefault()}
             >
               {loading ? (
@@ -122,61 +146,66 @@ export function ToolNameInput({
           </PopoverTrigger>
         </div>
       </PopoverAnchor>
-      <PopoverContent align="start" sideOffset={4} className="w-[min(24rem,calc(100vw-2rem))] p-1">
-        {!canLoadTools ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">
-            Select a server to browse tool names. You can still type any name.
-          </p>
-        ) : error && !loading ? (
-          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-            <p className="text-xs text-muted-foreground">
-              Suggestions unavailable. You can still type any name.
+      {!(loading && availableTools === null) && (
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="w-[min(24rem,calc(100vw-2rem))] p-1"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          {!canLoadTools ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">
+              Select a server to browse tool names. You can still type any name.
             </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => void onLoadTools()}
-            >
-              <RotateCw className="mr-1 h-3 w-3" /> Retry
-            </Button>
-          </div>
-        ) : availableTools === null ? null : availableTools.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">
-            No tools found. You can still type any name.
-          </p>
-        ) : matches.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">
-            No matching tools. Keep your custom name.
-          </p>
-        ) : (
-          <div
-            id={listId}
-            role="listbox"
-            aria-label="Available tools"
-            className="max-h-56 overflow-y-auto"
-          >
-            {matches.map((tool, index) => (
-              <button
-                key={tool}
+          ) : error && !loading ? (
+            <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+              <p className="text-xs text-muted-foreground">
+                Suggestions unavailable. You can still type any name.
+              </p>
+              <Button
                 type="button"
-                id={`${listId}-option-${index}`}
-                role="option"
-                aria-selected={index === selectedIndex}
-                className={`flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs font-mono outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent ${index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  selectTool(tool);
-                }}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={startToolLoad}
               >
-                {tool}
-              </button>
-            ))}
-          </div>
-        )}
-      </PopoverContent>
+                <RotateCw className="mr-1 h-3 w-3" /> Retry
+              </Button>
+            </div>
+          ) : availableTools === null ? null : availableTools.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">
+              No tools found. You can still type any name.
+            </p>
+          ) : matches.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">No matching suggestions.</p>
+          ) : (
+            <div
+              id={listId}
+              role="listbox"
+              aria-label="Available tools"
+              className="max-h-56 overflow-y-auto"
+            >
+              {matches.map((tool, index) => (
+                <button
+                  key={tool}
+                  type="button"
+                  id={`${listId}-option-${index}`}
+                  role="option"
+                  aria-selected={index === selectedIndex}
+                  className={`flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs font-mono outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent ${index === selectedIndex ? 'bg-accent text-accent-foreground' : ''}`}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    selectTool(tool);
+                  }}
+                >
+                  {tool}
+                </button>
+              ))}
+            </div>
+          )}
+        </PopoverContent>
+      )}
     </Popover>
   );
 }

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatToolAlternatives, isValidToolExpression } from '@/types/eval';
+import { ToolNameInput, type ToolNameInputProps } from '@/components/config-editor/ToolNameInput';
 
 function ToolAlternativeOrBadge() {
   return (
@@ -59,36 +60,50 @@ export function ToolAlternativesEditor({
   value,
   onChange,
   onEnter,
-  label
+  label,
+  toolSuggestions
 }: {
   value: string;
   onChange: (value: string) => void;
   onEnter?: () => void;
   label: string;
+  toolSuggestions?: Omit<ToolNameInputProps, 'value' | 'onChange' | 'onEnter' | 'inputLabel'>;
 }) {
   const alternatives = value.split('|');
   const names = alternatives.map((name) => name.trim()).filter(Boolean);
   const duplicate = new Set(names).size !== names.length;
   const setAlternatives = (next: string[]) => onChange(next.join('|'));
+  const updateAlternative = (index: number, name: string) =>
+    setAlternatives(
+      alternatives.map((current, currentIndex) =>
+        currentIndex === index ? name.replaceAll('|', '') : current
+      )
+    );
   return (
     <div className="min-w-0 flex-1" aria-label={label}>
       {alternatives.map((tool, index) => (
         <div key={index}>
           <div className="flex items-center gap-2">
-            <Input
-              value={tool}
-              onChange={(e) =>
-                setAlternatives(
-                  alternatives.map((current, i) =>
-                    i === index ? e.target.value.replaceAll('|', '') : current
-                  )
-                )
-              }
-              onKeyDown={(e) => e.key === 'Enter' && onEnter && (e.preventDefault(), onEnter())}
-              placeholder="Tool name"
-              aria-label={`${label} ${index + 1}`}
-              className="h-8 text-xs font-mono"
-            />
+            {toolSuggestions ? (
+              <ToolNameInput
+                {...toolSuggestions}
+                value={tool}
+                onChange={(name) => updateAlternative(index, name)}
+                onEnter={onEnter}
+                inputLabel={`${label} ${index + 1}`}
+              />
+            ) : (
+              <Input
+                value={tool}
+                onChange={(event) => updateAlternative(index, event.target.value)}
+                onKeyDown={(event) =>
+                  event.key === 'Enter' && onEnter && (event.preventDefault(), onEnter())
+                }
+                placeholder="Tool name"
+                aria-label={`${label} ${index + 1}`}
+                className="h-8 text-xs font-mono"
+              />
+            )}
             {alternatives.length > 1 && (
               <Button
                 type="button"

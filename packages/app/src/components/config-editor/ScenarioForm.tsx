@@ -286,7 +286,6 @@ function ScenarioCard({
   const [agentCheckEditingRule, setAgentCheckEditingRule] = useState<EvalRule | null>(null);
   const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
   const [valueRuleEditingRule, setValueRuleEditingRule] = useState<EvalRule | null>(null);
-  const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
   const [toolNamesError, setToolNamesError] = useState<string | null>(null);
@@ -471,7 +470,6 @@ function ScenarioCard({
     else nextRules.push(nextRule);
     onUpdate({ evalRules: nextRules });
     setNewRuleValue('');
-    setToolPickerValue('');
     setValueRuleEditingRule(null);
     setNewRuleType('required_tool');
   };
@@ -668,7 +666,7 @@ function ScenarioCard({
     if (isToolInputRule) {
       return Boolean(
         newRuleTool.trim() &&
-          (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
+        (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
       );
     }
     if (isJsonPathRule) return Boolean(newRulePath.trim());
@@ -710,11 +708,9 @@ function ScenarioCard({
   useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
-    setToolPickerValue('');
   }, [scenario.serverIds.join('|')]);
 
   useEffect(() => {
-    setToolPickerValue('');
     setNewRulePath('');
     setNewRuleEquals('');
     setNewToolSequenceValue('');
@@ -1342,7 +1338,7 @@ function ScenarioCard({
               </Card>
             )}
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
               <Card className="border bg-muted/20">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
@@ -1424,13 +1420,17 @@ function ScenarioCard({
                                   </span>
                                 ) : (
                                   <span className="font-mono break-all">
-                                    {rule.path
-                                      ? rule.equals !== undefined
-                                        ? `${rule.path} == ${String(rule.equals)}`
-                                        : rule.path
-                                      : rule.type === 'required_tool'
-                                        ? <ToolAlternativesDisplay value={String(rule.value ?? '')} />
-                                        : rule.value}
+                                    {rule.path ? (
+                                      rule.equals !== undefined ? (
+                                        `${rule.path} == ${String(rule.equals)}`
+                                      ) : (
+                                        rule.path
+                                      )
+                                    ) : rule.type === 'required_tool' ? (
+                                      <ToolAlternativesDisplay value={String(rule.value ?? '')} />
+                                    ) : (
+                                      rule.value
+                                    )}
                                   </span>
                                 )}
                               </div>
@@ -1560,33 +1560,22 @@ function ScenarioCard({
                               </>
                             ) : isToolInputRule ? (
                               <>
-                                {availableToolNames && availableToolNames.length > 0 ? (
-                                  <Select value={newRuleTool} onValueChange={setNewRuleTool}>
-                                    <SelectTrigger className="h-8 text-xs font-mono">
-                                      <SelectValue placeholder="Select tool" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {availableToolNames.map((toolName) => (
-                                        <SelectItem key={toolName} value={toolName}>
-                                          {toolName}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Input
-                                    value={newRuleTool}
-                                    onChange={(e) => setNewRuleTool(e.target.value)}
-                                    placeholder="Tool name"
-                                    className="h-8 text-xs font-mono"
-                                  />
-                                )}
+                                <ToolNameInput
+                                  value={newRuleTool}
+                                  onChange={setNewRuleTool}
+                                  inputLabel="Tool input check tool name"
+                                  availableTools={availableToolNames}
+                                  loading={toolNamesLoading}
+                                  error={toolNamesError}
+                                  canLoadTools={canLoadToolNames}
+                                  onLoadTools={loadAvailableTools}
+                                />
                                 {newRuleType === 'tool_input_jsonpath' && (
                                   <Input
                                     value={newRulePath}
                                     onChange={(e) => setNewRulePath(e.target.value)}
                                     placeholder="JSONPath (e.g. $.query)"
-                                    className="h-8 text-xs font-mono"
+                                    className="h-8 min-w-0 flex-1 text-xs font-mono"
                                   />
                                 )}
                                 {newRuleType === 'tool_input_jsonpath' ? (
@@ -1616,6 +1605,13 @@ function ScenarioCard({
                                   onChange={setNewToolSequenceValue}
                                   onEnter={addToolSequenceValue}
                                   label="Sequence step alternatives"
+                                  toolSuggestions={{
+                                    availableTools: availableToolNames,
+                                    loading: toolNamesLoading,
+                                    error: toolNamesError,
+                                    canLoadTools: canLoadToolNames,
+                                    onLoadTools: loadAvailableTools
+                                  }}
                                 />
                                 <AddToolAlternativeButton
                                   value={newToolSequenceValue}
@@ -1647,6 +1643,13 @@ function ScenarioCard({
                                 onChange={setNewRuleValue}
                                 onEnter={addRule}
                                 label="Required tool alternatives"
+                                toolSuggestions={{
+                                  availableTools: availableToolNames,
+                                  loading: toolNamesLoading,
+                                  error: toolNamesError,
+                                  canLoadTools: canLoadToolNames,
+                                  onLoadTools: loadAvailableTools
+                                }}
                               />
                             ) : (
                               <Input
@@ -1659,14 +1662,13 @@ function ScenarioCard({
                                 }
                               />
                             )}
-                            {!showToolSequenceEditor && (
+                            {!showToolSequenceEditor &&
                               newRuleType === 'required_tool' && (
                                 <AddToolAlternativeButton
                                   value={newRuleValue}
                                   onChange={setNewRuleValue}
                                 />
-                              )
-                            )}
+                              )}
                             <Button
                               type="button"
                               variant="default"
@@ -1766,76 +1768,6 @@ function ScenarioCard({
                                   </div>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        )}
-                        {newRuleType === 'required_tool' && (
-                          <div className="space-y-1">
-                            <div className="flex items-end gap-2">
-                              <div className="min-w-0 flex-1">
-                                <Label className="mb-1 block text-[11px] text-muted-foreground">
-                                  Pick from selected server tools (optional)
-                                </Label>
-                                <Select
-                                  value={toolPickerValue}
-                                  onValueChange={(value) => {
-                                    setToolPickerValue(value);
-                                    setNewRuleValue(
-                                      newRuleType === 'required_tool'
-                                        ? [...newRuleValue.split('|').slice(0, -1), value].join('|')
-                                        : value
-                                    );
-                                  }}
-                                  disabled={
-                                    toolNamesLoading ||
-                                    !availableToolNames ||
-                                    availableToolNames.length === 0
-                                  }
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue
-                                      placeholder={
-                                        toolNamesLoading
-                                          ? 'Loading tools...'
-                                          : availableToolNames && availableToolNames.length > 0
-                                            ? 'Select tool to insert in value field'
-                                            : 'Load tools first'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {(availableToolNames ?? []).map((toolName) => (
-                                      <SelectItem key={toolName} value={toolName}>
-                                        {toolName}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 shrink-0"
-                                onClick={loadAvailableTools}
-                                disabled={!canLoadToolNames || toolNamesLoading}
-                              >
-                                {toolNamesLoading
-                                  ? 'Loading...'
-                                  : availableToolNames
-                                    ? 'Refresh tools'
-                                    : 'Load tools'}
-                              </Button>
-                            </div>
-                            {!canLoadToolNames && (
-                              <p className="text-[11px] text-muted-foreground">
-                                Select at least one server in this scenario to load tool names.
-                              </p>
-                            )}
-                            {toolNamesError && (
-                              <p className="text-[11px] text-destructive">
-                                Could not load tools: {toolNamesError}
-                              </p>
                             )}
                           </div>
                         )}
