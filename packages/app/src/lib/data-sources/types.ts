@@ -96,6 +96,10 @@ export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,
+  formatToolExpression,
+  normalizeToolExpression,
+  parseToolAlternatives,
+  isValidToolExpression,
   tallyCheckCounts
 } from '@inspectr/mcplab-core';
 

@@ -947,3 +947,75 @@ describe('judge error results', () => {
     expect(() => toJudgeErrorResults(assertions, error)).toThrow(error);
   });
 });
+
+describe('evaluateScenario — tool alternatives', () => {
+  const rules = {
+    tool_constraints: { required_tools: ['search | lookup'] },
+    tool_sequence: ['auth', 'search | lookup']
+  };
+
+  it('passes when any alternative is used, in order', () => {
+    const result = evaluateScenario('', ['auth', 'lookup'], rules);
+    expect(result.pass).toBe(true);
+    expect(result.check_results.map((check) => check.label)).toEqual([
+      'Required tool · (search OR lookup)',
+      'Tool sequence · auth -> (search OR lookup)'
+    ]);
+  });
+
+  it('reports the alternative group when none is used', () => {
+    const result = evaluateScenario('', ['auth'], rules);
+    expect(result.failures).toEqual([
+      'Required tool not used: (search OR lookup)',
+      'Required tool in sequence not used: (search OR lookup)'
+    ]);
+  });
+
+  it('reports order failures when an alternative appears too early', () => {
+    const result = evaluateScenario('', ['search', 'auth'], rules);
+    expect(result.failures).toContain(
+      'Tool sequence order was not satisfied: auth -> (search OR lookup)'
+    );
+  });
+
+  it('resolves aliases per alternative and drops duplicates', () => {
+    expect(
+      normalizeToolConstraintAliases(
+        { tool_constraints: { required_tools: ['srv:search | search'] } },
+        ['search']
+      )?.tool_constraints?.required_tools
+    ).toEqual(['search']);
+  });
+
+  it('labels skipped alternative checks the same way', () => {
+    expect(buildNotExecutedCheckResults(rules).map((check) => check.label)).toEqual([
+      'Required tool · (search OR lookup)',
+      'Tool sequence · auth -> (search OR lookup)'
+    ]);
+  });
+});
+
+describe('evaluateScenarioWithAgentChecks — aliases', () => {
+  it('evaluates resolved names but keeps authored names in check identities', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      '',
+      ['search'],
+      {
+        tool_constraints: { required_tools: ['MCPLab:search | lookup'] },
+        tool_sequence: ['MCPLab:search'],
+        tool_input_assertions: [{ type: 'contains', tool: 'MCPLab:search', value: 'paris' }]
+      },
+      {
+        availableToolNames: ['search', 'lookup'],
+        toolCalls: [{ name: 'search', arguments: { q: 'Paris' } }]
+      }
+    );
+    expect(result.pass).toBe(true);
+    expect(result.check_results.map((check) => check.label)).toEqual([
+      'Required tool · (MCPLab:search OR lookup)',
+      'Tool sequence · MCPLab:search',
+      expect.stringContaining('MCPLab:search')
+    ]);
+    expect(result.check_results[2]?.metadata?.tool).toBe('MCPLab:search');
+  });
+});

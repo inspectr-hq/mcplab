@@ -370,17 +370,17 @@
                     "properties": {
                       "required_tools": {
                         "type": "array",
-                        "items": { "type": "string", "minLength": 1 }
+                        "items": { "type": "string", "minLength": 1, "pattern": "^(?!\\s*$)(?!.*(?:^|\\|)\\s*(?:\\||$)).+$" }
                       },
                       "forbidden_tools": {
                         "type": "array",
-                        "items": { "type": "string", "minLength": 1 }
+                        "items": { "type": "string", "minLength": 1, "pattern": "^(?!\\s*$)(?!.*\\|).+$" }
                       }
                     }
                   },
                   "tool_sequence": {
                     "type": "array",
-                    "items": { "type": "string", "minLength": 1 }
+                    "items": { "type": "string", "minLength": 1, "pattern": "^(?!\\s*$)(?!.*(?:^|\\|)\\s*(?:\\||$)).+$" }
                   },
                   "tool_input_assertions": {
                     "type": "array",

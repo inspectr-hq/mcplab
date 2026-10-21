@@ -45,6 +45,7 @@ import {
   readTestCaseFile,
   updateTestCaseFile,
   buildScenarioEntry,
+  isValidToolExpression,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
@@ -387,12 +388,18 @@ const AgentContextSchema = z
       .describe('Include raw MCP tool arguments in judge context.')
   })
   .describe('Shared context sent to every agent assertion.');
+const ToolExpressionSchema = z
+  .string()
+  .refine(isValidToolExpression, 'Expected unique, non-empty tool names separated by |.')
+  .describe(
+    'Raw MCP tool name, or alternatives like `search | lookup` where any one satisfies it.'
+  );
 const EvalRulesSchema = z
   .object({
     tool_constraints: z
       .object({
         required_tools: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .optional()
           .describe('Raw MCP tools that must be called.'),
         forbidden_tools: z
@@ -404,7 +411,7 @@ const EvalRulesSchema = z
       .describe('Deterministic MCP tool-usage constraints.')
       .optional(),
     tool_sequence: z
-      .array(z.string())
+      .array(ToolExpressionSchema)
       .optional()
       .describe('Flat ordered list of raw MCP tool names that must be called.'),
     tool_input_assertions: z
@@ -1515,7 +1522,7 @@ export function registerTools(server: McpServer): void {
           .max(4000)
           .describe('Task prompt executed by the evaluation agent.'),
         required_tools: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .optional()
           .describe(
             'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
@@ -1527,7 +1534,7 @@ export function registerTools(server: McpServer): void {
             'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(
@@ -1636,7 +1643,7 @@ export function registerTools(server: McpServer): void {
           .max(4000)
           .describe('Task prompt executed by the evaluation agent.'),
         required_tools: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .optional()
           .describe(
             'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
@@ -1648,7 +1655,7 @@ export function registerTools(server: McpServer): void {
             'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(
@@ -1873,7 +1880,7 @@ export function registerTools(server: McpServer): void {
           .max(4000)
           .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
         required_tools: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .optional()
           .describe(
             'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
@@ -1885,7 +1892,7 @@ export function registerTools(server: McpServer): void {
             'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
           ),
         tool_sequence: z
-          .array(z.string())
+          .array(ToolExpressionSchema)
           .min(1)
           .optional()
           .describe(

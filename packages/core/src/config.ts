@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
+import { validateEvalToolRules } from './tool-rule-expressions.js';
 import {
   ATTACHMENT_MEDIA_TYPE_BY_EXTENSION,
   attachmentExtensionFromPath,
@@ -284,6 +285,9 @@ function resolveReferences(
     );
   }
 
+  for (const scenario of resolvedScenarios) {
+    validateEvalToolRules(scenario.eval, `Scenario "${scenario.id}"`);
+  }
   resolveAttachmentPaths(resolvedScenarios, bundleRoot);
 
   // --- Resolve mcp_servers from scenarios and build server union ---
@@ -403,7 +407,10 @@ export function readLibraryAgentsAndServers(bundleRoot: string): {
   };
 }
 
-export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
+export function normalizeSourceConfig(
+  sourceConfig: SourceEvalConfig,
+  options?: { forWrite?: boolean }
+): {
   config: SourceEvalConfig;
   warnings: string[];
 } {
@@ -536,6 +543,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       continue;
     }
     const rawScenario = scenario as SourceScenario & { agent?: unknown };
+    if (options?.forWrite) validateEvalToolRules(rawScenario.eval, `Scenario "${rawScenario.id}"`);
     const legacyServers = Array.isArray(rawScenario.servers) ? rawScenario.servers : [];
     const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
     if (legacyServers.length > 0 && Array.isArray(rawMcpServers) && rawMcpServers.length > 0) {

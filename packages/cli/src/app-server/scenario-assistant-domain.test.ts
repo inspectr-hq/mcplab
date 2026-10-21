@@ -539,6 +539,39 @@ describe('Scenario Assistant runtime definition', () => {
     ]);
   });
 
+  it('maps each tool alternative to its raw name and rejects malformed groups', () => {
+    const output = validateScenarioAssistantProposal(
+      {
+        evalRules: {
+          replacement: [
+            { type: 'required_tool', value: 'srv__search | lookup' },
+            { type: 'tool_sequence', sequence: ['srv__search | lookup', 'search'] }
+          ]
+        }
+      },
+      new Map([['srv__search', { server: 'srv', tool: 'search' }]])
+    );
+    expect(output.evalRules?.replacement).toEqual([
+      { type: 'required_tool', value: 'search|lookup' },
+      { type: 'tool_sequence', sequence: ['search|lookup', 'search'] }
+    ]);
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'required_tool', value: 'search |' }] } },
+        new Map()
+      )
+    ).toThrow(/non-empty and unique/);
+  });
+
+  it('returns a path-aware validation error for a blank forbidden tool', () => {
+    expect(() =>
+      validateScenarioAssistantProposal(
+        { evalRules: { replacement: [{ type: 'forbidden_tool', value: '  ' }] } },
+        new Map()
+      )
+    ).toThrow('Invalid scenario proposal at evalRules.replacement[0].value');
+  });
+
   it('omits unchanged placeholders while preserving proposed checks', () => {
     const evalRules = { replacement: [{ type: 'response_contains', value: 'answer' }] };
     expect(

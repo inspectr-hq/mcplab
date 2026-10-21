@@ -54,6 +54,7 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
@@ -85,11 +86,7 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import {
-  buildCheckItems,
-  formatCheckStatusLabel,
-  formatEvalRuleLabel
-} from '@/lib/check-presentation';
+import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
@@ -1483,9 +1480,10 @@ const ResultDetail = () => {
                                                                 ) : (
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                                                 )}
-                                                                <span className="font-medium">
-                                                                  {formatEvalRuleLabel(check.rule)}
-                                                                </span>
+                                                                <EvalRuleLabel
+                                                                  rule={check.rule}
+                                                                  className="font-medium"
+                                                                />
                                                               </div>
                                                               {check.decisionInput && (
                                                                 <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">

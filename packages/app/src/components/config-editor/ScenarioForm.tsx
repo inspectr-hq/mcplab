@@ -39,20 +39,28 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { formatToolSequenceLabel } from '../../../../core/src/eval';
+import {
+  formatToolSequenceLabel,
+  isValidToolExpression,
+  normalizeToolExpression
+} from '@/types/eval';
+import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
+import {
+  AddToolAlternativeButton,
+  ToolAlternativesEditor,
+  ToolSequenceDisplay
+} from '@/components/config-editor/ToolAlternativesEditor';
+import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
+import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import {
   isSupportedAttachmentMediaType,
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
   SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
 } from '@/lib/attachment-policy';
-import {
-  buildCheckItems,
-  formatCheckStatusLabel,
-  formatEvalRuleLabel
-} from '@/lib/check-presentation';
+import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {
@@ -134,6 +142,19 @@ function parseEqualsValue(text: string): string | number | boolean | undefined {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return Number.isNaN(Number(value)) ? value : Number(value);
+}
+
+function getAddableToolExpression(value: string): string | null {
+  try {
+    const filledAlternatives = value
+      .split('|')
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .join('|');
+    return normalizeToolExpression(filledAlternatives);
+  } catch {
+    return null;
+  }
 }
 
 export function ScenarioForm({
@@ -271,7 +292,6 @@ function ScenarioCard({
   const [agentCheckEditingRule, setAgentCheckEditingRule] = useState<EvalRule | null>(null);
   const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
   const [valueRuleEditingRule, setValueRuleEditingRule] = useState<EvalRule | null>(null);
-  const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
   const [toolNamesError, setToolNamesError] = useState<string | null>(null);
@@ -368,18 +388,16 @@ function ScenarioCard({
   };
 
   const addRule = () => {
+    if (!canAddRule()) return;
     if (isToolInputRuleType(newRuleType)) {
       const tool = newRuleTool.trim();
-      if (!tool) return;
       let nextRule: EvalRule;
       if (newRuleType === 'tool_input_jsonpath') {
         const path = newRulePath.trim();
-        if (!path) return;
         const equals = parseEqualsValue(newRuleEquals);
         nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
       } else {
         const value = newRuleValue.trim();
-        if (!value) return;
         nextRule = { type: newRuleType, tool, value };
       }
       const nextRules = [...scenario.evalRules];
@@ -402,7 +420,6 @@ function ScenarioCard({
       newRuleType === 'response_jsonpath_not_exists'
     ) {
       const path = newRulePath.trim();
-      if (!path) return;
       if (newRuleType === 'response_jsonpath') {
         const equals = parseEqualsValue(newRuleEquals);
         onUpdate({
@@ -422,7 +439,6 @@ function ScenarioCard({
     if (newRuleType === 'agent_check') {
       const label = newRuleLabel.trim();
       const prompt = newRulePrompt.trim();
-      if (!label || !prompt) return;
       const nextRules = [...scenario.evalRules];
       const nextRule = { type: 'agent_check', label, prompt } as const;
       const editingIndex = findRuleIndex(agentCheckEditingRule);
@@ -438,32 +454,45 @@ function ScenarioCard({
     }
 
     if (newRuleType === 'tool_sequence') {
-      const nextSequence = toolSequenceDraft
-        .map((value) => value.trim())
-        .filter((value): value is string => typeof value === 'string' && value.length > 0);
-      if (nextSequence.length === 0) return;
-      updateToolSequence(nextSequence);
+      const sequence = getAddableToolSequence();
+      if (!sequence) return;
+      updateToolSequence(sequence);
       return;
     }
 
-    if (!newRuleValue.trim()) return;
+    const requiredExpression =
+      newRuleType === 'required_tool' ? getAddableToolExpression(newRuleValue) : null;
+    if (newRuleType === 'required_tool' && !requiredExpression) return;
+    const value = requiredExpression ?? newRuleValue.trim();
     const nextRules = [...scenario.evalRules];
-    const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
+    const nextRule = { type: newRuleType, value } as const;
     const editingIndex = findRuleIndex(valueRuleEditingRule);
     if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
     else nextRules.push(nextRule);
     onUpdate({ evalRules: nextRules });
     setNewRuleValue('');
-    setToolPickerValue('');
     setValueRuleEditingRule(null);
     setNewRuleType('required_tool');
   };
 
   const addToolSequenceValue = () => {
-    const value = newToolSequenceValue.trim();
+    const value = getAddableToolExpression(newToolSequenceValue);
     if (!value) return;
     setToolSequenceDraft((current) => [...current, value]);
     setNewToolSequenceValue('');
+  };
+
+  const getAddableToolSequence = () => {
+    const pendingValue = newToolSequenceValue.trim();
+    const pendingStep = pendingValue ? getAddableToolExpression(newToolSequenceValue) : null;
+    if (pendingValue && !pendingStep) return null;
+    const sequence = [...toolSequenceDraft, ...(pendingStep ? [pendingStep] : [])];
+    return sequence.length > 0 && sequence.every(isValidToolExpression) ? sequence : null;
+  };
+
+  const saveToolSequence = () => {
+    const sequence = getAddableToolSequence();
+    if (sequence) updateToolSequence(sequence);
   };
 
   const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
@@ -515,7 +544,7 @@ function ScenarioCard({
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
     setToolSequenceDraft(toolSequence);
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence.join('|')]);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, JSON.stringify(toolSequence)]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -559,6 +588,8 @@ function ScenarioCard({
   };
 
   const editableValueRuleTypes: EvalRule['type'][] = [
+    'required_tool',
+    'forbidden_tool',
     'response_contains',
     'response_not_contains',
     'response_starts_with',
@@ -630,7 +661,6 @@ function ScenarioCard({
     response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700',
     agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
   };
-  const isToolRule = newRuleType === 'required_tool' || newRuleType === 'forbidden_tool';
   const isToolInputRule = isToolInputRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
@@ -638,6 +668,26 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath_not_exists';
   const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
   const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
+  const canAddRule = () => {
+    if (isToolInputRule) {
+      return Boolean(
+        newRuleTool.trim() &&
+        (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
+      );
+    }
+    if (isJsonPathRule) return Boolean(newRulePath.trim());
+    if (newRuleType === 'agent_check') {
+      return Boolean(newRuleLabel.trim() && newRulePrompt.trim());
+    }
+    if (newRuleType === 'tool_sequence') {
+      return getAddableToolSequence() !== null;
+    }
+    if (newRuleType === 'required_tool') return getAddableToolExpression(newRuleValue) !== null;
+    if (newRuleType === 'forbidden_tool') {
+      return Boolean(newRuleValue.trim()) && !newRuleValue.includes('|');
+    }
+    return Boolean(newRuleValue.trim());
+  };
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
@@ -664,13 +714,12 @@ function ScenarioCard({
   useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
-    setToolPickerValue('');
   }, [scenario.serverIds.join('|')]);
 
   useEffect(() => {
-    setToolPickerValue('');
     setNewRulePath('');
     setNewRuleEquals('');
+    setNewRuleValue('');
     setNewToolSequenceValue('');
   }, [newRuleType]);
 
@@ -790,6 +839,14 @@ function ScenarioCard({
     } finally {
       setToolNamesLoading(false);
     }
+  };
+
+  const toolSuggestions = {
+    availableTools: availableToolNames,
+    loading: toolNamesLoading,
+    error: toolNamesError,
+    canLoadTools: canLoadToolNames,
+    onLoadTools: loadAvailableTools
   };
 
   return (
@@ -1221,9 +1278,7 @@ function ScenarioCard({
                                         ) : (
                                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                         )}
-                                        <span className="font-medium">
-                                          {formatPreviewEvalRuleLabel(check.rule)}
-                                        </span>
+                                        <EvalRuleLabel rule={check.rule} className="font-medium" />
                                       </div>
                                       {check.failureReason && (
                                         <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
@@ -1296,7 +1351,7 @@ function ScenarioCard({
               </Card>
             )}
 
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,6fr)_minmax(0,4fr)]">
               <Card className="border bg-muted/20">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
@@ -1363,9 +1418,7 @@ function ScenarioCard({
                                     )}
                                   </div>
                                 ) : rule.type === 'tool_sequence' ? (
-                                  <span className="font-mono break-all">
-                                    {formatToolSequenceText(rule.sequence ?? [])}
-                                  </span>
+                                  <ToolSequenceDisplay sequence={rule.sequence ?? []} />
                                 ) : isToolInputRuleType(rule.type) ? (
                                   <span className="font-mono break-all">
                                     {rule.type === 'tool_input_contains'
@@ -1380,11 +1433,17 @@ function ScenarioCard({
                                   </span>
                                 ) : (
                                   <span className="font-mono break-all">
-                                    {rule.path
-                                      ? rule.equals !== undefined
-                                        ? `${rule.path} == ${String(rule.equals)}`
-                                        : rule.path
-                                      : rule.value}
+                                    {rule.path ? (
+                                      rule.equals !== undefined ? (
+                                        `${rule.path} == ${String(rule.equals)}`
+                                      ) : (
+                                        rule.path
+                                      )
+                                    ) : rule.type === 'required_tool' ? (
+                                      <ToolAlternativesDisplay value={String(rule.value ?? '')} />
+                                    ) : (
+                                      rule.value
+                                    )}
                                   </span>
                                 )}
                               </div>
@@ -1453,7 +1512,7 @@ function ScenarioCard({
                               <RuleTypeSelect
                                 value={newRuleType}
                                 onValueChange={setNewRuleType}
-                                className="h-8 w-58 shrink-0 text-xs"
+                                className="h-8 w-52 shrink-0 text-xs"
                               />
                               <Input
                                 value={newRuleLabel}
@@ -1463,12 +1522,13 @@ function ScenarioCard({
                               />
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="default"
                                 size="sm"
                                 className="h-8 shrink-0"
                                 onClick={addRule}
+                                disabled={!canAddRule()}
                               >
-                                {agentCheckEditingRule !== null ? 'Update check' : 'Add check'}
+                                {agentCheckEditingRule !== null ? 'Update check' : 'Add'}
                               </Button>
                             </div>
                             <Textarea
@@ -1479,11 +1539,11 @@ function ScenarioCard({
                             />
                           </div>
                         ) : (
-                          <div className="flex gap-2 items-end">
+                          <div className="flex items-start gap-2">
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
-                              className="h-8 w-58 shrink-0 text-xs"
+                              className="h-8 w-52 shrink-0 text-xs"
                               hideToolSequence={
                                 hasToolSequenceRule && newRuleType !== 'tool_sequence'
                               }
@@ -1513,33 +1573,22 @@ function ScenarioCard({
                               </>
                             ) : isToolInputRule ? (
                               <>
-                                {availableToolNames && availableToolNames.length > 0 ? (
-                                  <Select value={newRuleTool} onValueChange={setNewRuleTool}>
-                                    <SelectTrigger className="h-8 text-xs font-mono">
-                                      <SelectValue placeholder="Select tool" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {availableToolNames.map((toolName) => (
-                                        <SelectItem key={toolName} value={toolName}>
-                                          {toolName}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Input
-                                    value={newRuleTool}
-                                    onChange={(e) => setNewRuleTool(e.target.value)}
-                                    placeholder="Tool name"
-                                    className="h-8 text-xs font-mono"
-                                  />
-                                )}
+                                <ToolNameInput
+                                  value={newRuleTool}
+                                  onChange={setNewRuleTool}
+                                  inputLabel="Tool input check tool name"
+                                  availableTools={availableToolNames}
+                                  loading={toolNamesLoading}
+                                  error={toolNamesError}
+                                  canLoadTools={canLoadToolNames}
+                                  onLoadTools={loadAvailableTools}
+                                />
                                 {newRuleType === 'tool_input_jsonpath' && (
                                   <Input
                                     value={newRulePath}
                                     onChange={(e) => setNewRulePath(e.target.value)}
                                     placeholder="JSONPath (e.g. $.query)"
-                                    className="h-8 text-xs font-mono"
+                                    className="h-8 min-w-0 flex-1 text-xs font-mono"
                                   />
                                 )}
                                 {newRuleType === 'tool_input_jsonpath' ? (
@@ -1563,16 +1612,17 @@ function ScenarioCard({
                                 )}
                               </>
                             ) : showToolSequenceEditor ? (
-                              <div className="min-w-0 flex-1 flex items-end gap-2">
-                                <Input
+                              <div className="min-w-0 flex flex-1 items-start gap-2">
+                                <ToolAlternativesEditor
                                   value={newToolSequenceValue}
-                                  onChange={(e) => setNewToolSequenceValue(e.target.value)}
-                                  placeholder="Tool name"
-                                  className="h-8 text-xs font-mono"
-                                  onKeyDown={(e) =>
-                                    e.key === 'Enter' &&
-                                    (e.preventDefault(), addToolSequenceValue())
-                                  }
+                                  onChange={setNewToolSequenceValue}
+                                  onEnter={addToolSequenceValue}
+                                  label="Sequence step alternatives"
+                                  toolSuggestions={toolSuggestions}
+                                />
+                                <AddToolAlternativeButton
+                                  value={newToolSequenceValue}
+                                  onChange={setNewToolSequenceValue}
                                 />
                                 <Button
                                   type="button"
@@ -1584,6 +1634,22 @@ function ScenarioCard({
                                   Add step
                                 </Button>
                               </div>
+                            ) : newRuleType === 'forbidden_tool' ? (
+                              <ToolNameInput
+                                value={newRuleValue}
+                                onChange={setNewRuleValue}
+                                onEnter={addRule}
+                                inputLabel="Forbidden tool name"
+                                {...toolSuggestions}
+                              />
+                            ) : newRuleType === 'required_tool' ? (
+                              <ToolAlternativesEditor
+                                value={newRuleValue}
+                                onChange={setNewRuleValue}
+                                onEnter={addRule}
+                                label="Required tool alternatives"
+                                toolSuggestions={toolSuggestions}
+                              />
                             ) : (
                               <Input
                                 value={newRuleValue}
@@ -1595,12 +1661,19 @@ function ScenarioCard({
                                 }
                               />
                             )}
+                            {newRuleType === 'required_tool' && (
+                              <AddToolAlternativeButton
+                                value={newRuleValue}
+                                onChange={setNewRuleValue}
+                              />
+                            )}
                             <Button
                               type="button"
-                              variant="outline"
+                              variant="default"
                               size="sm"
                               className="h-8 shrink-0"
                               onClick={addRule}
+                              disabled={!canAddRule()}
                             >
                               {valueRuleEditingRule !== null ? 'Update check' : 'Add'}
                             </Button>
@@ -1631,7 +1704,8 @@ function ScenarioCard({
                                     variant="outline"
                                     size="sm"
                                     className="h-7 px-2 text-[11px]"
-                                    onClick={() => updateToolSequence(toolSequenceDraft)}
+                                    onClick={saveToolSequence}
+                                    disabled={!getAddableToolSequence()}
                                   >
                                     {hasToolSequenceRule ? 'Update sequence' : 'Add sequence'}
                                   </Button>
@@ -1650,9 +1724,10 @@ function ScenarioCard({
                                     className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
                                   >
                                     <span className="text-xs font-medium">{toolIndex + 1}.</span>
-                                    <span className="min-w-0 flex-1 font-mono text-xs break-all">
-                                      {toolName}
-                                    </span>
+                                    <ToolAlternativesDisplay
+                                      value={toolName}
+                                      className="min-w-0 flex-1 text-xs"
+                                    />
                                     {!readOnly && (
                                       <div className="flex items-center gap-1">
                                         <Button
@@ -1692,72 +1767,6 @@ function ScenarioCard({
                                   </div>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        )}
-                        {isToolRule && (
-                          <div className="space-y-1">
-                            <div className="flex items-end gap-2">
-                              <div className="min-w-0 flex-1">
-                                <Label className="mb-1 block text-[11px] text-muted-foreground">
-                                  Pick from selected server tools (optional)
-                                </Label>
-                                <Select
-                                  value={toolPickerValue}
-                                  onValueChange={(value) => {
-                                    setToolPickerValue(value);
-                                    setNewRuleValue(value);
-                                  }}
-                                  disabled={
-                                    toolNamesLoading ||
-                                    !availableToolNames ||
-                                    availableToolNames.length === 0
-                                  }
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue
-                                      placeholder={
-                                        toolNamesLoading
-                                          ? 'Loading tools...'
-                                          : availableToolNames && availableToolNames.length > 0
-                                            ? 'Select tool to insert in value field'
-                                            : 'Load tools first'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {(availableToolNames ?? []).map((toolName) => (
-                                      <SelectItem key={toolName} value={toolName}>
-                                        {toolName}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 shrink-0"
-                                onClick={loadAvailableTools}
-                                disabled={!canLoadToolNames || toolNamesLoading}
-                              >
-                                {toolNamesLoading
-                                  ? 'Loading...'
-                                  : availableToolNames
-                                    ? 'Refresh tools'
-                                    : 'Load tools'}
-                              </Button>
-                            </div>
-                            {!canLoadToolNames && (
-                              <p className="text-[11px] text-muted-foreground">
-                                Select at least one server in this scenario to load tool names.
-                              </p>
-                            )}
-                            {toolNamesError && (
-                              <p className="text-[11px] text-destructive">
-                                Could not load tools: {toolNamesError}
-                              </p>
                             )}
                           </div>
                         )}
@@ -2012,8 +2021,6 @@ function renderEvalRuleValue(rule: EvalRule): string {
       : rule.path
     : String(rule.value ?? '');
 }
-
-const formatPreviewEvalRuleLabel = formatEvalRuleLabel;
 
 function formatPreviewFailureReason(reason: string): string {
   const trimmed = String(reason ?? '').trim();

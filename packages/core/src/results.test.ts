@@ -133,6 +133,36 @@ describe('aggregateResults', () => {
     expect(result.scenarios[0].pass_rate).toBeNull();
   });
 
+  it('counts a required alternative group once per run', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'gpt-4',
+          eval: { tool_constraints: { required_tools: ['search | lookup'] } },
+          runs: [makeRun(true, ['search', 'lookup'], { search: 1, lookup: 1 }), makeRun(false)]
+        }
+      ]
+    });
+    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search | lookup': 1 });
+  });
+
+  it('does not count malformed required expressions', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'gpt-4',
+          eval: { tool_constraints: { required_tools: ['search|'] } },
+          runs: [makeRun(true, ['search'], { search: 1 })]
+        }
+      ]
+    });
+    expect(result.scenarios[0].tool_constraints_stats?.required).toEqual({ 'search|': 0 });
+  });
+
   it('accumulates tool_usage_frequency across runs', () => {
     const result = aggregateResults({
       ...BASE,

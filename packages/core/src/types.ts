@@ -316,6 +316,14 @@ export interface DecisionAnswer {
   model?: string;
   durationMs: number;
   fallback?: DecisionFallback;
+  providerResponse?: DecisionProviderResponse;
+}
+
+export interface DecisionProviderResponse {
+  endpoint: string;
+  status?: number;
+  statusText?: string;
+  body?: unknown;
 }
 
 export interface DecisionConnectionTestResult {
@@ -327,6 +335,7 @@ export interface DecisionConnectionTestResult {
   probability?: number;
   durationMs: number;
   failure?: DecisionFallback;
+  providerResponse?: DecisionProviderResponse;
 }
 
 export interface DecisionRequest {
@@ -491,7 +500,9 @@ export function isLlmAgent(agent: AgentConfig): agent is LlmAgentConfig {
 }
 
 export interface ToolConstraints {
+  /** Required expressions accept `tool_a|tool_b` as alternatives. */
   required_tools?: string[];
+  /** Forbidden entries name exactly one tool and do not accept alternatives. */
   forbidden_tools?: string[];
 }
 
@@ -597,6 +608,7 @@ export type ResponseAssertion =
 
 export interface EvalRules {
   tool_constraints?: ToolConstraints;
+  /** Ordered tool expressions; each expression may contain `|` alternatives. */
   tool_sequence?: string[];
   tool_input_assertions?: ToolInputAssertion[];
   response_assertions?: ResponseAssertion[];

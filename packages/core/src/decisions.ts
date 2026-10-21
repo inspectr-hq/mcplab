@@ -14,6 +14,7 @@ import type {
   DecisionAnswer,
   DecisionConnectionTestResult,
   DecisionFallback,
+  DecisionProviderResponse,
   DecisionRequest,
   EvaluationDecisionConfig,
   SemanticEvaluationParams
@@ -47,6 +48,93 @@ function asRecord(raw: unknown): Record<string, unknown> | undefined {
   return raw && typeof raw === 'object' && !Array.isArray(raw)
     ? (raw as Record<string, unknown>)
     : undefined;
+}
+
+function requestCredentials(requestHeaders: Record<string, string>): string[] {
+  return Object.entries(requestHeaders).flatMap(([name, value]) => {
+    if (!/(authorization|api[-_]?key|token|secret)/i.test(name) || !value) return [];
+    const credential = value.match(/^\S+\s+(.+)$/)?.[1];
+    return credential ? [value, credential] : [value];
+  });
+}
+
+function redactSensitiveText(text: string, secrets: string[]): string {
+  return [...new Set(secrets)]
+    .sort((left, right) => right.length - left.length)
+    .reduce((safeText, secret) => safeText.replaceAll(secret, '[redacted]'), text);
+}
+
+function redactProviderValue(value: unknown, secrets: string[]): unknown {
+  if (typeof value === 'string') return redactSensitiveText(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactProviderValue(item, secrets));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        redactSensitiveText(key, secrets),
+        redactProviderValue(item, secrets)
+      ])
+    );
+  }
+  return value;
+}
+
+async function readProviderResponseBody(
+  response: Response,
+  requestHeaders: Record<string, string>
+): Promise<unknown> {
+  let text: string;
+  const secrets = requestCredentials(requestHeaders);
+  try {
+    text = (await response.text()).trim();
+  } catch {
+    return undefined;
+  }
+  if (!text) return undefined;
+
+  let body: unknown = text;
+  try {
+    body = redactProviderValue(JSON.parse(text), secrets);
+  } catch {
+    // Keep non-JSON provider responses as text.
+    body = redactSensitiveText(text, secrets);
+  }
+  const limit = 1000;
+  const serialized = typeof body === 'string' ? body : JSON.stringify(body);
+  return serialized.length > limit ? `${serialized.slice(0, limit)}… (truncated)` : body;
+}
+
+function providerResponseError(response?: DecisionProviderResponse): string | undefined {
+  const body = asRecord(response?.body);
+  const error = body?.error;
+  if (typeof error === 'string') return error;
+  if (error !== undefined) return JSON.stringify(error) ?? String(error);
+  return typeof response?.body === 'string' ? response.body : undefined;
+}
+
+function formatProviderResponseFailure(response?: DecisionProviderResponse): string {
+  const error = providerResponseError(response);
+  return [
+    decisionFallbackMessages.http_error,
+    response?.endpoint ? `Endpoint: ${response.endpoint}.` : undefined,
+    response?.status !== undefined
+      ? `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}.`
+      : undefined,
+    error ? `Provider error: ${error}` : undefined
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' ');
+}
+
+function sanitizeProviderEndpoint(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return '[invalid endpoint]';
+  }
 }
 
 function systemOneBody({ config, evidence, checks }: DecisionRequest) {
@@ -193,8 +281,11 @@ function normalizeAnswers(
 async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> {
   throwIfAborted(params.signal);
   const adapter: DecisionAdapter = adapters[params.config.provider];
-  const unavailable = (fallback: DecisionFallback, durationMs = 0) =>
-    params.checks.map(({ id }) => ({ id, fallback, durationMs }));
+  const unavailable = (
+    fallback: DecisionFallback,
+    durationMs = 0,
+    details: Omit<Partial<DecisionAnswer>, 'id' | 'fallback' | 'durationMs'> = {}
+  ) => params.checks.map(({ id }) => ({ id, fallback, durationMs, ...details }));
   if (adapter.requiredEnv.some((name) => !readEnvironmentVariable(name))) {
     return unavailable('missing_credentials');
   }
@@ -205,15 +296,28 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
   }
   const timeout = withTimeoutSignal(params.signal, adapter.timeoutMs);
   const started = Date.now();
+  let endpoint: string | undefined;
   try {
-    const response = await fetch(adapter.url(params.config), {
+    endpoint = adapter.url(params.config);
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(adapter.body(params)),
       signal: timeout.signal
     });
     throwIfAborted(params.signal);
-    if (!response.ok) return unavailable('http_error', Date.now() - started);
+    if (!response.ok) {
+      const body = await readProviderResponseBody(response, headers);
+      throwIfAborted(params.signal);
+      return unavailable('http_error', Date.now() - started, {
+        providerResponse: {
+          endpoint: sanitizeProviderEndpoint(endpoint),
+          status: response.status,
+          ...(response.statusText ? { statusText: response.statusText } : {}),
+          ...(body !== undefined ? { body } : {})
+        }
+      });
+    }
     const raw: unknown = await response.json();
     throwIfAborted(params.signal);
     return normalizeAnswers(raw, params, Date.now() - started);
@@ -225,7 +329,8 @@ async function requestBatch(params: DecisionRequest): Promise<DecisionAnswer[]> 
         : error instanceof SyntaxError
           ? 'invalid_response'
           : 'connection_error',
-      Date.now() - started
+      Date.now() - started,
+      endpoint ? { providerResponse: { endpoint: sanitizeProviderEndpoint(endpoint) } } : {}
     );
   } finally {
     timeout.dispose();
@@ -269,7 +374,9 @@ export async function testDecisionConnection(
   const failureMessage =
     answer.fallback === 'missing_credentials'
       ? `${decisionFallbackMessages.missing_credentials} ${DECISION_PROVIDERS[config.provider].credentials} Set the required variables and restart MCPLab.`
-      : decisionFallbackMessages[answer.fallback ?? 'invalid_answer'];
+      : answer.fallback === 'http_error'
+        ? formatProviderResponseFailure(answer.providerResponse)
+        : decisionFallbackMessages[answer.fallback ?? 'invalid_answer'];
   return {
     ok,
     message: ok
@@ -280,6 +387,7 @@ export async function testDecisionConnection(
     model: answer.model,
     probability: answer.probability,
     durationMs: answer.durationMs,
+    ...(answer.providerResponse ? { providerResponse: answer.providerResponse } : {}),
     ...(ok ? {} : { failure: answer.fallback ?? 'invalid_answer' })
   };
 }

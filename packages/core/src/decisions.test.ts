@@ -478,8 +478,49 @@ describe('decision connection probe', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(chatMock).not.toHaveBeenCalled();
   });
+  it('includes provider HTTP errors while redacting request credentials', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'provider rejected Bearer test-key' }), {
+        status: 401,
+        statusText: 'Unauthorized'
+      })
+    );
+    const result = await testDecisionConnection(config);
+    expect(result).toMatchObject({
+      ok: false,
+      failure: 'http_error',
+      providerResponse: {
+        endpoint: 'https://api.openai.com/v1/decisions',
+        status: 401,
+        statusText: 'Unauthorized',
+        body: { error: 'provider rejected [redacted]' }
+      }
+    });
+    expect(result.message).toContain('provider rejected [redacted]');
+    expect(JSON.stringify(result)).not.toContain('test-key');
+    expect(JSON.stringify(result)).not.toContain('Bearer test-key');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+  it('redacts credentials and query parameters from provider endpoints', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+    );
+    const [answer] = await requestDecisionAnswers({
+      ...input,
+      config: {
+        ...config,
+        provider: 'ollama',
+        baseUrl: 'https://user:pass@ollama.example/v1?token=secret'
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://user:pass@ollama.example/v1?token=secret/v1/systemone',
+      expect.anything()
+    );
+    expect(answer.providerResponse?.endpoint).toBe('https://ollama.example/v1');
+    expect(JSON.stringify(answer.providerResponse)).not.toMatch(/user|pass|secret/);
+  });
   it.each([
-    ['http_error', () => Promise.resolve(new Response('private provider error', { status: 401 }))],
     ['connection_error', () => Promise.reject(new Error('private connection details'))],
     ['missing_answer', () => Promise.resolve(response([]))],
     ['invalid_response', () => Promise.resolve(new Response('not JSON'))]

@@ -61,7 +61,7 @@ export async function handleEvalsRoutes(params: {
     }
     let normalizedConfig: SourceEvalConfig;
     try {
-      normalizedConfig = normalizeSourceConfig(config).config;
+      normalizedConfig = normalizeSourceConfig(config, { forWrite: true }).config;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
@@ -91,6 +91,13 @@ export async function handleEvalsRoutes(params: {
       asJson(res, 400, { error: 'Missing config object' });
       return true;
     }
+    let normalizedConfig: SourceEvalConfig;
+    try {
+      normalizedConfig = normalizeSourceConfig(config, { forWrite: true }).config;
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     let targetPath = currentPath;
     const nextFileName = String(body.fileName ?? '').trim();
     if (nextFileName) {
@@ -110,13 +117,6 @@ export async function handleEvalsRoutes(params: {
         renameSync(currentPath, uniquePath);
         targetPath = uniquePath;
       }
-    }
-    let normalizedConfig: SourceEvalConfig;
-    try {
-      normalizedConfig = normalizeSourceConfig(config).config;
-    } catch (error) {
-      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
-      return true;
     }
     writeFileSync(targetPath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
     asJson(res, 200, readConfigRecord(targetPath, settings.evalsDir, settings.librariesDir));

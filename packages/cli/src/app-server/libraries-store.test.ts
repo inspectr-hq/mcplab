@@ -336,6 +336,34 @@ describe('libraries-store test-case directory migration', () => {
     expect(profile).not.toHaveProperty('claude-learned');
   });
 
+  it('validates stored test cases before saving a browser provider or agent', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const testCasesDir = join(librariesDir, 'test-cases');
+    mkdirSync(testCasesDir, { recursive: true });
+    writeFileSync(
+      join(testCasesDir, 'legacy.yaml'),
+      'id: legacy\nname: Legacy\nprompt: test\neval:\n  tool_constraints:\n    required_tools: [search|]\n',
+      'utf8'
+    );
+    writeFileSync(join(librariesDir, 'agents.yaml'), 'existing: {}\n', 'utf8');
+    const profile = {
+      ...DEFAULT_BROWSER_PROVIDER_PROFILES.claude,
+      name: 'Updated Claude'
+    };
+
+    expect(() =>
+      writeBrowserProviderAndAgent(librariesDir, profile, {
+        id: 'new-browser',
+        name: 'New browser',
+        provider: profile.id,
+        url: 'https://claude.ai'
+      })
+    ).toThrow(/required_tools\[0\]/);
+
+    expect(readFileSync(join(librariesDir, 'agents.yaml'), 'utf8')).toBe('existing: {}\n');
+    expect(existsSync(join(librariesDir, 'browser-providers'))).toBe(false);
+  });
+
   it('loads servers and agents from library yaml files', () => {
     const librariesDir = makeTempLibrariesDir();
     writeFileSync(
@@ -376,6 +404,28 @@ describe('libraries-store test-case directory migration', () => {
 
     expect(existsSync(join(librariesDir, 'test-cases'))).toBe(true);
     expect(existsSync(join(librariesDir, 'test-cases', 'tc-1.yaml'))).toBe(true);
+  });
+
+  it('rejects invalid tool rules before changing library files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(join(librariesDir, 'servers.yaml'), 'existing: true\n', 'utf8');
+
+    expect(() =>
+      writeLibraries(librariesDir, {
+        servers: { next: { transport: 'http', url: 'http://next.example' } },
+        agents: {},
+        scenarios: [
+          {
+            id: 'invalid-case',
+            prompt: 'test',
+            eval: { tool_constraints: { required_tools: ['search|'] } }
+          }
+        ]
+      })
+    ).toThrow(/required_tools\[0\]/);
+
+    expect(readFileSync(join(librariesDir, 'servers.yaml'), 'utf8')).toBe('existing: true\n');
+    expect(existsSync(join(librariesDir, 'test-cases'))).toBe(false);
   });
 
   it('persists browser provider profiles when writing the complete library bundle', () => {

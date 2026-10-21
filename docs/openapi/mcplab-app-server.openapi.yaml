@@ -1858,6 +1858,16 @@ components:
         model: { type: string }
         probability: { type: number, minimum: 0, maximum: 1 }
         durationMs: { type: number, minimum: 0 }
+        providerResponse:
+          type: object
+          description: Endpoint and, when available, HTTP status and provider response body. Text bodies are limited to 1000 characters.
+          properties:
+            endpoint: { type: string, format: uri }
+            status: { type: integer, minimum: 100, maximum: 599 }
+            statusText: { type: string }
+            body: { description: Parsed JSON response body or bounded raw response text. }
+          required: [endpoint]
+          additionalProperties: false
         failure:
           type: string
           description: Failure category, present only when the connection test fails.

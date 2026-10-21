@@ -9,6 +9,42 @@ import {
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
 
+describe('queued tool-rule validation', () => {
+  it.each(['search|', 'search|search'])('rejects %s before enqueueing', async (expression) => {
+    const fixture = createOauthEvalFixture();
+    writeFileSync(
+      fixture.configPath,
+      `agents: []\nscenarios:\n  - id: s1\n    prompt: Test\n    eval:\n      tool_constraints:\n        required_tools: [${expression}]\n`
+    );
+    const enqueueRun = vi.fn();
+    const response: { status?: number; body?: any } = {};
+    const deps = makeRunsRouteDeps({
+      parseBody: async () => ({ configPath: fixture.configPath }),
+      asJson: (_res, status, body) => {
+        response.status = status;
+        response.body = body;
+      }
+    });
+    try {
+      await handleRunsRoutes({
+        req: { headers: {} } as any,
+        res: {} as any,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: { ...fixture, workspaceRoot: fixture.root } as any,
+        runQueueService: { enqueueRun } as any,
+        oauthSessionManager: {} as any,
+        deps: deps as any
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('required_tools[0]');
+      expect(enqueueRun).not.toHaveBeenCalled();
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+});
+
 describe('browser agent variance', () => {
   it.each([
     { supported: false, count: 1, status: 202 },

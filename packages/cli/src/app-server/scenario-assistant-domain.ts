@@ -10,7 +10,11 @@ import {
   type McpServerFeatures,
   type ToolDef
 } from '@inspectr/mcplab-core';
-import { McpClientManager } from '@inspectr/mcplab-core';
+import {
+  McpClientManager,
+  isValidToolExpression,
+  normalizeToolExpression
+} from '@inspectr/mcplab-core';
 import {
   ASSISTANT_TOOL_TIMEOUT_MESSAGE,
   assistantToolDisplay,
@@ -154,7 +158,9 @@ function assistantSystemPrompt(
     'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
-    'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order. Do not put the sequence in value.',
+    'For required_tool, value may be one raw MCP tool name or alternatives such as `search | lookup`; any one alternative satisfies the rule.',
+    'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order; each step may use alternatives such as `search | lookup`. Do not put the sequence in value.',
+    'forbidden_tool accepts exactly one raw MCP tool name, never `|` alternatives.',
     'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
     'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.',
     'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
@@ -352,25 +358,24 @@ function normalizeEvalRuleToolNames(
   toolPublicMap: Map<string, { server: string; tool: string }>
 ): void {
   if (!suggestions?.evalRules?.replacement) return;
+  // Map each `a | b` alternative from its public name to the raw MCP tool name.
+  const toRawTools = (expression: string): string =>
+    normalizeToolExpression(expression, {
+      mapTool: (name) => toolPublicMap.get(name)?.tool ?? name
+    });
   for (const rule of suggestions.evalRules.replacement) {
     if (
       (rule.type === 'required_tool' || rule.type === 'forbidden_tool') &&
       typeof rule.value === 'string' &&
       rule.value
     ) {
-      const mapping = toolPublicMap.get(rule.value);
-      if (mapping) {
-        rule.value = mapping.tool;
-      }
+      rule.value = toRawTools(rule.value);
     }
     if (rule.type === 'tool_sequence' && Array.isArray(rule.sequence)) {
       rule.sequence = rule.sequence
         .map((toolName) => toolName.trim())
         .filter((toolName) => toolName.length > 0)
-        .map((toolName) => {
-          const mapping = toolPublicMap.get(toolName);
-          return mapping ? mapping.tool : toolName;
-        });
+        .map(toRawTools);
     }
     if (
       (rule.type === 'tool_input_contains' ||
@@ -424,7 +429,7 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
   return `${rule.type}::${rule.tool ?? ''}::${rule.value ?? ''}::${(rule.sequence ?? []).join(
-    '|'
+    ' -> '
   )}::${rule.path ?? ''}::${rule.equals === undefined ? '' : String(rule.equals)}`;
 }
 
@@ -851,11 +856,20 @@ export function validateScenarioAssistantProposal(
         if (typeof r.value !== 'string')
           return invalid(`${path}.value`, 'required and must be a string');
       }
+      if (type === 'required_tool' && !isValidToolExpression(r.value as string))
+        return invalid(`${path}.value`, 'tool alternatives must be non-empty and unique');
+      if (
+        type === 'forbidden_tool' &&
+        ((r.value as string).includes('|') || !(r.value as string).trim())
+      )
+        return invalid(`${path}.value`, 'expected one non-empty tool name');
       if (type === 'tool_sequence' && (!Array.isArray(r.sequence) || r.sequence.length === 0))
         return invalid(`${path}.sequence`, 'required and must be a non-empty array');
       // Blank names are dropped when the rule is normalized, which could empty the sequence.
       if (type === 'tool_sequence' && (r.sequence as string[]).some((toolName) => !toolName.trim()))
         return invalid(`${path}.sequence`, 'tool names must not be blank');
+      if (type === 'tool_sequence' && !(r.sequence as string[]).every(isValidToolExpression))
+        return invalid(`${path}.sequence`, 'tool alternatives must be non-empty and unique');
       if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
         return invalid(`${path}.tool`, 'required and must be a string');
       if (

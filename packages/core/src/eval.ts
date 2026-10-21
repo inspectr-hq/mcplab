@@ -11,6 +11,11 @@ import type {
   ToolCall,
   ToolInputAssertion
 } from './types.js';
+import {
+  formatToolExpression,
+  normalizeToolExpression,
+  parseToolAlternatives
+} from './tool-rule-expressions.js';
 
 export interface EvalResult {
   pass: boolean;
@@ -150,10 +155,17 @@ export async function evaluateScenarioWithAgentChecks(
   evalRules?: EvalRules,
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
+  const toolCalls = options?.toolCalls ?? [];
   const normalizedRules = normalizeToolConstraintAliases(evalRules, options?.availableToolNames);
-  const base = evaluateScenario(finalText, toolSequence, normalizedRules, options?.toolCalls ?? []);
+  const base = evaluateScenario(finalText, toolSequence, normalizedRules, toolCalls);
   const failures = [...base.failures];
-  const check_results = [...base.check_results];
+  const check_results =
+    normalizedRules === evalRules
+      ? [...base.check_results]
+      : withAuthoredToolNames(
+          base.check_results,
+          evaluateScenario(finalText, toolSequence, evalRules, toolCalls).check_results
+        );
 
   const agentAssertions = evalRules?.agent_assertions ?? [];
   if (agentAssertions.length === 0) {
@@ -235,6 +247,23 @@ export async function evaluateScenarioWithAgentChecks(
   return { pass: failures.length === 0, failures, check_results };
 }
 
+/**
+ * Alias resolution maps rules 1:1, so authored and resolved evaluations yield checks in the same
+ * order. Keep the authored labels and tool names so results match the rules the user wrote.
+ */
+function withAuthoredToolNames(resolved: CheckResult[], authored: CheckResult[]): CheckResult[] {
+  return resolved.map((check, index) => {
+    const source = authored[index];
+    if (source?.type !== check.type) return check;
+    const tool = source.metadata?.tool;
+    return {
+      ...check,
+      label: source.label,
+      ...(check.metadata && tool !== undefined ? { metadata: { ...check.metadata, tool } } : {})
+    };
+  });
+}
+
 /** Resolve client display aliases such as `MCPLab:tool_name` to exposed MCP names. */
 export function normalizeToolConstraintAliases(
   evalRules: EvalRules | undefined,
@@ -249,6 +278,8 @@ export function normalizeToolConstraintAliases(
     const suffix = name.slice(separator + 1);
     return available.has(suffix) ? suffix : name;
   };
+  const resolveExpression = (expression: string): string =>
+    normalizeToolExpression(expression, { mapTool: resolve });
   const constraints = evalRules.tool_constraints;
   return {
     ...evalRules,
@@ -257,7 +288,7 @@ export function normalizeToolConstraintAliases(
           tool_constraints: {
             ...constraints,
             ...(constraints.required_tools
-              ? { required_tools: constraints.required_tools.map(resolve) }
+              ? { required_tools: constraints.required_tools.map(resolveExpression) }
               : {}),
             ...(constraints.forbidden_tools
               ? { forbidden_tools: constraints.forbidden_tools.map(resolve) }
@@ -265,7 +296,9 @@ export function normalizeToolConstraintAliases(
           }
         }
       : {}),
-    ...(evalRules.tool_sequence ? { tool_sequence: evalRules.tool_sequence.map(resolve) } : {}),
+    ...(evalRules.tool_sequence
+      ? { tool_sequence: evalRules.tool_sequence.map(resolveExpression) }
+      : {}),
     ...(evalRules.tool_input_assertions
       ? {
           tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({
@@ -290,8 +323,8 @@ function evaluateToolConstraints(
           ? unique.has(template.tool)
             ? `Forbidden tool used: ${template.tool}`
             : undefined
-          : !unique.has(template.tool)
-            ? `Required tool not used: ${template.tool}`
+          : !parseToolAlternatives(template.tool).some((tool) => unique.has(tool))
+            ? `Required tool not used: ${formatToolExpression(template.tool)}`
             : undefined;
       if (reason) failures.push(reason);
       return {
@@ -325,12 +358,13 @@ function evaluateToolSequence(
   }
 
   let cursor = 0;
-  for (const tool of expected) {
-    const index = actual.indexOf(tool, cursor);
+  for (const step of expected) {
+    const alternatives = parseToolAlternatives(step);
+    const index = actual.findIndex((tool, i) => i >= cursor && alternatives.includes(tool));
     if (index < 0) {
-      const reason = actual.includes(tool)
-        ? `Tool sequence order was not satisfied: ${expected.join(' -> ')}`
-        : `Required tool in sequence not used: ${tool}`;
+      const reason = alternatives.some((tool) => actual.includes(tool))
+        ? `Tool sequence order was not satisfied: ${formatToolSequenceText(expected)}`
+        : `Required tool in sequence not used: ${formatToolExpression(step)}`;
       return {
         failures: [reason],
         check_results: [
@@ -665,7 +699,7 @@ function buildToolConstraintCheckResults(
     results.push({
       type: 'required_tool',
       tool,
-      label: `Required tool · ${tool}`
+      label: `Required tool · ${formatToolExpression(tool)}`
     });
   }
   return results;
@@ -739,5 +773,11 @@ function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion)
 }
 
 export function formatToolSequenceLabel(sequence: string[]): string {
-  return sequence.length > 0 ? `Tool sequence · ${sequence.join(' -> ')}` : 'Tool sequence';
+  return sequence.length > 0
+    ? `Tool sequence · ${formatToolSequenceText(sequence)}`
+    : 'Tool sequence';
+}
+
+function formatToolSequenceText(sequence: string[]): string {
+  return sequence.map(formatToolExpression).join(' -> ');
 }

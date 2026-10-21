@@ -58,6 +58,9 @@ Source of truth: `config-schema.json`.
 - `tool_constraints.required_tools`: string[]
 - `tool_constraints.forbidden_tools`: string[]
 - `tool_sequence`: string[]
+- Every required tool entry is mandatory; `search | lookup` means either alternative satisfies that entry. All entries remain mandatory.
+- Every sequence entry is a required ordered step; `search | lookup` accepts either tool for that step. Repeated steps are valid.
+- `forbidden_tools` entries name one tool and reject `|` alternatives.
 - `tool_input_assertions`:
   - contains assertion: `{ type: "contains", tool: string, value: string }`
   - regex assertion: `{ type: "regex", tool: string, pattern: string }`
@@ -127,10 +130,10 @@ scenarios:
     prompt: Find matching items and summarize key outcomes.
     eval:
       tool_constraints:
-        required_tools: [search_items]
+        required_tools: [authenticate, search_items | lookup_items]
         forbidden_tools: [delete_item]
       tool_sequence:
-        - search_items
+        - search_items | lookup_items
         - summarize_items
       tool_input_assertions:
         - type: contains

@@ -3,6 +3,7 @@ import type { CheckResult, EvalRule } from '@/types/eval';
 import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
+  formatToolExpression,
   formatToolSequenceLabel
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
@@ -128,7 +129,8 @@ export function buildCheckItems({
 }
 
 export function formatEvalRuleLabel(rule: EvalRule): string {
-  if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
+  if (rule.type === 'required_tool')
+    return `Required tool · ${formatToolExpression(String(rule.value ?? ''))}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
