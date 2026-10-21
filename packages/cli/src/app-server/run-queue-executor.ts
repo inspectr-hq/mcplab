@@ -279,13 +279,12 @@ export async function executeRunJob(params: {
         message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
       }
     });
-    const selection = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents, {
-      declaredAgentNames: loaded.declaredAgentNames,
-      resolvedSelection: requestedAgents?.length
-        ? { agentNames: requestedAgents, source: job.runParams.agentSelectionSource ?? 'requested' }
-        : undefined,
-      defaultEvaluationAgentName: settings.defaultEvaluationAgentName
-    });
+    const selection = requestedAgents?.length
+      ? { agentNames: requestedAgents, source: job.runParams.agentSelectionSource ?? 'requested' }
+      : resolveRunSelectedAgents(runtimeOverriddenConfig, undefined, {
+          declaredAgentNames: loaded.declaredAgentNames,
+          defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+        });
     const resolvedAgents = selection.agentNames;
     const source = selection.source;
     const sourceLabel = {

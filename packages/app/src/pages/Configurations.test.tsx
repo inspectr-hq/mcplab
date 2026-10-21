@@ -194,9 +194,7 @@ describe('Configurations suites', () => {
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/trendminer/tags/tag-search.yaml',
-      runsPerScenario: 1,
-      agents: ['claude-sonnet-46'],
-      agentSelectionSource: 'evaluation_agents'
+      runsPerScenario: 1
     });
   });
 
@@ -215,13 +213,11 @@ describe('Configurations suites', () => {
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/root.yaml',
-      runsPerScenario: 1,
-      agents: ['root-agent'],
-      agentSelectionSource: 'evaluation_agents'
+      runsPerScenario: 1
     });
   });
 
-  it('run suite resolves each config agent list independently and honors run defaults', async () => {
+  it('queues suite configs for server-side agent resolution', async () => {
     configsRef.value = [
       {
         ...configsRef.value[1],
@@ -258,15 +254,11 @@ describe('Configurations suites', () => {
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(2));
     expect(sourceMock.startRun).toHaveBeenNthCalledWith(1, {
       configPath: '/path/trendminer/alerts/alert-check.yaml',
-      runsPerScenario: 1,
-      agents: ['agent-b'],
-      agentSelectionSource: 'evaluation_default'
+      runsPerScenario: 1
     });
     expect(sourceMock.startRun).toHaveBeenNthCalledWith(2, {
       configPath: '/path/trendminer/tags/tag-search.yaml',
-      runsPerScenario: 1,
-      agents: ['claude-sonnet-46'],
-      agentSelectionSource: 'evaluation_agents'
+      runsPerScenario: 1
     });
   });
 });

@@ -15,7 +15,6 @@ describe('workspace default evaluation agent', () => {
       declared?: boolean;
       defaultName?: string;
       requested?: string[];
-      selectionSource?: string;
       browser?: boolean;
     } = {}
   ) {
@@ -48,8 +47,7 @@ describe('workspace default evaluation agent', () => {
       deps: makeRunsRouteDeps({
         parseBody: async () => ({
           configPath,
-          agents: params.requested,
-          agentSelectionSource: params.selectionSource
+          agents: params.requested
         }),
         readLibraries: () => ({
           agents: libraryAgents,
@@ -86,33 +84,9 @@ describe('workspace default evaluation agent', () => {
     const override = await request({ defaultName: 'workspace', requested: ['other'] });
     expect(override.enqueueRun.mock.calls[0]?.[0]).toMatchObject({ requestedAgents: ['other'] });
   });
-  it('preserves inherited client intent and rejects stale or forged origins', async () => {
-    const inherited = await request({
-      defaultName: 'workspace',
-      requested: ['workspace'],
-      selectionSource: 'workspace_default'
-    });
-    expect(inherited.enqueueRun.mock.calls[0]?.[0]).toMatchObject({
-      requestedAgents: ['workspace'],
-      agentSelectionSource: 'workspace_default'
-    });
-    for (const selectionSource of ['workspace_default', 'not-a-source']) {
-      const invalid = await request({
-        defaultName: 'other',
-        requested: ['workspace'],
-        selectionSource
-      });
-      expect(invalid.enqueueRun).not.toHaveBeenCalled();
-      expect(invalid.asJson).toHaveBeenCalledWith(expect.anything(), 400, {
-        error: expect.any(String)
-      });
-    }
-  });
   it('rejects inherited browser defaults but preserves explicit Rover selections', async () => {
     const inherited = await request({
       defaultName: 'browser',
-      requested: ['browser'],
-      selectionSource: 'workspace_default',
       browser: true
     });
     expect(inherited.enqueueRun).not.toHaveBeenCalled();
@@ -122,7 +96,6 @@ describe('workspace default evaluation agent', () => {
     const explicit = await request({
       defaultName: 'browser',
       requested: ['browser'],
-      selectionSource: 'requested',
       browser: true
     });
     expect(explicit.enqueueRun.mock.calls[0]?.[0]).toMatchObject({

@@ -448,8 +448,7 @@ const RunEvaluation = () => {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario,
-        agents: selectedAgents.map((agent) => agent.id),
-        agentSelectionSource: agentSelectionEdited ? 'requested' : defaultSelection.source,
+        ...(agentSelectionEdited ? { agents: selectedAgents.map((agent) => agent.id) } : {}),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled

@@ -16,7 +16,6 @@ import {
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
   type EvaluationRunRequest,
-  type RunAgentSelectionSource,
   type WorkspaceEvaluation,
   type BrowserAgentConfig,
   type ScenarioAttachment,
@@ -386,17 +385,6 @@ export async function handleRunsRoutes(params: {
     const requestedAgents = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
-    if (
-      body.agentSelectionSource !== undefined &&
-      (typeof body.agentSelectionSource !== 'string' ||
-        !['requested', 'evaluation_default', 'evaluation_agents', 'workspace_default'].includes(
-          body.agentSelectionSource
-        ))
-    ) {
-      asJson(res, 400, { error: 'Invalid agent selection source.' });
-      return true;
-    }
-    const requestedAgentSource = body.agentSelectionSource as RunAgentSelectionSource | undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -492,7 +480,6 @@ export async function handleRunsRoutes(params: {
     try {
       selection = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents, {
         declaredAgentNames,
-        requestedAgentSource,
         defaultEvaluationAgentName: settings.defaultEvaluationAgentName
       });
     } catch (error) {

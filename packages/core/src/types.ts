@@ -31,10 +31,6 @@ export interface RunAgentSelectionParams {
   selectedAgentNames?: string[];
   requestedAgentNames?: string[];
   defaultEvaluationAgentName?: string;
-  /** UI intent is checked against the current defaults before preserving its origin. */
-  requestedAgentSource?: RunAgentSelectionSource;
-  /** Trusted queued selection, already resolved and snapshotted at creation time. */
-  resolvedSelection?: RunAgentSelection;
   /** Omit only while preparing a prompt or preview, before the user chooses agents. */
   availableAgents?: Record<string, { type?: 'llm' | 'browser' }>;
 }
@@ -45,7 +41,6 @@ export interface EvaluationRunRequest {
   scenarioId?: string;
   scenarioIds?: string[];
   agents?: string[];
-  agentSelectionSource?: RunAgentSelectionSource;
   runNote?: string;
   newConversationBetweenScenarios?: boolean;
   newConversationBeforeStart?: boolean;

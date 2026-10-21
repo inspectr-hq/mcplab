@@ -170,12 +170,12 @@ describe('RunEvaluation', () => {
       fireEvent.click(run);
       await waitFor(() =>
         expect(sourceMock.startRun).toHaveBeenCalledWith(
-          expect.objectContaining({
-            agents: ['workspace-agent'],
-            agentSelectionSource: edited ? 'requested' : 'workspace_default'
-          })
+          expect.objectContaining(
+            edited ? { agents: ['workspace-agent'] } : { configPath: expect.any(String) }
+          )
         )
       );
+      if (!edited) expect(sourceMock.startRun.mock.calls.at(-1)?.[0]).not.toHaveProperty('agents');
     }
   );
   it('shows only the workspace repair notice when its default was deleted', async () => {

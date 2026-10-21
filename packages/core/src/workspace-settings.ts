@@ -1,9 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { validateWorkspaceDefaultAgent } from './run-agent-selection.js';
+import { requireLlmAgent, validateWorkspaceDefaultAgent } from './run-agent-selection.js';
 import {
-  isLlmAgent,
   type EvalConfig,
   type LlmAgentConfig,
   type EvaluationJudge,
@@ -57,9 +56,12 @@ export function resolveEvaluationJudge(params: {
 }): EvaluationJudge | undefined {
   const selected = params.evaluationJudgeAgentName?.trim();
   if (!selected) return undefined;
-  const agent = params.agents[selected];
-  if (!agent) throw new Error(`Evaluation judge agent not found: ${selected}`);
-  if (!isLlmAgent(agent)) throw new Error(`Evaluation judge must be an LLM agent: ${selected}`);
+  const agent = requireLlmAgent(
+    params.agents,
+    selected,
+    'Evaluation judge agent',
+    'Evaluation judge'
+  );
   return { name: selected, agent };
 }
 
@@ -69,8 +71,7 @@ export function resolveDefaultEvaluationAgent(params: {
 }): LlmAgentConfig | undefined {
   const selected = params.defaultEvaluationAgentName?.trim();
   if (!selected) return undefined;
-  validateWorkspaceDefaultAgent(params.agents, selected);
-  return params.agents[selected] as LlmAgentConfig;
+  return validateWorkspaceDefaultAgent(params.agents, selected);
 }
 
 /** Resolve evaluation services only when selected scenarios need semantic checks. */

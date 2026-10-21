@@ -51,7 +51,6 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
-import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import { getConfigDisplayPath } from '@/lib/config-file-path';
 import type { EvalConfig } from '@/types/eval';
 
@@ -333,15 +332,11 @@ const Configurations = () => {
 
   const runConfig = async (configId: string, sourcePath: string, configName: string) => {
     if (queuingConfigIds.has(configId)) return;
-    const config = configs.find((cfg) => cfg.id === configId);
     setQueuingConfigIds((prev) => new Set(prev).add(configId));
     try {
-      const selection = config ? resolveConfigRunAgentSelection(config) : undefined;
-      const agents = selection?.agentNames ?? [];
       await source.startRun({
         configPath: sourcePath,
-        runsPerScenario: 1,
-        ...(agents.length > 0 ? { agents, agentSelectionSource: selection!.source } : {})
+        runsPerScenario: 1
       });
       setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
       window.setTimeout(() => {
@@ -396,12 +391,9 @@ const Configurations = () => {
 
       const outcomes = await Promise.allSettled(
         runnable.map(async (cfg) => {
-          const selection = resolveConfigRunAgentSelection(cfg);
-          const agents = selection.agentNames;
           return source.startRun({
             configPath: String(cfg.sourcePath),
-            runsPerScenario: 1,
-            ...(agents.length > 0 ? { agents, agentSelectionSource: selection.source } : {})
+            runsPerScenario: 1
           });
         })
       );
