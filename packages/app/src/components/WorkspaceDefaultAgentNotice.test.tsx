@@ -28,7 +28,10 @@ describe('WorkspaceDefaultAgentNotice', () => {
     expect(screen.getByText('Anthropic')).toBeInTheDocument();
     expect(screen.getByText('claude-3-5-haiku')).toBeInTheDocument();
     expect(screen.getByTitle('LLM agent')).toBeInTheDocument();
-    expect(screen.getByText(/Inherited because this evaluation has no agents/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Inherited because this evaluation has no agents/)
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Workspace settings' })).toBeInTheDocument();
   });
 
   it('shows browser type and invalid-default feedback', () => {

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Save,
   Bot,
+  Globe2,
   FileSpreadsheet,
   FileText,
   Play,
@@ -1315,7 +1316,23 @@ const ConfigEditor = () => {
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <div className="truncate font-medium text-sm">{name}</div>
+                            <span
+                              className="inline-flex min-w-0 items-center gap-2"
+                              title={row.agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
+                            >
+                              {row.agent.type === 'browser' ? (
+                                <Globe2
+                                  className="h-4 w-4 shrink-0 text-sky-600"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <Bot
+                                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span className="truncate font-medium text-sm">{name}</span>
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             {isDefault && (
@@ -1358,16 +1375,33 @@ const ConfigEditor = () => {
                         {expanded && (
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
                             <ProviderBadge provider={row.agent.provider} />
-                            <Badge variant="outline" className="text-xs font-mono">
-                              {row.agent.model}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs font-mono">
-                              max_tokens: {row.agent.maxTokens}
-                            </Badge>
-                            {row.agent.type !== 'browser' && (
-                              <Badge variant="outline" className="text-xs font-mono">
-                                temperature: {resolveAgentTemperature(row.agent.temperature)}
-                              </Badge>
+                            {row.agent.type === 'browser' ? (
+                              <>
+                                <Badge
+                                  variant="outline"
+                                  className="max-w-full truncate font-mono text-xs"
+                                  title={row.agent.url}
+                                >
+                                  {row.agent.url || 'Not configured'}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {row.agent.newConversationBetweenScenarios === false
+                                    ? 'Continue same conversation'
+                                    : 'New conversation per scenario'}
+                                </Badge>
+                              </>
+                            ) : (
+                              <>
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  {row.agent.model}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  max_tokens: {row.agent.maxTokens}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  temperature: {resolveAgentTemperature(row.agent.temperature)}
+                                </Badge>
+                              </>
                             )}
                           </div>
                         )}

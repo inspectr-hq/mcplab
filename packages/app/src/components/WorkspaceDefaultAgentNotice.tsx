@@ -19,6 +19,14 @@ export function WorkspaceDefaultAgentNotice(props: {
     (isBrowserAgent
       ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
       : undefined);
+  const description = props.loading
+    ? 'Loading workspace default agent...'
+    : error ??
+      (props.name
+        ? agent
+          ? undefined
+          : 'This agent is no longer available. Choose another workspace default or select an agent for the run.'
+        : 'Select an agent for the run or configure a workspace default.');
   return (
     <Card role="status">
       <CardContent className="flex items-start gap-3 p-4">
@@ -31,44 +39,45 @@ export function WorkspaceDefaultAgentNotice(props: {
             aria-hidden="true"
           />
         </span>
-        <div className="min-w-0 flex-1 space-y-1.5 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">
-              {props.loading
-                ? 'Workspace default agent'
-                : props.name
-                  ? `Workspace default agent: ${agent?.name || props.name}`
-                  : 'No workspace default agent is set.'}
-            </p>
-          </div>
-          {agent && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <ProviderBadge provider={agent.provider} />
-              {isBrowserAgent ? (
-                agent.url && (
-                  <Badge variant="outline" className="max-w-full truncate font-mono text-xs">
-                    {agent.url}
-                  </Badge>
-                )
-              ) : (
-                agent.model && (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {agent.model}
-                  </Badge>
-                )
-              )}
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1.5 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium">
+                {props.loading
+                  ? 'Workspace default agent'
+                  : props.name
+                    ? `Workspace default agent: ${agent?.name || props.name}`
+                    : 'No workspace default agent is set.'}
+              </p>
             </div>
-          )}
-          <p className={error || (props.name && !agent) ? 'text-destructive' : 'text-muted-foreground'}>
-            {props.loading
-              ? 'Loading workspace default agent...'
-              : error ??
-                (props.name
-                  ? agent
-                    ? 'Inherited because this evaluation has no agents. You can change the selection when running it.'
-                    : 'This agent is no longer available. Choose another workspace default or select an agent for the run.'
-                  : 'Select an agent for the run or configure a workspace default.')}
-          </p>
+            {agent && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <ProviderBadge provider={agent.provider} />
+                {isBrowserAgent ? (
+                  agent.url && (
+                    <Badge variant="outline" className="max-w-full truncate font-mono text-xs">
+                      {agent.url}
+                    </Badge>
+                  )
+                ) : (
+                  agent.model && (
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {agent.model}
+                    </Badge>
+                  )
+                )}
+              </div>
+            )}
+            {description && (
+              <p
+                className={
+                  error || (props.name && !agent) ? 'text-destructive' : 'text-muted-foreground'
+                }
+              >
+                {description}
+              </p>
+            )}
+          </div>
           <Link to="/settings" className="inline-block text-primary hover:underline">
             Workspace settings
           </Link>

@@ -201,6 +201,38 @@ describe('ConfigEditor', () => {
     expect(screen.getByRole('tab', { name: 'Agents' })).toHaveAttribute('data-state', 'active');
   });
 
+  it('shows the agent type icons on the evaluation agents page', () => {
+    configRef.value!.agents = [
+      {
+        id: 'llm-agent',
+        name: 'LLM Agent',
+        provider: 'openai',
+        model: 'gpt-test',
+        maxTokens: 100
+      },
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTitle('LLM agent')).toBeInTheDocument();
+    expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
+  });
+
   it('hides optional metadata fields in regular view mode', () => {
     render(
       <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1']}>
