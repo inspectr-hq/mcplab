@@ -233,6 +233,67 @@ describe('ConfigEditor', () => {
     expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
   });
 
+  it('shows the agent type icons in editable agent rows', () => {
+    configRef.value!.agents = [
+      {
+        id: 'llm-agent',
+        name: 'LLM Agent',
+        provider: 'openai',
+        model: 'gpt-test',
+        maxTokens: 100
+      },
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/edit?tab=agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTitle('LLM agent')).toBeInTheDocument();
+    expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
+  });
+
+  it('shows browser metadata rather than LLM fields in expanded agent details', () => {
+    configRef.value!.agents = [
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com',
+        newConversationBetweenScenarios: false
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand agent details' }));
+
+    expect(screen.getByText('https://chatgpt.com')).toBeInTheDocument();
+    expect(screen.getByText('Continue same conversation')).toBeInTheDocument();
+    expect(screen.queryByText('max_tokens: 0')).not.toBeInTheDocument();
+  });
+
   it('hides optional metadata fields in regular view mode', () => {
     render(
       <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1']}>

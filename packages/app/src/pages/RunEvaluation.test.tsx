@@ -231,7 +231,7 @@ describe('RunEvaluation', () => {
       if (!edited) expect(sourceMock.startRun.mock.calls.at(-1)?.[0]).not.toHaveProperty('agents');
     }
   );
-  it('shows only the workspace repair notice when its default was deleted', async () => {
+  it('shows a compact repair alert when the workspace default was deleted', async () => {
     configsRef.value = [
       { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
     ];
@@ -240,7 +240,10 @@ describe('RunEvaluation', () => {
         <RunEvaluation />
       </MemoryRouter>
     );
-    expect(await screen.findByText(/This agent is no longer available/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Workspace default agent workspace-agent is no longer available'
+    );
+    expect(screen.getByRole('link', { name: 'Workspace settings' })).toBeInTheDocument();
     expect(screen.queryByText(/Unavailable agents:/)).not.toBeInTheDocument();
   });
   it('does not inherit a persisted browser default, but allows explicit browser selection', async () => {
@@ -266,7 +269,7 @@ describe('RunEvaluation', () => {
     const checkbox = await screen.findByRole('checkbox', { name: 'Browser Agent' });
     await waitFor(() => expect(checkbox).not.toBeDisabled());
     expect(checkbox).not.toBeChecked();
-    expect(screen.getByRole('status')).toHaveTextContent('must be an LLM agent');
+    expect(screen.getByRole('alert')).toHaveTextContent('must be an LLM agent');
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
   });
@@ -434,7 +437,7 @@ describe('RunEvaluation', () => {
       expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
     );
   });
-  it('preselects the workspace default for an evaluation without agents', async () => {
+  it('preselects the workspace default without showing a separate agent card', async () => {
     configsRef.value = [
       { id: 'empty', name: 'Empty', agents: [], scenarios: [], createdAt: '', updatedAt: '' }
     ];
@@ -461,13 +464,14 @@ describe('RunEvaluation', () => {
         <RunEvaluation />
       </MemoryRouter>
     );
-    expect(await screen.findByText(/Workspace default agent: Workspace Agent/)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole('checkbox', { name: 'Workspace Agent' })).toBeChecked()
     );
     expect(screen.getByRole('checkbox', { name: 'Other Agent' })).not.toBeChecked();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Other Agent' }));
     expect(screen.queryByText(/Workspace default agent:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Workspace settings' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Other Agent' }));
+    expect(screen.getByRole('checkbox', { name: 'Other Agent' })).toBeChecked();
   });
   it('allows an explicit agent after workspace settings fail to load', async () => {
     configsRef.value = [

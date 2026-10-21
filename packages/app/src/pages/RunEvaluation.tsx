@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
-import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
@@ -269,6 +268,15 @@ const RunEvaluation = () => {
     availableAgents.some(
       (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
     );
+  const workspaceDefaultError =
+    !agentsLoading && defaultSelection.source === 'workspace_default'
+      ? invalidWorkspaceDefault
+        ? 'The workspace default must be an LLM agent. Choose another default or explicitly select a browser agent for this run.'
+        : defaultEvaluationAgent.name &&
+            !availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name)
+          ? `Workspace default agent ${defaultEvaluationAgent.name} is no longer available. Choose another workspace default.`
+          : undefined
+      : undefined;
   const defaultSelectedAgentIds = useMemo(() => {
     if (invalidWorkspaceDefault) return [];
     return defaultSelection.agentNames.filter((id) =>
@@ -282,15 +290,6 @@ const RunEvaluation = () => {
     !agentsLoading &&
     unavailableAgentNames.length > 0 &&
     defaultSelection.source !== 'workspace_default';
-  const inheritsWorkspaceAgent =
-    defaultSelection.source === 'workspace_default' ||
-    (!agentSelectionError && defaultSelection.source === 'none');
-  const showWorkspaceDefaultNotice =
-    inheritsWorkspaceAgent &&
-    (selectedAgentIds.length === 0 ||
-      (!invalidWorkspaceDefault &&
-        selectedAgentIds.length === 1 &&
-        selectedAgentIds[0] === defaultEvaluationAgent.name));
   useEffect(() => {
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
@@ -1066,18 +1065,19 @@ const RunEvaluation = () => {
                   {agentSelectionError}
                 </p>
               )}
+              {workspaceDefaultError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {workspaceDefaultError}{' '}
+                  <Link to="/settings" className="underline">
+                    Workspace settings
+                  </Link>
+                </p>
+              )}
               {showUnavailableAgents && (
                 <p role="alert" className="text-sm text-destructive">
                   Unavailable agents: {unavailableAgentNames.join(', ')}. Repair the evaluation or
                   select an available agent for this run.
                 </p>
-              )}
-              {showWorkspaceDefaultNotice && (
-                <WorkspaceDefaultAgentNotice
-                  {...defaultEvaluationAgent}
-                  loading={agentsLoading}
-                  agents={libraryAgents}
-                />
               )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>

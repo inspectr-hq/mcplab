@@ -78,7 +78,10 @@ export function WorkspaceDefaultAgentNotice(props: {
               </p>
             )}
           </div>
-          <Link to="/settings" className="inline-block text-primary hover:underline">
+          <Link
+            to="/settings"
+            className="inline-block whitespace-nowrap text-xs text-primary hover:underline"
+          >
             Workspace settings
           </Link>
         </div>

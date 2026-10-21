@@ -1030,6 +1030,7 @@ const ConfigEditor = () => {
                   {agentEntries.map((entry, index) => {
                     const referenceAgent =
                       entry.kind === 'referenced' ? findLibraryAgentByRef(entry.ref) : null;
+                    const rowAgent = entry.kind === 'inline' ? entry.agent : referenceAgent;
                     const rowName =
                       entry.kind === 'inline'
                         ? safeText(entry.agent.name, entry.agent.id)
@@ -1076,7 +1077,30 @@ const ConfigEditor = () => {
                               </Button>
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <span className="truncate font-medium">{rowName}</span>
+                            <span
+                              className="inline-flex min-w-0 items-center gap-2"
+                              title={
+                                rowAgent
+                                  ? rowAgent.type === 'browser'
+                                    ? 'Browser agent'
+                                    : 'LLM agent'
+                                  : undefined
+                              }
+                            >
+                              {rowAgent &&
+                                (rowAgent.type === 'browser' ? (
+                                  <Globe2
+                                    className="h-4 w-4 shrink-0 text-sky-600"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <Bot
+                                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                  />
+                                ))}
+                              <span className="truncate font-medium">{rowName}</span>
+                            </span>
                             <Badge
                               variant={entry.kind === 'inline' ? 'secondary' : 'outline-solid'}
                             >
