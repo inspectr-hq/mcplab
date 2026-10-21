@@ -24,7 +24,7 @@ export function resolveRunAgentSelection(params: RunAgentSelectionParams): RunAg
     ? { agentNames: [...params.requestedAgentNames], source: 'requested' as const }
     : defaults;
   if (selection.source === 'workspace_default' && params.availableAgents) {
-    validateWorkspaceDefaultAgent(params.availableAgents, selection.agentNames[0]);
+    requireLlmAgent(params.availableAgents, selection.agentNames[0]!, 'Default evaluation agent');
   }
   return { ...selection, agentNames: [...selection.agentNames] };
 }
@@ -44,13 +44,6 @@ export function findUndeclaredDefaultAgents(
   defaults: string[] = []
 ): string[] {
   return defaults.filter((name) => !declaredAgentNames.includes(name));
-}
-
-export function validateWorkspaceDefaultAgent(
-  agents: EvalConfig['agents'],
-  name: string
-): LlmAgentConfig {
-  return requireLlmAgent(agents, name, 'Default evaluation agent');
 }
 
 export function requireLlmAgent(

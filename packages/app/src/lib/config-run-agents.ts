@@ -5,13 +5,6 @@ import {
   type RunAgentSelection
 } from '@/types/eval';
 
-export function resolveConfigRunAgents(
-  cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>,
-  defaultEvaluationAgentName?: string
-): string[] {
-  return resolveConfigRunAgentSelection(cfg, defaultEvaluationAgentName).agentNames;
-}
-
 export function resolveConfigRunAgentSelection(
   cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>,
   defaultEvaluationAgentName?: string

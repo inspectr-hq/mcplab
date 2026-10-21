@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { resolveConfigRunAgents } from './config-run-agents';
+import { resolveConfigRunAgentSelection } from './config-run-agents';
 import type { EvalConfig } from '@/types/eval';
 
-describe('resolveConfigRunAgents', () => {
+describe('resolveConfigRunAgentSelection', () => {
   it('rejects an undeclared default even when it could exist in the library', () => {
     expect(() =>
-      resolveConfigRunAgents({
+      resolveConfigRunAgentSelection({
         agents: [],
         agentEntries: [{ kind: 'referenced', ref: 'declared' }],
         runDefaults: { selectedAgentNames: ['library-only'] }
@@ -13,15 +13,15 @@ describe('resolveConfigRunAgents', () => {
     ).toThrow('must be declared');
   });
   it('inherits a workspace default only when the evaluation has no agents', () => {
-    expect(resolveConfigRunAgents({ agents: [], agentEntries: [] }, 'workspace')).toEqual([
-      'workspace'
-    ]);
-    expect(resolveConfigRunAgents({ agents: [], agentEntries: [] })).toEqual([]);
     expect(
-      resolveConfigRunAgents(
+      resolveConfigRunAgentSelection({ agents: [], agentEntries: [] }, 'workspace').agentNames
+    ).toEqual(['workspace']);
+    expect(resolveConfigRunAgentSelection({ agents: [], agentEntries: [] }).agentNames).toEqual([]);
+    expect(
+      resolveConfigRunAgentSelection(
         { agents: [], agentEntries: [{ kind: 'referenced', ref: 'local' }] },
         'workspace'
-      )
+      ).agentNames
     ).toEqual(['local']);
   });
   it('returns trimmed configured agent ids when no run default subset is present', () => {
@@ -52,7 +52,10 @@ describe('resolveConfigRunAgents', () => {
       ]
     };
 
-    expect(resolveConfigRunAgents(config)).toEqual(['referenced-agent', 'inline-agent']);
+    expect(resolveConfigRunAgentSelection(config).agentNames).toEqual([
+      'referenced-agent',
+      'inline-agent'
+    ]);
   });
 
   it('prefers run default agents when they are a subset of configured ids', () => {
@@ -84,6 +87,6 @@ describe('resolveConfigRunAgents', () => {
       }
     };
 
-    expect(resolveConfigRunAgents(config)).toEqual(['agent-b']);
+    expect(resolveConfigRunAgentSelection(config).agentNames).toEqual(['agent-b']);
   });
 });

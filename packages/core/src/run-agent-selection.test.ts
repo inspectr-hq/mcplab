@@ -42,14 +42,19 @@ describe('resolveRunAgentSelection', () => {
     const params = {
       declaredAgentNames: [],
       defaultEvaluationAgentName: 'workspace',
-      availableAgents: { workspace: { type: 'llm' as const } }
+      availableAgents: { workspace: { provider: 'openai' as const, model: 'test' } }
     };
     expect(resolveRunAgentSelection(params)).toEqual({
       agentNames: ['workspace'],
       source: 'workspace_default'
     });
     expect(() =>
-      resolveRunAgentSelection({ ...params, availableAgents: { workspace: { type: 'browser' } } })
+      resolveRunAgentSelection({
+        ...params,
+        availableAgents: {
+          workspace: { type: 'browser', provider: 'chatgpt', url: 'https://chatgpt.com' }
+        }
+      })
     ).toThrow('must be an LLM agent');
   });
   it('retains the origin of each selection tier', () => {

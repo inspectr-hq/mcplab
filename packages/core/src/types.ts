@@ -32,7 +32,7 @@ export interface RunAgentSelectionParams {
   requestedAgentNames?: string[];
   defaultEvaluationAgentName?: string;
   /** Omit only while preparing a prompt or preview, before the user chooses agents. */
-  availableAgents?: Record<string, { type?: 'llm' | 'browser' }>;
+  availableAgents?: EvalConfig['agents'];
 }
 
 export interface EvaluationRunRequest {

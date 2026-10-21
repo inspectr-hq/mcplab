@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { requireLlmAgent, validateWorkspaceDefaultAgent } from './run-agent-selection.js';
+import { requireLlmAgent } from './run-agent-selection.js';
 import {
   type EvalConfig,
   type LlmAgentConfig,
@@ -71,7 +71,7 @@ export function resolveDefaultEvaluationAgent(params: {
 }): LlmAgentConfig | undefined {
   const selected = params.defaultEvaluationAgentName?.trim();
   if (!selected) return undefined;
-  return validateWorkspaceDefaultAgent(params.agents, selected);
+  return requireLlmAgent(params.agents, selected, 'Default evaluation agent');
 }
 
 /** Resolve evaluation services only when selected scenarios need semantic checks. */

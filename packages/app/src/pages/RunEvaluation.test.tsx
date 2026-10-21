@@ -980,7 +980,7 @@ describe('RunEvaluation', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Agent A')).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'Agent A' })).toBeChecked();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
@@ -988,11 +988,7 @@ describe('RunEvaluation', () => {
     await waitFor(() => {
       expect(sourceMock.startRun).toHaveBeenCalledTimes(1);
     });
-    expect(sourceMock.startRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agents: ['agent-a']
-      })
-    );
+    expect(sourceMock.startRun.mock.calls[0]?.[0]).not.toHaveProperty('agents');
   });
 
   it.each([

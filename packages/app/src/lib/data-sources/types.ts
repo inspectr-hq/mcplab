@@ -123,11 +123,7 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
-export type {
-  RunAgentSelection,
-  RunAgentSelectionSource,
-  EvaluationRunRequest
-} from '@inspectr/mcplab-core';
+export type { RunAgentSelection, EvaluationRunRequest } from '@inspectr/mcplab-core';
 export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 

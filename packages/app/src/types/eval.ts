@@ -30,7 +30,6 @@ export type {
   ProviderModelsResponse,
   WorkspaceSettingsPatch,
   RunAgentSelection,
-  RunAgentSelectionSource,
   EvaluationRunRequest,
   InspectrSession
 } from '@/lib/data-sources/types';
