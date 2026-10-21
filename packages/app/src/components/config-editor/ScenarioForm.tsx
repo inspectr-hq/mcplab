@@ -39,8 +39,7 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { formatToolSequenceLabel } from '../../../../core/src/eval';
-import { formatToolExpression, isValidToolExpression } from '@/types/eval';
+import { formatToolExpression, formatToolSequenceLabel, isValidToolExpression } from '@/types/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { ToolAlternativesEditor } from '@/components/config-editor/ToolAlternativesEditor';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';

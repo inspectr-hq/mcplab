@@ -27,6 +27,9 @@ describe('tool rule expressions', () => {
     expect(() => validateEvalToolRules({ tool_constraints: { forbidden_tools: ['a|b'] } })).toThrow(
       'forbidden_tools[0]'
     );
+    expect(() => validateEvalToolRules({ tool_constraints: { forbidden_tools: [' '] } })).toThrow(
+      'forbidden_tools[0]'
+    );
     expect(() =>
       validateEvalToolRules({
         tool_constraints: { required_tools: ['a | b'], forbidden_tools: ['c'] },

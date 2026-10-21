@@ -974,7 +974,7 @@ describe('evaluateScenario — tool alternatives', () => {
   it('reports order failures when an alternative appears too early', () => {
     const result = evaluateScenario('', ['search', 'auth'], rules);
     expect(result.failures).toContain(
-      'Tool sequence order was not satisfied: auth -> search | lookup'
+      'Tool sequence order was not satisfied: auth -> (search OR lookup)'
     );
   });
 

@@ -14,7 +14,8 @@ export {
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
   formatToolExpression,
-  isValidToolExpression
+  isValidToolExpression,
+  formatToolSequenceLabel
 } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 

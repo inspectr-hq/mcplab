@@ -26,7 +26,7 @@ export function formatToolExpression(expression: string): string {
   return alternatives.length > 1 ? `(${alternatives.join(' OR ')})` : alternatives[0];
 }
 
-/** Throw when a required tool or sequence step is malformed, or a forbidden tool uses `|`. */
+/** Throw when a required tool or sequence step is malformed, or a forbidden tool is blank or uses `|`. */
 export function validateEvalToolRules(rules: EvalRules | undefined, context = 'Eval rules'): void {
   const check = (expression: string, path: string) => {
     try {
@@ -42,9 +42,9 @@ export function validateEvalToolRules(rules: EvalRules | undefined, context = 'E
     check(expression, `tool_sequence[${index}]`)
   );
   rules?.tool_constraints?.forbidden_tools?.forEach((name, index) => {
-    if (name.includes('|'))
+    if (name.includes('|') || !name.trim())
       throw new Error(
-        `${context}: tool_constraints.forbidden_tools[${index}]: alternatives are not supported.`
+        `${context}: tool_constraints.forbidden_tools[${index}] must be one non-empty tool name.`
       );
   });
 }

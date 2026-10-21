@@ -21,7 +21,8 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   if (!id) throw new Error('Unable to derive scenario id. Provide id or name.');
   const required = unique(input.required_tools);
   const forbidden = unique(input.forbidden_tools);
-  const sequence = unique(input.tool_sequence);
+  // Repeated steps are meaningful in a sequence, so only trim and drop blanks.
+  const sequence = (input.tool_sequence ?? []).map((step) => step.trim()).filter(Boolean);
   const patterns = unique(input.response_regex_patterns);
   const evalRules = mergeEvalRules(input.eval, {
     required,

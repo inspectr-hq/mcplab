@@ -335,7 +335,7 @@ function evaluateToolSequence(
     const index = actual.findIndex((tool, i) => i >= cursor && alternatives.includes(tool));
     if (index < 0) {
       const reason = alternatives.some((tool) => actual.includes(tool))
-        ? `Tool sequence order was not satisfied: ${expected.join(' -> ')}`
+        ? `Tool sequence order was not satisfied: ${formatToolSequenceText(expected)}`
         : `Required tool in sequence not used: ${formatToolExpression(step)}`;
       return {
         failures: [reason],
@@ -746,6 +746,10 @@ function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion)
 
 export function formatToolSequenceLabel(sequence: string[]): string {
   return sequence.length > 0
-    ? `Tool sequence · ${sequence.map(formatToolExpression).join(' -> ')}`
+    ? `Tool sequence · ${formatToolSequenceText(sequence)}`
     : 'Tool sequence';
+}
+
+function formatToolSequenceText(sequence: string[]): string {
+  return sequence.map(formatToolExpression).join(' -> ');
 }
