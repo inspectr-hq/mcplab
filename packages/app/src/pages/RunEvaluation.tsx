@@ -1081,8 +1081,8 @@ const RunEvaluation = () => {
               )}
               {showUnavailableAgents && (
                 <p role="alert" className="text-sm text-destructive">
-                  Unavailable agents: {unavailableAgentNames.join(', ')}. Repair the evaluation or
-                  select an available agent for this run.
+                  Unavailable agents: {unavailableAgentNames.join(', ')}. Repair the evaluation
+                  before running.
                 </p>
               )}
               <div className="flex items-center justify-between">
@@ -1397,7 +1397,7 @@ const RunEvaluation = () => {
                 !configId ||
                 agentsLoading ||
                 Boolean(agentSelectionError) ||
-                (showUnavailableAgents && !agentSelectionEdited) ||
+                showUnavailableAgents ||
                 oauthAuthInProgress ||
                 selectedAgentIds.length === 0 ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)

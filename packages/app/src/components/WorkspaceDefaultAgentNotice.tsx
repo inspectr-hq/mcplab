@@ -6,8 +6,13 @@ import { AgentTypeIcon } from '@/components/AgentTypeIcon';
 import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type { AgentConfig } from '@/types/eval';
 
-function getNoticeTitle(loading: boolean, name: string | undefined, agent?: AgentConfig): string {
-  if (loading) return 'Workspace default agent';
+function getNoticeTitle(
+  loading: boolean,
+  error: string | undefined,
+  name: string | undefined,
+  agent?: AgentConfig
+): string {
+  if (loading || error) return 'Workspace default agent';
   if (!name) return 'No workspace default agent is set.';
   return `Workspace default agent: ${agent?.name || name}`;
 }
@@ -35,7 +40,7 @@ export function WorkspaceDefaultAgentNotice(props: {
   const agent = props.agents.find((item) => item.id === props.name);
   const isBrowserAgent = agent?.type === 'browser';
   const error = props.error ?? (isBrowserAgent ? WORKSPACE_DEFAULT_LLM_AGENT_ERROR : undefined);
-  const title = getNoticeTitle(props.loading, props.name, agent);
+  const title = getNoticeTitle(props.loading, error, props.name, agent);
   const description = getNoticeDescription(props.loading, error, props.name, agent);
   return (
     <Card role="status">

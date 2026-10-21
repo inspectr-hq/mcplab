@@ -58,4 +58,20 @@ describe('WorkspaceDefaultAgentNotice', () => {
     expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
     expect(screen.getByText(/workspace default must be an LLM agent/)).toBeInTheDocument();
   });
+
+  it('uses a neutral title when loading settings fails', () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceDefaultAgentNotice
+          loading={false}
+          error="Could not load workspace settings."
+          agents={[]}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Workspace default agent')).toBeInTheDocument();
+    expect(screen.getByText('Could not load workspace settings.')).toBeInTheDocument();
+    expect(screen.queryByText('No workspace default agent is set.')).not.toBeInTheDocument();
+  });
 });

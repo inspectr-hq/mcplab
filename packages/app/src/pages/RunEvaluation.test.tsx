@@ -156,7 +156,8 @@ describe('RunEvaluation', () => {
     libraryAgentsRef.value = [agentA, agentB];
     sourceMock.getWorkspaceSettings
       .mockResolvedValueOnce({ defaultEvaluationAgentName: 'agent-a' })
-      .mockResolvedValueOnce({ defaultEvaluationAgentName: 'agent-b' });
+      .mockResolvedValueOnce({ defaultEvaluationAgentName: 'agent-b' })
+      .mockRejectedValueOnce(new Error('settings refresh failed'));
 
     render(
       <MemoryRouter initialEntries={['/run?configId=empty']}>
@@ -175,6 +176,11 @@ describe('RunEvaluation', () => {
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Agent B' })).toBeChecked());
     expect(screen.getByRole('checkbox', { name: 'Agent A' })).not.toBeChecked();
     expect(runButton).toBeEnabled();
+
+    act(() => window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalledTimes(3));
+    expect(runButton).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Agent B' })).toBeChecked();
   });
 
   it.each([false, true])(
@@ -337,7 +343,10 @@ describe('RunEvaluation', () => {
     const runButton = screen.getByRole('button', { name: 'Run' });
     expect(runButton).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Replacement Agent' }));
-    expect(runButton).toBeEnabled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Repair the evaluation before running.'
+    );
+    expect(runButton).toBeDisabled();
   });
   it('waits for libraries before enabling and initializing test selection', async () => {
     configsRef.value = [

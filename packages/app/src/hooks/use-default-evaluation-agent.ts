@@ -20,6 +20,7 @@ export function useDefaultEvaluationAgent() {
         setState({ name: settings?.defaultEvaluationAgentName, loading: false });
       } catch {
         if (!current || version !== requestVersion) return;
+        if (loaded) return;
         setState((previous) => ({
           ...previous,
           loading: false,
