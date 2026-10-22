@@ -55,6 +55,57 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 describe('SettingsPage', () => {
+  it('offers only LLM agents as the shared evaluation default', async () => {
+    agentsRef.value.push({ id: 'browser', name: 'Browser Agent', model: '', type: 'browser' });
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    await waitFor(() => expect(select).toBeEnabled());
+    fireEvent.click(select);
+    expect(screen.queryByRole('option', { name: /Browser Agent/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Assistant One/ })).toBeInTheDocument();
+  });
+  it('labels a saved browser default as disallowed rather than unavailable', async () => {
+    agentsRef.value.push({ id: 'browser', name: 'Browser Agent', model: '', type: 'browser' });
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      defaultEvaluationAgentName: 'browser'
+    });
+    render(<SettingsPage />);
+
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    fireEvent.click(select);
+
+    expect(
+      screen.getByRole('option', { name: 'browser (browser agent, not allowed)' })
+    ).toBeInTheDocument();
+  });
+  it('restores the agent setting after a failed save', async () => {
+    sourceMock.updateWorkspaceSettings.mockRejectedValueOnce(new Error('Save failed'));
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    await waitFor(() => expect(select).toBeEnabled());
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: /Assistant One/ }));
+    await waitFor(() => expect(select).toHaveTextContent('None'));
+    await waitFor(() => expect(select).toBeEnabled());
+  });
+  it('selects and clears the workspace default evaluation agent', async () => {
+    render(<SettingsPage />);
+    const select = await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: /Assistant One/ }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        defaultEvaluationAgentName: 'assistant-1'
+      })
+    );
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole('option', { name: 'None' }));
+    await waitFor(() =>
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        defaultEvaluationAgentName: null
+      })
+    );
+  });
   it('allows repairing an unsupported provider in persisted decision settings', async () => {
     sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
       evaluationJudgeAgentName: 'assistant-1',

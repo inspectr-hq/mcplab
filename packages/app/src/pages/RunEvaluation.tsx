@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
@@ -29,9 +31,10 @@ import {
   formatQueueConfigPath,
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
-import { resolveConfigRunAgents } from '@/lib/config-run-agents';
+import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
+import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
-import type { InspectrSession } from '@/types/eval';
+import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -52,6 +55,29 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
 
 function nowTime(): string {
   return new Date().toLocaleTimeString();
+}
+
+function getWorkspaceDefaultError({
+  agentsLoading,
+  selectionSource,
+  invalidWorkspaceDefault,
+  agentName,
+  agentAvailable
+}: {
+  agentsLoading: boolean;
+  selectionSource: RunAgentSelection['source'];
+  invalidWorkspaceDefault: boolean;
+  agentName?: string;
+  agentAvailable: boolean;
+}): string | undefined {
+  if (agentsLoading || selectionSource !== 'workspace_default') {
+    return undefined;
+  }
+  if (invalidWorkspaceDefault) return WORKSPACE_DEFAULT_LLM_AGENT_ERROR;
+  if (agentName && !agentAvailable) {
+    return `Workspace default agent ${agentName} is no longer available. Choose another workspace default.`;
+  }
+  return undefined;
 }
 
 // Assignment marks a Rover job running before its first scenario starts.
@@ -85,6 +111,11 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [agentSelectionEdited, setAgentSelectionEdited] = useState(false);
+  const changeSelectedAgents: typeof setSelectedAgentIds = (next) => {
+    setAgentSelectionEdited(true);
+    setSelectedAgentIds(next);
+  };
   const [conversationMode, setConversationMode] = useState<ConversationMode>('agent_default');
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
@@ -114,12 +145,14 @@ const RunEvaluation = () => {
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
+  const defaultEvaluationAgent = useDefaultEvaluationAgent();
   const {
     agents: libraryAgents,
     scenarios: libraryScenarios,
     servers: libraryServers,
     reload: reloadLibraries
   } = useLibraries();
+  const librariesReady = useLibrariesReady();
   const normalizedRunId = runId.trim();
   const resultsHref = normalizedRunId
     ? `/results/${encodeURIComponent(normalizedRunId)}${
@@ -227,12 +260,68 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   const prevConfigKeyRef = useRef('');
+  const pendingAgentConfigKeyRef = useRef('');
+  const configKey = selectedConfig
+    ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
+    : '';
+  const agentsLoading = defaultEvaluationAgent.loading || !librariesReady;
+  const defaultSelection = useMemo<RunAgentSelection & { error?: string }>(() => {
+    try {
+      return selectedConfig
+        ? resolveConfigRunAgentSelection(selectedConfig, defaultEvaluationAgent.name)
+        : { agentNames: [], source: 'none' as const };
+    } catch (error) {
+      return {
+        agentNames: [],
+        source: 'none' as const,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }, [selectedConfig, defaultEvaluationAgent.name]);
+  const agentSelectionError =
+    selectedConfig?.loadError ||
+    defaultSelection.error ||
+    (!agentSelectionEdited &&
+    (defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none')
+      ? defaultEvaluationAgent.error
+      : undefined);
+  const agentSelectionErrorMessage =
+    defaultEvaluationAgent.error && agentSelectionError === defaultEvaluationAgent.error
+      ? `${agentSelectionError} Select agents for this run.`
+      : agentSelectionError;
+  const invalidWorkspaceDefault =
+    defaultSelection.source === 'workspace_default' &&
+    availableAgents.some(
+      (agent) => agent.id === defaultEvaluationAgent.name && agent.type === 'browser'
+    );
+  const workspaceDefaultError = getWorkspaceDefaultError({
+    agentsLoading,
+    selectionSource: defaultSelection.source,
+    invalidWorkspaceDefault,
+    agentName: defaultEvaluationAgent.name,
+    agentAvailable: availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name)
+  });
+  const showWorkspaceDefaultError =
+    Boolean(workspaceDefaultError) && (!agentSelectionEdited || selectedAgentIds.length === 0);
+  const defaultSelectedAgentIds = useMemo(() => {
+    if (invalidWorkspaceDefault) return [];
+    return defaultSelection.agentNames.filter((id) =>
+      availableAgents.some((agent) => agent.id === id)
+    );
+  }, [invalidWorkspaceDefault, defaultSelection.agentNames, availableAgents]);
+  const unavailableAgentNames = defaultSelection.agentNames.filter(
+    (id) => !availableAgents.some((agent) => agent.id === id)
+  );
+  const showUnavailableAgents =
+    !agentsLoading &&
+    unavailableAgentNames.length > 0 &&
+    defaultSelection.source !== 'workspace_default';
   useEffect(() => {
-    const configKey = selectedConfig
-      ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
-      : '';
+    if (!librariesReady) return;
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
+    pendingAgentConfigKeyRef.current = configKey;
+    setAgentSelectionEdited(false);
     if (!selectedConfig) {
       setSelectedAgentIds([]);
       setConversationMode('agent_default');
@@ -243,17 +332,28 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredAgentIds = resolveConfigRunAgents(selectedConfig);
-    setSelectedAgentIds(
-      configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
-    );
     setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
-  }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
+  }, [configKey, selectedConfig, availableScenarios, librariesReady]);
+  useEffect(() => {
+    if (agentsLoading || !pendingAgentConfigKeyRef.current) return;
+    setSelectedAgentIds(defaultSelectedAgentIds);
+    pendingAgentConfigKeyRef.current = '';
+  }, [configKey, agentsLoading, defaultSelectedAgentIds]);
+  useEffect(() => {
+    if (
+      agentsLoading ||
+      agentSelectionEdited ||
+      (defaultSelection.source !== 'workspace_default' && defaultSelection.source !== 'none')
+    ) {
+      return;
+    }
+    setSelectedAgentIds(defaultSelectedAgentIds);
+  }, [agentsLoading, agentSelectionEdited, defaultSelection, defaultSelectedAgentIds]);
 
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {
@@ -393,7 +493,7 @@ const RunEvaluation = () => {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario,
-        agents: selectedAgents.map((agent) => agent.id),
+        ...(agentSelectionEdited ? { agents: selectedAgents.map((agent) => agent.id) } : {}),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
@@ -973,21 +1073,40 @@ const RunEvaluation = () => {
             />
           </div>
           {selectedConfig && (
-            <div className="space-y-2">
+            <fieldset className="space-y-2" disabled={agentsLoading}>
+              {agentSelectionErrorMessage && (
+                <p role="alert" className="text-sm text-destructive">
+                  {agentSelectionErrorMessage}
+                </p>
+              )}
+              {showWorkspaceDefaultError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {workspaceDefaultError}{' '}
+                  <Link to="/settings" className="underline">
+                    Workspace settings
+                  </Link>
+                </p>
+              )}
+              {showUnavailableAgents && (
+                <p role="alert" className="text-sm text-destructive">
+                  Unavailable agents: {unavailableAgentNames.join(', ')}. Repair the evaluation
+                  before running.
+                </p>
+              )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <div className="flex items-center gap-3 text-xs">
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedAgentIds(availableAgents.map((agent) => agent.id))}
+                    onClick={() => changeSelectedAgents(availableAgents.map((agent) => agent.id))}
                   >
                     Select all
                   </button>
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedAgentIds([])}
+                    onClick={() => changeSelectedAgents([])}
                   >
                     Clear
                   </button>
@@ -1006,7 +1125,7 @@ const RunEvaluation = () => {
                             aria-label={`Select all ${group.label}`}
                             onClick={() => {
                               const groupIds = new Set(group.agents.map((agent) => agent.id));
-                              setSelectedAgentIds((prev) => [
+                              changeSelectedAgents((prev) => [
                                 ...prev.filter((id) => !groupIds.has(id)),
                                 ...groupIds
                               ]);
@@ -1020,7 +1139,9 @@ const RunEvaluation = () => {
                             aria-label={`Clear ${group.label}`}
                             onClick={() => {
                               const groupIds = new Set(group.agents.map((agent) => agent.id));
-                              setSelectedAgentIds((prev) => prev.filter((id) => !groupIds.has(id)));
+                              changeSelectedAgents((prev) =>
+                                prev.filter((id) => !groupIds.has(id))
+                              );
                             }}
                           >
                             Clear
@@ -1039,7 +1160,7 @@ const RunEvaluation = () => {
                                 checked={checked}
                                 onCheckedChange={(value) => {
                                   const isChecked = value === true;
-                                  setSelectedAgentIds((prev) =>
+                                  changeSelectedAgents((prev) =>
                                     isChecked
                                       ? [...prev, agent.id]
                                       : prev.filter((id) => id !== agent.id)
@@ -1082,10 +1203,10 @@ const RunEvaluation = () => {
                   in this config.
                 </p>
               )}
-            </div>
+            </fieldset>
           )}
           {selectedConfig && (
-            <div className="space-y-2">
+            <fieldset disabled={!librariesReady} className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Tests</Label>
                 <div className="flex items-center gap-3 text-xs">
@@ -1275,15 +1396,18 @@ const RunEvaluation = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </fieldset>
           )}
           <div className="flex gap-2">
             <Button
               onClick={startRun}
               disabled={
                 !configId ||
+                agentsLoading ||
+                Boolean(agentSelectionError) ||
+                showUnavailableAgents ||
                 oauthAuthInProgress ||
-                (availableAgents.length > 0 && selectedAgentIds.length === 0) ||
+                selectedAgentIds.length === 0 ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
               }
             >

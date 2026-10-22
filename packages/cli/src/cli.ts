@@ -11,6 +11,7 @@ import {
   selectScenarios,
   runAll,
   resolveWorkspaceEvaluation,
+  resolveLoadedRunAgents,
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   renderSummaryMarkdown,
@@ -30,6 +31,7 @@ import { migrateSourceConfig } from './migrate-utils.js';
 import {
   resolveRunOptions,
   runInteractiveSelection,
+  loadInteractiveConfig,
   type ResolveRunOptionsResult
 } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
@@ -135,18 +137,7 @@ program
               defaultEvalsDir: 'mcplab/evals',
               cwd: process.cwd(),
               promptAgentSelection: needsAgentPrompt,
-              loadConfigForValidation: (path: string) => {
-                const loaded = loadConfig(path);
-                const { agents: libraryAgents, servers: libraryServers } = readLibraries(
-                  loaded.bundleRoot
-                );
-                loaded.config = {
-                  ...loaded.config,
-                  agents: { ...libraryAgents, ...loaded.config.agents },
-                  servers: { ...libraryServers, ...loaded.config.servers }
-                };
-                return loaded;
-              }
+              loadConfigForValidation: loadInteractiveConfig
             })
           : undefined;
 
@@ -795,16 +786,19 @@ async function executeSingleConfigRun(params: {
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
-  const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
+  const selection = resolveLoadedRunAgents({
+    loaded,
+    config: runtimeOverriddenConfig,
+    requestedAgentNames: requestedAgents,
+    defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
+  });
+  const effectiveAgents = selection.agentNames;
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
-  if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
-    const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
-    console.log(
-      kleur.cyan(
-        `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${expanded.scenarios.length} total tests`
-      )
-    );
-  }
+  console.log(
+    kleur.cyan(
+      `📊 Testing ${beforeExpandCount} scenarios × ${effectiveAgents.length} selected agents = ${expanded.scenarios.length} total tests`
+    )
+  );
 
   const runsPerScenario = Number(options.runs);
   if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {

@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Bot,
-  Check,
-  ChevronDown,
-  Globe2,
-  Loader2,
-  RefreshCw,
-  Wifi,
-  X
-} from 'lucide-react';
+import { AgentTypeIcon } from '@/components/AgentTypeIcon';
+import { ArrowLeft, Check, ChevronDown, Loader2, RefreshCw, Wifi, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -303,11 +294,7 @@ const AgentDetail = () => {
             <ArrowLeft className="h-4 w-4" /> Agents
           </Link>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
-            {form.type === 'browser' ? (
-              <Globe2 className="h-6 w-6 text-sky-600" aria-hidden="true" />
-            ) : (
-              <Bot className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-            )}
+            <AgentTypeIcon agent={form} className="h-6 w-6" />
             {isNew ? 'New Agent' : form.name}
           </h1>
         </div>

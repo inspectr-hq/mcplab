@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyEvaluationSettingsPatch,
   applySettingsOverrides,
@@ -19,6 +19,65 @@ afterEach(() => {
 });
 
 describe('Decision Engine settings', () => {
+  it('normalizes assistant settings and the legacy alias inside the atomic patch', () => {
+    const settings = fixture();
+    for (const key of ['assistantAgentName', 'scenarioAssistantAgentName']) {
+      expect(() => applyEvaluationSettingsPatch(settings, { [key]: 123 }, agents)).toThrow(
+        'must be an agent name or null'
+      );
+      expect(
+        applyEvaluationSettingsPatch(settings, { [key]: ' judge ' }, agents).assistantAgentName
+      ).toBe('judge');
+      expect(
+        applyEvaluationSettingsPatch(settings, { [key]: null }, agents).assistantAgentName
+      ).toBeUndefined();
+    }
+    expect(
+      applyEvaluationSettingsPatch(
+        settings,
+        { assistantAgentName: 'judge', scenarioAssistantAgentName: 'old' },
+        agents
+      ).assistantAgentName
+    ).toBe('judge');
+  });
+  it('persists, reloads, and clears the workspace default evaluation agent', () => {
+    const settings = fixture();
+    const next = applyEvaluationSettingsPatch(
+      settings,
+      { defaultEvaluationAgentName: ' judge ' },
+      agents
+    );
+    persistSettingsOverrides(next);
+    applySettingsOverrides(settings);
+    expect(settings.defaultEvaluationAgentName).toBe('judge');
+    expect(
+      loadWorkspaceSettingsOverrides(settings.librariesDir).default_evaluation_agent_name
+    ).toBe('judge');
+    persistSettingsOverrides(
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: null }, agents)
+    );
+    applySettingsOverrides(settings);
+    expect(settings.defaultEvaluationAgentName).toBeUndefined();
+  });
+  it('rejects deleted and browser workspace defaults atomically', () => {
+    const settings = fixture();
+    expect(() =>
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: 'deleted' }, agents)
+    ).toThrow('Default evaluation agent not found');
+    expect(settings.defaultEvaluationAgentName).toBeUndefined();
+    expect(() =>
+      applyEvaluationSettingsPatch(settings, { defaultEvaluationAgentName: 'browser' }, agents)
+    ).toThrow('Default evaluation agent must be an LLM agent');
+  });
+  it('reads the library once for a combined agent settings patch', () => {
+    const readAgents = vi.fn(() => agents);
+    applyEvaluationSettingsPatch(
+      fixture(),
+      { defaultEvaluationAgentName: 'judge', evaluationJudgeAgentName: 'judge' },
+      readAgents
+    );
+    expect(readAgents).toHaveBeenCalledTimes(1);
+  });
   it.each(['deleted', undefined])(
     'does not revalidate %s judge when saving unrelated settings',
     (name) => {

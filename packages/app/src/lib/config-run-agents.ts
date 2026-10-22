@@ -1,8 +1,14 @@
-import type { AgentEntry, EvalConfig } from '@/types/eval';
+import {
+  resolveRunAgentSelection,
+  type AgentEntry,
+  type EvalConfig,
+  type RunAgentSelection
+} from '@/types/eval';
 
-export function resolveConfigRunAgents(
-  cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>
-): string[] {
+export function resolveConfigRunAgentSelection(
+  cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>,
+  defaultEvaluationAgentName?: string
+): RunAgentSelection {
   const entries: AgentEntry[] =
     cfg.agentEntries && cfg.agentEntries.length > 0
       ? cfg.agentEntries
@@ -11,8 +17,9 @@ export function resolveConfigRunAgents(
     .map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
     .map((agentId) => agentId.trim())
     .filter(Boolean);
-  const defaultAgents = (cfg.runDefaults?.selectedAgentNames ?? []).filter((agentId) =>
-    configuredAgents.includes(agentId)
-  );
-  return defaultAgents.length > 0 ? defaultAgents : configuredAgents;
+  return resolveRunAgentSelection({
+    declaredAgentNames: configuredAgents,
+    selectedAgentNames: cfg.runDefaults?.selectedAgentNames,
+    defaultEvaluationAgentName
+  });
 }

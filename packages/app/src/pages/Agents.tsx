@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot, Globe2 } from 'lucide-react';
+import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot } from 'lucide-react';
+import { AgentTypeIcon } from '@/components/AgentTypeIcon';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -201,15 +202,8 @@ const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
                         }
                       >
                         <TableCell className="font-medium">
-                          <span
-                            className="inline-flex items-center gap-2"
-                            title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
-                          >
-                            {agent.type === 'browser' ? (
-                              <Globe2 className="h-4 w-4 text-sky-600" aria-hidden="true" />
-                            ) : (
-                              <Bot className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                            )}
+                          <span className="inline-flex items-center gap-2">
+                            <AgentTypeIcon agent={agent} />
                             {agent.name}
                           </span>
                         </TableCell>

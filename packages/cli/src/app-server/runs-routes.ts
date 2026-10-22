@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import {
   McpClientManager,
+  NO_EVALUATION_AGENTS_MESSAGE,
   loadConfig,
   hashConfig,
   createRunId,
@@ -14,6 +15,7 @@ import {
   applyRuntimeServerOverrides,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
+  type EvaluationRunRequest,
   type WorkspaceEvaluation,
   type BrowserAgentConfig,
   type ScenarioAttachment,
@@ -45,7 +47,7 @@ export type RunsRouteDeps = Pick<
   | 'getScenarioRunTraceRecords'
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
-  | 'resolveRunSelectedAgents'
+  | 'resolveLoadedRunAgents'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'pkgVersion'
@@ -78,18 +80,7 @@ export function applyLibraryAgents(
   applyLibraryEntries(loaded, libraryAgents, {});
 }
 
-type RunRequestBody = {
-  configPath?: unknown;
-  runsPerScenario?: unknown;
-  scenarioId?: unknown;
-  scenarioIds?: unknown;
-  agents?: unknown;
-  runNote?: unknown;
-  newConversationBetweenScenarios?: unknown;
-  newConversationBeforeStart?: unknown;
-  serverOverrideAll?: unknown;
-  scenarioServerOverrides?: unknown;
-};
+type RunRequestBody = Partial<Record<keyof EvaluationRunRequest, unknown>>;
 
 type PreviewRunRequestBody = {
   selectedAgentName?: unknown;
@@ -150,7 +141,7 @@ export async function handleRunsRoutes(params: {
     getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
-    resolveRunSelectedAgents,
+    resolveLoadedRunAgents,
     readLibraries,
     pickDefaultAssistantAgentName,
     pkgVersion
@@ -391,9 +382,10 @@ export async function handleRunsRoutes(params: {
     const scenarioIds = Array.isArray(body.scenarioIds)
       ? body.scenarioIds.map((id: unknown) => String(id).trim()).filter(Boolean)
       : undefined;
-    const requestedAgents = Array.isArray(body.agents)
+    const requestedAgentsFromBody = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
+    const requestedAgents = requestedAgentsFromBody?.length ? requestedAgentsFromBody : undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -455,9 +447,11 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     let selectedConfig: EvalConfig;
+    let declaredAgentNames: string[];
     let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+      declaredAgentNames = loaded.declaredAgentNames;
       const libraries = readLibraries(settings.librariesDir);
       browserProviders = libraries.browserProviders;
       applyLibraryEntries(loaded, libraries.agents, libraries.servers);
@@ -483,7 +477,23 @@ export async function handleRunsRoutes(params: {
     // Resolve lazily in advanceQueue so runtime overrides are always reflected.
     const oauthServerNames: string[] | undefined = undefined;
 
-    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents);
+    let selection;
+    try {
+      selection = deps.resolveLoadedRunAgents({
+        loaded: { declaredAgentNames },
+        config: selectedConfig,
+        requestedAgentNames: requestedAgents,
+        defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+      });
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    const selectedAgentNames = selection.agentNames;
+    if (selectedAgentNames.length === 0) {
+      asJson(res, 400, { error: NO_EVALUATION_AGENTS_MESSAGE });
+      return true;
+    }
     const selectedAgents = selectedAgentNames.map((name) => ({
       name,
       agent: selectedConfig.agents[name]
@@ -535,6 +545,15 @@ export async function handleRunsRoutes(params: {
     }
     const evaluationRunId = createRunId();
     const baseRunParams = {
+      agentSelectionSource: selection.source,
+      agentSnapshot: structuredClone(
+        Object.fromEntries(
+          [...new Set([...declaredAgentNames, ...selectedAgentNames])].map((name) => [
+            name,
+            selectedConfig.agents[name]!
+          ])
+        )
+      ),
       evaluationRunId,
       evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,
@@ -550,7 +569,7 @@ export async function handleRunsRoutes(params: {
     };
     const runParamsList =
       browserAgents.length === 0
-        ? [{ ...baseRunParams, requestedAgents }]
+        ? [{ ...baseRunParams, requestedAgents: selectedAgentNames }]
         : [
             ...(llmAgentNames.length > 0
               ? [{ ...baseRunParams, requestedAgents: llmAgentNames }]

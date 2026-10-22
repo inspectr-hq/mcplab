@@ -4,18 +4,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigEditor from './ConfigEditor';
 import type { EvalConfig } from '@/types/eval';
 
-const { configRef, librariesRef, reloadMock, scenarioFormPropsRef } = vi.hoisted(() => ({
-  configRef: { value: null as EvalConfig | null },
-  librariesRef: {
-    value: {
-      servers: [],
-      agents: [],
-      scenarios: []
-    }
-  },
-  reloadMock: vi.fn(),
-  scenarioFormPropsRef: { value: null as { servers?: Array<{ id: string }> } | null }
-}));
+const { configRef, librariesRef, reloadMock, scenarioFormPropsRef, sourceMock } = vi.hoisted(
+  () => ({
+    sourceMock: {
+      getWorkspaceSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultEvaluationAgentName: 'workspace-agent' })
+    },
+    configRef: { value: null as EvalConfig | null },
+    librariesRef: {
+      value: {
+        servers: [],
+        agents: [],
+        scenarios: [],
+        loading: false
+      }
+    },
+    reloadMock: vi.fn(),
+    scenarioFormPropsRef: { value: null as { servers?: Array<{ id: string }> } | null }
+  })
+);
 
 vi.mock('@/contexts/ConfigContext', () => ({
   useConfigs: () => ({
@@ -39,7 +47,7 @@ vi.mock('@/contexts/LibraryContext', () => ({
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
-    source: {}
+    source: sourceMock
   })
 }));
 
@@ -56,6 +64,96 @@ function LocationProbe() {
 }
 
 describe('ConfigEditor', () => {
+  it('explains when the workspace default is unavailable', async () => {
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/This agent is no longer available/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Workspace settings' })).toHaveAttribute(
+      'href',
+      '/settings'
+    );
+  });
+  it('explains how to choose a default when none is configured', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({});
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/No workspace default agent is set/)).toBeInTheDocument();
+  });
+  it('shows missing referenced agents in view mode', async () => {
+    configRef.value!.agentEntries = [
+      {
+        kind: 'inline',
+        agent: {
+          id: 'inline-agent',
+          name: 'Inline Agent',
+          provider: 'openai',
+          model: 'test',
+          maxTokens: 100
+        }
+      },
+      { kind: 'referenced', ref: 'available-agent' },
+      { kind: 'referenced', ref: 'deleted-agent' }
+    ];
+    librariesRef.value.agents = [
+      {
+        id: 'available-agent',
+        name: 'Available Agent',
+        provider: 'openai',
+        model: 'test',
+        maxTokens: 100
+      }
+    ];
+    librariesRef.value.loading = true;
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Loading agents…')).toBeInTheDocument();
+    expect(screen.getByText('Inline Agent')).toBeInTheDocument();
+
+    librariesRef.value.loading = false;
+    rerender(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText('Referenced agents not found: deleted-agent')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Available Agent')).toBeInTheDocument();
+  });
+  it.each(['/mcp-evaluations/cfg-1/agents', '/mcp-evaluations/cfg-1/edit?tab=agents'])(
+    'shows the inherited workspace agent on %s without adding it to the evaluation',
+    async (path) => {
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+          </Routes>
+        </MemoryRouter>
+      );
+      expect(
+        await screen.findByText(/Workspace default agent: workspace-agent/)
+      ).toBeInTheDocument();
+      expect(configRef.value!.agentEntries).toEqual([]);
+    }
+  );
   beforeEach(() => {
     reloadMock.mockClear();
     configRef.value = {
@@ -101,7 +199,8 @@ describe('ConfigEditor', () => {
           evalRules: [],
           extractRules: []
         }
-      ]
+      ],
+      loading: false
     };
     scenarioFormPropsRef.value = null;
   });
@@ -151,6 +250,99 @@ describe('ConfigEditor', () => {
     );
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Agents' })).toHaveAttribute('data-state', 'active');
+  });
+
+  it('shows the agent type icons on the evaluation agents page', () => {
+    configRef.value!.agents = [
+      {
+        id: 'llm-agent',
+        name: 'LLM Agent',
+        provider: 'openai',
+        model: 'gpt-test',
+        maxTokens: 100
+      },
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTitle('LLM agent')).toBeInTheDocument();
+    expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
+  });
+
+  it('shows the agent type icons in editable agent rows', () => {
+    configRef.value!.agents = [
+      {
+        id: 'llm-agent',
+        name: 'LLM Agent',
+        provider: 'openai',
+        model: 'gpt-test',
+        maxTokens: 100
+      },
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/edit?tab=agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTitle('LLM agent')).toBeInTheDocument();
+    expect(screen.getByTitle('Browser agent')).toBeInTheDocument();
+  });
+
+  it('shows browser metadata rather than LLM fields in expanded agent details', () => {
+    configRef.value!.agents = [
+      {
+        id: 'browser-agent',
+        name: 'Browser Agent',
+        type: 'browser',
+        provider: 'chatgpt',
+        model: '',
+        maxTokens: 0,
+        url: 'https://chatgpt.com',
+        newConversationBetweenScenarios: false
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/agents']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand agent details' }));
+
+    expect(screen.getByText('https://chatgpt.com')).toBeInTheDocument();
+    expect(screen.getByText('Continue same conversation')).toBeInTheDocument();
+    expect(screen.queryByText('max_tokens: 0')).not.toBeInTheDocument();
   });
 
   it('hides optional metadata fields in regular view mode', () => {

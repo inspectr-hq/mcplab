@@ -21,6 +21,8 @@ import {
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
   loadConfig,
+  expandConfigForAgents,
+  resolveLoadedRunAgents,
   hashConfig,
   runAll,
   loadWorkspaceSettingsOverrides,
@@ -50,7 +52,6 @@ import {
   mergeBrowserProviderProfiles,
   type SourceEvalConfig,
   type EvalConfig,
-  type ExecutableEvalConfig,
   type ResultsJson,
   type SearchDoc,
   type SearchHit,
@@ -2078,11 +2079,13 @@ export function registerTools(server: McpServer): void {
           scenarioServerOverrides: scenario_server_overrides
         });
         const effectiveConfigHash = hashConfig(runtimeOverridden);
-        const executable = expandConfigForAgents(
-          runtimeOverridden,
-          runtimeOverridden.run_defaults?.selected_agents
-        );
         const workspaceSettings = loadWorkspaceSettingsOverrides(bundleRoot);
+        const selection = resolveLoadedRunAgents({
+          loaded,
+          config: runtimeOverridden,
+          defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
+        });
+        const executable = expandConfigForAgents(runtimeOverridden, selection.agentNames);
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
@@ -4012,30 +4015,6 @@ function resolveExistingRunReadDir(primaryRunsDir: string, runId?: string): stri
     if (existsSync(join(dir, runId))) return dir;
   }
   return primaryRunsDir;
-}
-
-function expandConfigForAgents(
-  config: EvalConfig,
-  requestedAgents?: string[]
-): ExecutableEvalConfig {
-  const selectedAgents =
-    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
-  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
-    );
-  }
-
-  const scenarios = config.scenarios.flatMap((scenario) =>
-    selectedAgents.map((agent) => ({
-      ...scenario,
-      agent,
-      scenario_exec_id: `${scenario.id}-${agent}`
-    }))
-  );
-
-  return { ...config, scenarios };
 }
 
 function latestRunId(runsDir: string): string | undefined {

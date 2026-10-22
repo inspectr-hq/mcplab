@@ -1,6 +1,7 @@
 import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
+  LlmAgentConfig as CoreLlmAgentConfig,
   EvalConfig as CoreEvalConfig,
   SourceEvalConfig as CoreSourceEvalConfig,
   ResultsJson as CoreResultsJson,
@@ -53,7 +54,8 @@ import type {
   AgentConnectionTestResult,
   ProviderModelsResponse,
   WorkspaceSettingsPatch,
-  WorkspaceEvaluationSettings
+  WorkspaceEvaluationSettings,
+  EvaluationRunRequest
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -100,7 +102,8 @@ export {
   normalizeToolExpression,
   parseToolAlternatives,
   isValidToolExpression,
-  tallyCheckCounts
+  tallyCheckCounts,
+  resolveRunAgentSelection
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -109,6 +112,7 @@ export type {
   CoreServerAuthOauthAuthorizationCode,
   CoreServerConfig,
   CoreAgentConfig,
+  CoreLlmAgentConfig,
   CoreScenario,
   CoreEvalConfig,
   CoreSourceEvalConfig,
@@ -121,6 +125,7 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { RunAgentSelection, EvaluationRunRequest } from '@inspectr/mcplab-core';
 export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
 
@@ -690,18 +695,7 @@ export interface EvalDataSource {
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
-  startRun: (params: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioId?: string;
-    scenarioIds?: string[];
-    agents?: string[];
-    runNote?: string;
-    newConversationBetweenScenarios?: boolean;
-    newConversationBeforeStart?: boolean;
-    serverOverrideAll?: string[];
-    scenarioServerOverrides?: Record<string, string[]>;
-  }) => Promise<StartRunResponse>;
+  startRun: (params: EvaluationRunRequest) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
   stopScenario: (
     jobId: string,

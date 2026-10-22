@@ -6,6 +6,7 @@ import {
   loadConfig,
   runAll,
   resolveWorkspaceEvaluation,
+  resolveLoadedRunAgents,
   upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
@@ -73,7 +74,10 @@ export type AdmissionResult =
 export function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] {
   if (job.runParams.oauthServerNames !== undefined) return job.runParams.oauthServerNames;
   try {
-    const loaded = loadConfig(job.runParams.configPath, { bundleRoot: librariesDir });
+    const loaded = loadConfig(job.runParams.configPath, {
+      bundleRoot: librariesDir,
+      agentOverrides: job.runParams.agentSnapshot
+    });
     const libraries = readLibrariesFromStore(librariesDir);
     applyLibraryEntries(loaded, libraries.agents, libraries.servers);
     const selected = job.runParams.scenarioIds?.length
@@ -162,6 +166,7 @@ export async function executeRunJob(params: {
     | 'workspaceRoot'
     | 'evaluationJudgeAgentName'
     | 'evaluationDecision'
+    | 'defaultEvaluationAgentName'
   >;
   oauthSessionManager: OAuthSessionManager;
   inspectrSessionManager?: InspectrSessionManager;
@@ -173,7 +178,6 @@ export async function executeRunJob(params: {
     getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
-    resolveRunSelectedAgents,
     readLibraries,
     pkgVersion
   } = deps;
@@ -194,9 +198,20 @@ export async function executeRunJob(params: {
       ts: new Date().toISOString(),
       payload: { message: `Loading MCP Evaluation config: ${configPath}` }
     });
-    const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+    const loaded = loadConfig(configPath, {
+      bundleRoot: settings.librariesDir,
+      agentOverrides: job.runParams.agentSnapshot
+    });
     const { agents: libraryAgents, servers: libraryServers } = readLibraries(settings.librariesDir);
     applyLibraryEntries(loaded, libraryAgents, libraryServers);
+    if (job.runParams.agentSnapshot) {
+      // loadConfig uses snapshots to resolve declared refs. This merge also restores
+      // selected library agents, including a workspace fallback absent from the evaluation.
+      loaded.config = {
+        ...loaded.config,
+        agents: { ...loaded.config.agents, ...job.runParams.agentSnapshot }
+      };
+    }
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -264,18 +279,29 @@ export async function executeRunJob(params: {
         message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
       }
     });
-    const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents);
+    const resolvedSelection = resolveLoadedRunAgents({
+      loaded,
+      config: runtimeOverriddenConfig,
+      requestedAgentNames: requestedAgents,
+      defaultEvaluationAgentName: settings.defaultEvaluationAgentName
+    });
+    const selection = requestedAgents?.length
+      ? { ...resolvedSelection, source: job.runParams.agentSelectionSource ?? 'requested' }
+      : resolvedSelection;
+    const resolvedAgents = selection.agentNames;
+    const source = selection.source;
+    const sourceLabel = {
+      requested: 'requested',
+      evaluation_default: 'run default',
+      evaluation_agents: 'config-declared',
+      workspace_default: 'workspace default',
+      none: 'selected'
+    }[source];
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
       payload: {
-        message:
-          requestedAgents && requestedAgents.length > 0
-            ? `Using requested agents: ${resolvedAgents.join(', ')}`
-            : runtimeOverriddenConfig.run_defaults?.selected_agents &&
-                runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
-              ? `Using run default agents: ${resolvedAgents.join(', ')}`
-              : `Using config-declared agents: ${resolvedAgents.join(', ')}`
+        message: `Using ${sourceLabel} agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);

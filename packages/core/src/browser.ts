@@ -1,4 +1,6 @@
 export { tallyCheckCounts } from './check-counts.js';
+export { resolveRunAgentSelection } from './run-agent-selection.js';
+export { isLlmAgent } from './types.js';
 export {
   normalizeEvaluationDecisionConfig,
   isDecisionEngineEnabled,
@@ -27,7 +29,10 @@ export type {
   ScenarioAssistantSuggestionBundle,
   ScenarioAssistantSuggestionRule,
   EvaluationDecisionConfig,
-  WorkspaceSettingsPatch
+  WorkspaceSettingsPatch,
+  RunAgentSelection,
+  EvaluationRunRequest,
+  RunAgentSelectionSource
 } from './types.js';
 export {
   formatToolInputAssertionFailureReason,

@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AgentTypeIcon } from '@/components/AgentTypeIcon';
+import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
+import { WorkspaceDefaultAgentNotice } from '@/components/WorkspaceDefaultAgentNotice';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -72,6 +76,8 @@ const ConfigEditor = () => {
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
   const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
+  const defaultEvaluationAgent = useDefaultEvaluationAgent();
+  const librariesReady = useLibrariesReady();
 
   const isNew = id === 'new';
   const isView = !isNew && !!id;
@@ -661,7 +667,10 @@ const ConfigEditor = () => {
       )
     )
   );
-  const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
+  const missingAgentRefs = librariesReady
+    ? referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref))
+    : [];
+  const showMissingAgentRefs = missingAgentRefs.length > 0;
   const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
@@ -948,6 +957,15 @@ const ConfigEditor = () => {
         </TabsList>
 
         <TabsContent value="agents">
+          {agentEntries.length === 0 && (
+            <div className="mb-4">
+              <WorkspaceDefaultAgentNotice
+                {...defaultEvaluationAgent}
+                loading={defaultEvaluationAgent.loading || !librariesReady}
+                agents={libAgents}
+              />
+            </div>
+          )}
           {!readOnly && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
@@ -1015,6 +1033,7 @@ const ConfigEditor = () => {
                   {agentEntries.map((entry, index) => {
                     const referenceAgent =
                       entry.kind === 'referenced' ? findLibraryAgentByRef(entry.ref) : null;
+                    const rowAgent = entry.kind === 'inline' ? entry.agent : referenceAgent;
                     const rowName =
                       entry.kind === 'inline'
                         ? safeText(entry.agent.name, entry.agent.id)
@@ -1061,7 +1080,10 @@ const ConfigEditor = () => {
                               </Button>
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <span className="truncate font-medium">{rowName}</span>
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              {rowAgent && <AgentTypeIcon agent={rowAgent} />}
+                              <span className="truncate font-medium">{rowName}</span>
+                            </span>
                             <Badge
                               variant={entry.kind === 'inline' ? 'secondary' : 'outline-solid'}
                             >
@@ -1282,93 +1304,116 @@ const ConfigEditor = () => {
               </CardContent>
             </Card>
           )}
-          {readOnly ? (
+          {readOnly && agentEntries.length > 0 && (
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">
-                  {agentViewRows.map((row, index) => {
-                    const name = safeText(row.agent.name, row.agent.id);
-                    const isDefault = defaultRunAgentNames.includes(
-                      row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
-                    );
-                    const viewAgentKey = row.ref ?? row.agent.id;
-                    const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
-                    return (
-                      <div
-                        key={`agent-view-${index}-${row.ref ?? row.agent.id}`}
-                        className="rounded-md border p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                            <div className="truncate font-medium text-sm">{name}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isDefault && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
-                              >
-                                Default
-                              </Badge>
-                            )}
-                            <Badge
-                              variant={row.origin === 'inline' ? 'secondary' : 'outline-solid'}
-                            >
-                              {row.origin === 'inline' ? 'Inline' : 'Referenced'}
-                            </Badge>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                setExpandedViewAgentIds((prev) => ({
-                                  ...prev,
-                                  // eslint-disable-next-line no-extra-boolean-cast
-                                  [viewAgentKey]: !Boolean(prev[viewAgentKey])
-                                }))
-                              }
-                              aria-label={
-                                expanded ? 'Collapse agent details' : 'Expand agent details'
-                              }
-                            >
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ${
-                                  expanded ? 'rotate-180' : ''
-                                }`}
-                              />
-                            </Button>
-                          </div>
-                        </div>
-                        {expanded && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
-                            <ProviderBadge provider={row.agent.provider} />
-                            <Badge variant="outline" className="text-xs font-mono">
-                              {row.agent.model}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs font-mono">
-                              max_tokens: {row.agent.maxTokens}
-                            </Badge>
-                            {row.agent.type !== 'browser' && (
-                              <Badge variant="outline" className="text-xs font-mono">
-                                temperature: {resolveAgentTemperature(row.agent.temperature)}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {agentViewRows.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6">
-                      No agents configured.
+                  {!librariesReady && (
+                    <p className="text-xs text-muted-foreground">Loading agents…</p>
+                  )}
+                  {showMissingAgentRefs && (
+                    <p className="text-xs text-destructive">
+                      Referenced agents not found: {missingAgentRefs.join(', ')}
                     </p>
                   )}
+                  {agentViewRows.map((row, index) => {
+                      const name = safeText(row.agent.name, row.agent.id);
+                      const isDefault = defaultRunAgentNames.includes(
+                        row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
+                      );
+                      const viewAgentKey = row.ref ?? row.agent.id;
+                      const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
+                      return (
+                        <div
+                          key={`agent-view-${index}-${row.ref ?? row.agent.id}`}
+                          className="rounded-md border p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                              <span className="inline-flex min-w-0 items-center gap-2">
+                                <AgentTypeIcon agent={row.agent} />
+                                <span className="truncate font-medium text-sm">{name}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isDefault && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
+                                >
+                                  Default
+                                </Badge>
+                              )}
+                              <Badge
+                                variant={row.origin === 'inline' ? 'secondary' : 'outline-solid'}
+                              >
+                                {row.origin === 'inline' ? 'Inline' : 'Referenced'}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={() =>
+                                  setExpandedViewAgentIds((prev) => ({
+                                    ...prev,
+                                    // eslint-disable-next-line no-extra-boolean-cast
+                                    [viewAgentKey]: !Boolean(prev[viewAgentKey])
+                                  }))
+                                }
+                                aria-label={
+                                  expanded ? 'Collapse agent details' : 'Expand agent details'
+                                }
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    expanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </Button>
+                            </div>
+                          </div>
+                          {expanded && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                              <ProviderBadge provider={row.agent.provider} />
+                              {row.agent.type === 'browser' ? (
+                                <>
+                                  <Badge
+                                    variant="outline"
+                                    className="max-w-full truncate font-mono text-xs"
+                                    title={row.agent.url}
+                                  >
+                                    {row.agent.url || 'Not configured'}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">
+                                    {row.agent.newConversationBetweenScenarios === false
+                                      ? 'Continue same conversation'
+                                      : 'New conversation per scenario'}
+                                  </Badge>
+                                </>
+                              ) : (
+                                <>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    {row.agent.model}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    max_tokens: {row.agent.maxTokens}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    temperature: {resolveAgentTemperature(row.agent.temperature)}
+                                  </Badge>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                  })}
                 </div>
               </CardContent>
             </Card>
-          ) : null}
+          )}
         </TabsContent>
 
         <TabsContent value="scenarios">

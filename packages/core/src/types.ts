@@ -9,11 +9,47 @@ export interface EvaluationDecisionConfig {
 }
 
 export interface WorkspaceEvaluationSettings {
+  defaultEvaluationAgentName?: string;
   evaluationJudgeAgentName?: string;
   evaluationDecision?: EvaluationDecisionConfig;
 }
 
+export type RunAgentSelectionSource =
+  | 'requested'
+  | 'evaluation_default'
+  | 'evaluation_agents'
+  | 'workspace_default'
+  | 'none';
+
+export interface RunAgentSelection {
+  agentNames: string[];
+  source: RunAgentSelectionSource;
+}
+
+export interface RunAgentSelectionParams {
+  declaredAgentNames: string[];
+  selectedAgentNames?: string[];
+  requestedAgentNames?: string[];
+  defaultEvaluationAgentName?: string;
+  /** Omit only while preparing a prompt or preview, before the user chooses agents. */
+  availableAgents?: EvalConfig['agents'];
+}
+
+export interface EvaluationRunRequest {
+  configPath: string;
+  runsPerScenario: number;
+  scenarioId?: string;
+  scenarioIds?: string[];
+  agents?: string[];
+  runNote?: string;
+  newConversationBetweenScenarios?: boolean;
+  newConversationBeforeStart?: boolean;
+  serverOverrideAll?: string[];
+  scenarioServerOverrides?: Record<string, string[]>;
+}
+
 export interface WorkspaceSettingsOverrides {
+  default_evaluation_agent_name?: string;
   /** The agent every assistant uses unless a session picks another. */
   assistant_agent_name?: string;
   evaluation_judge_agent_name?: string;
@@ -22,6 +58,7 @@ export interface WorkspaceSettingsOverrides {
 }
 
 export interface WorkspaceSettingsPatch {
+  defaultEvaluationAgentName?: string | null;
   defaultQueueWorkers?: number;
   assistantAgentName?: string | null;
   evaluationJudgeAgentName?: string | null;

@@ -1,4 +1,9 @@
 export * from './types.js';
+export {
+  resolveRunAgentSelection,
+  resolveLoadedRunAgents,
+  NO_EVALUATION_AGENTS_MESSAGE
+} from './run-agent-selection.js';
 export * from './server-constants.js';
 export { tallyCheckCounts } from './check-counts.js';
 export { readBrowserProviderProfiles } from './browser-provider-store.js';
@@ -32,6 +37,7 @@ export {
   loadWorkspaceSettingsOverrides,
   toWorkspaceEvaluationSettings,
   resolveEvaluationJudge,
+  resolveDefaultEvaluationAgent,
   resolveWorkspaceEvaluation
 } from './workspace-settings.js';
 export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';

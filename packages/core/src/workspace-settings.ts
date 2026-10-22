@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { requireLlmAgent } from './run-agent-selection.js';
 import {
-  isLlmAgent,
   type EvalConfig,
+  type LlmAgentConfig,
   type EvaluationJudge,
   type ResolveWorkspaceEvaluationParams,
   type WorkspaceEvaluation,
@@ -23,6 +24,10 @@ export function loadWorkspaceSettingsOverrides(librariesDir: string): WorkspaceS
     const assistantAgentName = current.assistant_agent_name ?? legacyAssistantAgentName;
     return {
       ...current,
+      default_evaluation_agent_name:
+        typeof parsed.default_evaluation_agent_name === 'string'
+          ? parsed.default_evaluation_agent_name.trim() || undefined
+          : undefined,
       assistant_agent_name:
         typeof assistantAgentName === 'string' ? assistantAgentName.trim() || undefined : undefined,
       evaluation_judge_agent_name:
@@ -39,6 +44,7 @@ export function toWorkspaceEvaluationSettings(
   settings: WorkspaceSettingsOverrides
 ): WorkspaceEvaluationSettings {
   return {
+    defaultEvaluationAgentName: settings.default_evaluation_agent_name,
     evaluationJudgeAgentName: settings.evaluation_judge_agent_name,
     evaluationDecision: settings.evaluation_decision
   };
@@ -50,10 +56,22 @@ export function resolveEvaluationJudge(params: {
 }): EvaluationJudge | undefined {
   const selected = params.evaluationJudgeAgentName?.trim();
   if (!selected) return undefined;
-  const agent = params.agents[selected];
-  if (!agent) throw new Error(`Evaluation judge agent not found: ${selected}`);
-  if (!isLlmAgent(agent)) throw new Error(`Evaluation judge must be an LLM agent: ${selected}`);
+  const agent = requireLlmAgent(
+    params.agents,
+    selected,
+    'Evaluation judge agent',
+    'Evaluation judge'
+  );
   return { name: selected, agent };
+}
+
+export function resolveDefaultEvaluationAgent(params: {
+  agents: EvalConfig['agents'];
+  defaultEvaluationAgentName?: string;
+}): LlmAgentConfig | undefined {
+  const selected = params.defaultEvaluationAgentName?.trim();
+  if (!selected) return undefined;
+  return requireLlmAgent(params.agents, selected, 'Default evaluation agent');
 }
 
 /** Resolve evaluation services only when selected scenarios need semantic checks. */

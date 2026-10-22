@@ -1,5 +1,80 @@
 import { describe, expect, it } from 'vitest';
-import { parseNumberSelection, resolveRunOptions } from './run-interactive.js';
+import {
+  getAgentModeOptions,
+  loadInteractiveConfig,
+  parseNumberSelection,
+  resolveRunOptions
+} from './run-interactive.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { resolveRunAgentSelection } from '@inspectr/mcplab-core';
+
+describe('loadInteractiveConfig', () => {
+  it.each(['browser', 'deleted'])(
+    'allows replacing a persisted %s workspace default',
+    (defaultName) => {
+      const root = mkdtempSync(join(tmpdir(), 'mcplab-interactive-default-'));
+      try {
+        writeFileSync(
+          join(root, 'agents.yaml'),
+          'main:\n  provider: openai\n  model: test\nbrowser:\n  type: browser\n  provider: chatgpt\n  url: https://chatgpt.com\n'
+        );
+        writeFileSync(
+          join(root, '.mcplab-app-settings.yaml'),
+          `default_evaluation_agent_name: ${defaultName}\n`
+        );
+        const configPath = join(root, 'eval.yaml');
+        writeFileSync(configPath, 'scenarios: []\n');
+        const loaded = loadInteractiveConfig(configPath);
+        expect(loaded.config.run_defaults).toBeUndefined();
+        expect(loaded.declaredAgentNames).toEqual([]);
+        expect(loaded.agentSelection).toEqual({
+          agentNames: [defaultName],
+          source: 'workspace_default'
+        });
+        const options = resolveRunOptions({
+          interactive: true,
+          interactiveSelection: { configPath, agentMode: 'specific', agents: ['main'] }
+        });
+        expect(
+          resolveRunAgentSelection({
+            declaredAgentNames: loaded.declaredAgentNames,
+            requestedAgentNames: options.agents?.split(','),
+            defaultEvaluationAgentName: defaultName
+          })
+        ).toEqual({ agentNames: ['main'], source: 'requested' });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+});
+
+describe('getAgentModeOptions', () => {
+  it('labels workspace defaults and distinguishes the full library', () => {
+    expect(
+      getAgentModeOptions(['main', 'other'], { agentNames: ['main'], source: 'workspace_default' })
+    ).toEqual([
+      { mode: 'all', label: 'All available agents' },
+      { mode: 'defaults', label: 'Workspace default agent (main)' },
+      { mode: 'specific', label: 'Choose specific agents' }
+    ]);
+  });
+  it('does not duplicate all-agents when no explicit defaults exist', () => {
+    expect(
+      getAgentModeOptions(['main'], { agentNames: ['main'], source: 'evaluation_agents' }).map(
+        (choice) => choice.mode
+      )
+    ).toEqual(['all', 'specific']);
+    expect(
+      getAgentModeOptions(['main', 'other'], {
+        agentNames: ['main'],
+        source: 'evaluation_agents'
+      })[1].label
+    ).toBe('Evaluation agents (main)');
+  });
+});
 
 describe('parseNumberSelection', () => {
   it('parses a single selection', () => {

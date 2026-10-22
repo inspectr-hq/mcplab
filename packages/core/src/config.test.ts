@@ -23,6 +23,20 @@ const BASE_CONFIG: EvalConfig = {
 };
 
 describe('expandConfigForAgents', () => {
+  it('preserves declared names separately from the mutable runtime agent pool', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-declared-agents-'));
+    try {
+      writeFileSync(
+        join(root, 'eval.yaml'),
+        'agents:\n  - id: declared\n    provider: openai\n    model: test\nscenarios: []\n'
+      );
+      const loaded = loadConfig(join(root, 'eval.yaml'), { bundleRoot: root });
+      loaded.config.agents.library = { provider: 'openai', model: 'library' };
+      expect(loaded.declaredAgentNames).toEqual(['declared']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it('expands each scenario for every agent when no agents requested', () => {
     const result = expandConfigForAgents(BASE_CONFIG);
     expect(result.scenarios).toHaveLength(4); // 2 scenarios × 2 agents

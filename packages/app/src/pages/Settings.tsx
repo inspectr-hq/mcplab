@@ -15,19 +15,26 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings';
+import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 
 const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
+  const librariesReady = useLibrariesReady();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [assistantAgentName, setAssistantAgentName] = useState<string>('');
+  const [defaultEvaluationAgentName, setDefaultEvaluationAgentName] = useState('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
   const [decisionError, setDecisionError] = useState('');
   const [testingDecision, setTestingDecision] = useState(false);
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
+  const defaultAgentIsBrowser = agents.some(
+    (agent) => agent.id === defaultEvaluationAgentName && agent.type === 'browser'
+  );
+  const defaultAgentStatus = defaultAgentIsBrowser ? 'browser agent, not allowed' : 'unavailable';
 
   const effectiveAssistantAgentName = useMemo(
     () => assistantAgentName || agents[0]?.name || '',
@@ -39,11 +46,13 @@ const SettingsPage = () => {
     try {
       const settings = await source.getWorkspaceSettings();
       setAssistantAgentName(settings?.assistantAgentName ?? '');
+      setDefaultEvaluationAgentName(settings?.defaultEvaluationAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       setSavedDecision(settings?.evaluationDecision);
     } catch (error: unknown) {
       setAssistantAgentName('');
+      setDefaultEvaluationAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
       setSavedDecision(undefined);
@@ -61,22 +70,39 @@ const SettingsPage = () => {
     void loadSettings();
   }, [loadSettings]);
 
-  const saveAssistantAgentSetting = async (nextAgentName: string) => {
-    const previousAgentName = assistantAgentName;
-    setAssistantAgentName(nextAgentName);
+  const agentSettings = {
+    defaultEvaluationAgentName: {
+      name: defaultEvaluationAgentName,
+      setName: setDefaultEvaluationAgentName,
+      label: 'evaluation agent',
+      cleared: 'Default evaluation agent cleared.'
+    },
+    assistantAgentName: {
+      name: assistantAgentName,
+      setName: setAssistantAgentName,
+      label: 'assistant agent',
+      cleared: 'Default assistant agent cleared (will use first available agent by default).'
+    },
+    evaluationJudgeAgentName: {
+      name: evaluationJudgeAgentName,
+      setName: setEvaluationJudgeAgentName,
+      label: 'evaluation judge',
+      cleared: 'Default evaluation judge cleared.'
+    }
+  };
+
+  const saveAgentSetting = async (key: keyof typeof agentSettings, name: string) => {
+    const field = agentSettings[key];
+    field.setName(name);
     setSavingSettings(true);
     try {
-      await source.updateWorkspaceSettings({
-        assistantAgentName: nextAgentName || undefined
-      });
+      await source.updateWorkspaceSettings({ [key]: name || null });
       toast({
         title: 'Settings updated',
-        description: nextAgentName
-          ? `Default assistant agent set to ${nextAgentName}.`
-          : 'Default assistant agent cleared (will use first available agent by default).'
+        description: name ? `Default ${field.label} set to ${name}.` : field.cleared
       });
     } catch (error: unknown) {
-      setAssistantAgentName(previousAgentName);
+      field.setName(field.name);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
@@ -118,29 +144,7 @@ const SettingsPage = () => {
       );
       return;
     }
-    const previousAgentName = evaluationJudgeAgentName;
-    setEvaluationJudgeAgentName(nextAgentName);
-    setSavingSettings(true);
-    try {
-      await source.updateWorkspaceSettings({
-        evaluationJudgeAgentName: nextAgentName || null
-      });
-      toast({
-        title: 'Settings updated',
-        description: nextAgentName
-          ? `Default evaluation judge set to ${nextAgentName}.`
-          : 'Default evaluation judge cleared.'
-      });
-    } catch (error: unknown) {
-      setEvaluationJudgeAgentName(previousAgentName);
-      toast({
-        title: 'Could not save settings',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingSettings(false);
-    }
+    await saveAgentSetting('evaluationJudgeAgentName', nextAgentName);
   };
 
   const refreshAll = async () => {
@@ -173,6 +177,59 @@ const SettingsPage = () => {
 
       <Card>
         <CardHeader className="pb-3">
+          <CardTitle className="text-base">Evaluation Defaults</CardTitle>
+          <CardDescription>
+            LLM agent used when an evaluation has no agents configured.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="default-evaluation-agent">
+              Default Evaluation Agent
+            </Label>
+            <Select
+              value={defaultEvaluationAgentName || '__none__'}
+              onValueChange={(value) =>
+                void saveAgentSetting(
+                  'defaultEvaluationAgentName',
+                  value === '__none__' ? '' : value
+                )
+              }
+              disabled={savingSettings || loadingSettings || !librariesReady}
+            >
+              <SelectTrigger
+                id="default-evaluation-agent"
+                className="h-9 text-sm"
+                aria-describedby="default-evaluation-agent-help"
+              >
+                <SelectValue placeholder="Select evaluation agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {defaultEvaluationAgentName &&
+                  !llmAgents.some((agent) => agent.id === defaultEvaluationAgentName) && (
+                    <SelectItem value={defaultEvaluationAgentName} disabled>
+                      {defaultEvaluationAgentName} ({defaultAgentStatus})
+                    </SelectItem>
+                  )}
+                {llmAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name || agent.id} · {agent.model || agent.provider}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p id="default-evaluation-agent-help" className="text-xs text-muted-foreground">
+              Evaluation agents and explicit run selections take precedence. Inheritance is resolved
+              when a run is created.
+            </p>
+          </div>
+          <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Assistant Defaults</CardTitle>
           <CardDescription>
             Default assistant agent used across assistant flows. If unset, MCP Lab uses the first
@@ -185,7 +242,7 @@ const SettingsPage = () => {
             <Select
               value={effectiveAssistantAgentName || '__none__'}
               onValueChange={(value) =>
-                void saveAssistantAgentSetting(value === '__none__' ? '' : value)
+                void saveAgentSetting('assistantAgentName', value === '__none__' ? '' : value)
               }
               disabled={savingSettings}
             >
