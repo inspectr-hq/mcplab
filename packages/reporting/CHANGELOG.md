@@ -1,5 +1,21 @@
 # @inspectr/mcplab-reporting
 
+## 1.4.0
+
+### Minor Changes
+
+- feat: Add check with OR for required tools
+- feat: add autocomplete ToolNameInput
+- feat: add evaluation agent fallback
+- feat: add copy buttons to result traces
+- fix: support nested eval config folders
+- fix: broadcast task progress in queue
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.27.0
+
 ## 1.3.3
 
 ### Patch Changes

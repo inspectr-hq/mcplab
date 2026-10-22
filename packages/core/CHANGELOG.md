@@ -1,5 +1,16 @@
 # @inspectr/mcplab-core
 
+## 1.27.0
+
+### Minor Changes
+
+- feat: Add check with OR for required tools
+- feat: add autocomplete ToolNameInput
+- feat: add evaluation agent fallback
+- feat: add copy buttons to result traces
+- fix: support nested eval config folders
+- fix: broadcast task progress in queue
+
 ## 1.26.0
 
 ### Minor Changes
