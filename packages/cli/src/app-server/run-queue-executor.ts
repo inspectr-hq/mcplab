@@ -170,6 +170,7 @@ export async function executeRunJob(params: {
   >;
   oauthSessionManager: OAuthSessionManager;
   inspectrSessionManager?: InspectrSessionManager;
+  onChildProgress?: () => void;
   deps: RunsRouteDeps;
 }): Promise<ExecutionOutcome> {
   const { job, settings, oauthSessionManager, deps } = params;
@@ -319,6 +320,7 @@ export async function executeRunJob(params: {
       total: runsPerScenario,
       status: 'queued' as const
     }));
+    params.onChildProgress?.();
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -454,7 +456,7 @@ export async function executeRunJob(params: {
         job.childAbortControllers?.get(`${scenario.id}:${scenario.agent}`)?.signal,
       persistArtifacts: !job.runParams.evaluationRunId,
       onProgress: async (event: RunProgressEvent) => {
-        updateChildProgress(job, event);
+        if (updateChildProgress(job, event)) params.onChildProgress?.();
         const message = formatRunProgressMessage(event);
         if (!message) return;
         addJobEvent(job, {
@@ -669,8 +671,8 @@ function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number |
   return hasAny ? total : null;
 }
 
-function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
-  if (event.type !== 'scenario_run_started' && event.type !== 'scenario_run_finished') return;
+function updateChildProgress(job: RunJob, event: RunProgressEvent): boolean {
+  if (event.type !== 'scenario_run_started' && event.type !== 'scenario_run_finished') return false;
   const existing = job.childProgress ?? [];
   const index = existing.findIndex(
     (child) => child.scenarioId === event.scenarioId && child.agentName === event.agentName
@@ -691,7 +693,7 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
     (event.type === 'scenario_run_finished' && event.outcome === 'stopped')
   ) {
     job.childProgress = upsertQueueChildProgress(existing, { ...current, status: 'stopped' });
-    return;
+    return true;
   }
   const next: QueueChildProgress = {
     ...current,
@@ -704,6 +706,7 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
         })
   };
   job.childProgress = upsertQueueChildProgress(existing, next);
+  return true;
 }
 
 function formatRunProgressMessage(event: RunProgressEvent): string | null {

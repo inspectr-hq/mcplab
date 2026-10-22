@@ -435,6 +435,7 @@ export function createRunQueueService(params: {
       settings,
       oauthSessionManager,
       inspectrSessionManager,
+      onChildProgress: emit,
       deps: deps as any
     });
     await handleExecutionOutcome(job, outcome, options);

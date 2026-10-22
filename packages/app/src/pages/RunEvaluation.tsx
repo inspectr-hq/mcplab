@@ -33,7 +33,12 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
-import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
+import type {
+  EvaluationQueueItem,
+  QueueChildProgress,
+  QueueEntry,
+  QueueResponse
+} from '@/lib/data-sources/types';
 import type { InspectrSession, RunAgentSelection } from '@/types/eval';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
@@ -142,6 +147,7 @@ const RunEvaluation = () => {
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const attachedJobIdRef = useRef<string | null>(null);
   const queueEvaluationsRef = useRef(new Map<string, EvaluationQueueItem>());
+  const queueRevisionRef = useRef(0);
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
@@ -592,9 +598,11 @@ const RunEvaluation = () => {
     }
   };
 
-  const refreshQueue = async (detectCompletedEvaluation = false) => {
+  const refreshQueue = async (detectCompletedEvaluation = false, snapshot?: QueueResponse) => {
+    const revision = ++queueRevisionRef.current;
     try {
-      const q = await source.getRunQueue();
+      const q = snapshot ?? (await source.getRunQueue());
+      if (revision !== queueRevisionRef.current) return;
       const nextEvaluations = q.evaluations ?? [];
       const nextEvaluationIds = new Set(nextEvaluations.map((item) => item.evaluationRunId));
       const previousEvaluations = queueEvaluationsRef.current;
@@ -681,7 +689,9 @@ const RunEvaluation = () => {
     refreshConfigAndLibraries();
     void refreshQueue();
     const unsubscribeQueue = source.subscribeRunQueue((event) => {
-      if (event.type === 'queue_event') void refreshQueue(true);
+      if (event.type === 'queue_event') {
+        void refreshQueue(true, event.payload.event as QueueResponse);
+      }
     });
     const handleFocus = () => {
       refreshConfigAndLibraries();
@@ -1323,7 +1333,7 @@ const RunEvaluation = () => {
                                 return (
                                   <Badge
                                     key={serverId}
-                                    variant={selected ? 'default' : 'outline-solid'}
+                                    variant={selected ? 'default' : 'outline'}
                                     className={`cursor-pointer text-xs ${
                                       selected ? '' : 'opacity-60 hover:opacity-100'
                                     }`}
@@ -1377,7 +1387,7 @@ const RunEvaluation = () => {
                       return (
                         <Badge
                           key={serverId}
-                          variant={selected ? 'default' : 'outline-solid'}
+                          variant={selected ? 'default' : 'outline'}
                           className={`cursor-pointer text-xs ${
                             selected ? '' : 'opacity-60 hover:opacity-100'
                           }`}
@@ -1746,7 +1756,7 @@ const RunEvaluation = () => {
                           }`}
                           onClick={() => selectQueueJob(job.jobId)}
                         >
-                          <span className="flex min-w-0 items-center gap-1.5 truncate">
+                          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <span className="shrink-0 tabular-nums">{rowIndex + 1}.</span>
                             {(child ? child.status === 'running' : job.status === 'running') && (
                               <QueueProcessingIndicator label="Subjob running" />
@@ -1758,15 +1768,7 @@ const RunEvaluation = () => {
                               <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
                             )}
                             {child
-                              ? `${child.scenarioId} · ${child.agentName}${
-                                  child.serverNames
-                                    ? ` · MCP servers: ${
-                                        child.serverNames.length
-                                          ? child.serverNames.join(', ')
-                                          : 'none'
-                                      }`
-                                    : ''
-                                } · `
+                              ? `${child.scenarioId} · ${child.agentName} · `
                               : `${
                                   job.roverAgent?.name ??
                                   job.runParams.agents?.join(', ') ??
@@ -1796,6 +1798,16 @@ const RunEvaluation = () => {
                               ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
                             {child?.error && ` · ${child.error}`}
                             {!child && job.roverProgress?.error && ` · ${job.roverProgress.error}`}
+                            {child?.serverNames?.map((serverName) => (
+                              <Badge
+                                key={serverName}
+                                asChild
+                                variant="outline"
+                                className="font-mono text-[11px]"
+                              >
+                                <span>MCP: {serverName}</span>
+                              </Badge>
+                            ))}
                           </span>
                           <span
                             className="flex shrink-0 items-center gap-1"

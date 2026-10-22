@@ -277,9 +277,7 @@ export function ServerForm({
                   <Button
                     type="button"
                     variant={
-                      !srv.oauthMode || srv.oauthMode === 'pre_registered'
-                        ? 'default'
-                        : 'outline-solid'
+                      !srv.oauthMode || srv.oauthMode === 'pre_registered' ? 'default' : 'outline'
                     }
                     size="sm"
                     disabled={readOnly}
@@ -289,7 +287,7 @@ export function ServerForm({
                   </Button>
                   <Button
                     type="button"
-                    variant={srv.oauthMode === 'dcr' ? 'default' : 'outline-solid'}
+                    variant={srv.oauthMode === 'dcr' ? 'default' : 'outline'}
                     size="sm"
                     disabled={readOnly}
                     onClick={() =>

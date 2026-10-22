@@ -897,7 +897,7 @@ function ScenarioCard({
           {readOnly ? (
             <div className="flex items-center gap-2">
               {scenarioOrigin && (
-                <Badge variant={scenarioOrigin === 'inline' ? 'secondary' : 'outline-solid'}>
+                <Badge variant={scenarioOrigin === 'inline' ? 'secondary' : 'outline'}>
                   {scenarioOrigin === 'referenced' ? 'Referenced' : 'Inline'}
                 </Badge>
               )}
@@ -1010,7 +1010,7 @@ function ScenarioCard({
                 {servers.map((srv) => (
                   <Badge
                     key={srv.id}
-                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline-solid'}
+                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline'}
                     className={`cursor-pointer text-xs ${
                       scenario.serverIds.includes(srv.id) ? '' : 'opacity-50'
                     }`}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { aggregateResults, expandConfigForAgents } from '@inspectr/mcplab-core';
+import { aggregateResults, expandConfigForAgents, type QueueResponse } from '@inspectr/mcplab-core';
+import type { ServerResponse } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 const { runAllMock } = vi.hoisted(() => ({ runAllMock: vi.fn() }));
 vi.mock('@inspectr/mcplab-core', async (importOriginal) => ({
@@ -13,11 +14,88 @@ import {
 } from './run-queue-executor.js';
 import {
   createQueuedJob,
+  createRunQueueServiceForTest,
   createOauthEvalFixture,
   cleanupFixtureRoot
 } from './runs-routes.test-helpers.js';
 
 describe('executeRunJob', () => {
+  it('broadcasts child transitions while keeping the evaluation visible until execution finishes', async () => {
+    const fixture = createOauthEvalFixture();
+    const snapshots: QueueResponse[] = [];
+    try {
+      writeFileSync(
+        fixture.configPath,
+        'agents:\n  - id: mini\n    provider: openai\n    model: test\nscenarios:\n  - id: s1\n    prompt: test\n    servers: []\n  - id: s2\n    prompt: test\n    servers: []\n'
+      );
+      runAllMock.mockImplementationOnce(async (_config, options) => {
+        for (const [index, scenarioId] of ['s1', 's2'].entries()) {
+          const event = {
+            scenarioId,
+            agentName: 'mini',
+            scenarioRunIndex: index + 1,
+            totalScenarioRuns: 2,
+            runIndex: 0,
+            runsPerScenario: 1
+          };
+          await options.onProgress({ ...event, type: 'scenario_run_started' });
+          await options.onProgress({
+            ...event,
+            type: 'scenario_run_finished',
+            outcome: 'passed',
+            pass: true,
+            toolCallCount: 0
+          });
+        }
+        return {
+          runDir: fixture.runsDir,
+          results: aggregateResults({
+            runId: 'execution-progress',
+            timestamp: '2026-10-22T00:00:00Z',
+            configHash: 'test',
+            cliVersion: 'test',
+            scenarioRuns: []
+          })
+        };
+      });
+      const service = createRunQueueServiceForTest({
+        settings: fixture,
+        deps: {
+          expandConfigForAgents,
+          sendSseEvent: (_target: unknown, event: { payload: { event: QueueResponse } }) => {
+            snapshots.push(structuredClone(event.payload.event));
+          }
+        }
+      });
+      service.subscribeQueue({ on: vi.fn(), end: vi.fn() } as unknown as ServerResponse);
+      const { jobId } = service.enqueueRun({
+        configPath: fixture.configPath,
+        runsPerScenario: 1,
+        evaluationRunId: 'evaluation-progress'
+      });
+      await vi.waitFor(() => expect(service.jobs.get(jobId)?.status).toBe('completed'));
+      const evaluationSnapshots = snapshots.flatMap((snapshot) => snapshot.evaluations ?? []);
+      const childSnapshots = evaluationSnapshots.filter(
+        (evaluation) => evaluation.jobs[0]?.childProgress?.length
+      );
+      expect(
+        childSnapshots.map((evaluation) =>
+          evaluation.jobs[0].childProgress?.map((child) => child.status)
+        )
+      ).toEqual([
+        ['queued', 'queued'],
+        ['running', 'queued'],
+        ['completed', 'queued'],
+        ['completed', 'running'],
+        ['completed', 'completed']
+      ]);
+      expect(childSnapshots.at(-1)).toMatchObject({ status: 'running', completedJobs: 2 });
+      expect(snapshots.at(-1)?.evaluations).toEqual([]);
+    } finally {
+      runAllMock.mockReset();
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
   it('resolves OAuth admission using saved agent refs after library deletion', () => {
     const fixture = createOauthEvalFixture();
     try {
