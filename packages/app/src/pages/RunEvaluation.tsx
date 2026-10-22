@@ -70,7 +70,9 @@ function getWorkspaceDefaultError({
   agentName?: string;
   agentAvailable: boolean;
 }): string | undefined {
-  if (agentsLoading || selectionSource !== 'workspace_default') return undefined;
+  if (agentsLoading || selectionSource !== 'workspace_default') {
+    return undefined;
+  }
   if (invalidWorkspaceDefault) return WORKSPACE_DEFAULT_LLM_AGENT_ERROR;
   if (agentName && !agentAvailable) {
     return `Workspace default agent ${agentName} is no longer available. Choose another workspace default.`;
@@ -283,6 +285,10 @@ const RunEvaluation = () => {
     (defaultSelection.source === 'workspace_default' || defaultSelection.source === 'none')
       ? defaultEvaluationAgent.error
       : undefined);
+  const agentSelectionErrorMessage =
+    defaultEvaluationAgent.error && agentSelectionError === defaultEvaluationAgent.error
+      ? `${agentSelectionError} Select agents for this run.`
+      : agentSelectionError;
   const invalidWorkspaceDefault =
     defaultSelection.source === 'workspace_default' &&
     availableAgents.some(
@@ -295,6 +301,8 @@ const RunEvaluation = () => {
     agentName: defaultEvaluationAgent.name,
     agentAvailable: availableAgents.some((agent) => agent.id === defaultEvaluationAgent.name)
   });
+  const showWorkspaceDefaultError =
+    Boolean(workspaceDefaultError) && (!agentSelectionEdited || selectedAgentIds.length === 0);
   const defaultSelectedAgentIds = useMemo(() => {
     if (invalidWorkspaceDefault) return [];
     return defaultSelection.agentNames.filter((id) =>
@@ -1066,12 +1074,12 @@ const RunEvaluation = () => {
           </div>
           {selectedConfig && (
             <fieldset className="space-y-2" disabled={agentsLoading}>
-              {agentSelectionError && (
+              {agentSelectionErrorMessage && (
                 <p role="alert" className="text-sm text-destructive">
-                  {agentSelectionError}
+                  {agentSelectionErrorMessage}
                 </p>
               )}
-              {workspaceDefaultError && !agentSelectionEdited && (
+              {showWorkspaceDefaultError && (
                 <p role="alert" className="text-sm text-destructive">
                   {workspaceDefaultError}{' '}
                   <Link to="/settings" className="underline">

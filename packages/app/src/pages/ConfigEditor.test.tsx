@@ -91,6 +91,16 @@ describe('ConfigEditor', () => {
   });
   it('shows missing referenced agents in view mode', async () => {
     configRef.value!.agentEntries = [
+      {
+        kind: 'inline',
+        agent: {
+          id: 'inline-agent',
+          name: 'Inline Agent',
+          provider: 'openai',
+          model: 'test',
+          maxTokens: 100
+        }
+      },
       { kind: 'referenced', ref: 'available-agent' },
       { kind: 'referenced', ref: 'deleted-agent' }
     ];
@@ -112,6 +122,7 @@ describe('ConfigEditor', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('Loading agents…')).toBeInTheDocument();
+    expect(screen.getByText('Inline Agent')).toBeInTheDocument();
 
     librariesRef.value.loading = false;
     rerender(

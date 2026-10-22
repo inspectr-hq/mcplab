@@ -280,6 +280,9 @@ describe('RunEvaluation', () => {
     expect(checkbox).toBeChecked();
     expect(screen.queryByText(/must be an LLM agent/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    fireEvent.click(checkbox);
+    expect(screen.getByRole('alert')).toHaveTextContent('must be an LLM agent');
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
   });
   it('explains invalid evaluation defaults and prevents running them', async () => {
     configsRef.value = [

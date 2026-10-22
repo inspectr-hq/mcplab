@@ -667,8 +667,10 @@ const ConfigEditor = () => {
       )
     )
   );
-  const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
-  const showMissingAgentRefs = librariesReady && missingAgentRefs.length > 0;
+  const missingAgentRefs = librariesReady
+    ? referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref))
+    : [];
+  const showMissingAgentRefs = missingAgentRefs.length > 0;
   const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
@@ -1314,8 +1316,7 @@ const ConfigEditor = () => {
                       Referenced agents not found: {missingAgentRefs.join(', ')}
                     </p>
                   )}
-                  {librariesReady &&
-                    agentViewRows.map((row, index) => {
+                  {agentViewRows.map((row, index) => {
                       const name = safeText(row.agent.name, row.agent.id);
                       const isDefault = defaultRunAgentNames.includes(
                         row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
@@ -1408,7 +1409,7 @@ const ConfigEditor = () => {
                           )}
                         </div>
                       );
-                    })}
+                  })}
                 </div>
               </CardContent>
             </Card>
