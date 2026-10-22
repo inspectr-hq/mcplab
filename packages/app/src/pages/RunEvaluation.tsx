@@ -1756,7 +1756,7 @@ const RunEvaluation = () => {
                           }`}
                           onClick={() => selectQueueJob(job.jobId)}
                         >
-                          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className="flex min-w-0 items-center gap-1.5 truncate">
                             <span className="shrink-0 tabular-nums">{rowIndex + 1}.</span>
                             {(child ? child.status === 'running' : job.status === 'running') && (
                               <QueueProcessingIndicator label="Subjob running" />
@@ -1768,7 +1768,11 @@ const RunEvaluation = () => {
                               <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
                             )}
                             {child
-                              ? `${child.scenarioId} · ${child.agentName} · `
+                              ? `${child.scenarioId} · ${child.agentName}${
+                                  child.serverNames?.length
+                                    ? ` · MCP: ${child.serverNames.join(', ')}`
+                                    : ''
+                                } · `
                               : `${
                                   job.roverAgent?.name ??
                                   job.runParams.agents?.join(', ') ??
@@ -1798,16 +1802,6 @@ const RunEvaluation = () => {
                               ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
                             {child?.error && ` · ${child.error}`}
                             {!child && job.roverProgress?.error && ` · ${job.roverProgress.error}`}
-                            {child?.serverNames?.map((serverName) => (
-                              <Badge
-                                key={serverName}
-                                asChild
-                                variant="outline"
-                                className="font-mono text-[11px]"
-                              >
-                                <span>MCP: {serverName}</span>
-                              </Badge>
-                            ))}
                           </span>
                           <span
                             className="flex shrink-0 items-center gap-1"
