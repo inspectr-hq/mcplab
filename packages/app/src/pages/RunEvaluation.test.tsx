@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
@@ -937,12 +937,8 @@ describe('RunEvaluation', () => {
     await screen.findByText('Live children');
     fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
     expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
-    expect(screen.getAllByText(/^MCP:/).map((badge) => badge.textContent)).toEqual([
-      'MCP: weather',
-      'MCP: search'
-    ]);
-    const serverlessRow = screen.getByText(/s2 · Agent/).closest('div')!;
-    expect(within(serverlessRow).queryByText(/^MCP:/)).not.toBeInTheDocument();
+    expect(screen.getByText(/s1 · Agent · MCP: weather, search · queued/)).toBeInTheDocument();
+    expect(screen.getByText(/s2 · Agent/)).not.toHaveTextContent('MCP:');
     expect(screen.queryByText(/@unknown/)).not.toBeInTheDocument();
 
     let resolveRefresh!: (value: ReturnType<typeof snapshot>) => void;
