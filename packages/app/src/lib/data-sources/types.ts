@@ -1,6 +1,7 @@
 import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
+  LlmAgentConfig as CoreLlmAgentConfig,
   EvalConfig as CoreEvalConfig,
   SourceEvalConfig as CoreSourceEvalConfig,
   ResultsJson as CoreResultsJson,
@@ -111,6 +112,7 @@ export type {
   CoreServerAuthOauthAuthorizationCode,
   CoreServerConfig,
   CoreAgentConfig,
+  CoreLlmAgentConfig,
   CoreScenario,
   CoreEvalConfig,
   CoreSourceEvalConfig,

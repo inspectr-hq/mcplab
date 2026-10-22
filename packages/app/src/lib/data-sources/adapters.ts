@@ -35,6 +35,7 @@ import type {
 } from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
+  CoreLlmAgentConfig,
   CoreResultsJson,
   CoreScenarioRun,
   CoreSourceEvalConfig,
@@ -54,7 +55,7 @@ const coreLlmProvider = {
   azure_foundry: 'azure_foundry',
   google: 'openai',
   custom: 'openai'
-} satisfies Record<LlmAgentConfig['provider'], CoreAgentConfig['provider']>;
+} satisfies Record<LlmAgentConfig['provider'], CoreLlmAgentConfig['provider']>;
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
