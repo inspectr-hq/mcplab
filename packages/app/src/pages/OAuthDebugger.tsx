@@ -605,7 +605,7 @@ export default function OAuthDebuggerPage() {
 
   const severityBadge = (severity: 'error' | 'warning' | 'info') => {
     if (severity === 'error') return 'destructive' as const;
-    if (severity === 'warning') return 'outline-solid' as const;
+    if (severity === 'warning') return 'outline' as const;
     return 'secondary' as const;
   };
 
@@ -635,7 +635,7 @@ export default function OAuthDebuggerPage() {
                 className="rounded-full"
               >
                 <Badge
-                  variant={active ? 'default' : 'outline-solid'}
+                  variant={active ? 'default' : 'outline'}
                   className={!allowed ? 'opacity-50' : ''}
                 >
                   {step.label}
@@ -1196,10 +1196,10 @@ export default function OAuthDebuggerPage() {
                               s.status === 'failed'
                                 ? 'destructive'
                                 : s.status === 'completed'
-                                  ? 'outline-solid'
+                                  ? 'outline'
                                   : s.status === 'active'
                                     ? 'secondary'
-                                    : 'outline-solid'
+                                    : 'outline'
                             }
                             className={
                               s.status === 'completed'

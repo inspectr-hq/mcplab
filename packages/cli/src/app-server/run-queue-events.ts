@@ -119,7 +119,7 @@ export function buildQueueState(
       const hasPending =
         children.some((child) => ['queued', 'running'].includes(child.status)) ||
         entries.some((entry) =>
-          ['waiting_for_rover', 'blocked_auth', 'paused_rover'].includes(entry.status)
+          ['running', 'waiting_for_rover', 'blocked_auth', 'paused_rover'].includes(entry.status)
         );
       const status: EvaluationQueueItem['status'] =
         stoppedJobs > 0 && errorJobs === 0 && !hasPending

@@ -647,9 +647,7 @@ const ServerDetail = () => {
                 <Button
                   type="button"
                   variant={
-                    !form.oauthMode || form.oauthMode === 'pre_registered'
-                      ? 'default'
-                      : 'outline-solid'
+                    !form.oauthMode || form.oauthMode === 'pre_registered' ? 'default' : 'outline'
                   }
                   size="sm"
                   onClick={() => setForm((f) => ({ ...f, oauthMode: 'pre_registered' }))}
@@ -658,7 +656,7 @@ const ServerDetail = () => {
                 </Button>
                 <Button
                   type="button"
-                  variant={form.oauthMode === 'dcr' ? 'default' : 'outline-solid'}
+                  variant={form.oauthMode === 'dcr' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() =>
                     setForm((f) => ({

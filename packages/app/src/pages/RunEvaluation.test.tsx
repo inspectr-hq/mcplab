@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
@@ -752,7 +752,7 @@ describe('RunEvaluation', () => {
 
     await waitFor(() => expect(sourceMock.subscribeRunQueue).toHaveBeenCalledOnce());
 
-    sourceMock.getRunQueue.mockResolvedValue({
+    const queue = {
       active: null,
       active_jobs: [],
       admitting_jobs: [],
@@ -770,11 +770,11 @@ describe('RunEvaluation', () => {
           jobs: [{ jobId: 'live-job', status: 'running', runParams: {} }]
         }
       ]
-    });
+    };
     await act(async () => {
       queueEventHandlerRef.current?.({
         type: 'queue_event',
-        payload: { event: {} }
+        payload: { event: queue }
       });
     });
 
@@ -884,6 +884,96 @@ describe('RunEvaluation', () => {
     const icons = screen.getAllByLabelText('Subjob running');
     expect(icons).toHaveLength(1);
     expect(icons[0].parentElement).toHaveTextContent('running-scenario');
+  });
+
+  it('updates expanded subjobs from queue events and ignores an older refresh', async () => {
+    const snapshot = (status: 'queued' | 'running' | 'completed') => ({
+      active: null,
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'live-children',
+          evaluationName: 'Live children',
+          status: 'running',
+          totalJobs: 2,
+          completedJobs: status === 'completed' ? 1 : 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'live-job',
+              status: 'running',
+              runParams: {},
+              childProgress: [
+                {
+                  scenarioId: 's1',
+                  agentName: 'Agent',
+                  serverNames: ['weather', 'search'],
+                  status,
+                  completed: status === 'completed' ? 1 : 0,
+                  total: 1
+                },
+                {
+                  scenarioId: 's2',
+                  agentName: 'Agent',
+                  serverNames: [],
+                  status: 'queued',
+                  completed: 0,
+                  total: 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+    sourceMock.getRunQueue.mockResolvedValue(snapshot('queued'));
+    render(
+      <MemoryRouter>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await screen.findByText('Live children');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/^MCP:/).map((badge) => badge.textContent)).toEqual([
+      'MCP: weather',
+      'MCP: search'
+    ]);
+    const serverlessRow = screen.getByText(/s2 · Agent/).closest('div')!;
+    expect(within(serverlessRow).queryByText(/^MCP:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/@unknown/)).not.toBeInTheDocument();
+
+    let resolveRefresh!: (value: ReturnType<typeof snapshot>) => void;
+    sourceMock.getRunQueue.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      })
+    );
+    act(() => window.dispatchEvent(new Event('focus')));
+    const requestCount = sourceMock.getRunQueue.mock.calls.length;
+    await act(async () =>
+      queueEventHandlerRef.current?.({
+        type: 'queue_event',
+        payload: { event: snapshot('running') }
+      })
+    );
+    expect(screen.getByLabelText('Subjob running').parentElement).toHaveTextContent('s1');
+    await act(async () => resolveRefresh(snapshot('queued')));
+    expect(screen.getByLabelText('Subjob running')).toBeInTheDocument();
+    await act(async () =>
+      queueEventHandlerRef.current?.({
+        type: 'queue_event',
+        payload: { event: snapshot('completed') }
+      })
+    );
+    expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
+    expect(screen.getByText(/s1 · Agent/).closest('div')).toHaveTextContent(
+      'completed (1/1 attempts)'
+    );
+    expect(screen.getByRole('button', { name: 'Collapse evaluation details' })).toBeInTheDocument();
+    expect(sourceMock.getRunQueue).toHaveBeenCalledTimes(requestCount);
   });
 
   it('does not offer a browser action for a running API job or a finished browser job', async () => {

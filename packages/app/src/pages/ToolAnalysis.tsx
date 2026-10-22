@@ -571,7 +571,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Configure Analysis"
           >
             <Badge
-              variant={viewStep === 'configure' ? 'default' : 'outline-solid'}
+              variant={viewStep === 'configure' ? 'default' : 'outline'}
               className="cursor-pointer"
             >
               Configure Analysis
@@ -585,7 +585,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Run Analysis"
           >
             <Badge
-              variant={viewStep === 'run' ? 'default' : 'outline-solid'}
+              variant={viewStep === 'run' ? 'default' : 'outline'}
               className={canOpenRunStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Run Analysis
@@ -599,7 +599,7 @@ const ToolAnalysisPage = () => {
             aria-label="Open Report"
           >
             <Badge
-              variant={viewStep === 'report' ? 'default' : 'outline-solid'}
+              variant={viewStep === 'report' ? 'default' : 'outline'}
               className={canOpenReportStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Report
