@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeftRight, Bot, ChevronDown, Layers, Wrench, XCircle } from 'lucide-react';
 import { scenarioExecutionKey } from '@/lib/data-sources/types';
-import { formatPassRate } from '@/lib/utils';
 import { formatFailureReason } from '@/lib/format-failure-reason';
 import {
   formatDurationMs,
@@ -15,6 +14,8 @@ import { tallyCheckCounts } from '@/types/eval';
 import { ConversationRow, ExpandableText } from '@/components/results/ScenarioEvidence';
 import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
+import { formatProvider } from '@/components/ProviderBadge';
+import { PassRateBadge } from '@/components/PassRateBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -102,6 +103,47 @@ export function ScenarioComparisonView({
   };
   const scenarioName = (scenario: ScenarioResult) =>
     scenario.scenarioName || scenario.scenarioId;
+  const agentDetails = (scenario: ScenarioResult) => {
+    const details = [scenario.provider ? formatProvider(scenario.provider) : null, scenario.model]
+      .filter(Boolean)
+      .join(' · ');
+    return details || scenario.agentName || scenario.agentId || 'Unknown agent';
+  };
+  const checkSummary = (scenario: ScenarioResult): ReactNode => {
+    const counts = tallyCheckCounts(scenario.runs.flatMap((run) => run.checkResults ?? []));
+    const hasCheckResults = scenario.runs.some((run) => (run.checkResults?.length ?? 0) > 0);
+    if (!hasCheckResults) return '—';
+    const notEvaluatedLabel = counts.not_evaluated
+      ? ` · ${counts.not_evaluated} not evaluated`
+      : '';
+    const notExecutedLabel = counts.not_executed
+      ? ` · ${counts.not_executed} not executed`
+      : '';
+    return (
+      <span
+        title={`${counts.passed} passed · ${counts.failed} failed${notEvaluatedLabel}${notExecutedLabel}`}
+        aria-label={`${counts.passed} checks passed, ${counts.failed} checks failed${
+          counts.not_evaluated ? `, ${counts.not_evaluated} not evaluated` : ''
+        }${counts.not_executed ? `, ${counts.not_executed} not executed` : ''}`}
+      >
+        <span className="text-success">{counts.passed} ✓</span>
+        <span className="text-muted-foreground"> </span>
+        <span className="text-destructive">{counts.failed} ✕</span>
+        {counts.not_evaluated > 0 && (
+          <>
+            <span className="text-muted-foreground"> </span>
+            <span>{counts.not_evaluated} ○</span>
+          </>
+        )}
+        {counts.not_executed > 0 && (
+          <>
+            <span className="text-muted-foreground"> </span>
+            <span>{counts.not_executed} ⊘</span>
+          </>
+        )}
+      </span>
+    );
+  };
   const label = (scenario: ScenarioResult) => {
     const agentName = scenario.agentName || scenario.agentId || 'Unknown agent';
     const serverLabel = scenario.server_variant
@@ -113,15 +155,11 @@ export function ScenarioComparisonView({
   };
   const metricRows: Array<[string, ReactNode, ReactNode]> = [
     ['Scenario', scenarioName(left), scenarioName(right)],
-    ['Agent', left.agentName, right.agentName],
+    ['Agent', agentDetails(left), agentDetails(right)],
     ['MCP servers', serverBadges(left), serverBadges(right)],
     ['Runs', String(left.runs.length), String(right.runs.length)],
-    ['Pass rate', formatPassRate(left.passRate), formatPassRate(right.passRate)],
-    [
-      'Checks',
-      `${tallyCheckCounts(left.runs.flatMap((run) => run.checkResults ?? [])).passed} passed`,
-      `${tallyCheckCounts(right.runs.flatMap((run) => run.checkResults ?? [])).passed} passed`
-    ],
+    ['Pass rate', <PassRateBadge rate={left.passRate} />, <PassRateBadge rate={right.passRate} />],
+    ['Checks', checkSummary(left), checkSummary(right)],
     [
       'Total time',
       formatDurationMs(getScenarioTotalDurationMs(left), { preciseUnderTenSeconds: true }),

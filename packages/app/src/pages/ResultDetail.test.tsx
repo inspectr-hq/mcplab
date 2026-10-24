@@ -218,7 +218,13 @@ describe('ResultDetail conversation toggle', () => {
 
   it('switches the scenarios card into inline compare mode', async () => {
     const result = makeResult();
+    result.scenarios[0].provider = 'anthropic';
+    result.scenarios[0].model = 'claude-haiku-5-5';
     result.scenarios[0].runs[0].failureReasons = ['The check failed'];
+    result.scenarios[0].runs[0].checkResults = [
+      { type: 'required_tool', label: 'Required tool', status: 'passed' },
+      { type: 'response_regex', label: 'Response regex', status: 'failed' }
+    ];
     const secondScenario = {
       ...result.scenarios[0],
       scenarioId: 'scn-2',
@@ -252,6 +258,9 @@ describe('ResultDetail conversation toggle', () => {
       screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length
     ).toBeGreaterThan(0);
     expect(screen.getAllByText('Scenario 2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Anthropic · claude-haiku-5-5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 ✓').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 ✕').length).toBeGreaterThan(0);
     expect(screen.getByText('MCP servers')).toBeInTheDocument();
     expect(screen.getByText('Total time')).toBeInTheDocument();
     expect(screen.getAllByText(/Extracted values · 0 total/).length).toBe(2);
