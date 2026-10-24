@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Activity,
   BarChart3,
   Timer,
@@ -158,6 +159,10 @@ const ResultDetail = () => {
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
   const [scenarioCompareMode, setScenarioCompareMode] = useState(false);
   const [scenarioCompareKeys, setScenarioCompareKeys] = useState<[string, string]>(['', '']);
+  const swapScenarioCompare = useCallback(
+    () => setScenarioCompareKeys(([left, right]) => [right, left]),
+    []
+  );
   const [targetConfigId, setTargetConfigId] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
@@ -1077,6 +1082,19 @@ const ResultDetail = () => {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {scenarioCompareMode ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2 text-xs"
+                      onClick={swapScenarioCompare}
+                      title="Swap compared scenarios"
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      Swap
+                    </Button>
+                  ) : null}
                   {scenarioCompareOptions.length > 1 ? (
                     <Button
                       type="button"
@@ -1115,7 +1133,6 @@ const ResultDetail = () => {
                   rightKey={scenarioCompareKeys[1]}
                   onLeftChange={(value) => setScenarioCompareKeys(([, right]) => [value, right])}
                   onRightChange={(value) => setScenarioCompareKeys(([left]) => [left, value])}
-                  onSwap={() => setScenarioCompareKeys(([left, right]) => [right, left])}
                   mcpServerNames={mcpServerNames}
                   scenarioDefinitionByResultId={scenarioDefinitionByResultId}
                 />

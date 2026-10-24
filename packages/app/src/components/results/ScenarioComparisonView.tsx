@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeftRight, Bot, ChevronDown, Layers, Wrench, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Bot, ChevronDown, Layers, Wrench, XCircle } from 'lucide-react';
 import { scenarioExecutionKey } from '@/lib/data-sources/types';
 import { formatPassRate } from '@/lib/utils';
 import { formatFailureReason } from '@/lib/format-failure-reason';
@@ -18,7 +18,6 @@ import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/components/ProviderBadge';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Select,
@@ -44,7 +43,6 @@ export function ScenarioComparisonView({
   rightKey,
   onLeftChange,
   onRightChange,
-  onSwap,
   mcpServerNames,
   scenarioDefinitionByResultId
 }: {
@@ -54,7 +52,6 @@ export function ScenarioComparisonView({
   rightKey: string;
   onLeftChange: (value: string) => void;
   onRightChange: (value: string) => void;
-  onSwap: () => void;
   mcpServerNames: Record<string, string>;
   scenarioDefinitionByResultId: Map<string, UiEvalConfig['scenarios'][number]>;
 }) {
@@ -70,22 +67,26 @@ export function ScenarioComparisonView({
   );
   if (!left || !right) return null;
 
-  const serverNames = (scenario: ScenarioResult) => {
-    const ids = scenario.servers?.length
-      ? scenario.servers
-      : scenario.server_variant
-        ? result.server_variants?.find((variant) => variant.id === scenario.server_variant)
-            ?.serverIds
-        : undefined;
-    return (ids ?? []).map((id) => mcpServerNames[id]?.trim() || id);
+  const serverIds = (scenario: ScenarioResult) => {
+    if (scenario.servers?.length) return scenario.servers;
+    if (scenario.server_variant) {
+      return (
+        result.server_variants?.find((variant) => variant.id === scenario.server_variant)
+          ?.serverIds ?? []
+      );
+    }
+    const definition = scenarioDefinitionByResultId.get(scenario.scenarioId);
+    if (definition?.serverIds?.length) return definition.serverIds;
+    return (
+      definition?.mcpServers?.flatMap((entry) =>
+        entry.kind === 'referenced' ? [entry.ref] : [entry.server.id]
+      ) ?? []
+    );
   };
-  const serverIds = (scenario: ScenarioResult) =>
-    scenario.servers?.length
-      ? scenario.servers
-      : scenario.server_variant
-        ? (result.server_variants?.find((variant) => variant.id === scenario.server_variant)
-            ?.serverIds ?? [])
-        : [];
+  const serverNames = (scenario: ScenarioResult) => {
+    const ids = serverIds(scenario);
+    return ids.map((id) => mcpServerNames[id]?.trim() || id);
+  };
   const serverBadges = (scenario: ScenarioResult) => {
     const ids = serverIds(scenario);
     const versions = Object.fromEntries(
@@ -102,13 +103,18 @@ export function ScenarioComparisonView({
       serverNames(scenario).join(' + ') || 'Scenario defaults'
     );
   };
-  const scenarioName = (scenario: ScenarioResult) =>
-    scenario.scenarioName || scenario.scenarioId;
+  const scenarioName = (scenario: ScenarioResult) => scenario.scenarioName || scenario.scenarioId;
   const agentDetails = (scenario: ScenarioResult) => {
+    const agentName = scenario.agentName || scenario.agentId || 'Unknown agent';
     const details = [scenario.provider ? formatProvider(scenario.provider) : null, scenario.model]
       .filter(Boolean)
       .join(' · ');
-    return details || scenario.agentName || scenario.agentId || 'Unknown agent';
+    return (
+      <div>
+        <div>{agentName}</div>
+        {details ? <div className="text-xs text-muted-foreground">{details}</div> : null}
+      </div>
+    );
   };
   const checkSummary = (scenario: ScenarioResult): ReactNode => {
     const counts = tallyCheckCounts(scenario.runs.flatMap((run) => run.checkResults ?? []));
@@ -117,9 +123,7 @@ export function ScenarioComparisonView({
     const notEvaluatedLabel = counts.not_evaluated
       ? ` · ${counts.not_evaluated} not evaluated`
       : '';
-    const notExecutedLabel = counts.not_executed
-      ? ` · ${counts.not_executed} not executed`
-      : '';
+    const notExecutedLabel = counts.not_executed ? ` · ${counts.not_executed} not executed` : '';
     return (
       <span
         title={`${counts.passed} passed · ${counts.failed} failed${notEvaluatedLabel}${notExecutedLabel}`}
@@ -186,63 +190,50 @@ export function ScenarioComparisonView({
   return (
     <div className="space-y-3 p-4">
       <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-2">
-        <>
-          <label className="space-y-1.5 text-xs font-medium">
-            <span className="text-muted-foreground">Left scenario</span>
-            <Select value={leftKey} onValueChange={onLeftChange}>
-              <SelectTrigger className="h-8 min-w-0 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {scenarios.map((scenario) => {
-                  const key = scenarioExecutionKey(
-                    scenario.scenarioId,
-                    scenario.agentName,
-                    scenario.server_variant
-                  );
-                  return (
-                    <SelectItem key={key} value={key} disabled={key === rightKey}>
-                      {label(scenario)}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </label>
-          <label className="space-y-1.5 text-xs font-medium">
-            <span className="text-muted-foreground">Right scenario</span>
-            <Select value={rightKey} onValueChange={onRightChange}>
-              <SelectTrigger className="h-8 min-w-0 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {scenarios.map((scenario) => {
-                  const key = scenarioExecutionKey(
-                    scenario.scenarioId,
-                    scenario.agentName,
-                    scenario.server_variant
-                  );
-                  return (
-                    <SelectItem key={key} value={key} disabled={key === leftKey}>
-                      {label(scenario)}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </label>
-        </>
-      </div>
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs"
-          onClick={onSwap}
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" /> Swap
-        </Button>
+        <label className="space-y-1.5 text-xs font-medium">
+          <span className="text-muted-foreground">Left scenario</span>
+          <Select value={leftKey} onValueChange={onLeftChange}>
+            <SelectTrigger className="h-8 min-w-0 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {scenarios.map((scenario) => {
+                const key = scenarioExecutionKey(
+                  scenario.scenarioId,
+                  scenario.agentName,
+                  scenario.server_variant
+                );
+                return (
+                  <SelectItem key={key} value={key} disabled={key === rightKey}>
+                    {label(scenario)}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="space-y-1.5 text-xs font-medium">
+          <span className="text-muted-foreground">Right scenario</span>
+          <Select value={rightKey} onValueChange={onRightChange}>
+            <SelectTrigger className="h-8 min-w-0 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {scenarios.map((scenario) => {
+                const key = scenarioExecutionKey(
+                  scenario.scenarioId,
+                  scenario.agentName,
+                  scenario.server_variant
+                );
+                return (
+                  <SelectItem key={key} value={key} disabled={key === leftKey}>
+                    {label(scenario)}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </label>
       </div>
       <div className="overflow-x-auto">
         <Table className="min-w-[42rem] table-fixed">
@@ -255,25 +246,32 @@ export function ScenarioComparisonView({
             <TableRow>
               <TableHead className="w-32">Metric</TableHead>
               <TableHead>{label(left)}</TableHead>
-              <TableHead>{label(right)}</TableHead>
+              <TableHead className="border-l border-border/60">{label(right)}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {metricRows.map(([name, leftValue, rightValue]) => (
               <TableRow key={name}>
                 <TableCell className="font-medium text-muted-foreground">{name}</TableCell>
-                <TableCell className="font-mono text-sm">{leftValue}</TableCell>
-                <TableCell className="font-mono text-sm">{rightValue}</TableCell>
+                <TableCell className={name === 'Agent' ? 'text-sm' : 'font-mono text-sm'}>
+                  {leftValue}
+                </TableCell>
+                <TableCell
+                  className={`${name === 'Agent' ? 'text-sm' : 'font-mono text-sm'} border-l border-border/60`}
+                >
+                  {rightValue}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <div className="grid gap-3 border-t pt-3 md:grid-cols-2">
+      <div className="grid gap-3 border-t pt-3 md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]">
         <ScenarioComparisonEvidence
           scenario={left}
           scenarioDefinition={scenarioDefinitionByResultId.get(left.scenarioId)}
         />
+        <div className="hidden bg-border/60 md:block" aria-hidden="true" />
         <ScenarioComparisonEvidence
           scenario={right}
           scenarioDefinition={scenarioDefinitionByResultId.get(right.scenarioId)}
@@ -312,7 +310,7 @@ function ScenarioComparisonEvidence({
           <CollapsibleTrigger asChild>
             <button type="button" className="flex w-full items-center gap-2 text-left">
               <ChevronDown className={`h-3.5 w-3.5 ${open ? 'rotate-180' : ''}`} />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {title}
               </span>
             </button>
@@ -341,6 +339,8 @@ function ScenarioComparisonEvidence({
           : [];
         const passed = checks.filter((check) => check.status === 'passed').length;
         const failed = checks.filter((check) => check.status === 'failed').length;
+        const notEvaluated = checks.filter((check) => check.status === 'not_evaluated').length;
+        const notExecuted = checks.filter((check) => check.status === 'not_executed').length;
         return (
           <div key={run.runIndex} className="space-y-2 rounded-md border bg-card p-2 text-sm">
             <p className="font-mono text-xs text-muted-foreground">
@@ -368,21 +368,105 @@ function ScenarioComparisonEvidence({
               ? section(
                   `checks-${run.runIndex}`,
                   <>
-                    Checks · {passed} passed · {failed} failed
-                  </>,
-                  <div className="space-y-1">
-                    {checks.map((check, index) => (
-                      <div
-                        key={`${check.rule.type}-${index}`}
-                        className="rounded border px-2 py-1.5 text-xs"
+                    <span>Checks</span>
+                    <Badge
+                      variant="outline"
+                      className="h-5 border-success/30 bg-success/10 text-[10px] text-success"
+                    >
+                      {passed} passed
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={`h-5 text-[10px] ${
+                        failed > 0 ? 'border-destructive/30 bg-destructive/10 text-destructive' : ''
+                      }`}
+                    >
+                      {failed} failed
+                    </Badge>
+                    {notEvaluated > 0 ? (
+                      <Badge
+                        variant="outline"
+                        className="h-5 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
                       >
-                        <EvalRuleLabel rule={check.rule} className="font-medium" />{' '}
-                        <Badge variant="outline" className="ml-2 text-[10px]">
-                          {formatCheckStatusLabel(check.status)}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>,
+                        {notEvaluated} not evaluated
+                      </Badge>
+                    ) : null}
+                    {notExecuted > 0 ? (
+                      <Badge
+                        variant="outline"
+                        className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
+                      >
+                        {notExecuted} not executed
+                      </Badge>
+                    ) : null}
+                  </>,
+                  <>
+                    {notExecuted > 0 ? (
+                      <p className="mb-2 text-[11px] text-muted-foreground">
+                        Checks were not executed because this run ended before evaluation.
+                      </p>
+                    ) : null}
+                    <div className="space-y-1">
+                      {checks.map((check, index) => (
+                        <div
+                          key={`${check.rule.type}-${index}`}
+                          className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                            check.status === 'failed'
+                              ? 'border-destructive/20 bg-destructive/5'
+                              : check.status === 'not_executed'
+                                ? 'border-amber-500/20 bg-amber-500/5'
+                                : check.status === 'not_evaluated'
+                                  ? 'border-muted-foreground/20 bg-muted/40'
+                                  : 'border-success/20 bg-success/5'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              {check.status === 'failed' ? (
+                                <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                              ) : check.status === 'not_executed' ? (
+                                <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                              ) : check.status === 'not_evaluated' ? (
+                                <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              ) : (
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                              )}
+                              <EvalRuleLabel rule={check.rule} className="font-medium" />
+                            </div>
+                            {check.decisionInput ? (
+                              <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
+                                Assertion prompt: {check.decisionInput}
+                              </p>
+                            ) : null}
+                            {!check.decisionInput && check.failureReason ? (
+                              <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
+                                {formatFailureReason(check.failureReason)}
+                              </p>
+                            ) : null}
+                            {check.decisionDetails ? (
+                              <p className="mt-1 pl-5 text-[9px] text-muted-foreground">
+                                {check.decisionDetails}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`shrink-0 text-[10px] ${
+                              check.status === 'failed'
+                                ? 'border-destructive/30 text-destructive'
+                                : check.status === 'not_executed'
+                                  ? 'border-amber-500/30 text-amber-600'
+                                  : check.status === 'not_evaluated'
+                                    ? 'border-muted-foreground/30 text-muted-foreground'
+                                    : 'border-success/30 text-success'
+                            }`}
+                          >
+                            {formatCheckStatusLabel(check.status)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </>,
                   true,
                   'bg-muted/20'
                 )

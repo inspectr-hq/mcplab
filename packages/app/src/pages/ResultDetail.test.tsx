@@ -218,6 +218,7 @@ describe('ResultDetail conversation toggle', () => {
 
   it('switches the scenarios card into inline compare mode', async () => {
     const result = makeResult();
+    result.mcpServerVersions = { 'server-1': '1.0' };
     result.scenarios[0].provider = 'anthropic';
     result.scenarios[0].model = 'claude-haiku-5-5';
     result.scenarios[0].runs[0].failureReasons = ['The check failed'];
@@ -239,6 +240,20 @@ describe('ResultDetail conversation toggle', () => {
     result.scenarios.push(secondScenario);
     result.totalScenarios = 2;
     result.totalRuns = 2;
+    mockLibraryServers.push({
+      id: 'server-1',
+      name: 'TrendMiner',
+      transport: 'sse',
+      url: 'https://mcp.example.com'
+    });
+    mockLibraryScenarios.push({
+      id: 'scn-1',
+      name: 'Scenario 1',
+      serverIds: ['server-1'],
+      prompt: 'Search',
+      evalRules: [],
+      extractRules: []
+    });
     getResultMock.mockResolvedValue(result);
 
     render(
@@ -253,12 +268,15 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Compare scenarios' }));
 
     expect(screen.getByRole('button', { name: 'Exit compare' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Swap' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
     expect(
       screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length
     ).toBeGreaterThan(0);
     expect(screen.getAllByText('Scenario 2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Agent 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Anthropic · claude-haiku-5-5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TrendMiner@1.0').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1 ✓').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1 ✕').length).toBeGreaterThan(0);
     expect(screen.getByText('MCP servers')).toBeInTheDocument();
