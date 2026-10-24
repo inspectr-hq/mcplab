@@ -337,7 +337,7 @@ const RunEvaluation = () => {
     return defaultSelection.agentNames.filter((id) =>
       availableAgents.some((agent) => agent.id === id)
     );
-  }, [invalidWorkspaceDefault, defaultSelection.agentNames, availableAgents]);
+  }, [invalidWorkspaceDefault, defaultSelection, availableAgents]);
   const unavailableAgentNames = defaultSelection.agentNames.filter(
     (id) => !availableAgents.some((agent) => agent.id === id)
   );
@@ -595,7 +595,7 @@ const RunEvaluation = () => {
 
   useEffect(() => {
     if (activeJobId || done) return;
-    let storedJobId = '';
+    let storedJobId: string;
     try {
       storedJobId = sessionStorage.getItem(RUN_EVAL_ACTIVE_JOB_KEY) ?? '';
     } catch {
