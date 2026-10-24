@@ -908,10 +908,10 @@ describe('ResultDetail conversation toggle', () => {
     const row = screen.getByText('Scenario 1').closest('tr');
     expect(row).not.toBeNull();
     const cells = row!.querySelectorAll('td');
+    expect(cells[5]).toHaveClass('text-right');
     expect(cells[6]).toHaveClass('text-right');
     expect(cells[7]).toHaveClass('text-right');
     expect(cells[8]).toHaveClass('text-right');
-    expect(cells[9]).toHaveClass('text-right');
   });
 
   it('shows the formatted provider and model alongside the agent name', async () => {

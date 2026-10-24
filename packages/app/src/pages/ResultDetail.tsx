@@ -1052,7 +1052,7 @@ const ResultDetail = () => {
           </div>
 
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="px-4 pb-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <CardTitle className="text-base">Scenarios</CardTitle>
