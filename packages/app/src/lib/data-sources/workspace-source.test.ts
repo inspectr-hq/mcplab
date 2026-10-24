@@ -7,6 +7,7 @@ vi.mock('./workspace-api-client', () => ({
     listRuns: vi.fn(),
     getRun: vi.fn(),
     getRunTrace: vi.fn(),
+    updateConfig: vi.fn(),
     testDecisionConnection: vi.fn(),
     testAgentConnection: vi.fn()
   }
@@ -118,6 +119,38 @@ describe('workspaceSource.listResults', () => {
     expect(results).toHaveLength(3);
     expect(workspaceApiClient.getRun).toHaveBeenCalledTimes(3);
     expect(workspaceApiClient.getRunTrace).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('workspaceSource.updateConfig', () => {
+  it('preserves the existing YAML filename when the display name changes', async () => {
+    vi.mocked(workspaceApiClient.updateConfig).mockResolvedValue({
+      id: 'cfg-1',
+      name: 'original',
+      path: '/workspace/evals/original.yaml',
+      relativePath: 'original.yaml',
+      mtime: '2026-06-12T00:00:00.000Z',
+      hash: 'hash-1',
+      config: { name: 'Renamed display name', agents: [], scenarios: [] }
+    });
+
+    await workspaceSource.updateConfig({
+      id: 'cfg-1',
+      name: 'Renamed display name',
+      configName: 'Renamed display name',
+      sourcePath: '/workspace/evals/original.yaml',
+      relativePath: 'original.yaml',
+      servers: [],
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-06-11T00:00:00.000Z',
+      updatedAt: '2026-06-12T00:00:00.000Z'
+    });
+
+    expect(workspaceApiClient.updateConfig).toHaveBeenCalledWith(
+      'cfg-1',
+      expect.objectContaining({ name: 'Renamed display name' })
+    );
   });
 });
 
