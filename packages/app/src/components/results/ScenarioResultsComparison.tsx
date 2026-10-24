@@ -93,11 +93,7 @@ export function ScenarioResultsComparison({
       ids.map((id) => [id, result.mcpServerVersions[id] ?? null] as const)
     );
     return Object.keys(versions).length > 0 ? (
-      <McpServerBadge
-        versions={versions}
-        serverNames={mcpServerNames}
-        size="compact"
-      />
+      <McpServerBadge versions={versions} serverNames={mcpServerNames} size="compact" />
     ) : (
       serverNames(scenario).join(' + ') || 'Scenario defaults'
     );

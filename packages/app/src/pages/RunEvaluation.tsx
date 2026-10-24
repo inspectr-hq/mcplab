@@ -35,6 +35,7 @@ import {
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
 import { sortAgentsForDisplay } from '@/lib/agent-display-order';
+import { sortServersForDisplay } from '@/lib/server-display-order';
 import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type {
   EvaluationQueueItem,
@@ -268,7 +269,7 @@ const RunEvaluation = () => {
     for (const server of selectedConfig?.servers ?? []) {
       byId.set(server.id, { id: server.id, name: server.name });
     }
-    return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
+    return sortServersForDisplay(Array.from(byId.values()));
   }, [selectedConfig?.servers, libraryServers]);
   const comparedServerIds = useMemo(
     () => comparisonServerIds.filter((id) => availableServers.some((server) => server.id === id)),
@@ -336,7 +337,7 @@ const RunEvaluation = () => {
     return defaultSelection.agentNames.filter((id) =>
       availableAgents.some((agent) => agent.id === id)
     );
-  }, [invalidWorkspaceDefault, defaultSelection.agentNames, availableAgents]);
+  }, [invalidWorkspaceDefault, defaultSelection, availableAgents]);
   const unavailableAgentNames = defaultSelection.agentNames.filter(
     (id) => !availableAgents.some((agent) => agent.id === id)
   );
@@ -594,7 +595,7 @@ const RunEvaluation = () => {
 
   useEffect(() => {
     if (activeJobId || done) return;
-    let storedJobId = '';
+    let storedJobId: string;
     try {
       storedJobId = sessionStorage.getItem(RUN_EVAL_ACTIVE_JOB_KEY) ?? '';
     } catch {
