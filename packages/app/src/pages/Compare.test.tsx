@@ -19,6 +19,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
   })
 }));
 
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({ servers: [] })
+}));
+
 function makeRun(id: string, scenarios: EvalResult['scenarios']): EvalResult {
   return {
     id,

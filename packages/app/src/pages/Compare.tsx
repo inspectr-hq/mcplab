@@ -51,6 +51,7 @@ import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/components/ProviderBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -215,6 +216,7 @@ function getRepresentativeScenarioMetadata(
 
 const Compare = () => {
   const { source } = useDataSource();
+  const mcpServerNames = useMcpServerNames();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTimeFilter = getTimeFilterQueryState(searchParams);
   const dimension: ComparisonDimension =
@@ -1323,7 +1325,9 @@ const Compare = () => {
                               </div>
                               <McpServerBadge
                                 versions={item.run.mcpServerVersions}
+                                serverNames={mcpServerNames}
                                 showPrefix={false}
+                                size="compact"
                               />
                             </div>
                           );
@@ -1571,6 +1575,8 @@ const Compare = () => {
                         />
                         <McpServerBadge
                           versions={r.mcpServerVersions}
+                          serverNames={mcpServerNames}
+                          size="compact"
                           className="mt-0.5 max-w-full border-0 bg-transparent p-0 text-[10px] font-normal"
                         />
                       </TableHead>

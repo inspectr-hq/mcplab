@@ -759,6 +759,7 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
     expect(badge).toHaveClass('leading-none');
+    expect(screen.getByText(/api@1\.2\.3/).parentElement).toHaveClass('min-h-5');
     expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
     expect(screen.getByText(/docs@unknown/)).toBeInTheDocument();
   });

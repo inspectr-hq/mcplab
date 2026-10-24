@@ -91,6 +91,7 @@ import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentatio
 import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
+import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import {
   formatDurationMs,
   getRunToolTimeMs,
@@ -152,6 +153,7 @@ const ResultDetail = () => {
   const isEmbedded = searchParams.get('embed') === '1';
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
+  const mcpServerNames = useMcpServerNames();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [editingRunNote, setEditingRunNote] = useState(false);
@@ -844,7 +846,11 @@ const ResultDetail = () => {
             </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
-            <McpServerBadge versions={result.mcpServerVersions} />
+            <McpServerBadge
+              versions={result.mcpServerVersions}
+              serverNames={mcpServerNames}
+              size="compact"
+            />
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"

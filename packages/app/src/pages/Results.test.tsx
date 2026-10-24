@@ -5,16 +5,18 @@ import Results from './Results';
 import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 import type { EvalResult } from '@/types/eval';
 
-const { sourceMock } = vi.hoisted(() => {
+const { sourceMock, libraryServers } = vi.hoisted(() => {
   const listResults = vi.fn();
   const listRunSummaries = vi.fn();
   const deleteResult = vi.fn();
+  const servers: Array<{ id: string; name: string }> = [];
   return {
     sourceMock: {
       listResults,
       listRunSummaries: undefined as unknown as typeof listRunSummaries,
       deleteResult
-    }
+    },
+    libraryServers: servers
   };
 });
 
@@ -24,6 +26,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
     source: sourceMock
   })
+}));
+
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({ servers: libraryServers })
 }));
 
 vi.mock('@/hooks/use-run-queue-status', () => ({
@@ -154,6 +160,7 @@ function toDatetimeLocalValue(date: Date) {
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    libraryServers.length = 0;
     sourceMock.listRunSummaries = undefined as unknown as typeof sourceMock.listRunSummaries;
     localStorage.removeItem('mcplab:results:time-filter');
     queueMock.completionVersion = 0;
@@ -179,7 +186,14 @@ describe('Results', () => {
 
   it('uses compact column widths and shows the evaluation name below the run ID', async () => {
     const run = makeRun('run-with-mcp', 1200);
-    run.mcpServerVersions = { 'long-mcp-server-name': '1.2.3' };
+    run.mcpServerVersions = {
+      'long-mcp-server-name': '1.2.3',
+      'second-mcp-server': '2.0.0'
+    };
+    libraryServers.push(
+      { id: 'long-mcp-server-name', name: 'Long MCP Server' },
+      { id: 'second-mcp-server', name: 'Second MCP Server' }
+    );
     run.configName = 'Search evaluation';
     run.configPath = '/workspace/mcplab/evals/search.yaml';
     run.runNote = 'Full 31-scenario MCPLab tool suite, post tool-name-prefix fix';
@@ -238,7 +252,13 @@ describe('Results', () => {
     expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
-    expect(within(evaluationCell).getByText(/long-mcp-server-name@1\.2\.3/)).toBeInTheDocument();
+    expect(within(evaluationCell).getByText('1 scenario · 1 agent · 2 MCP')).toBeInTheDocument();
+    const serverBadge = within(evaluationCell).getByText(/Long MCP Server@1\.2\.3/)
+      .parentElement;
+    const secondServerBadge = within(evaluationCell).getByText(/Second MCP Server@2\.0\.0/)
+      .parentElement;
+    expect(serverBadge).toHaveClass('rounded-full', 'min-h-5');
+    expect(secondServerBadge).toHaveClass('rounded-full', 'min-h-5');
     expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText('Search evaluation')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
