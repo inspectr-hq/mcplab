@@ -1843,13 +1843,6 @@ const RunEvaluation = () => {
                                         : job.status === 'paused_rover'
                                           ? 'paused'
                                           : job.status.replaceAll('_', ' ')}
-                            {job.runParams.serverVariant && (
-                              <span className="shrink-0 font-medium">
-                                {job.runParams.serverVariant.label ||
-                                  job.runParams.serverVariant.id}{' '}
-                                ·{' '}
-                              </span>
-                            )}
                             {child
                               ? child.total > 1
                                 ? ` (${child.completed}/${child.total} attempts)`

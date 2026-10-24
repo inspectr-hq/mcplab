@@ -1085,7 +1085,6 @@ const ResultDetail = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-8" />
                     <TableHead>Scenario</TableHead>
                     <TableHead>Agent</TableHead>
                     <TableHead>Runs</TableHead>
@@ -1144,15 +1143,13 @@ const ResultDetail = () => {
                         <>
                           <CollapsibleTrigger asChild>
                             <TableRow className="cursor-pointer hover:bg-muted/50">
-                              <TableCell>
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${
-                                    openScenarios.has(rowKey) ? 'rotate-180' : ''
-                                  }`}
-                                />
-                              </TableCell>
                               <TableCell className="font-medium text-sm">
                                 <div className="flex items-center gap-1.5">
+                                  <ChevronDown
+                                    className={`h-4 w-4 shrink-0 transition-transform ${
+                                      openScenarios.has(rowKey) ? 'rotate-180' : ''
+                                    }`}
+                                  />
                                   <span>{sc.scenarioName}</span>
                                   {!isEmbedded && sc.server_variant && (
                                     <Badge variant="outline">
@@ -1256,7 +1253,7 @@ const ResultDetail = () => {
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={10} className="p-0">
+                              <td colSpan={9} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">

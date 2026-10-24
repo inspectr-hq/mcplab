@@ -904,7 +904,7 @@ describe('RunEvaluation', () => {
             {
               jobId: 'live-job',
               status: 'running',
-              runParams: {},
+              runParams: { serverVariant: { id: 'baseline', label: 'Baseline' } },
               childProgress: [
                 {
                   scenarioId: 's1',
@@ -965,8 +965,10 @@ describe('RunEvaluation', () => {
       })
     );
     expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
-    expect(screen.getByText(/s1 · Agent/).closest('div')).toHaveTextContent('completed');
-    expect(screen.getByText(/s1 · Agent/).closest('div')).not.toHaveTextContent('attempts');
+    const completedSubtask = screen.getByText(/s1 · Agent/).closest('div');
+    expect(completedSubtask).toHaveTextContent('completed');
+    expect(completedSubtask).not.toHaveTextContent('attempts');
+    expect(completedSubtask?.textContent).not.toMatch(/·\s*$/);
     expect(screen.getByRole('button', { name: 'Collapse evaluation details' })).toBeInTheDocument();
     expect(sourceMock.getRunQueue).toHaveBeenCalledTimes(requestCount);
   });
