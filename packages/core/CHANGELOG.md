@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.28.0
+
+### Minor Changes
+
+- feat: compare MCP server sets in evaluation runs
+- feat: add inline scenario comparison to result details
+
 ## 1.27.0
 
 ### Minor Changes

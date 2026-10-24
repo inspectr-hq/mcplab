@@ -1,5 +1,19 @@
 # @inspectr/mcplab
 
+## 1.34.0
+
+### Minor Changes
+
+- feat: compare MCP server sets in evaluation runs
+- feat: add inline scenario comparison to result details
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.28.0
+  - @inspectr/mcplab-mcp-server@1.12.0
+  - @inspectr/mcplab-reporting@1.5.0
+
 ## 1.33.0
 
 ### Minor Changes
