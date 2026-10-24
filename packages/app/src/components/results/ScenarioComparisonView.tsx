@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeftRight, Bot, ChevronDown, Layers, Wrench, XCircle } from 'lucide-react';
 import { scenarioExecutionKey } from '@/lib/data-sources/types';
+import { formatPassRate } from '@/lib/utils';
 import { formatFailureReason } from '@/lib/format-failure-reason';
 import {
   formatDurationMs,
@@ -244,7 +245,12 @@ export function ScenarioComparisonView({
         </Button>
       </div>
       <div className="overflow-x-auto">
-        <Table className="min-w-[42rem]">
+        <Table className="min-w-[42rem] table-fixed">
+          <colgroup>
+            <col style={{ width: '8rem' }} />
+            <col style={{ width: 'calc(50% - 8rem)' }} />
+            <col style={{ width: '50%' }} />
+          </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead className="w-32">Metric</TableHead>
