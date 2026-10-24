@@ -965,11 +965,58 @@ describe('RunEvaluation', () => {
       })
     );
     expect(screen.queryByLabelText('Subjob running')).not.toBeInTheDocument();
-    expect(screen.getByText(/s1 · Agent/).closest('div')).toHaveTextContent(
-      'completed (1/1 attempts)'
-    );
+    expect(screen.getByText(/s1 · Agent/).closest('div')).toHaveTextContent('completed');
+    expect(screen.getByText(/s1 · Agent/).closest('div')).not.toHaveTextContent('attempts');
     expect(screen.getByRole('button', { name: 'Collapse evaluation details' })).toBeInTheDocument();
     expect(sourceMock.getRunQueue).toHaveBeenCalledTimes(requestCount);
+  });
+
+  it('shows attempt counts when multiple runs are planned', async () => {
+    sourceMock.getRunQueue.mockResolvedValue({
+      active: null,
+      active_jobs: [],
+      queued: [],
+      evaluations: [
+        {
+          evaluationRunId: 'multi-run',
+          evaluationName: 'Multi-run evaluation',
+          status: 'running',
+          totalJobs: 1,
+          completedJobs: 0,
+          failedJobs: 0,
+          stoppedJobs: 0,
+          pausedJobs: 0,
+          jobs: [
+            {
+              jobId: 'multi-run-job',
+              status: 'running',
+              runParams: {},
+              childProgress: [
+                {
+                  scenarioId: 's1',
+                  agentName: 'Agent',
+                  status: 'queued',
+                  completed: 0,
+                  total: 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Multi-run evaluation');
+    fireEvent.click(screen.getByRole('button', { name: 'Expand evaluation details' }));
+    expect(screen.getByText(/s1 · Agent/).closest('div')).toHaveTextContent(
+      'queued (0/2 attempts)'
+    );
   });
 
   it('does not offer a browser action for a running API job or a finished browser job', async () => {

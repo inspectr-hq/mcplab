@@ -1851,7 +1851,9 @@ const RunEvaluation = () => {
                               </span>
                             )}
                             {child
-                              ? ` (${child.completed}/${child.total} attempts)`
+                              ? child.total > 1
+                                ? ` (${child.completed}/${child.total} attempts)`
+                                : ''
                               : job.roverProgress &&
                                 ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
                             {!child &&
