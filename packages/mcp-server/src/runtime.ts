@@ -36,6 +36,9 @@ import {
   searchDocs,
   getContext,
   applyRuntimeServerOverrides,
+  planServerVariants,
+  normalizeRuntimeServerSelection,
+  runServerVariants,
   readLibraryAgentsAndServers,
   readBrowserProviderProfiles,
   serializeBrowserProviderProfile,
@@ -114,6 +117,32 @@ const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_HOST = '127.0.0.1';
 const MAX_MARKDOWN_REPORT_READ_BYTES = 2 * 1024 * 1024;
+
+const ServerSetSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().optional(),
+    servers: z.array(z.string().min(1)).min(1).optional(),
+    scenarioServerOverrides: z.record(z.array(z.string())).optional()
+  })
+  .strict();
+
+const RuntimeServerSelectionSchema = {
+  server_sets: z
+    .array(ServerSetSchema)
+    .min(1)
+    .optional()
+    .describe(
+      'Execute each MCP server set separately inside one evaluation result. Omit servers in a set to use scenario defaults. Mutually exclusive with runtime server overrides.'
+    ),
+  servers: z
+    .array(z.string().min(1))
+    .min(1)
+    .optional()
+    .describe(
+      'Use these MCP servers together for all selected scenarios. Omit to use scenario defaults. Mutually exclusive with server_sets.'
+    )
+};
 
 const GenericObjectSchema = z.object({}).passthrough();
 
@@ -2033,11 +2062,14 @@ export function registerTools(server: McpServer): void {
           z.object({
             scenario_id: z.string(),
             agent: z.string(),
+            server_variant: z.string().optional(),
+            servers: z.array(z.string()).optional(),
             pass_rate: z.number().nullable(),
             tool_usage_frequency: z.record(z.number())
           })
         ),
         effective_server_overrides: z.record(z.array(z.string())),
+        effective_server_variants: z.record(z.record(z.array(z.string()))).optional(),
         report_html_preview: z.string()
       },
       inputSchema: {
@@ -2049,10 +2081,7 @@ export function registerTools(server: McpServer): void {
           .positive()
           .optional()
           .describe('Runs per scenario (default 1).'),
-        server_override_all: z
-          .array(z.string())
-          .optional()
-          .describe('Optional MCP server refs to apply to all selected scenarios for this run.'),
+        ...RuntimeServerSelectionSchema,
         scenario_server_overrides: z
           .record(z.array(z.string()))
           .optional()
@@ -2063,7 +2092,8 @@ export function registerTools(server: McpServer): void {
       config_path,
       scenario_id,
       runs_per_scenario,
-      server_override_all,
+      servers,
+      server_sets,
       scenario_server_overrides
     }) => {
       return withToolHandling(async () => {
@@ -2074,8 +2104,16 @@ export function registerTools(server: McpServer): void {
         const libraries = readLibraryAgentsAndServers(bundleRoot);
         const mergedConfig = mergeLibraryServersAndAgents(loaded.config, libraries);
         const selected = selectScenarios(mergedConfig, scenario_id);
+        const selectionInput = normalizeRuntimeServerSelection({
+          server_sets,
+          servers
+        });
+        const variants = planServerVariants(selected, selectionInput.serverVariants, {
+          serverOverrideAll: selectionInput.serverOverrideAll,
+          scenarioServerOverrides: scenario_server_overrides
+        });
         const runtimeOverridden = applyRuntimeServerOverrides(selected, {
-          serverOverrideAll: server_override_all,
+          serverOverrideAll: selectionInput.serverOverrideAll,
           scenarioServerOverrides: scenario_server_overrides
         });
         const effectiveConfigHash = hashConfig(runtimeOverridden);
@@ -2086,7 +2124,8 @@ export function registerTools(server: McpServer): void {
           defaultEvaluationAgentName: workspaceSettings.default_evaluation_agent_name
         });
         const executable = expandConfigForAgents(runtimeOverridden, selection.agentNames);
-        const { runDir, results } = await runAll(executable, {
+        const runOptions = {
+          configPath: resolve(config_path),
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
           configHash: effectiveConfigHash,
@@ -2098,12 +2137,18 @@ export function registerTools(server: McpServer): void {
             scenarios: executable.scenarios,
             settings: toWorkspaceEvaluationSettings(workspaceSettings)
           })
-        });
+        };
+        const { runDir, results } = variants.length
+          ? await runServerVariants(selected, selection.agentNames, variants, runOptions)
+          : await runAll(executable, runOptions);
 
         const reportHtml = renderReport(results);
         const allRuns = results.scenarios.flatMap((scenario) => scenario.runs);
         const passedRuns = allRuns.filter((run) => run.pass === true).length;
-        const failedRuns = allRuns.filter((run) => run.pass === false).length;
+        const failedRuns = Math.max(
+          allRuns.filter((run) => run.pass === false).length,
+          results.summary.outcomes?.failed ?? 0
+        );
         const skippedRuns = Math.max(0, allRuns.length - passedRuns - failedRuns);
         const durationMs = allRuns.reduce((sum, run) => {
           const directRaw = (run as { duration_ms?: unknown }).duration_ms;
@@ -2131,12 +2176,23 @@ export function registerTools(server: McpServer): void {
           scenarios: results.scenarios.map((scenario) => ({
             scenario_id: scenario.scenario_id,
             agent: scenario.agent,
+            server_variant: scenario.server_variant,
+            servers: scenario.servers,
             pass_rate: scenario.pass_rate,
             tool_usage_frequency: scenario.tool_usage_frequency
           })),
-          effective_server_overrides: Object.fromEntries(
-            runtimeOverridden.scenarios.map((scenario) => [scenario.id, [...scenario.servers]])
-          ),
+          effective_server_overrides: variants.length
+            ? {}
+            : Object.fromEntries(
+                runtimeOverridden.scenarios.map((scenario) => [scenario.id, [...scenario.servers]])
+              ),
+          ...(variants.length
+            ? {
+                effective_server_variants: Object.fromEntries(
+                  variants.map((variant) => [variant.id, variant.scenarioServerOverrides ?? {}])
+                )
+              }
+            : {}),
           report_html_preview: truncate(reportHtml, 4000)
         });
       });
@@ -2236,11 +2292,7 @@ export function registerTools(server: McpServer): void {
           .max(500)
           .optional()
           .describe('Optional note attached to the queued run.'),
-        server_override_all: z
-          .array(z.string())
-          .min(1)
-          .optional()
-          .describe('Replace MCP servers for every selected scenario for this queued run.'),
+        ...RuntimeServerSelectionSchema,
         scenario_server_overrides: z
           .record(z.array(z.string()))
           .optional()
@@ -2271,7 +2323,9 @@ export function registerTools(server: McpServer): void {
             ...(input.scenario_ids ? { scenarioIds: input.scenario_ids } : {}),
             ...(input.agents ? { agents: input.agents } : {}),
             ...(input.run_note ? { runNote: input.run_note } : {}),
-            ...(input.server_override_all ? { serverOverrideAll: input.server_override_all } : {}),
+            ...(input.server_sets !== undefined ? { server_sets: input.server_sets } : {}),
+            ...(input.servers !== undefined ? { servers: input.servers } : {}),
+            ...(input.servers !== undefined ? { servers: input.servers } : {}),
             ...(input.scenario_server_overrides
               ? { scenarioServerOverrides: input.scenario_server_overrides }
               : {})

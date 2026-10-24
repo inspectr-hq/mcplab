@@ -216,14 +216,25 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
     `Pass rate: ${results.summary.pass_rate === null ? '–' : `${(results.summary.pass_rate * 100).toFixed(1)}%`}`
   );
   lines.push('');
-  lines.push('| Scenario | Agent | Runs | Pass rate | Distinct sequences | Tool calls |');
-  lines.push('|---|---|---|---|---|---|');
+  const hasServerSets = results.scenarios.some((scenario) => scenario.server_variant);
+  lines.push(
+    `| Scenario | Agent | ${hasServerSets ? 'Server set | ' : ''}Runs | Pass rate | Distinct sequences | Tool calls |`
+  );
+  lines.push(`|---|---|${hasServerSets ? '---|' : ''}---|---|---|---|`);
   for (const scenario of results.scenarios) {
+    const setLabel = (
+      results.metadata.server_variants?.find((variant) => variant.id === scenario.server_variant)
+        ?.label ||
+      scenario.server_variant ||
+      ''
+    )
+      .replaceAll('|', '\\|')
+      .replaceAll('\n', ' ');
     const passRate =
       scenario.pass_rate === null ? '–' : `${(scenario.pass_rate * 100).toFixed(1)}%`;
     const toolCalls = scenario.runs.reduce((sum, run) => sum + run.tool_call_count, 0);
     lines.push(
-      `| ${scenario.scenario_id} | ${scenario.agent} | ${scenario.runs.length} | ${passRate} | ${
+      `| ${scenario.scenario_id} | ${scenario.agent} | ${hasServerSets ? `${setLabel} | ` : ''}${scenario.runs.length} | ${passRate} | ${
         Object.keys(scenario.distinct_sequences).length
       } | ${toolCalls} |`
     );

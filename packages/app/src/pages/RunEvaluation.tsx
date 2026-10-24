@@ -1,3 +1,5 @@
+import { ServerComparisonPicker } from '@/components/ServerComparisonPicker';
+import { McpServerPicker } from '@/components/McpServerPicker';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
@@ -32,6 +34,7 @@ import {
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgentSelection } from '@/lib/config-run-agents';
+import { sortAgentsForDisplay } from '@/lib/agent-display-order';
 import { WORKSPACE_DEFAULT_LLM_AGENT_ERROR } from '@/lib/agent-messages';
 import type {
   EvaluationQueueItem,
@@ -123,7 +126,11 @@ const RunEvaluation = () => {
   };
   const [conversationMode, setConversationMode] = useState<ConversationMode>('agent_default');
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
-  const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
+  const [serverMode, setServerMode] = useState<'defaults' | 'override' | 'compare'>('defaults');
+  const globalServerOverrideEnabled = serverMode === 'override';
+  const compareServers = serverMode === 'compare';
+  const [comparisonServerIds, setComparisonServerIds] = useState<string[]>([]);
+
   const [globalServerOverrideIds, setGlobalServerOverrideIds] = useState<string[]>([]);
   const [scenarioServerOverrideEnabledMap, setScenarioServerOverrideEnabledMap] = useState<
     Record<string, boolean>
@@ -241,14 +248,18 @@ const RunEvaluation = () => {
   const runsPerScenario = selectedBrowserAgents.length > 0 ? 1 : Number(varianceRuns);
   const agentGroups = useMemo(
     () => [
-      { label: 'LLM Agents', agents: availableAgents.filter((agent) => agent.type !== 'browser') },
+      {
+        label: 'LLM Agents',
+        agents: sortAgentsForDisplay(availableAgents.filter((agent) => agent.type !== 'browser'))
+      },
       {
         label: 'Browser Agents',
-        agents: availableAgents.filter((agent) => agent.type === 'browser')
+        agents: sortAgentsForDisplay(availableAgents.filter((agent) => agent.type === 'browser'))
       }
     ],
     [availableAgents]
   );
+  const planRepetitions = selectedBrowserAgents.length > 0 ? 1 : Number(varianceRuns) || 1;
   const availableServers = useMemo(() => {
     const byId = new Map<string, { id: string; name?: string }>();
     for (const server of libraryServers) {
@@ -259,6 +270,17 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
   }, [selectedConfig?.servers, libraryServers]);
+  const comparedServerIds = useMemo(
+    () => comparisonServerIds.filter((id) => availableServers.some((server) => server.id === id)),
+    [comparisonServerIds, availableServers]
+  );
+  const invalidServerComparison = compareServers && comparedServerIds.length < 2;
+  const planExecutionCount =
+    selectedScenarioIds.length *
+    selectedAgentIds.length *
+    comparedServerIds.length *
+    planRepetitions;
+
   useEffect(() => {
     if (!requestedConfigId) return;
     if (!configs.some((config) => config.id === requestedConfigId)) return;
@@ -332,7 +354,8 @@ const RunEvaluation = () => {
       setSelectedAgentIds([]);
       setConversationMode('agent_default');
       setSelectedScenarioIds([]);
-      setGlobalServerOverrideEnabled(false);
+      setServerMode('defaults');
+      setComparisonServerIds([]);
       setGlobalServerOverrideIds([]);
       setScenarioServerOverrideEnabledMap({});
       setScenarioServerOverrideMap({});
@@ -340,7 +363,8 @@ const RunEvaluation = () => {
     }
     setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
-    setGlobalServerOverrideEnabled(false);
+    setServerMode('defaults');
+    setComparisonServerIds([]);
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
     setScenarioServerOverrideMap({});
@@ -366,6 +390,7 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${nowTime()}] Missing source path for selected config.`]);
       return;
     }
+    if (invalidServerComparison) return;
     const selectedAgents = availableAgents.filter((agent) => selectedAgentIds.includes(agent.id));
     if (selectedAgents.length === 0) {
       setLogs((prev) => [...prev, `[${nowTime()}] Select at least one agent.`]);
@@ -376,11 +401,15 @@ const RunEvaluation = () => {
     );
     const selectedScenarioSet = new Set(selectedScenarios.map((scenario) => scenario.id));
     const runtimeOverridesEnabled =
-      globalServerOverrideEnabled || Object.values(scenarioServerOverrideEnabledMap).some(Boolean);
+      !compareServers &&
+      (globalServerOverrideEnabled ||
+        Object.values(scenarioServerOverrideEnabledMap).some(Boolean));
     const filteredScenarioServerOverrides = Object.fromEntries(
       Object.entries(scenarioServerOverrideMap).filter(
         ([scenarioId]) =>
-          selectedScenarioSet.has(scenarioId) && scenarioServerOverrideEnabledMap[scenarioId]
+          !compareServers &&
+          selectedScenarioSet.has(scenarioId) &&
+          scenarioServerOverrideEnabledMap[scenarioId]
       )
     );
     const effectiveScenarioServerSummary = selectedScenarios
@@ -418,6 +447,7 @@ const RunEvaluation = () => {
       new Set(
         selectedScenarios
           .flatMap((scenario) => {
+            if (compareServers) return comparedServerIds;
             if (!runtimeOverridesEnabled) return scenario.serverIds || [];
             if (filteredScenarioServerOverrides[scenario.id]) {
               return filteredScenarioServerOverrides[scenario.id] ?? [];
@@ -490,20 +520,23 @@ const RunEvaluation = () => {
         .join(
           ', '
         )} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${runsPerScenario}${selectedBrowserAgents.length > 0 ? ` newConversationBeforeStart=${browserConversationOptions.newConversationBeforeStart ?? 'agent_default'} newConversationBetweenScenarios=${browserConversationOptions.newConversationBetweenScenarios ?? 'agent_default'}` : ''}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
-      `[${nowTime()}] Effective MCP servers per selected test: ${
-        effectiveScenarioServerSummary || '(none)'
-      }`
+      compareServers
+        ? `[${nowTime()}] Comparing MCP servers separately: ${comparedServerIds.join(', ')}`
+        : `[${nowTime()}] Effective MCP servers per selected test: ${effectiveScenarioServerSummary || '(none)'}`
     ]);
     setProgress(10);
     try {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario,
+        ...(compareServers
+          ? { server_sets: comparedServerIds.map((id) => ({ id, servers: [id] })) }
+          : {}),
         ...(agentSelectionEdited ? { agents: selectedAgents.map((agent) => agent.id) } : {}),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         ...browserConversationOptions,
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
-          ? { serverOverrideAll: globalServerOverrideIds }
+          ? { servers: globalServerOverrideIds }
           : {}),
         ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
           ? { scenarioServerOverrides: filteredScenarioServerOverrides }
@@ -1058,6 +1091,7 @@ const RunEvaluation = () => {
                 type="number"
                 min="1"
                 max="10"
+                className="w-full sm:w-32"
                 value={selectedBrowserAgents.length > 0 ? '1' : varianceRuns}
                 onChange={(e) => setVarianceRuns(e.target.value)}
                 disabled={selectedBrowserAgents.length > 0}
@@ -1125,7 +1159,12 @@ const RunEvaluation = () => {
               <div className="space-y-3">
                 {agentGroups.map((group) =>
                   group.agents.length > 0 ? (
-                    <div key={group.label} className="space-y-2">
+                    <div
+                      key={group.label}
+                      role="group"
+                      aria-label={group.label}
+                      className="space-y-2"
+                    >
                       <div className="flex items-center gap-3">
                         <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
                         <div className="flex items-center gap-3 text-xs">
@@ -1158,15 +1197,16 @@ const RunEvaluation = () => {
                           </button>
                         </div>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid grid-flow-row grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-2">
                         {group.agents.map((agent) => {
                           const checked = selectedAgentIds.includes(agent.id);
                           return (
                             <label
                               key={agent.id}
-                              className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                              className="flex min-w-0 cursor-pointer items-start gap-2 rounded-md border p-2 text-sm"
                             >
                               <Checkbox
+                                className="mt-0.5"
                                 checked={checked}
                                 onCheckedChange={(value) => {
                                   const isChecked = value === true;
@@ -1177,7 +1217,9 @@ const RunEvaluation = () => {
                                   );
                                 }}
                               />
-                              <span>{agent.name || agent.id}</span>
+                              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                                {agent.name || agent.id}
+                              </span>
                             </label>
                           );
                         })}
@@ -1248,8 +1290,10 @@ const RunEvaluation = () => {
                   const scenarioOverrideEnabled = Boolean(
                     scenarioServerOverrideEnabledMap[scenario.id]
                   );
-                  const hasOverride = scenarioOverrideEnabled && Array.isArray(perScenarioOverride);
-                  const defaultScenarioServerSet = new Set(scenario.serverIds || []);
+                  const hasOverride =
+                    !compareServers &&
+                    scenarioOverrideEnabled &&
+                    Array.isArray(perScenarioOverride);
                   return (
                     <div
                       key={scenario.id}
@@ -1298,7 +1342,8 @@ const RunEvaluation = () => {
                               Per-scenario: "Override MCP Servers"
                             </Label>
                             <Switch
-                              checked={scenarioOverrideEnabled}
+                              disabled={compareServers}
+                              checked={!compareServers && scenarioOverrideEnabled}
                               onCheckedChange={(enabled) => {
                                 setScenarioServerOverrideEnabledMap((prev) => ({
                                   ...prev,
@@ -1324,40 +1369,19 @@ const RunEvaluation = () => {
                               }}
                             />
                           </div>
-                          {scenarioOverrideEnabled && (
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              {availableServers.map((server) => {
-                                const serverId = server.id;
-                                const selected = (perScenarioOverride ?? []).includes(serverId);
-                                const isDefaultForScenario = defaultScenarioServerSet.has(serverId);
-                                return (
-                                  <Badge
-                                    key={serverId}
-                                    variant={selected ? 'default' : 'outline'}
-                                    className={`cursor-pointer text-xs ${
-                                      selected ? '' : 'opacity-60 hover:opacity-100'
-                                    }`}
-                                    style={
-                                      !selected && isDefaultForScenario
-                                        ? { borderColor: 'hsl(var(--primary))' }
-                                        : undefined
-                                    }
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setScenarioServerOverrideMap((prev) => {
-                                        const current = prev[scenario.id] ?? [];
-                                        const next = current.includes(serverId)
-                                          ? current.filter((id) => id !== serverId)
-                                          : [...current, serverId];
-                                        return { ...prev, [scenario.id]: next };
-                                      });
-                                    }}
-                                  >
-                                    {server.name?.trim() ? server.name : serverId}
-                                  </Badge>
-                                );
-                              })}
-                            </div>
+                          {scenarioOverrideEnabled && !compareServers && (
+                            <McpServerPicker
+                              className="mt-1"
+                              servers={availableServers}
+                              selectedIds={perScenarioOverride ?? []}
+                              defaultIds={scenario.serverIds}
+                              onChange={(ids) =>
+                                setScenarioServerOverrideMap((prev) => ({
+                                  ...prev,
+                                  [scenario.id]: ids
+                                }))
+                              }
+                            />
                           )}
                         </div>
                       )}
@@ -1366,52 +1390,71 @@ const RunEvaluation = () => {
                 })}
               </div>
               <div className="space-y-1 rounded-md border p-2">
-                <div className="flex items-center justify-between">
+                <div className="space-y-2">
                   <div className="text-xs">
-                    <span>Override MCP Servers for selected Tests </span>
+                    <span className="font-medium">MCP Servers </span>
                     <span className="text-muted-foreground">
                       Selected tests run against the servers you choose here. Applies only to this
                       run.
                     </span>
                   </div>
-                  <Switch
-                    checked={globalServerOverrideEnabled}
-                    onCheckedChange={setGlobalServerOverrideEnabled}
-                  />
+                  <div
+                    role="radiogroup"
+                    aria-label="MCP server mode"
+                    className="flex flex-wrap gap-4 text-sm"
+                  >
+                    {(
+                      [
+                        { value: 'defaults', label: 'Use scenario defaults' },
+                        { value: 'override', label: 'Override servers' },
+                        { value: 'compare', label: 'Compare MCP servers' }
+                      ] as const
+                    ).map((option) => (
+                      <label key={option.value} className="inline-flex min-h-10 items-center gap-2">
+                        <input
+                          className="accent-primary"
+                          type="radio"
+                          name="server-mode"
+                          checked={serverMode === option.value}
+                          onChange={() => setServerMode(option.value)}
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 {globalServerOverrideEnabled && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableServers.map((server) => {
-                      const serverId = server.id;
-                      const selected = globalServerOverrideIds.includes(serverId);
-                      return (
-                        <Badge
-                          key={serverId}
-                          variant={selected ? 'default' : 'outline'}
-                          className={`cursor-pointer text-xs ${
-                            selected ? '' : 'opacity-60 hover:opacity-100'
-                          }`}
-                          onClick={() =>
-                            setGlobalServerOverrideIds((prev) =>
-                              prev.includes(serverId)
-                                ? prev.filter((id) => id !== serverId)
-                                : [...prev, serverId]
-                            )
-                          }
-                        >
-                          {server.name?.trim() ? server.name : serverId}
-                        </Badge>
-                      );
-                    })}
-                  </div>
+                  <McpServerPicker
+                    servers={availableServers}
+                    selectedIds={globalServerOverrideIds}
+                    onChange={setGlobalServerOverrideIds}
+                  />
+                )}
+                {compareServers && (
+                  <ServerComparisonPicker
+                    selectedIds={comparedServerIds}
+                    servers={availableServers}
+                    onChange={setComparisonServerIds}
+                  />
                 )}
               </div>
             </fieldset>
+          )}
+          {compareServers && comparedServerIds.length >= 2 && (
+            <p className="text-sm font-medium" role="status">
+              {selectedScenarioIds.length} {selectedScenarioIds.length === 1 ? 'test' : 'tests'} ×{' '}
+              {selectedAgentIds.length} {selectedAgentIds.length === 1 ? 'agent' : 'agents'} ×{' '}
+              {comparedServerIds.length} {comparedServerIds.length === 1 ? 'server' : 'servers'} ×{' '}
+              {planRepetitions} {planRepetitions === 1 ? 'repetition' : 'repetitions'} ={' '}
+              {planExecutionCount} {planExecutionCount === 1 ? 'execution' : 'executions'} · 1
+              evaluation result
+            </p>
           )}
           <div className="flex gap-2">
             <Button
               onClick={startRun}
               disabled={
+                invalidServerComparison ||
                 !configId ||
                 agentsLoading ||
                 Boolean(agentSelectionError) ||
@@ -1767,6 +1810,13 @@ const RunEvaluation = () => {
                             {(child?.status === 'error' || child?.status === 'stopped') && (
                               <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
                             )}
+                            {job.runParams.serverVariant && (
+                              <span className="shrink-0 font-medium">
+                                {job.runParams.serverVariant.label ||
+                                  job.runParams.serverVariant.id}{' '}
+                                ·{' '}
+                              </span>
+                            )}
                             {child
                               ? `${child.scenarioId} · ${child.agentName}${
                                   child.serverNames?.length
@@ -1793,6 +1843,13 @@ const RunEvaluation = () => {
                                         : job.status === 'paused_rover'
                                           ? 'paused'
                                           : job.status.replaceAll('_', ' ')}
+                            {job.runParams.serverVariant && (
+                              <span className="shrink-0 font-medium">
+                                {job.runParams.serverVariant.label ||
+                                  job.runParams.serverVariant.id}{' '}
+                                ·{' '}
+                              </span>
+                            )}
                             {child
                               ? ` (${child.completed}/${child.total} attempts)`
                               : job.roverProgress &&

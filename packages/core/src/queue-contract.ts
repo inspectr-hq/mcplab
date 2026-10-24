@@ -1,4 +1,4 @@
-import type { RoverAgentRef } from './types.js';
+import type { RoverAgentRef, ServerVariant, EvaluationRunRequest } from './types.js';
 
 export const ROVER_PROTOCOL_VERSION = 2 as const;
 export const ROVER_CAPABILITIES = ['scenario_control', 'assignment_lease'] as const;
@@ -30,6 +30,8 @@ export const ROVER_LEASE_TERMINAL_REASONS = [
 ] as const satisfies readonly RoverLeaseReleaseReason[];
 
 interface QueueRunParamsBase {
+  serverVariant?: ServerVariant;
+  evaluationRequest?: EvaluationRunRequest;
   evaluationRunId?: string;
   evaluationName?: string;
   configPath: string;

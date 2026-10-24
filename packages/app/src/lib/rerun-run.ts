@@ -1,5 +1,5 @@
 import type { EvalResult } from '@/types/eval';
-import type { EvalDataSource } from '@/lib/data-sources/types';
+import { toServerSets, type EvalDataSource } from '@/lib/data-sources/types';
 
 export async function rerunWithSameSettings(source: EvalDataSource, run: EvalResult) {
   const configPath = run.configPath?.trim();
@@ -14,12 +14,17 @@ export async function rerunWithSameSettings(source: EvalDataSource, run: EvalRes
         );
   await source.startRun({
     configPath,
-    runsPerScenario: 1,
+    runsPerScenario: sourceRun.rerun_runs_per_scenario ?? 1,
+    server_sets: sourceRun.rerun_server_variants
+      ? toServerSets(sourceRun.rerun_server_variants)
+      : undefined,
     scenarioIds: sourceRun.rerunScenarioIds,
     agents: agents.length > 0 ? agents : undefined,
     runNote: sourceRun.runNote,
-    serverOverrideAll: sourceRun.rerunServerOverrideAll,
-    scenarioServerOverrides: sourceRun.rerunScenarioServerOverrides,
+    servers: sourceRun.rerun_server_variants?.length ? undefined : sourceRun.rerunServerOverrideAll,
+    scenarioServerOverrides: sourceRun.rerun_server_variants?.length
+      ? undefined
+      : sourceRun.rerunScenarioServerOverrides,
     newConversationBeforeStart: sourceRun.rerunNewConversationBeforeStart,
     newConversationBetweenScenarios: sourceRun.rerunNewConversationBetweenScenarios
   });

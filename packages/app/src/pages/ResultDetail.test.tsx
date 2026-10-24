@@ -1093,3 +1093,25 @@ describe('ResultDetail conversation toggle', () => {
     expect(container.querySelector('svg.lucide-clock3')).toBeTruthy();
   });
 });
+
+it('filters a full result to the requested server set', async () => {
+  const result = makeResult();
+  result.server_variants = [
+    { id: 'A', label: 'Baseline' },
+    { id: 'B', label: 'Candidate' }
+  ];
+  result.scenarios = ['A', 'B'].map((variant) => ({
+    ...result.scenarios[0],
+    server_variant: variant
+  }));
+  getResultMock.mockResolvedValue(result);
+  render(
+    <MemoryRouter initialEntries={['/results/run-1?variant=B']}>
+      <Routes>
+        <Route path="/results/:id" element={<ResultDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+  expect(await screen.findByText('Candidate')).toBeInTheDocument();
+  expect(screen.queryByText('Baseline')).not.toBeInTheDocument();
+});

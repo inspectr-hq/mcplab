@@ -1,3 +1,4 @@
+import { scenarioExecutionKey } from '@/lib/data-sources/types';
 import { calculatePassRate } from '@/types/eval';
 import { formatPassRate } from '@/lib/utils';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -343,6 +344,8 @@ const ResultDetail = () => {
 
   const requestedConfigId = searchParams.get('configId') ?? '';
   const requestedAgentId = (searchParams.get('agent') ?? '').trim();
+  const requestedVariantId = (searchParams.get('variant') ?? '').trim();
+  const hasResultFilter = Boolean(requestedAgentId || requestedVariantId);
   const activeConfig = useMemo(() => {
     const byRequested = requestedConfigId
       ? configs.find((c) => c.id === requestedConfigId)
@@ -456,12 +459,13 @@ const ResultDetail = () => {
         filteredStoppedRuns: 0
       };
     }
-    const scenarios = requestedAgentId
-      ? result.scenarios.filter(
-          (scenario) =>
-            scenario.agentId === requestedAgentId || scenario.agentName === requestedAgentId
-        )
-      : result.scenarios;
+    const scenarios = result.scenarios.filter(
+      (scenario) =>
+        (!requestedAgentId ||
+          scenario.agentId === requestedAgentId ||
+          scenario.agentName === requestedAgentId) &&
+        (!requestedVariantId || scenario.server_variant === requestedVariantId)
+    );
     const scenarioRunCount = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
     const scenarioPassCount = scenarios.reduce(
       (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
@@ -471,13 +475,13 @@ const ResultDetail = () => {
       (sum, scenario) => sum + scenario.runs.filter((run) => run.outcome === 'stopped').length,
       0
     );
-    const totalRuns = !requestedAgentId && result.outcomes ? result.totalRuns : scenarioRunCount;
+    const totalRuns = !hasResultFilter && result.outcomes ? result.totalRuns : scenarioRunCount;
     const passCount =
-      !requestedAgentId && result.outcomes?.passed !== undefined
+      !hasResultFilter && result.outcomes?.passed !== undefined
         ? result.outcomes.passed
         : scenarioPassCount;
     const stoppedRuns =
-      !requestedAgentId && result.outcomes?.stopped !== undefined
+      !hasResultFilter && result.outcomes?.stopped !== undefined
         ? result.outcomes.stopped
         : scenarioStoppedCount;
     const totalToolCalls = scenarios.reduce(
@@ -500,7 +504,7 @@ const ResultDetail = () => {
       displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage)),
       filteredStoppedRuns: stoppedRuns
     };
-  }, [result, requestedAgentId]);
+  }, [result, requestedAgentId, requestedVariantId, hasResultFilter]);
 
   const toolData = useMemo(() => {
     const toolFreq: Record<string, number> = {};
@@ -525,11 +529,11 @@ const ResultDetail = () => {
   );
   const runOutcomes = filteredScenarios.flatMap((scenario) => scenario.runs);
   const incompleteRuns =
-    !requestedAgentId && result.outcomes?.incomplete !== undefined
+    !hasResultFilter && result.outcomes?.incomplete !== undefined
       ? result.outcomes.incomplete
       : runOutcomes.filter((run) => run.outcome === 'incomplete').length;
   const errorRuns =
-    !requestedAgentId && result.outcomes?.error !== undefined
+    !hasResultFilter && result.outcomes?.error !== undefined
       ? result.outcomes.error
       : runOutcomes.filter((run) => run.outcome === 'error').length;
   const stoppedRuns = filteredStoppedRuns;
@@ -544,12 +548,11 @@ const ResultDetail = () => {
   };
 
   const runSectionKey = (
-    scenarioId: string,
-    agentName: string,
+    executionKey: string,
     runIndex: number,
     section: 'checks' | 'extracts' | 'tools' | 'final' | 'conversation'
-  ) => `${scenarioId}:${agentName}:${runIndex}:${section}`;
-  const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
+  ) => `${JSON.stringify([executionKey, runIndex])}:${section}`;
+
   const toggleRunSection = (key: string) => {
     setCollapsedRunSections((prev) => {
       const next = new Set(prev);
@@ -793,6 +796,13 @@ const ResultDetail = () => {
                   {new Date(result.timestamp).toLocaleString()}
                 </span>
                 <span className="mx-1">·</span>
+                {requestedVariantId && (
+                  <Badge variant="outline">
+                    Server set:{' '}
+                    {result.server_variants?.find((variant) => variant.id === requestedVariantId)
+                      ?.label || requestedVariantId}
+                  </Badge>
+                )}
                 {requestedAgentId ? (
                   <>
                     <span className="inline-flex items-center align-middle">
@@ -1053,7 +1063,11 @@ const ResultDetail = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredScenarios.map((sc) => {
-                    const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
+                    const rowKey = scenarioExecutionKey(
+                      sc.scenarioId,
+                      sc.agentName,
+                      sc.server_variant
+                    );
                     const scenarioLabel = sc.scenarioName || sc.scenarioId;
                     const checkCounts = tallyCheckCounts(
                       sc.runs.flatMap((run) => run.checkResults ?? [])
@@ -1093,6 +1107,15 @@ const ResultDetail = () => {
                               <TableCell className="font-medium text-sm">
                                 <div className="flex items-center gap-1.5">
                                   <span>{sc.scenarioName}</span>
+                                  {sc.server_variant && (
+                                    <Badge variant="outline">
+                                      {result.server_variants?.find(
+                                        (variant) => variant.id === sc.server_variant
+                                      )?.label ||
+                                        sc.servers?.join(' + ') ||
+                                        sc.server_variant}
+                                    </Badge>
+                                  )}
                                   {scenarioEditHref ? (
                                     <Link
                                       to={scenarioEditHref}
@@ -1366,21 +1389,11 @@ const ResultDetail = () => {
                                               {checks.length > 0 && (
                                                 <Collapsible
                                                   open={isRunSectionOpen(
-                                                    runSectionKey(
-                                                      sc.scenarioId,
-                                                      sc.agentName,
-                                                      run.runIndex,
-                                                      'checks'
-                                                    )
+                                                    runSectionKey(rowKey, run.runIndex, 'checks')
                                                   )}
                                                   onOpenChange={() =>
                                                     toggleRunSection(
-                                                      runSectionKey(
-                                                        sc.scenarioId,
-                                                        sc.agentName,
-                                                        run.runIndex,
-                                                        'checks'
-                                                      )
+                                                      runSectionKey(rowKey, run.runIndex, 'checks')
                                                     )
                                                   }
                                                 >
@@ -1394,8 +1407,7 @@ const ResultDetail = () => {
                                                           className={`h-3.5 w-3.5 transition-transform ${
                                                             isRunSectionOpen(
                                                               runSectionKey(
-                                                                sc.scenarioId,
-                                                                sc.agentName,
+                                                                rowKey,
                                                                 run.runIndex,
                                                                 'checks'
                                                               )
@@ -1532,22 +1544,12 @@ const ResultDetail = () => {
                                         })()}
                                         <Collapsible
                                           open={isRunSectionOpen(
-                                            runSectionKey(
-                                              sc.scenarioId,
-                                              sc.agentName,
-                                              run.runIndex,
-                                              'extracts'
-                                            ),
+                                            runSectionKey(rowKey, run.runIndex, 'extracts'),
                                             Object.keys(run.extractedValues ?? {}).length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
-                                              runSectionKey(
-                                                sc.scenarioId,
-                                                sc.agentName,
-                                                run.runIndex,
-                                                'extracts'
-                                              )
+                                              runSectionKey(rowKey, run.runIndex, 'extracts')
                                             )
                                           }
                                         >
@@ -1562,8 +1564,7 @@ const ResultDetail = () => {
                                                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${
                                                       isRunSectionOpen(
                                                         runSectionKey(
-                                                          sc.scenarioId,
-                                                          sc.agentName,
+                                                          rowKey,
                                                           run.runIndex,
                                                           'extracts'
                                                         ),
@@ -1618,22 +1619,12 @@ const ResultDetail = () => {
                                         </Collapsible>
                                         <Collapsible
                                           open={isRunSectionOpen(
-                                            runSectionKey(
-                                              sc.scenarioId,
-                                              sc.agentName,
-                                              run.runIndex,
-                                              'tools'
-                                            ),
+                                            runSectionKey(rowKey, run.runIndex, 'tools'),
                                             run.toolCalls.length > 0
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
-                                              runSectionKey(
-                                                sc.scenarioId,
-                                                sc.agentName,
-                                                run.runIndex,
-                                                'tools'
-                                              )
+                                              runSectionKey(rowKey, run.runIndex, 'tools')
                                             )
                                           }
                                         >
@@ -1648,8 +1639,7 @@ const ResultDetail = () => {
                                                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${
                                                       isRunSectionOpen(
                                                         runSectionKey(
-                                                          sc.scenarioId,
-                                                          sc.agentName,
+                                                          rowKey,
                                                           run.runIndex,
                                                           'tools'
                                                         ),
@@ -1779,21 +1769,11 @@ const ResultDetail = () => {
                                         </Collapsible>
                                         <Collapsible
                                           open={isRunSectionOpen(
-                                            runSectionKey(
-                                              sc.scenarioId,
-                                              sc.agentName,
-                                              run.runIndex,
-                                              'final'
-                                            )
+                                            runSectionKey(rowKey, run.runIndex, 'final')
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
-                                              runSectionKey(
-                                                sc.scenarioId,
-                                                sc.agentName,
-                                                run.runIndex,
-                                                'final'
-                                              )
+                                              runSectionKey(rowKey, run.runIndex, 'final')
                                             )
                                           }
                                         >
@@ -1807,12 +1787,7 @@ const ResultDetail = () => {
                                                   <ChevronDown
                                                     className={`h-3.5 w-3.5 transition-transform ${
                                                       isRunSectionOpen(
-                                                        runSectionKey(
-                                                          sc.scenarioId,
-                                                          sc.agentName,
-                                                          run.runIndex,
-                                                          'final'
-                                                        )
+                                                        runSectionKey(rowKey, run.runIndex, 'final')
                                                       )
                                                         ? 'rotate-180'
                                                         : ''
@@ -1843,21 +1818,11 @@ const ResultDetail = () => {
                                         </Collapsible>
                                         <Collapsible
                                           open={isRunSectionOpen(
-                                            runSectionKey(
-                                              sc.scenarioId,
-                                              sc.agentName,
-                                              run.runIndex,
-                                              'conversation'
-                                            )
+                                            runSectionKey(rowKey, run.runIndex, 'conversation')
                                           )}
                                           onOpenChange={() =>
                                             toggleRunSection(
-                                              runSectionKey(
-                                                sc.scenarioId,
-                                                sc.agentName,
-                                                run.runIndex,
-                                                'conversation'
-                                              )
+                                              runSectionKey(rowKey, run.runIndex, 'conversation')
                                             )
                                           }
                                         >
@@ -1872,8 +1837,7 @@ const ResultDetail = () => {
                                                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${
                                                       isRunSectionOpen(
                                                         runSectionKey(
-                                                          sc.scenarioId,
-                                                          sc.agentName,
+                                                          rowKey,
                                                           run.runIndex,
                                                           'conversation'
                                                         )
@@ -1934,12 +1898,7 @@ const ResultDetail = () => {
                                               </div>
                                             </CollapsibleContent>
                                             {!isRunSectionOpen(
-                                              runSectionKey(
-                                                sc.scenarioId,
-                                                sc.agentName,
-                                                run.runIndex,
-                                                'conversation'
-                                              )
+                                              runSectionKey(rowKey, run.runIndex, 'conversation')
                                             ) && (
                                               <button
                                                 type="button"
@@ -1947,8 +1906,7 @@ const ResultDetail = () => {
                                                 onClick={() =>
                                                   toggleRunSection(
                                                     runSectionKey(
-                                                      sc.scenarioId,
-                                                      sc.agentName,
+                                                      rowKey,
                                                       run.runIndex,
                                                       'conversation'
                                                     )

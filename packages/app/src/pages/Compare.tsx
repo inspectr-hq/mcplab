@@ -1,3 +1,8 @@
+import {
+  buildWithinRunRows,
+  withinRunOptions,
+  type ComparisonDimension
+} from '@/lib/within-run-compare';
 import { calculatePassRate } from '@/types/eval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -74,9 +79,9 @@ const colors = [
 
 type CompareMode = 'runs' | 'within-run';
 
-type AgentSummary = {
-  agentId: string;
-  agentName: string;
+type ComparisonSummary = {
+  columnId: string;
+  columnName: string;
   provider?: string;
   model?: string;
   passRate: number | null;
@@ -89,7 +94,7 @@ type WithinRunScenarioRow = {
   scenarioId: string;
   scenarioName: string;
   displayLabel: string;
-  byAgent: Record<string, ScenarioResult | undefined>;
+  byColumn: Record<string, ScenarioResult | undefined>;
 };
 
 type CompareTableItem =
@@ -198,7 +203,7 @@ function isSameStringArray(a: string[], b: string[]): boolean {
 
 function getRepresentativeScenarioMetadata(
   scenarios: ScenarioResult[]
-): Pick<AgentSummary, 'provider' | 'model'> {
+): Pick<ComparisonSummary, 'provider' | 'model'> {
   const representativeScenario =
     scenarios.find((scenario) => scenario.provider && scenario.model) ??
     scenarios.find((scenario) => scenario.provider || scenario.model);
@@ -212,6 +217,10 @@ const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTimeFilter = getTimeFilterQueryState(searchParams);
+  const dimension: ComparisonDimension =
+    searchParams.get('by') === 'servers' ? 'servers' : 'agents';
+  const comparingServers = dimension === 'servers';
+  const columnsParam = comparingServers ? 'variants' : 'agents';
   const mode: CompareMode = searchParams.get('mode') === 'within-run' ? 'within-run' : 'runs';
   const [results, setResults] = useState<EvalResult[]>([]);
   const [detailedRunsById, setDetailedRunsById] = useState<Record<string, EvalResult>>({});
@@ -241,14 +250,14 @@ const Compare = () => {
   const { offset, hasMore, totalCount } = pagination;
 
   const initialWithinRunId = searchParams.get('runId') ?? '';
-  const initialWithinRunAgents = (searchParams.get('agents') ?? '')
+  const initialWithinRunAgents = (searchParams.get(columnsParam) ?? '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
   const initialWithinRunScenario = searchParams.get('scenario') ?? 'all';
 
   const [withinRunId, setWithinRunId] = useState(initialWithinRunId);
-  const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
+  const [withinRunColumnIds, setWithinRunColumnIds] = useState<string[]>(initialWithinRunAgents);
   const [withinRunScenarioFilter, setWithinRunScenarioFilter] = useState(initialWithinRunScenario);
   const [openWithinRunScenarioPicker, setOpenWithinRunScenarioPicker] = useState(false);
   const refreshRequestIdRef = useRef(0);
@@ -497,15 +506,24 @@ const Compare = () => {
     return agentIds.slice(0, Math.min(2, agentIds.length));
   };
 
-  const startWithinRunFromRun = (run: EvalResult) => {
-    const nextAgents = defaultAgentsForRun(run);
+  const startWithinRunFromRun = (run: EvalResult, by: ComparisonDimension = 'agents') => {
+    const nextAgents =
+      by === 'servers'
+        ? withinRunOptions(run, 'servers')
+            .slice(0, 2)
+            .map((option) => option.id)
+        : defaultAgentsForRun(run);
     setWithinRunId(run.id);
-    setWithinRunAgentIds(nextAgents);
+    setWithinRunColumnIds(nextAgents);
     setWithinRunScenarioFilter('all');
     const next = new URLSearchParams(searchParams);
     next.set('mode', 'within-run');
     next.set('runId', run.id);
-    if (nextAgents.length > 0) next.set('agents', nextAgents.join(','));
+    next.set('by', by);
+    next.delete('agents');
+    next.delete('variants');
+    if (nextAgents.length > 0)
+      next.set(by === 'servers' ? 'variants' : 'agents', nextAgents.join(','));
     else next.delete('agents');
     next.delete('scenario');
     setSearchParams(next, { replace: true });
@@ -559,16 +577,18 @@ const Compare = () => {
     timeFilterEnd
   ]);
 
-  const withinRunAgentOptions = useMemo(() => {
-    if (!withinRun) return [];
-    const map = new Map<string, string>();
-    for (const scenario of withinRun.scenarios) {
-      map.set(scenario.agentId, scenario.agentName || scenario.agentId);
-    }
-    return Array.from(map.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [withinRun]);
+  const heldOptions = useMemo(
+    () => withinRunOptions(withinRun, comparingServers ? 'agents' : 'servers'),
+    [withinRun, comparingServers]
+  );
+  const heldParam = comparingServers ? 'agent' : 'variant';
+  const requestedHeldId = searchParams.get(heldParam);
+  const heldId =
+    heldOptions.find((option) => option.id === requestedHeldId)?.id ?? heldOptions[0]?.id;
+  const withinRunColumnOptions = useMemo(
+    () => withinRunOptions(withinRun, dimension),
+    [withinRun, dimension]
+  );
 
   const withinRunScenarioOptions = useMemo(() => {
     if (!withinRun) return [];
@@ -582,21 +602,21 @@ const Compare = () => {
     return Array.from(labels).sort((a, b) => a.localeCompare(b));
   }, [withinRun]);
 
-  const withinRunAgentIdsKey = useMemo(() => withinRunAgentIds.join(','), [withinRunAgentIds]);
+  const withinRunColumnIdsKey = useMemo(() => withinRunColumnIds.join(','), [withinRunColumnIds]);
 
   useEffect(() => {
     if (mode === 'within-run') {
       const nextRunId = searchParams.get('runId') ?? '';
-      const nextAgents = (searchParams.get('agents') ?? '')
+      const nextAgents = (searchParams.get(columnsParam) ?? '')
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
       const nextScenario = searchParams.get('scenario') ?? 'all';
       setWithinRunId((prev) => (prev === nextRunId ? prev : nextRunId));
-      setWithinRunAgentIds((prev) => (isSameStringArray(prev, nextAgents) ? prev : nextAgents));
+      setWithinRunColumnIds((prev) => (isSameStringArray(prev, nextAgents) ? prev : nextAgents));
       setWithinRunScenarioFilter((prev) => (prev === nextScenario ? prev : nextScenario));
     }
-  }, [mode, searchParams]);
+  }, [mode, searchParams, columnsParam]);
 
   useEffect(() => {
     if (mode !== 'within-run') return;
@@ -606,17 +626,10 @@ const Compare = () => {
     if (!nextRunId || !results.some((run) => run.id === nextRunId)) {
       nextRunId = results[0]!.id;
     }
-    const nextRun = results.find((run) => run.id === nextRunId);
-    const nextAgentOptions = (() => {
-      if (!nextRun) return [];
-      const map = new Map<string, string>();
-      for (const scenario of nextRun.scenarios) {
-        map.set(scenario.agentId, scenario.agentName || scenario.agentId);
-      }
-      return Array.from(map.keys());
-    })();
+    const nextRun = detailedRunsById[nextRunId] ?? results.find((run) => run.id === nextRunId);
+    const nextAgentOptions = withinRunOptions(nextRun, dimension).map((option) => option.id);
     const validAgentSet = new Set(nextAgentOptions);
-    let nextAgents = withinRunAgentIdsKey
+    let nextAgents = withinRunColumnIdsKey
       .split(',')
       .map((id) => id.trim())
       .filter((id): id is string => Boolean(id))
@@ -641,10 +654,18 @@ const Compare = () => {
         : withinRunScenarioFilter;
 
     if (nextRunId !== withinRunId) setWithinRunId(nextRunId);
-    if (nextAgents.join(',') !== withinRunAgentIdsKey) setWithinRunAgentIds(nextAgents);
+    if (nextAgents.join(',') !== withinRunColumnIdsKey) setWithinRunColumnIds(nextAgents);
     if (nextScenarioFilter !== withinRunScenarioFilter)
       setWithinRunScenarioFilter(nextScenarioFilter);
-  }, [mode, results, withinRunId, withinRunAgentIdsKey, withinRunScenarioFilter]);
+  }, [
+    mode,
+    results,
+    detailedRunsById,
+    dimension,
+    withinRunId,
+    withinRunColumnIdsKey,
+    withinRunScenarioFilter
+  ]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -652,8 +673,8 @@ const Compare = () => {
       next.set('mode', 'within-run');
       if (withinRunId) next.set('runId', withinRunId);
       else next.delete('runId');
-      if (withinRunAgentIds.length > 0) next.set('agents', withinRunAgentIds.join(','));
-      else next.delete('agents');
+      if (withinRunColumnIds.length > 0) next.set(columnsParam, withinRunColumnIds.join(','));
+      else next.delete(columnsParam);
       if (withinRunScenarioFilter !== 'all') next.set('scenario', withinRunScenarioFilter);
       else next.delete('scenario');
       next.delete('time_filter');
@@ -695,8 +716,9 @@ const Compare = () => {
     timeFilterMode,
     timeFilterPreset,
     timeFilterStart,
+    columnsParam,
     withinRunId,
-    withinRunAgentIds,
+    withinRunColumnIds,
     withinRunScenarioFilter,
     searchParams,
     setSearchParams
@@ -728,60 +750,42 @@ const Compare = () => {
 
   const withinRunScenarioRows = useMemo<WithinRunScenarioRow[]>(() => {
     if (!withinRun) return [];
-    const scenarioMap = new Map<string, WithinRunScenarioRow>();
-    for (const scenario of withinRun.scenarios) {
-      const scenarioId = String(scenario.scenarioId ?? '').trim();
-      const scenarioName = String(scenario.scenarioName ?? '').trim();
-      const displayLabel = scenarioName || scenarioId;
-      if (!scenarioId && !displayLabel) continue;
-      const key = scenarioId || displayLabel;
-      const existing = scenarioMap.get(key);
-      if (existing) {
-        existing.byAgent[scenario.agentId] = scenario;
-        continue;
-      }
-      scenarioMap.set(key, {
-        scenarioId: scenarioId || displayLabel,
-        scenarioName,
-        displayLabel: displayLabel || scenarioId,
-        byAgent: { [scenario.agentId]: scenario }
-      });
-    }
-    const rows = Array.from(scenarioMap.values()).sort((a, b) => {
-      const left = (a.displayLabel || a.scenarioId).toLowerCase();
-      const right = (b.displayLabel || b.scenarioId).toLowerCase();
-      return left.localeCompare(right);
-    });
-    if (withinRunScenarioFilter === 'all') return rows;
-    return rows.filter((row) => row.displayLabel === withinRunScenarioFilter);
-  }, [withinRun, withinRunScenarioFilter]);
+    const rows = buildWithinRunRows(withinRun, dimension, heldId);
+    return withinRunScenarioFilter === 'all'
+      ? rows
+      : rows.filter((row) => row.displayLabel === withinRunScenarioFilter);
+  }, [withinRun, dimension, heldId, withinRunScenarioFilter]);
 
-  const selectedWithinRunAgentOptions = useMemo(() => {
-    const optionMap = new Map(withinRunAgentOptions.map((option) => [option.id, option]));
-    return withinRunAgentIds
+  const selectedWithinRunColumnOptions = useMemo(() => {
+    const optionMap = new Map(withinRunColumnOptions.map((option) => [option.id, option]));
+    return withinRunColumnIds
       .map((id) => optionMap.get(id))
       .filter((option): option is { id: string; name: string } => Boolean(option));
-  }, [withinRunAgentIds, withinRunAgentOptions]);
+  }, [withinRunColumnIds, withinRunColumnOptions]);
 
   const withinRunComparePair = useMemo(() => {
-    if (!withinRun || selectedWithinRunAgentOptions.length !== 2) return null;
-    const [left, right] = selectedWithinRunAgentOptions;
-    return {
-      left,
-      right,
-      link: `/compare/results?left=${encodeURIComponent(withinRun.id)}&right=${encodeURIComponent(
-        withinRun.id
-      )}&leftConfig=${encodeURIComponent(withinRun.configId)}&rightConfig=${encodeURIComponent(
-        withinRun.configId
-      )}&leftAgent=${encodeURIComponent(left.id)}&rightAgent=${encodeURIComponent(right.id)}`
-    };
-  }, [withinRun, selectedWithinRunAgentOptions]);
+    if (!withinRun || selectedWithinRunColumnOptions.length !== 2) return null;
+    const [left, right] = selectedWithinRunColumnOptions;
+    const params = new URLSearchParams({
+      left: withinRun.id,
+      right: withinRun.id,
+      leftConfig: withinRun.configId,
+      rightConfig: withinRun.configId
+    });
+    params.set(comparingServers ? 'leftVariant' : 'leftAgent', left.id);
+    params.set(comparingServers ? 'rightVariant' : 'rightAgent', right.id);
+    if (heldId) {
+      params.set(comparingServers ? 'leftAgent' : 'leftVariant', heldId);
+      params.set(comparingServers ? 'rightAgent' : 'rightVariant', heldId);
+    }
+    return { left, right, link: `/compare/results?${params.toString()}` };
+  }, [withinRun, selectedWithinRunColumnOptions, comparingServers, heldId]);
 
-  const withinRunAgentSummary = useMemo<AgentSummary[]>(() => {
-    if (!withinRun || selectedWithinRunAgentOptions.length === 0) return [];
-    return selectedWithinRunAgentOptions.map((agent) => {
+  const withinRunColumnSummary = useMemo<ComparisonSummary[]>(() => {
+    if (!withinRun || selectedWithinRunColumnOptions.length === 0) return [];
+    return selectedWithinRunColumnOptions.map((agent) => {
       const relatedScenarios = withinRunScenarioRows
-        .map((row) => row.byAgent[agent.id])
+        .map((row) => row.byColumn[agent.id])
         .filter((value): value is ScenarioResult => Boolean(value));
       const runs = relatedScenarios.flatMap((scenario) => scenario.runs);
       const totalRuns = runs.length;
@@ -790,8 +794,8 @@ const Compare = () => {
       const totalDuration = runs.reduce((sum, run) => sum + run.duration, 0);
       const { provider, model } = getRepresentativeScenarioMetadata(relatedScenarios);
       return {
-        agentId: agent.id,
-        agentName: agent.name,
+        columnId: agent.id,
+        columnName: agent.name,
         provider,
         model,
         passRate: calculatePassRate(
@@ -804,10 +808,10 @@ const Compare = () => {
         avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns
       };
     });
-  }, [withinRun, selectedWithinRunAgentOptions, withinRunScenarioRows]);
+  }, [withinRun, selectedWithinRunColumnOptions, withinRunScenarioRows]);
 
-  const toggleWithinRunAgent = (agentId: string) => {
-    setWithinRunAgentIds((prev) => {
+  const toggleWithinRunColumn = (agentId: string) => {
+    setWithinRunColumnIds((prev) => {
       if (prev.includes(agentId)) {
         return prev.filter((id) => id !== agentId);
       }
@@ -838,12 +842,12 @@ const Compare = () => {
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
             <GitCompare className="h-6 w-6" />
-            Compare Runs
+            {mode === 'within-run' && comparingServers ? 'Compare MCP servers' : 'Compare Runs'}
           </h1>
           <p className="text-sm text-muted-foreground">
             {mode === 'runs'
               ? 'Select 2–5 runs to compare'
-              : 'Compare agents side-by-side within one run'}
+              : `Compare ${comparingServers ? 'MCP server sets' : 'agents'} side-by-side within one run`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1055,6 +1059,60 @@ const Compare = () => {
             <CardTitle className="text-base">Within One Run Controls</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-2">
+                <Label>Compare by</Label>
+                <Select
+                  value={dimension}
+                  onValueChange={(value: ComparisonDimension) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set('by', value);
+                    next.delete('agents');
+                    next.delete('variants');
+                    const ids = withinRunOptions(withinRun, value)
+                      .slice(0, 2)
+                      .map((option) => option.id);
+                    next.set(value === 'servers' ? 'variants' : 'agents', ids.join(','));
+                    setSearchParams(next, { replace: true });
+                  }}
+                >
+                  <SelectTrigger className="w-48" aria-label="Compare by">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agents">Agents</SelectItem>
+                    <SelectItem value="servers">MCP servers</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {heldOptions.length > 0 && (
+                <div className="space-y-2">
+                  <Label>{comparingServers ? 'Agent' : 'MCP server set'}</Label>
+                  <Select
+                    value={heldId}
+                    onValueChange={(value) => {
+                      const next = new URLSearchParams(searchParams);
+                      next.set(heldParam, value);
+                      setSearchParams(next, { replace: true });
+                    }}
+                  >
+                    <SelectTrigger
+                      className="w-64"
+                      aria-label={comparingServers ? 'Agent' : 'MCP server set'}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {heldOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Run</p>
@@ -1130,20 +1188,27 @@ const Compare = () => {
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Agents (select 2+)</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {comparingServers ? 'MCP server sets (select 2+)' : 'Agents (select 2+)'}
+              </p>
               <div className="flex flex-wrap gap-3 rounded-md border p-3">
-                {withinRunAgentOptions.length === 0 && (
+                {withinRunColumnOptions.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    No agents available for selected run.
+                    No {comparingServers ? 'server sets' : 'agents'} available for selected run.
                   </p>
                 )}
-                {withinRunAgentOptions.map((agent) => (
+                {withinRunColumnOptions.map((agent) => (
                   <label key={agent.id} className="inline-flex items-center gap-2 text-sm">
                     <Checkbox
-                      checked={withinRunAgentIds.includes(agent.id)}
-                      onCheckedChange={() => toggleWithinRunAgent(agent.id)}
+                      checked={withinRunColumnIds.includes(agent.id)}
+                      onCheckedChange={() => toggleWithinRunColumn(agent.id)}
                     />
                     <span>{agent.name}</span>
+                    {comparingServers && withinRun?.server_variant_errors?.[agent.id] && (
+                      <span className="text-destructive text-xs">
+                        {withinRun.server_variant_errors[agent.id]}
+                      </span>
+                    )}
                   </label>
                 ))}
               </div>
@@ -1318,6 +1383,16 @@ const Compare = () => {
                         {runScopesById.get(item.run.id)?.agentCount ?? 0}
                       </TableCell>
                       <TableCell className="text-right">
+                        {(item.run.server_variants?.length ?? 0) > 1 && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startWithinRunFromRun(item.run, 'servers')}
+                          >
+                            Compare MCP servers
+                          </Button>
+                        )}
                         {(runScopesById.get(item.run.id)?.agentCount ?? 0) > 1 ? (
                           <Button
                             type="button"
@@ -1565,15 +1640,16 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === 'within-run' && withinRun && selectedWithinRunAgentOptions.length < 2 && (
+      {mode === 'within-run' && withinRun && selectedWithinRunColumnOptions.length < 2 && (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            Select at least 2 agents to compare side-by-side within this run.
+            Select at least 2 {comparingServers ? 'server sets' : 'agents'} to compare side-by-side
+            within this run.
           </CardContent>
         </Card>
       )}
 
-      {mode === 'within-run' && withinRun && selectedWithinRunAgentOptions.length >= 2 && (
+      {mode === 'within-run' && withinRun && selectedWithinRunColumnOptions.length >= 2 && (
         <>
           <Card>
             <CardContent className="pt-6">
@@ -1582,7 +1658,7 @@ const Compare = () => {
                   <p className="text-sm font-medium">Need full result details?</p>
                   <p className="text-xs text-muted-foreground">
                     {withinRunComparePair
-                      ? 'Open a side-by-side full result view filtered by the selected agents.'
+                      ? `Open a side-by-side full result view filtered by the selected ${comparingServers ? 'server sets' : 'agents'}.`
                       : 'Open the complete run result page for all details and trace navigation.'}
                   </p>
                 </div>
@@ -1607,16 +1683,18 @@ const Compare = () => {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Agent Summary</CardTitle>
+              <CardTitle className="text-base">
+                {comparingServers ? 'MCP Server Summary' : 'Agent Summary'}
+              </CardTitle>
             </CardHeader>
             <CardContent className="max-h-96 overflow-auto p-0">
               <Table>
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead>Metric</TableHead>
-                    {withinRunAgentSummary.map((summary) => (
-                      <TableHead key={summary.agentId}>
-                        <div className="font-medium text-sm">{summary.agentName}</div>
+                    {withinRunColumnSummary.map((summary) => (
+                      <TableHead key={summary.columnId}>
+                        <div className="font-medium text-sm">{summary.columnName}</div>
                         {(summary.provider || summary.model) && (
                           <div className="font-mono text-xs font-normal text-muted-foreground">
                             {[
@@ -1634,32 +1712,32 @@ const Compare = () => {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-medium">Pass Rate</TableCell>
-                    {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId}>
+                    {withinRunColumnSummary.map((summary) => (
+                      <TableCell key={summary.columnId}>
                         <PassRateBadge rate={summary.passRate} />
                       </TableCell>
                     ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Total Runs</TableCell>
-                    {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId} className="font-mono">
+                    {withinRunColumnSummary.map((summary) => (
+                      <TableCell key={summary.columnId} className="font-mono">
                         {summary.totalRuns}
                       </TableCell>
                     ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Avg Tool Calls</TableCell>
-                    {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId} className="font-mono">
+                    {withinRunColumnSummary.map((summary) => (
+                      <TableCell key={summary.columnId} className="font-mono">
                         {summary.avgToolCalls.toFixed(1)}
                       </TableCell>
                     ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Avg Latency</TableCell>
-                    {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId} className="font-mono">
+                    {withinRunColumnSummary.map((summary) => (
+                      <TableCell key={summary.columnId} className="font-mono">
                         {Math.round(summary.avgLatency)}ms
                       </TableCell>
                     ))}
@@ -1671,15 +1749,17 @@ const Compare = () => {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Scenario × Agent Matrix</CardTitle>
+              <CardTitle className="text-base">
+                {comparingServers ? 'Scenario × MCP Server Matrix' : 'Scenario × Agent Matrix'}
+              </CardTitle>
             </CardHeader>
             <CardContent className="max-h-136 overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead className="w-[260px]">Scenario</TableHead>
-                    {selectedWithinRunAgentOptions.map((agent) => {
-                      const summary = withinRunAgentSummary.find((s) => s.agentId === agent.id);
+                    {selectedWithinRunColumnOptions.map((agent) => {
+                      const summary = withinRunColumnSummary.find((s) => s.columnId === agent.id);
                       return (
                         <TableHead key={agent.id}>
                           <div className="font-medium text-sm">{agent.name}</div>
@@ -1702,8 +1782,8 @@ const Compare = () => {
                   {withinRunScenarioRows.map((row) => (
                     <TableRow key={row.scenarioId}>
                       <TableCell className="font-medium text-sm">{row.displayLabel}</TableCell>
-                      {selectedWithinRunAgentOptions.map((agent) => {
-                        const scenario = row.byAgent[agent.id];
+                      {selectedWithinRunColumnOptions.map((agent) => {
+                        const scenario = row.byColumn[agent.id];
                         if (!scenario) {
                           return (
                             <TableCell key={agent.id}>

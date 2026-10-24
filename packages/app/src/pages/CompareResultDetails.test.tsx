@@ -104,3 +104,20 @@ describe('CompareResultDetails', () => {
     );
   });
 });
+
+it('keeps server-set filters on embedded and standalone detail links', () => {
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/compare/results?left=run&right=run&leftAgent=one&rightAgent=one&leftVariant=A&rightVariant=B'
+      ]}
+    >
+      <CompareResultDetails />
+    </MemoryRouter>
+  );
+  expect(screen.getByTitle('Result run · one · A').getAttribute('src')).toContain('variant=A');
+  expect(screen.getByTitle('Result run · one · B').getAttribute('src')).toContain('variant=B');
+  expect(screen.getByRole('link', { name: 'Open Left' }).getAttribute('href')).toContain(
+    'variant=A'
+  );
+});

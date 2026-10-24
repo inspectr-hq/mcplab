@@ -2081,3 +2081,22 @@ describe('config adapters round-trip', () => {
     );
   });
 });
+
+it('keeps conversations distinct for server sets with the same scenario, agent and repetition', () => {
+  const results = baseResults();
+  const scenario = { ...results.scenarios[0], runs: [results.scenarios[0].runs[0]] };
+  results.scenarios = [
+    { ...scenario, server_variant: 'A', servers: ['dev'] },
+    { ...scenario, server_variant: 'B', servers: ['prod'] }
+  ];
+  const records = ['A', 'B'].map((variant) => ({
+    ...makeRecord(0, [
+      { role: 'assistant', content: [{ type: 'text' as const, text: `Answer ${variant}` }] }
+    ]),
+    server_variant: variant
+  }));
+  const converted = fromCoreResultsJson(results, records);
+  expect(
+    converted.scenarios.map((s) => s.runs[0].conversation.map((item) => item.text).join(' '))
+  ).toEqual(['Answer A', 'Answer B']);
+});

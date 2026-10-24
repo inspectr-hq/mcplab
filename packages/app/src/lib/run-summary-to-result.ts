@@ -1,3 +1,4 @@
+import { serverComparisonMetadata } from '@/lib/data-sources/types';
 import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 import type { EvalResult } from '@/types/eval';
 
@@ -5,6 +6,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
   const toolTokensTotal =
     typeof summary.toolTokensTotal === 'number' ? summary.toolTokensTotal : null;
   return {
+    ...serverComparisonMetadata(summary),
     id: summary.runId,
     evaluationRunId: summary.evaluationRunId,
     configId: '',

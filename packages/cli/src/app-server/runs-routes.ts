@@ -13,6 +13,10 @@ import {
   validateEvalToolRules,
   resolveWorkspaceEvaluation,
   applyRuntimeServerOverrides,
+  planServerVariants,
+  normalizeRuntimeServerSelection,
+  toServerSets,
+  type ServerVariant,
   DEFAULT_BROWSER_PROVIDER_PROFILES,
   type EvalConfig,
   type EvaluationRunRequest,
@@ -388,16 +392,14 @@ export async function handleRunsRoutes(params: {
     const requestedAgents = requestedAgentsFromBody?.length ? requestedAgentsFromBody : undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
-    const serverOverrideAll = Array.isArray(body.serverOverrideAll)
-      ? body.serverOverrideAll.map((id: unknown) => String(id).trim()).filter(Boolean)
-      : undefined;
-    if (
-      Array.isArray(body.serverOverrideAll) &&
-      (!serverOverrideAll || serverOverrideAll.length === 0)
-    ) {
-      asJson(res, 400, { error: 'serverOverrideAll must include at least one server id' });
+    let serverSelection: ReturnType<typeof normalizeRuntimeServerSelection>;
+    try {
+      serverSelection = normalizeRuntimeServerSelection(body);
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
     }
+    const { serverOverrideAll } = serverSelection;
     if (
       body.scenarioServerOverrides !== undefined &&
       (typeof body.scenarioServerOverrides !== 'object' ||
@@ -447,6 +449,7 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     let selectedConfig: EvalConfig;
+    let serverVariants: ServerVariant[] = [];
     let declaredAgentNames: string[];
     let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
@@ -464,11 +467,14 @@ export async function handleRunsRoutes(params: {
         selected,
         scenarioServerOverrides
       );
-      applyRuntimeServerOverrides(selected, {
+      serverVariants = planServerVariants(selected, serverSelection.serverVariants, {
+        serverOverrideAll,
+        scenarioServerOverrides: body.scenarioServerOverrides
+      });
+      selectedConfig = applyRuntimeServerOverrides(selected, {
         serverOverrideAll,
         scenarioServerOverrides: filteredScenarioOverrides
       });
-      selectedConfig = selected;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
@@ -528,6 +534,7 @@ export async function handleRunsRoutes(params: {
     const unsupportedNewChat = browserAgents.find(({ agent }) => {
       const profile = browserProviders?.[agent.provider];
       const needsNewChat =
+        serverVariants.length > 0 ||
         (newConversationBeforeStart ?? supportsNewChat(agent)) ||
         (selectedConfig.scenarios.length > 1 &&
           (conversationOverride ??
@@ -567,36 +574,63 @@ export async function handleRunsRoutes(params: {
       newConversationBeforeStart,
       newConversationBetweenScenarios: conversationOverride
     };
-    const runParamsList =
-      browserAgents.length === 0
-        ? [{ ...baseRunParams, requestedAgents: selectedAgentNames }]
-        : [
-            ...(llmAgentNames.length > 0
-              ? [{ ...baseRunParams, requestedAgents: llmAgentNames }]
-              : []),
-            ...browserAgents.map(({ name, agent }) => ({
-              ...baseRunParams,
-              requestedAgents: [name],
-              executionType: 'rover' as const,
-              roverAgent: {
-                name,
-                provider: agent.provider,
-                url: agent.url,
-                ...(browserProviders[agent.provider]?.source !== 'builtin' &&
-                browserProviders[agent.provider]
-                  ? {
-                      providerRevision: browserProviders[agent.provider].learned.updatedAt
-                    }
-                  : {})
-              },
-              roverScenarios: structuredClone(selectedConfig.scenarios),
-              roverNewConversationBetweenScenarios:
-                conversationOverride ??
-                agent.newConversationBetweenScenarios ??
-                supportsNewChat(agent),
-              roverNewConversationBeforeStart: newConversationBeforeStart ?? supportsNewChat(agent)
-            }))
-          ];
+    const runParamsList = (serverVariants.length ? serverVariants : [undefined]).flatMap(
+      (serverVariant) => {
+        const variantBase = {
+          ...baseRunParams,
+          ...(serverVariant
+            ? {
+                serverVariant,
+                serverVariants,
+                evaluationRequest: {
+                  configPath,
+                  runsPerScenario,
+                  agents: selectedAgentNames,
+                  scenarioIds: selectedConfig.scenarios.map((scenario) => scenario.id),
+                  server_sets: toServerSets(serverVariants)
+                },
+                scenarioIds: selectedConfig.scenarios.map((scenario) => scenario.id),
+                serverOverrideAll: undefined,
+                scenarioServerOverrides: serverVariant.scenarioServerOverrides
+              }
+            : {})
+        };
+        const variantConfig = applyRuntimeServerOverrides(selectedConfig, {
+          scenarioServerOverrides: variantBase.scenarioServerOverrides
+        });
+        return browserAgents.length === 0
+          ? [{ ...variantBase, requestedAgents: selectedAgentNames }]
+          : [
+              ...(llmAgentNames.length > 0
+                ? [{ ...variantBase, requestedAgents: llmAgentNames }]
+                : []),
+              ...browserAgents.map(({ name, agent }) => ({
+                ...variantBase,
+                requestedAgents: [name],
+                executionType: 'rover' as const,
+                roverAgent: {
+                  name,
+                  provider: agent.provider,
+                  url: agent.url,
+                  ...(browserProviders[agent.provider]?.source !== 'builtin' &&
+                  browserProviders[agent.provider]
+                    ? {
+                        providerRevision: browserProviders[agent.provider].learned.updatedAt
+                      }
+                    : {})
+                },
+                roverScenarios: structuredClone(variantConfig.scenarios),
+                roverNewConversationBetweenScenarios:
+                  conversationOverride ??
+                  agent.newConversationBetweenScenarios ??
+                  supportsNewChat(agent),
+                roverNewConversationBeforeStart: serverVariant
+                  ? true
+                  : (newConversationBeforeStart ?? supportsNewChat(agent))
+              }))
+            ];
+      }
+    );
     const responses = runParamsList.map((runParams) =>
       runQueueService.enqueueRun(runParams, { hostHeader: req.headers.host })
     );

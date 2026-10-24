@@ -56,11 +56,36 @@ describe('rerunWithSameSettings', () => {
         configPath: 'eval.yaml',
         scenarioIds: ['scn-1'],
         agents: ['agent-explicit-a', 'agent-explicit-b'],
-        serverOverrideAll: ['replacement-server'],
+        servers: ['replacement-server'],
         scenarioServerOverrides: { 'scn-1': ['scenario-server'] },
         newConversationBeforeStart: false,
         newConversationBetweenScenarios: false
       })
     );
   });
+});
+
+it('replays all sets and the original repetition count without legacy overrides', async () => {
+  const run = makeRunResult();
+  run.rerun_server_variants = [
+    { id: 'A', scenarioServerOverrides: { 'scn-1': ['baseline'] } },
+    { id: 'B', serverIds: ['candidate'] }
+  ];
+  run.rerun_runs_per_scenario = 3;
+  run.rerunServerOverrideAll = ['stale'];
+  const source = {
+    getResult: vi.fn().mockResolvedValue(run),
+    startRun: vi.fn()
+  } as unknown as EvalDataSource;
+  await rerunWithSameSettings(source, run);
+  expect(source.startRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      server_sets: [
+        { id: 'A', scenarioServerOverrides: { 'scn-1': ['baseline'] } },
+        { id: 'B', servers: ['candidate'] }
+      ],
+      runsPerScenario: 3
+    })
+  );
+  expect(vi.mocked(source.startRun).mock.calls[0][0].servers).toBeUndefined();
 });

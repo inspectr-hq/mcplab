@@ -142,7 +142,9 @@ const buildCrumbs = (pathname: string, search: string): Crumb[] => {
   }
   if (matchPath('/compare', pathname)) {
     const mode = new URLSearchParams(search).get('mode');
-    const modeLabel = mode === 'within-run' ? 'Agents' : 'Runs';
+    let modeLabel = 'Runs';
+    if (mode === 'within-run')
+      modeLabel = new URLSearchParams(search).get('by') === 'servers' ? 'MCP servers' : 'Agents';
     crumbs.push({ label: 'Compare Evaluations', to: '/compare' }, { label: modeLabel });
     return crumbs;
   }

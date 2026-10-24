@@ -17,6 +17,11 @@ import {
   renderSummaryMarkdown,
   expandConfigForAgents,
   applyRuntimeServerOverrides,
+  planServerVariants,
+  normalizeRuntimeServerSelection,
+  parseServerVariant,
+  toServerSets,
+  runServerVariants,
   type EvalConfig,
   type SourceEvalConfig,
   type ExecutableEvalConfig,
@@ -86,7 +91,8 @@ interface RunCommandOptions {
   runsDir: string;
   oauthToken: string[];
   openBrowser: boolean;
-  serverOverrideAll?: string;
+  servers?: string;
+  serverSet: string[];
   serverOverride: string[];
 }
 
@@ -116,12 +122,18 @@ program
     'Open browser to mcplab serve UI when OAuth is required (default: print URL only)'
   )
   .option(
-    '--server-override-all <serverRef[,serverRef...]>',
-    'Override MCP server refs for all selected scenarios for this run only'
+    '--servers <serverRef[,serverRef...]>',
+    'Use these MCP servers together for all selected scenarios'
+  )
+  .option(
+    '--server-set <id=default|serverId[,serverId...]>',
+    'Compare a server set (repeatable); default uses each scenario server selection',
+    (value: string, values: string[]) => [...values, value],
+    [] as string[]
   )
   .option(
     '--server-override <scenarioId=serverRef[,serverRef...]>',
-    'Override MCP server refs for one scenario (repeatable, higher priority than --server-override-all)',
+    'Override MCP server refs for one scenario (repeatable, higher priority than --servers)',
     (val: string, acc: string[]) => [...acc, val],
     [] as string[]
   )
@@ -673,21 +685,23 @@ function openBrowserUrl(url: string): void {
 }
 
 function parseRuntimeServerOverrides(options: RunCommandOptions): {
+  serverVariants?: unknown;
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
 } {
-  const serverOverrideAll = options.serverOverrideAll
-    ? options.serverOverrideAll
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean)
-    : undefined;
-  if (
-    options.serverOverrideAll !== undefined &&
-    (!serverOverrideAll || serverOverrideAll.length === 0)
-  ) {
-    throw new Error('serverOverrideAll must include at least one server id');
-  }
+  const parseServers = (value: string | undefined) =>
+    value === undefined
+      ? undefined
+      : value
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+  const selection = normalizeRuntimeServerSelection({
+    servers: parseServers(options.servers),
+    server_sets: options.serverSet?.length
+      ? toServerSets(options.serverSet.map(parseServerVariant))
+      : undefined
+  });
   const scenarioServerOverrides: Record<string, string[]> = {};
   for (const rawEntry of options.serverOverride) {
     const entry = String(rawEntry ?? '').trim();
@@ -714,7 +728,7 @@ function parseRuntimeServerOverrides(options: RunCommandOptions): {
     scenarioServerOverrides[scenarioId] = parsedServerIds;
   }
   return {
-    serverOverrideAll,
+    ...selection,
     scenarioServerOverrides:
       Object.keys(scenarioServerOverrides).length > 0 ? scenarioServerOverrides : undefined
   };
@@ -779,6 +793,11 @@ async function executeSingleConfigRun(params: {
     selectedBaseConfig,
     runtimeOverrides
   );
+  const serverVariants = planServerVariants(
+    selectedBaseConfig,
+    runtimeOverrides.serverVariants,
+    selectedOverrides
+  );
   const runtimeOverriddenConfig = applyRuntimeServerOverrides(
     selectedBaseConfig,
     selectedOverrides
@@ -824,7 +843,13 @@ async function executeSingleConfigRun(params: {
   }
 
   // Detect OAuth servers missing a token and fail early with a helpful message
-  const effectiveServerIds = new Set(expanded.scenarios.flatMap((scenario) => scenario.servers));
+  const effectiveServerIds = new Set(
+    serverVariants.length
+      ? serverVariants.flatMap((variant) =>
+          Object.values(variant.scenarioServerOverrides ?? {}).flat()
+        )
+      : expanded.scenarios.flatMap((scenario) => scenario.servers)
+  );
   const oauthServers = Array.from(effectiveServerIds).filter((name) => {
     const cfg = expanded.servers?.[name];
     return cfg?.auth?.type === 'oauth_authorization_code';
@@ -867,7 +892,8 @@ async function executeSingleConfigRun(params: {
     );
   }
 
-  const { runDir, results } = await runAll(expanded, {
+  const runOptions = {
+    configPath: resolve(configPath),
     runsPerScenario,
     scenarioId: options.scenario,
     runNote,
@@ -882,13 +908,19 @@ async function executeSingleConfigRun(params: {
       scenarios: expanded.scenarios,
       settings: toWorkspaceEvaluationSettings(workspaceSettings)
     }),
-    onProgress: async (event) => {
+    onProgress: async (event: RunProgressEvent) => {
       const line = formatRunProgressEvent(event);
       if (line) {
         console.log(`[${formatNowTime()}] ${line}`);
       }
     }
-  });
+  };
+  const { runDir, results } = serverVariants.length
+    ? await runServerVariants(selectedBaseConfig, effectiveAgents, serverVariants, runOptions)
+    : await runAll(expanded, runOptions);
+  if (serverVariants.length) {
+    results.metadata.config_path = resolve(configPath);
+  }
   const reportPath = join(runDir, 'report.html');
   const resultsPath = join(runDir, 'results.json');
   const summaryPath = join(runDir, 'summary.md');
@@ -908,7 +940,7 @@ async function executeSingleConfigRun(params: {
   return {
     runDir,
     runId: results.metadata.run_id,
-    passed: failedRuns === 0,
+    passed: failedRuns === 0 && !Object.keys(results.metadata.server_variant_errors ?? {}).length,
     shouldFailOnDrift: false
   };
 }

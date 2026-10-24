@@ -11,6 +11,7 @@ import {
   type EvalConfig,
   type RunOutcome,
   type Scenario,
+  type ServerVariant,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import type { PersistEvaluationArtifactsParams } from '@inspectr/mcplab-core';
@@ -46,6 +47,7 @@ export interface LiveTestSession {
   configPath?: string;
   configName?: string;
   agentName?: string;
+  serverVariant?: ServerVariant;
   completionInput?: CompleteLiveTestInput;
   completion?: LiveTestCompletion;
 }
@@ -108,6 +110,9 @@ export interface LiveTestServiceOptions {
   evalsDir?: string;
   cliVersion: string;
   readScenarios: (input?: LiveTestStartInput) => Scenario[];
+  resolveExecution?: (
+    input: LiveTestStartInput
+  ) => { scenarios: Scenario[]; serverVariant?: ServerVariant } | undefined;
   persist: (params: PersistEvaluationArtifactsParams) => void;
   getWorkspaceEvaluation?: (scenario: Scenario) => WorkspaceEvaluation;
   ttlMs?: number;
@@ -140,9 +145,10 @@ export class LiveTestService {
 
   start(input: LiveTestStartInput): LiveTestSession {
     this.cleanup();
-    const scenario = this.options
-      .readScenarios(input)
-      .find((candidate) => candidate.id === input.testCaseId);
+    const execution = this.options.resolveExecution?.(input);
+    const scenario = (execution?.scenarios ?? this.options.readScenarios(input)).find(
+      (candidate) => candidate.id === input.testCaseId
+    );
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
     if (scenario.attachments?.length) {
       throw new LiveTestError('Attachments are not supported by Rover yet.', 400);
@@ -155,6 +161,7 @@ export class LiveTestService {
       status: 'ready',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
+      serverVariant: execution?.serverVariant,
       evaluationRunId: input.evaluationRunId,
       ...(input.configPath?.trim() ? { configPath: input.configPath.trim() } : {}),
       ...(input.configName?.trim() ? { configName: input.configName.trim() } : {}),
@@ -338,6 +345,7 @@ export class LiveTestService {
           session.configName ?? `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`,
         executionId: runId,
         executionSource: 'rover',
+        serverVariant: session.serverVariant,
         results,
         traceRecords: [traceRecord],
         eventId: `rover-result-${runId}`,

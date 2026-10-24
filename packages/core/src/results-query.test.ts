@@ -203,3 +203,20 @@ describe('results-query core', () => {
     ).toThrow('Invalid run id path');
   });
 });
+
+it('indexes scenario and failure documents separately for each server set', () => {
+  const { runsDir, runId } = fixture();
+  const runDir = join(runsDir, runId);
+  const result = JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8'));
+  result.scenarios = ['A', 'B'].map((variant) => ({
+    ...result.scenarios[0],
+    server_variant: variant,
+    servers: [variant]
+  }));
+  writeFileSync(join(runDir, 'results.json'), JSON.stringify(result));
+  const docs = buildSearchIndex(runsDir);
+  const scenarioDocs = docs.filter(
+    (doc) => doc.tags.includes('scenario') && doc.source === 'results'
+  );
+  expect(new Set(scenarioDocs.map((doc) => doc.id)).size).toBe(2);
+});

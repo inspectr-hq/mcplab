@@ -382,11 +382,17 @@ paths:
                 runNote:
                   type: string
                   maxLength: 500
-                serverOverrideAll:
+                server_sets:
                   type: array
                   minItems: 1
-                  items: { type: string }
-                  description: Runtime server refs applied to all selected scenarios for this run.
+                  items:
+                    $ref: "#/components/schemas/ServerSet"
+                  description: Execute each server set separately inside one evaluation result. Mutually exclusive with servers and per-scenario overrides.
+                servers:
+                  type: array
+                  minItems: 1
+                  items: { type: string, minLength: 1 }
+                  description: Use these MCP servers together for all selected scenarios. Mutually exclusive with server_sets.
                 scenarioServerOverrides:
                   type: object
                   additionalProperties:
@@ -1926,10 +1932,57 @@ components:
           type: array
           items: { type: string }
       additionalProperties: true
+    ServerSet:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { type: string, minLength: 1 }
+        label: { type: string }
+        servers:
+          type: array
+          minItems: 1
+          items: { type: string, minLength: 1 }
+          description: MCP servers available together. Omit to use each scenario's configured servers.
+        scenarioServerOverrides:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: Frozen per-scenario bindings retained for queued execution and reruns.
+    ServerVariant:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, minLength: 1 }
+        label: { type: string }
+        serverIds:
+          type: array
+          minItems: 1
+          items: { type: string, minLength: 1 }
+          description: Omit to use each scenario's configured servers.
+        scenarioServerOverrides:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: Frozen per-scenario bindings retained for queued execution and reruns.
     WorkspaceRunSummary:
       type: object
       required: [runId, path, timestamp, configHash, totalScenarios, totalRuns, passRate, avgToolCalls, avgLatencyMs]
       properties:
+        server_variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerVariant"
+        rerun_server_variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerVariant"
+        rerun_runs_per_scenario: { type: integer, minimum: 1 }
+        server_variant_errors:
+          type: object
+          additionalProperties: { type: string }
         runId: { type: string }
         path: { type: string }
         timestamp: { type: string, format: date-time }

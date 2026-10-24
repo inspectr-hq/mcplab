@@ -43,3 +43,11 @@ export {
 
 export { calculatePassRate } from './result-metrics.js';
 export * from './tool-rule-expressions.js';
+
+export * from './server-variants.js';
+export type {
+  ServerSet,
+  ServerVariant,
+  ServerVariantResult,
+  ServerComparisonMetadata
+} from './types.js';

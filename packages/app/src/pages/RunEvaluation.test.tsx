@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
@@ -537,7 +537,7 @@ describe('RunEvaluation', () => {
   });
   it('shows the result card when the final attached job completes', async () => {
     sessionStorage.setItem(activeJobStorageKey, 'job-final');
-    let onEvent: ((event: any) => void) | undefined;
+    let onEvent: ((event: unknown) => void) | undefined;
     sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
       if (jobId === 'job-final') onEvent = callback;
       return () => {};
@@ -1688,7 +1688,7 @@ describe('RunEvaluation', () => {
     'shows grouped results after the last child sends %s',
     async (eventType) => {
       sessionStorage.setItem(activeJobStorageKey, 'job-last');
-      let onEvent: ((event: any) => void) | undefined;
+      let onEvent: ((event: unknown) => void) | undefined;
       sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
         if (jobId === 'job-last') onEvent = callback;
         return () => {};
@@ -1776,7 +1776,7 @@ describe('RunEvaluation', () => {
     'shows stopped completion separately from errors and keeps grouped results (%s)',
     async (eventType) => {
       sessionStorage.setItem(activeJobStorageKey, 'job-last');
-      let onEvent: ((event: any) => void) | undefined;
+      let onEvent: ((event: unknown) => void) | undefined;
       sourceMock.subscribeRunJob.mockImplementation((jobId, callback) => {
         if (jobId === 'job-last') onEvent = callback;
         return () => {};
@@ -1989,4 +1989,182 @@ describe('RunEvaluation', () => {
       expect(screen.queryByText(/Run completed\./)).toBeNull();
     }
   );
+});
+
+describe('MCP server comparison setup', () => {
+  async function renderComparison() {
+    configsRef.value = [
+      {
+        id: 'comparison',
+        name: 'Comparison',
+        sourcePath: '/eval.yaml',
+        agents: [{ id: 'api', name: 'API', provider: 'openai', model: 'test', maxTokens: 100 }],
+        servers: [
+          { id: 'dev', name: 'Dev', transport: 'streamable-http', url: 'http://dev' },
+          { id: 'prod', name: 'Prod', transport: 'streamable-http', url: 'http://prod' }
+        ],
+        scenarios: [
+          {
+            id: 's',
+            name: 'Shared scenario',
+            prompt: 'test',
+            serverIds: ['dev'],
+            evalRules: [],
+            extractRules: []
+          }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    render(
+      <MemoryRouter initialEntries={['/run?configId=comparison']}>
+        <RunEvaluation />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('radio', { name: 'Compare MCP servers' }));
+  }
+
+  it('runs each selected server separately in one request and previews the execution count', async () => {
+    await renderComparison();
+    expect(
+      screen.getByText('Run each selected test separately against each server.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add server set' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Set 1' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dev' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByText(/0 executions/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dev' }));
+    expect(screen.getByRole('button', { name: 'Dev' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    expect(screen.queryByText(/executions/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    expect(screen.getByText(/2 executions.*1 evaluation result/)).toBeInTheDocument();
+    expect(screen.getByRole('switch')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Variance Runs' }), {
+      target: { value: '2' }
+    });
+    expect(screen.getByText(/4 executions.*1 evaluation result/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    const request = sourceMock.startRun.mock.calls[0][0];
+    expect(request).toMatchObject({
+      scenarioIds: ['s'],
+      runsPerScenario: 2,
+      server_sets: [
+        { id: 'dev', servers: ['dev'] },
+        { id: 'prod', servers: ['prod'] }
+      ]
+    });
+    expect(request).not.toHaveProperty('serverVariants');
+    expect(request).not.toHaveProperty('servers');
+    expect(request).not.toHaveProperty('serverOverrideAll');
+    expect(request).not.toHaveProperty('scenarioServerOverrides');
+  });
+
+  it('uses scenario defaults when leaving comparison mode', async () => {
+    await renderComparison();
+    fireEvent.click(screen.getByRole('button', { name: 'Dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Use scenario defaults' }));
+    expect(screen.getByRole('switch')).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    const request = sourceMock.startRun.mock.calls[0][0];
+    expect(request).not.toHaveProperty('server_sets');
+    expect(request).not.toHaveProperty('servers');
+    expect(request).not.toHaveProperty('scenarioServerOverrides');
+  });
+
+  it('keeps multiple override servers together when leaving comparison mode', async () => {
+    await renderComparison();
+    fireEvent.click(screen.getByRole('radio', { name: 'Override servers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun.mock.calls[0][0]).toMatchObject({ servers: ['dev', 'prod'] });
+    expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty('server_sets');
+  });
+
+  it('reuses server badges for per-test overrides without deselecting the test', async () => {
+    await renderComparison();
+    fireEvent.click(screen.getByRole('radio', { name: 'Use scenario defaults' }));
+    fireEvent.click(screen.getByRole('switch'));
+    expect(screen.getByRole('button', { name: 'Dev' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Prod' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun.mock.calls[0][0]).toMatchObject({
+      scenarioIds: ['s'],
+      scenarioServerOverrides: { s: ['prod'] }
+    });
+  });
+});
+
+it('renders agents in provider and tier order while retaining the configured selection', async () => {
+  const specs = [
+    ['azure-deepseek-v4-flash', 'azure', 'DeepSeek-V4-Flash'],
+    ['claude-haiku-55', 'anthropic', 'claude-haiku-5-5'],
+    ['azure-gpt-6-luna', 'azure', 'gpt-6-luna'],
+    ['claude-sonnet-55', 'anthropic', 'claude-sonnet-5-5'],
+    ['azure-gpt-6.1-sol', 'azure', 'gpt-6.1-sol'],
+    ['claude-opus-5', 'anthropic', 'claude-opus-5-5']
+  ] as const;
+  const agents: AgentConfig[] = specs.map(([id, provider, model]) => ({
+    id,
+    name: id,
+    provider,
+    model,
+    maxTokens: 100
+  }));
+  configsRef.value = [
+    {
+      id: 'agent-order',
+      name: 'Agent ordering',
+      sourcePath: '/eval.yaml',
+      agents,
+      runDefaults: { selectedAgentNames: ['azure-gpt-6-luna'] },
+      scenarios: [
+        {
+          id: 's',
+          name: 'Scenario',
+          prompt: 'test',
+          serverIds: [],
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      createdAt: '',
+      updatedAt: ''
+    }
+  ];
+  render(
+    <MemoryRouter initialEntries={['/run?configId=agent-order']}>
+      <RunEvaluation />
+    </MemoryRouter>
+  );
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled());
+  const displayed = within(screen.getByRole('group', { name: 'LLM Agents' })).getAllByRole(
+    'checkbox'
+  );
+  expect(displayed.map((checkbox) => checkbox.closest('label')?.textContent)).toEqual([
+    'claude-opus-5',
+    'claude-sonnet-55',
+    'claude-haiku-55',
+    'azure-gpt-6.1-sol',
+    'azure-gpt-6-luna',
+    'azure-deepseek-v4-flash'
+  ]);
+  expect(screen.getByRole('checkbox', { name: 'azure-gpt-6-luna' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'claude-opus-5' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+  await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+  expect(sourceMock.startRun.mock.calls[0][0]).not.toHaveProperty('agents');
 });

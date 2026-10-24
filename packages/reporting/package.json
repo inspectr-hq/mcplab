@@ -30,7 +30,8 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "vitest run src"
   },
   "dependencies": {
     "@inspectr/mcplab-core": "1.27.0"

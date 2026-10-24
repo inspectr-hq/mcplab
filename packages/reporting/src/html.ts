@@ -1,4 +1,6 @@
 import {
+  scenarioExecutionKey,
+  type ScenarioAggregate,
   formatToolExpression,
   formatToolSequenceLabel,
   type ResultsJson
@@ -23,6 +25,15 @@ function formatPercent(value: number | null): string {
 }
 
 export function renderHtml(results: ResultsJson): string {
+  const anchor = (scenario: ScenarioAggregate) =>
+    encodeURIComponent(
+      scenarioExecutionKey(scenario.scenario_id, scenario.agent, scenario.server_variant)
+    );
+  const serverSet = (scenario: ScenarioAggregate) =>
+    scenario.server_variant
+      ? ` <small>(${escapeHtml(results.metadata.server_variants?.find((variant) => variant.id === scenario.server_variant)?.label || scenario.server_variant)})</small>`
+      : '';
+
   const scenarioRows = results.scenarios
     .map((scenario) => {
       const toolCalls = scenario.runs.reduce((sum, run) => sum + run.tool_call_count, 0);
@@ -38,9 +49,9 @@ export function renderHtml(results: ResultsJson): string {
               : 'mixed';
       return `
         <tr data-status="${status}">
-          <td><a href="#scenario-${escapeHtml(scenario.scenario_id)}">${escapeHtml(
+          <td><a href="#scenario-${anchor(scenario)}">${escapeHtml(
             scenario.scenario_id
-          )}</a></td>
+          )}</a>${serverSet(scenario)}</td>
           <td>${escapeHtml(scenario.agent)}</td>
           <td>${scenario.runs.length}</td>
           <td>${passRate}</td>
@@ -107,8 +118,8 @@ export function renderHtml(results: ResultsJson): string {
         .join('\n');
 
       return `
-        <section id="scenario-${escapeHtml(scenario.scenario_id)}" class="scenario">
-          <h3>${escapeHtml(scenario.scenario_id)}</h3>
+        <section id="scenario-${anchor(scenario)}" class="scenario">
+          <h3>${escapeHtml(scenario.scenario_id)}${serverSet(scenario)}</h3>
           <p><strong>Agent:</strong> ${escapeHtml(scenario.agent)} | <strong>Runs:</strong> ${
             scenario.runs.length
           } | <strong>Pass rate:</strong> ${formatPercent(scenario.pass_rate)}</p>
