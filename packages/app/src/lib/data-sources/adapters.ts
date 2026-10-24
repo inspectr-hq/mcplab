@@ -1,3 +1,4 @@
+import { scenarioExecutionKey, serverComparisonMetadata } from './types';
 import type {
   AgentContext,
   AgentConfig,
@@ -848,11 +849,6 @@ export function toCoreLibraries(
   };
 }
 
-function traceScenarioKey(scenarioId?: string, agent?: string): string | undefined {
-  if (!scenarioId) return undefined;
-  return `${scenarioId}::${agent ?? ''}`;
-}
-
 function isTextBlock(
   block: TraceMessageContentBlock
 ): block is Extract<TraceMessageContentBlock, { type: 'text' }> {
@@ -1264,20 +1260,30 @@ export function fromCoreResultsJson(
 ): EvalResult {
   const traceByScenario = new Map<string, ScenarioRunTraceRecord[]>();
   for (const record of traceRecords) {
-    const key = traceScenarioKey(record.scenario_id, record.agent);
+    const key = record.scenario_id
+      ? scenarioExecutionKey(record.scenario_id, record.agent, record.server_variant)
+      : undefined;
     if (!key) continue;
     const existing = traceByScenario.get(key) ?? [];
     existing.push(record);
     traceByScenario.set(key, existing);
   }
   const scenarios = results.scenarios.map((scenario) => {
-    const runRecords = traceByScenario.get(`${scenario.scenario_id}::${scenario.agent}`) ?? [];
+    const runRecords =
+      traceByScenario.get(
+        scenarioExecutionKey(scenario.scenario_id, scenario.agent, scenario.server_variant)
+      ) ?? [];
     const runRecordByIndex = new Map<number, ScenarioRunTraceRecord>();
     for (const record of runRecords) {
       runRecordByIndex.set(record.run_index, record);
     }
     const runs: ScenarioRun[] = scenario.runs.map((run, index) => {
-      const record = runRecordByIndex.get(run.run_index) ?? runRecords[index];
+      const record =
+        (run.request_id
+          ? runRecords.find((record) => record.request_id === run.request_id)
+          : undefined) ??
+        runRecordByIndex.get(run.run_index) ??
+        runRecords[index];
       const tokenUsage = estimateRunTokenUsage(record);
       return {
         runIndex: run.run_index,
@@ -1331,6 +1337,8 @@ export function fromCoreResultsJson(
         : runs.reduce((sum, run) => sum + run.toolCalls.length, 0) / runs.length;
 
     return {
+      server_variant: scenario.server_variant,
+      servers: scenario.servers,
       scenarioId: scenario.scenario_id,
       scenarioName: scenario.scenario_name || scenario.scenario_id,
       inspectrOrigins: scenario.inspectr_origins,
@@ -1369,6 +1377,7 @@ export function fromCoreResultsJson(
   );
 
   return {
+    ...serverComparisonMetadata(results.metadata),
     id: canonicalRunId ?? results.metadata.run_id,
     configId: '',
     configHash: results.metadata.config_hash,

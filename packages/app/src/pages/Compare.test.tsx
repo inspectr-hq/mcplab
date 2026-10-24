@@ -19,6 +19,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
   })
 }));
 
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({ servers: [] })
+}));
+
 function makeRun(id: string, scenarios: EvalResult['scenarios']): EvalResult {
   return {
     id,
@@ -324,6 +328,29 @@ describe('Compare', () => {
 
     await screen.findByText('run-3');
     expect(screen.getAllByRole('button', { name: 'Compare agents' })).toHaveLength(2);
+  });
+
+  it('does not show an empty action placeholder when only MCP comparison is available', async () => {
+    const run = makeRunAt('server-only', '2026-03-10T10:00:00.000Z');
+    run.server_variants = [{ id: 'baseline' }, { id: 'candidate' }];
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/compare']}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const row = (await screen.findByText('server-only')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row!).getByRole('button', { name: 'Compare MCP servers' })).toHaveClass(
+      'h-7',
+      'px-2',
+      'text-xs'
+    );
+    expect(within(row!).queryByText('—')).not.toBeInTheDocument();
   });
 
   it('starts within-run compare directly from the run list action', async () => {
@@ -710,4 +737,62 @@ describe('Compare', () => {
     );
     expect(screen.getByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).toBeInTheDocument();
   });
+});
+
+it('compares server sets within one result and links to variant-filtered details', async () => {
+  const base = makeRunAt('server-comparison', '2026-10-23T10:00:00.000Z');
+  base.server_variants = [
+    { id: 'A', label: 'Baseline' },
+    { id: 'B', label: 'Candidate' }
+  ];
+  base.scenarios = ['A', 'B'].map((variant) => ({ ...base.scenarios[0], server_variant: variant }));
+  sourceMock.listResults.mockResolvedValue([base]);
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/compare?mode=within-run&runId=server-comparison&by=servers&variants=A,B&agent=agent-a'
+      ]}
+    >
+      <Compare />
+    </MemoryRouter>
+  );
+  expect(await screen.findByText('MCP Server Summary')).toBeInTheDocument();
+  expect(screen.getByText('Scenario × MCP Server Matrix')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: 'Compare full results' });
+  expect(link.getAttribute('href')).toContain('leftVariant=A');
+  expect(link.getAttribute('href')).toContain('rightVariant=B');
+  expect(link.getAttribute('href')).toContain('leftAgent=agent-a');
+});
+
+it('switches comparison dimensions without URL synchronization reverting the selection', async () => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn()
+  });
+  const base = makeRunAt('switch-dimension', '2026-10-23T10:00:00Z');
+  base.server_variants = [{ id: 'A' }, { id: 'B' }];
+  const scenario = base.scenarios[0];
+  base.scenarios = ['A', 'B'].flatMap((variant) =>
+    ['agent-a', 'agent-b'].map((agent) => ({
+      ...scenario,
+      agentId: agent,
+      agentName: agent,
+      server_variant: variant
+    }))
+  );
+  sourceMock.listResults.mockResolvedValue([base]);
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/compare?mode=within-run&runId=switch-dimension&by=servers&variants=A,B&agent=agent-a'
+      ]}
+    >
+      <Compare />
+    </MemoryRouter>
+  );
+  await screen.findByText('MCP Server Summary');
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Compare by' }), { key: 'ArrowDown' });
+  fireEvent.click(await screen.findByRole('option', { name: /^Agents$/ }));
+  expect(await screen.findByText('Agent Summary')).toBeInTheDocument();
+  expect(screen.queryByText('MCP Server Summary')).not.toBeInTheDocument();
 });

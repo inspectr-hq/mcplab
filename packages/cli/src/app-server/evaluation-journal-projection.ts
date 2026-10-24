@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { ResultsJson } from '@inspectr/mcplab-core';
+import type { ResultsJson, ServerVariant, EvaluationRunRequest } from '@inspectr/mcplab-core';
 import { projectEvaluationResult } from './evaluation-result-projection.js';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import { readExecutionEvents } from './execution-journal.js';
@@ -20,7 +20,25 @@ export function projectEvaluationJournal(params: {
       results.push(event.results as ResultsJson);
       return results;
     }, []);
-  if (executions.length === 0) return null;
+  const start = events.find((event) => event.type === 'evaluation_started');
+  const request = start?.evaluationRequest as EvaluationRunRequest | undefined;
+  const serverVariants = request?.server_sets
+    ? request.server_sets.map(({ servers, ...set }) => ({
+        ...set,
+        ...(servers === undefined ? {} : { serverIds: servers })
+      }))
+    : undefined;
+  if (
+    executions.length === 0 &&
+    (!serverVariants?.length ||
+      !events.some(
+        (event) =>
+          event.type === 'execution_failed' ||
+          event.type === 'execution_stopped' ||
+          event.type === 'evaluation_stopped'
+      ))
+  )
+    return null;
   const failedExecutions = new Set(
     events
       .filter((event) => event.type === 'execution_failed')
@@ -57,7 +75,33 @@ export function projectEvaluationJournal(params: {
   });
   if (params.executionStatus || stoppedExecutions.size > 0)
     results.metadata.execution_status = 'stopped';
-  const start = events.find((event) => event.type === 'evaluation_started');
+  if (serverVariants?.length) {
+    if (!results.metadata.config_path && typeof start?.configPath === 'string')
+      results.metadata.config_path = start.configPath;
+    if (!results.metadata.rerun_scenario_ids && Array.isArray(start?.scenarioIds))
+      results.metadata.rerun_scenario_ids = start.scenarioIds as string[];
+    if (request?.agents) results.metadata.rerun_agents = request.agents;
+    if (request?.scenarioIds) results.metadata.rerun_scenario_ids = request.scenarioIds;
+    results.metadata.server_variants = serverVariants;
+    results.metadata.rerun_server_variants = serverVariants;
+    results.metadata.server_variant_errors = Object.fromEntries(
+      events
+        .filter(
+          (event) =>
+            event.type === 'execution_failed' ||
+            event.type === 'execution_stopped' ||
+            event.type === 'evaluation_stopped'
+        )
+        .flatMap((event) => {
+          const variant = event.serverVariant as ServerVariant | undefined;
+          return variant ? [[variant.id, String(event.reason ?? event.type)]] : [];
+        })
+    );
+    delete results.metadata.rerun_server_override_all;
+    delete results.metadata.rerun_scenario_server_overrides;
+  }
+  if (typeof start?.runsPerScenario === 'number')
+    results.metadata.rerun_runs_per_scenario = start.runsPerScenario;
   if (typeof start?.newConversationBeforeStart === 'boolean')
     results.metadata.rerun_new_conversation_before_start = start.newConversationBeforeStart;
   if (typeof start?.newConversationBetweenScenarios === 'boolean')

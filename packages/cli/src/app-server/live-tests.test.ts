@@ -381,3 +381,23 @@ describe('LiveTestService', () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 });
+
+it('captures the active browser execution server set with its scenario snapshot', () => {
+  let id = 'A';
+  const service = new LiveTestService({
+    runsDir: '/tmp',
+    cliVersion: 'test',
+    persist: vi.fn(),
+    readScenarios: () => scenarios,
+    resolveExecution: () => ({
+      scenarios: [{ ...scenarios[0], servers: [id] }],
+      serverVariant: { id, scenarioServerOverrides: { plain: [id] } }
+    })
+  });
+  const first = service.start({ testCaseId: 'plain', client: 'claude', evaluationRunId: 'one' });
+  id = 'B';
+  const second = service.start({ testCaseId: 'plain', client: 'claude', evaluationRunId: 'one' });
+  expect(first.serverVariant?.id).toBe('A');
+  expect(first.testCase.servers).toEqual(['A']);
+  expect(second.serverVariant?.id).toBe('B');
+});

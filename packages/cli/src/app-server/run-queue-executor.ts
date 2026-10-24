@@ -535,6 +535,7 @@ export async function executeRunJob(params: {
         runNote: job.runParams.runNote,
         executionId: results.metadata.run_id,
         executionSource: 'mcplab',
+        serverVariant: job.runParams.serverVariant,
         results,
         traceRecords,
         eventId: `llm-result-${results.metadata.run_id}`

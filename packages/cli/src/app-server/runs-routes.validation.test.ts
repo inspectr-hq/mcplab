@@ -54,7 +54,7 @@ describe('run request validation', () => {
     expect(responses).toEqual([{ status: 404, payload: { error: 'Run not found: missing' } }]);
   });
 
-  it('returns 400 when serverOverrideAll is an empty array', async () => {
+  it('returns 400 when servers is an empty array', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];
     const handled = await handleRunsRoutes({
       req: { url: '/api/runs', headers: {}, on: () => undefined } as any,
@@ -73,7 +73,7 @@ describe('run request validation', () => {
       deps: makeRunsRouteDeps({
         parseBody: async () => ({
           configPath: '/tmp/eval.yaml',
-          serverOverrideAll: []
+          servers: []
         }),
         asJson: (_res: unknown, status: number, payload: unknown) => {
           responses.push({ status, payload });
@@ -84,7 +84,7 @@ describe('run request validation', () => {
     expect(handled).toBe(true);
     expect(responses[0]?.status).toBe(400);
     expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
-      'serverOverrideAll must include at least one server id'
+      'servers must be a nonempty array of server ids'
     );
   });
 

@@ -19,10 +19,6 @@ function configFileName(config: EvalConfig): string {
   return config.name || `config-${Date.now()}`;
 }
 
-function configFileNameFromName(name: string): string {
-  return name || `config-${Date.now()}`;
-}
-
 export const workspaceSource: EvalDataSource = {
   async health() {
     return workspaceApiClient.health();
@@ -39,11 +35,7 @@ export const workspaceSource: EvalDataSource = {
     return fromCoreConfigYaml(record);
   },
   async updateConfig(config) {
-    const record = await workspaceApiClient.updateConfig(
-      config.id,
-      toCoreConfigYaml(config),
-      configFileNameFromName(config.name)
-    );
+    const record = await workspaceApiClient.updateConfig(config.id, toCoreConfigYaml(config));
     return fromCoreConfigYaml(record);
   },
   async deleteConfig(id) {

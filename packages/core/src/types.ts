@@ -35,6 +35,32 @@ export interface RunAgentSelectionParams {
   availableAgents?: EvalConfig['agents'];
 }
 
+export interface ServerVariant {
+  id: string;
+  label?: string;
+  /** Omitted selects each scenario's configured servers. */
+  serverIds?: string[];
+  /** Frozen effective bindings, retained for queued execution and reruns. */
+  scenarioServerOverrides?: Record<string, string[]>;
+}
+
+/** Runtime input for a group of MCP servers used together. */
+export interface ServerSet extends Omit<ServerVariant, 'serverIds'> {
+  servers?: string[];
+}
+
+export interface ServerComparisonMetadata {
+  server_variants?: ServerVariant[];
+  rerun_server_variants?: ServerVariant[];
+  rerun_runs_per_scenario?: number;
+  server_variant_errors?: Record<string, string>;
+}
+
+export interface ServerVariantResult {
+  server_variant?: string;
+  servers?: string[];
+}
+
 export interface EvaluationRunRequest {
   configPath: string;
   runsPerScenario: number;
@@ -44,7 +70,8 @@ export interface EvaluationRunRequest {
   runNote?: string;
   newConversationBetweenScenarios?: boolean;
   newConversationBeforeStart?: boolean;
-  serverOverrideAll?: string[];
+  server_sets?: ServerSet[];
+  servers?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
 }
 
@@ -838,7 +865,7 @@ export interface TraceMessage {
   content: TraceMessageContentBlock[];
 }
 
-export interface ScenarioRunTraceRecord {
+export interface ScenarioRunTraceRecord extends ServerVariantResult {
   type: 'scenario_run';
   trace_version: 3;
   run_index: number;
@@ -894,7 +921,7 @@ export interface ScenarioRunResult {
   extracted: Record<string, string | number | boolean | null>;
 }
 
-export interface ScenarioAggregate {
+export interface ScenarioAggregate extends ServerVariantResult {
   scenario_id: string;
   scenario_name?: string;
   agent: string;
@@ -936,7 +963,7 @@ export type HealthMcpConnectionInfo =
     };
 
 export interface ResultsJson {
-  metadata: {
+  metadata: ServerComparisonMetadata & {
     run_id: string;
     timestamp: string;
     run_note?: string;

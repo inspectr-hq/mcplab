@@ -1,5 +1,6 @@
+import { annotateServerVariant } from '@inspectr/mcplab-core';
 import { join } from 'node:path';
-import type { ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
+import type { ResultsJson, ScenarioRunTraceRecord, ServerVariant } from '@inspectr/mcplab-core';
 import { appendExecutionEvent, type ExecutionJournalEvent } from './execution-journal.js';
 import { projectEvaluationJournal } from './evaluation-journal-projection.js';
 
@@ -9,6 +10,7 @@ type JournalWriterOptions = {
   evaluationName?: string;
   runNote?: string;
   appendEvent?: typeof appendExecutionEvent;
+  serverVariant?: ServerVariant;
 };
 
 export function recordEvaluationExecution(
@@ -20,6 +22,9 @@ export function recordEvaluationExecution(
     eventId?: string;
   }
 ): ResultsJson | null {
+  const annotated = options.serverVariant
+    ? annotateServerVariant(options.results, options.traceRecords ?? [], options.serverVariant)
+    : { results: options.results, traceRecords: options.traceRecords };
   const event: ExecutionJournalEvent = {
     eventId: options.eventId ?? `${options.executionSource}-result-${options.executionId}`,
     type: 'execution_completed',
@@ -27,8 +32,8 @@ export function recordEvaluationExecution(
     evaluationRunId: options.evaluationRunId,
     executionId: options.executionId,
     executionSource: options.executionSource,
-    results: options.results,
-    ...(options.traceRecords ? { traceRecords: options.traceRecords } : {})
+    results: annotated.results,
+    ...(annotated.traceRecords ? { traceRecords: annotated.traceRecords } : {})
   };
   (options.appendEvent ?? appendExecutionEvent)(
     join(options.runsDir, options.evaluationRunId),
@@ -52,6 +57,7 @@ export function recordEvaluationTerminalExecution(
   const event: ExecutionJournalEvent = {
     eventId: `execution-${options.status}-${options.executionId}`,
     type: options.status === 'error' ? 'execution_failed' : 'execution_stopped',
+    serverVariant: options.serverVariant,
     ts: new Date().toISOString(),
     executionId: options.executionId,
     evaluationRunId: options.evaluationRunId,

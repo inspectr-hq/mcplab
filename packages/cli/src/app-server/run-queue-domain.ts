@@ -149,6 +149,7 @@ export function createRunQueueService(params: {
       evaluationRunId,
       executionId: job.id,
       roverType: message.type,
+      server_variant: job.runParams.serverVariant?.id,
       provider,
       ...details
     });
@@ -205,6 +206,7 @@ export function createRunQueueService(params: {
     appendExecutionEvent(join(settings.runsDir, evaluationRunId), {
       eventId: `evaluation-stopped-${job.id}`,
       type: 'evaluation_stopped',
+      serverVariant: job.runParams.serverVariant,
       ts: new Date().toISOString(),
       executionId: job.id,
       evaluationRunId,
@@ -228,6 +230,7 @@ export function createRunQueueService(params: {
       evaluationName: job.runParams.evaluationName,
       runNote: job.runParams.runNote,
       executionId: job.id,
+      serverVariant: job.runParams.serverVariant,
       status,
       reason
     });
@@ -648,6 +651,11 @@ export function createRunQueueService(params: {
           appendExecutionEvent(journalDir, {
             eventId: `evaluation-started-${runParams.evaluationRunId}`,
             type: 'evaluation_started',
+            serverVariants: runParams.serverVariants,
+            evaluationRequest: runParams.evaluationRequest,
+            configPath: runParams.configPath,
+            scenarioIds: runParams.scenarioIds,
+            runsPerScenario: runParams.runsPerScenario,
             ts: new Date().toISOString(),
             evaluationRunId: runParams.evaluationRunId,
             evaluationName: runParams.evaluationName,
@@ -877,6 +885,7 @@ export function createRunQueueService(params: {
         configPath: job.runParams.configPath,
         evaluationName: job.runParams.evaluationName,
         agentName: job.runParams.roverAgent!.name,
+        serverVariant: job.runParams.serverVariant,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
         newConversationBeforeStart: job.runParams.roverNewConversationBeforeStart !== false,

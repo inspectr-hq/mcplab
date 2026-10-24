@@ -13,6 +13,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({ source: sourceMock })
 }));
 
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({ servers: [] })
+}));
+
 function makeResult(id: string, durationMs: number): EvalResult {
   return {
     id,
@@ -103,4 +107,47 @@ describe('CompareResultDetails', () => {
       '/results/run-1?configId=cfg-1&agent=agent-b'
     );
   });
+
+  it('shows the selected MCP server badges in each comparison pane header', async () => {
+    const leftResult = makeResult('run-1', 1200);
+    leftResult.mcpServerVersions = { api: '1.2.3', docs: '2.0.0' };
+    leftResult.server_variants = [
+      { id: 'baseline', label: 'Baseline', serverIds: ['api'] },
+      { id: 'candidate', label: 'Candidate', serverIds: ['docs'] }
+    ];
+    sourceMock.getResult.mockResolvedValue(leftResult);
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/compare/results?left=run-1&right=run-1&leftVariant=baseline&rightVariant=candidate'
+        ]}
+      >
+        <Routes>
+          <Route path="/compare/results" element={<CompareResultDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('api@1.2.3')).toBeInTheDocument();
+    expect(await screen.findByText('docs@2.0.0')).toBeInTheDocument();
+    expect(screen.queryByText('Server set:')).not.toBeInTheDocument();
+  });
+});
+
+it('keeps server-set filters on embedded and standalone detail links', () => {
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/compare/results?left=run&right=run&leftAgent=one&rightAgent=one&leftVariant=A&rightVariant=B'
+      ]}
+    >
+      <CompareResultDetails />
+    </MemoryRouter>
+  );
+  expect(screen.getByTitle('Result run · one · A').getAttribute('src')).toContain('variant=A');
+  expect(screen.getByTitle('Result run · one · B').getAttribute('src')).toContain('variant=B');
+  expect(screen.getByRole('link', { name: 'Open Left' }).getAttribute('href')).toContain(
+    'variant=A'
+  );
 });

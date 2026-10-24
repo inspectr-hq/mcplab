@@ -1,31 +1,35 @@
 import type { ServerResponse } from 'node:http';
 import type {
   EvalConfig,
+  QueueRunParams,
   RunAgentSelectionSource,
   QueueChildProgress,
   RoverAgentRef,
+  ServerVariant,
   Scenario
 } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
 type RunParamsBase = {
-  evaluationRunId?: string;
-  evaluationName?: string;
-  configPath: string;
-  runsPerScenario: number;
-  scenarioId?: string;
-  scenarioIds?: string[];
-  requestedAgents?: string[];
-  /** Resolved at enqueue time so later settings and library changes cannot retarget jobs. */
-  agentSnapshot?: EvalConfig['agents'];
-  agentSelectionSource?: RunAgentSelectionSource;
-  runNote?: string;
-  oauthServerNames?: string[];
-  serverOverrideAll?: string[];
-  scenarioServerOverrides?: Record<string, string[]>;
-  newConversationBeforeStart?: boolean;
-  newConversationBetweenScenarios?: boolean;
-};
+  serverVariants?: ServerVariant[];
+} & Pick<QueueRunParams, 'serverVariant' | 'evaluationRequest'> & {
+    evaluationRunId?: string;
+    evaluationName?: string;
+    configPath: string;
+    runsPerScenario: number;
+    scenarioId?: string;
+    scenarioIds?: string[];
+    requestedAgents?: string[];
+    /** Resolved at enqueue time so later settings and library changes cannot retarget jobs. */
+    agentSnapshot?: EvalConfig['agents'];
+    agentSelectionSource?: RunAgentSelectionSource;
+    runNote?: string;
+    oauthServerNames?: string[];
+    serverOverrideAll?: string[];
+    scenarioServerOverrides?: Record<string, string[]>;
+    newConversationBeforeStart?: boolean;
+    newConversationBetweenScenarios?: boolean;
+  };
 
 export type McplabRunParams = RunParamsBase & {
   executionType?: 'mcplab';

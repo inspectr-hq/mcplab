@@ -1,3 +1,4 @@
+import { serverComparisonMetadata, type ServerComparisonMetadata } from '@inspectr/mcplab-core';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -40,7 +41,7 @@ export class RunValidationError extends RunStoreError {
   }
 }
 
-export interface RunSummary {
+export interface RunSummary extends ServerComparisonMetadata {
   runId: string;
   /** Parent evaluation identity for queue/grouped runs, when present. */
   evaluationRunId?: string;
@@ -141,6 +142,7 @@ function buildRunSummary(runId: string, dir: string, results: ResultsJson): RunS
   );
   return {
     runId,
+    ...serverComparisonMetadata(results.metadata),
     evaluationRunId: results.metadata.evaluation_run_id ?? results.metadata.evaluation_group_id,
     path: dir,
     timestamp: results.metadata.timestamp,

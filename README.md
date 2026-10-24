@@ -539,13 +539,43 @@ mcplab run -c mcplab/evals/eval.yaml -s basic-test
 mcplab run -c mcplab/evals/eval.yaml -n 5
 
 # Runtime MCP server override for all selected scenarios
-mcplab run -c mcplab/evals/eval.yaml --server-override-all kpi-api-stage
+mcplab run -c mcplab/evals/eval.yaml --servers kpi-api-stage
 
-# Runtime per-scenario override (wins over --server-override-all)
+# Runtime per-scenario override (wins over --servers)
 mcplab run -c mcplab/evals/eval.yaml \
-  --server-override-all kpi-api-stage \
+  --servers kpi-api-stage \
   --server-override add-calculations=kpi-api-dev
 ```
+
+Compare server sets in one evaluation result:
+
+```bash
+mcplab run -c mcplab/evals/eval.yaml -n 3 \
+  --server-set "baseline=default" \
+  --server-set "candidate=kpi-api-stage"
+```
+
+Each set runs separately; multiple server IDs inside a set are available together. `default` uses each scenario's configured servers. Server sets cannot be combined with the existing runtime override flags. Results retain the set identity, effective servers, and repetition count.
+
+In **Run Evaluation**, choose **MCP Servers > Compare MCP servers**, select at least two servers, and review the execution count before running. Each selected test runs separately against each selected server. Per-test overrides are disabled in this mode. One result contains all selected scenarios, agents, and servers. Comparisons of multi-server sets remain available through the CLI, MCP tools, and API. In **Compare Evaluations**, choose **Compare by > MCP servers** and hold the agent constant, or compare agents while holding the server set constant.
+
+Both MCP tools, `mcplab_run_eval` and `mcplab_queue_run`, accept runtime `servers` or `server_sets`. The app API accepts the same fields on `POST /api/runs`. For comparison:
+
+```json
+{
+  "config_path": "eval.yaml",
+  "scenario_id": "basic-test",
+  "runs_per_scenario": 1,
+  "server_sets": [
+    { "id": "baseline" },
+    { "id": "candidate", "servers": ["kpi-api-stage"] }
+  ]
+}
+```
+
+For a global override without comparison, use `"servers": ["kpi-api-stage"]`. Multiple servers in one list are available together. Omit `servers` inside a set to use scenario defaults. `servers` and `server_sets` are mutually exclusive; server sets also cannot be combined with per-scenario overrides. Queued browser comparisons start a fresh conversation for each set.
+
+Saved result metadata records the server set identity and effective server bindings for reruns and comparisons.
 
 Runtime override server refs are resolved against the effective server set (eval config + `mcplab/servers.yaml`) consistently across CLI, app-server API, and MCP tools.
 

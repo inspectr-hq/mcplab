@@ -60,6 +60,7 @@ import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { useHeightToViewportBottom } from '@/hooks/use-height-to-viewport-bottom';
 import { cn } from '@/lib/utils';
@@ -224,6 +225,7 @@ const PAGE_LIMIT = 100;
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { source } = useDataSource();
+  const mcpServerNames = useMcpServerNames();
   const [initialTimeFilter] = useState<TimeFilterQueryState>(() =>
     hasExplicitTimeFilterQuery(searchParams)
       ? getTimeFilterQueryState(searchParams)
@@ -1174,6 +1176,9 @@ const Results = () => {
                               scopePreview: 'n/a',
                               modelSummary: ''
                             };
+                            const mcpServerCount = Object.keys(
+                              item.run.mcpServerVersions ?? {}
+                            ).length;
                             return (
                               <div className="space-y-1">
                                 <div className="flex min-w-0 items-baseline gap-1.5">
@@ -1182,6 +1187,7 @@ const Results = () => {
                                     {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount}{' '}
                                     agent
                                     {scope.agentCount === 1 ? '' : 's'}
+                                    {mcpServerCount > 0 ? ` · ${mcpServerCount} MCP` : ''}
                                   </span>
                                   {scope.modelSummary ? (
                                     <span className="min-w-0 truncate" title={scope.modelSummary}>
@@ -1191,7 +1197,8 @@ const Results = () => {
                                 </div>
                                 <McpServerBadge
                                   versions={item.run.mcpServerVersions}
-                                  showPrefix={false}
+                                  serverNames={mcpServerNames}
+                                  size="compact"
                                   className="max-w-[18rem]"
                                 />
                               </div>

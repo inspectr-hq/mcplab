@@ -5,6 +5,7 @@ import type { RunJob, RunQueueState } from './run-queue-state.js';
 
 export function toQueueEntry(job: RunJob): QueueEntry {
   const commonRunParams = {
+    serverVariant: job.runParams.serverVariant,
     evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     configPath: job.runParams.configPath,

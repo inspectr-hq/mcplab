@@ -2,50 +2,58 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultDetail from './ResultDetail';
-import type { EvalConfig, EvalResult } from '@/types/eval';
+import type { EvalConfig, EvalResult, ServerConfig } from '@/types/eval';
 import type {
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView
 } from '@/lib/data-sources/types';
 
-const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLibraryScenarios } =
-  vi.hoisted(() => {
-    const getResult = vi.fn();
-    const listMarkdownReports = vi.fn().mockResolvedValue([]);
-    const updateRunNote = vi.fn().mockResolvedValue(undefined);
-    const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-    const openRunInspectrSession = vi.fn();
-    const configs: EvalConfig[] = [];
-    const libraryScenarios: EvalConfig['scenarios'] = [];
-    const assistantState = {
-      assistantMessages: [] as ResultAssistantSessionView['messages'],
-      assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
-      assistantInput: '',
-      assistantLoading: false,
-      assistantChatEndRef: { current: null as HTMLDivElement | null },
-      assistantInputRef: { current: null as HTMLTextAreaElement | null },
-      setAssistantInput: vi.fn(),
-      askResultAssistant: vi.fn(),
-      approveResultAssistantToolCall: vi.fn(),
-      denyResultAssistantToolCall: vi.fn(),
-      applyResultAssistantSnippet: vi.fn(),
-      ensureIntroMessage: vi.fn(),
-      resetAssistantSession: vi.fn()
-    };
-    return {
-      getResultMock: getResult,
-      sourceMock: {
-        getResult,
-        listMarkdownReports,
-        updateRunNote,
-        startRun,
-        openRunInspectrSession
-      },
-      mockResultAssistantState: assistantState,
-      mockConfigs: configs,
-      mockLibraryScenarios: libraryScenarios
-    };
-  });
+const {
+  getResultMock,
+  sourceMock,
+  mockResultAssistantState,
+  mockConfigs,
+  mockLibraryScenarios,
+  mockLibraryServers
+} = vi.hoisted(() => {
+  const getResult = vi.fn();
+  const listMarkdownReports = vi.fn().mockResolvedValue([]);
+  const updateRunNote = vi.fn().mockResolvedValue(undefined);
+  const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
+  const openRunInspectrSession = vi.fn();
+  const configs: EvalConfig[] = [];
+  const libraryScenarios: EvalConfig['scenarios'] = [];
+  const libraryServers: ServerConfig[] = [];
+  const assistantState = {
+    assistantMessages: [] as ResultAssistantSessionView['messages'],
+    assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
+    assistantInput: '',
+    assistantLoading: false,
+    assistantChatEndRef: { current: null as HTMLDivElement | null },
+    assistantInputRef: { current: null as HTMLTextAreaElement | null },
+    setAssistantInput: vi.fn(),
+    askResultAssistant: vi.fn(),
+    approveResultAssistantToolCall: vi.fn(),
+    denyResultAssistantToolCall: vi.fn(),
+    applyResultAssistantSnippet: vi.fn(),
+    ensureIntroMessage: vi.fn(),
+    resetAssistantSession: vi.fn()
+  };
+  return {
+    getResultMock: getResult,
+    sourceMock: {
+      getResult,
+      listMarkdownReports,
+      updateRunNote,
+      startRun,
+      openRunInspectrSession
+    },
+    mockResultAssistantState: assistantState,
+    mockConfigs: configs,
+    mockLibraryScenarios: libraryScenarios,
+    mockLibraryServers: libraryServers
+  };
+});
 
 vi.mock('@/hooks/use-result-assistant', () => ({
   useResultAssistant: () => mockResultAssistantState
@@ -72,7 +80,7 @@ vi.mock('@/contexts/ConfigContext', () => ({
 
 vi.mock('@/contexts/LibraryContext', () => ({
   useLibraries: () => ({
-    servers: [],
+    servers: mockLibraryServers,
     agents: [],
     scenarios: mockLibraryScenarios,
     loading: false,
@@ -167,6 +175,7 @@ describe('ResultDetail conversation toggle', () => {
   beforeEach(() => {
     mockConfigs.length = 0;
     mockLibraryScenarios.length = 0;
+    mockLibraryServers.length = 0;
     mockResultAssistantState.assistantMessages = [];
     mockResultAssistantState.assistantPendingToolCalls = [];
     mockResultAssistantState.assistantInput = '';
@@ -205,6 +214,85 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(tools);
     expect(extracts).toHaveAttribute('aria-expanded', 'true');
     expect(tools).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('switches the scenarios card into inline compare mode', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = { 'server-1': '1.0' };
+    result.scenarios[0].provider = 'anthropic';
+    result.scenarios[0].model = 'claude-haiku-5-5';
+    result.scenarios[0].runs[0].failureReasons = ['The check failed'];
+    result.scenarios[0].runs[0].checkResults = [
+      { type: 'required_tool', label: 'Required tool', status: 'passed' },
+      { type: 'response_regex', label: 'Response regex', status: 'failed' }
+    ];
+    const secondScenario = {
+      ...result.scenarios[0],
+      scenarioId: 'scn-2',
+      scenarioName: 'Scenario 2',
+      passRate: 0,
+      runs: result.scenarios[0].runs.map((run) => ({
+        ...run,
+        passed: false,
+        failureReasons: ['The check failed']
+      }))
+    };
+    result.scenarios.push(secondScenario);
+    result.totalScenarios = 2;
+    result.totalRuns = 2;
+    mockLibraryServers.push({
+      id: 'server-1',
+      name: 'TrendMiner',
+      transport: 'sse',
+      url: 'https://mcp.example.com'
+    });
+    mockLibraryScenarios.push({
+      id: 'scn-1',
+      name: 'Scenario 1',
+      serverIds: ['server-1'],
+      prompt: 'Search',
+      evalRules: [],
+      extractRules: []
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Compare scenarios' }));
+
+    expect(screen.getByRole('button', { name: 'Exit compare' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Swap' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length).toBeGreaterThan(
+      0
+    );
+    expect(screen.getAllByText('Scenario 2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Agent 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Anthropic · claude-haiku-5-5').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TrendMiner@1.0').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 ✓').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 ✕').length).toBeGreaterThan(0);
+    expect(screen.getByText('MCP servers')).toBeInTheDocument();
+    expect(screen.getByText('Total time')).toBeInTheDocument();
+    expect(screen.getAllByText('Extracted values').length).toBe(2);
+    expect(screen.getAllByText('0 total').length).toBe(2);
+    expect(screen.getAllByText('Tool call sequence').length).toBe(2);
+    expect(screen.getAllByText('1 total').length).toBe(2);
+    expect(screen.getAllByText('Final answer').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Conversation trace').length).toBeGreaterThanOrEqual(2);
+    const failureSections = screen.getAllByRole('button', { name: /Failure reasons · 1/ });
+    expect(failureSections).toHaveLength(2);
+    expect(failureSections[0]).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(failureSections[0]);
+    expect(failureSections[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(failureSections[1]).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('starts populated extracted values and tool call sequence expanded', async () => {
@@ -757,10 +845,60 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
+    const badge = screen.getAllByLabelText('MCP server')[0].closest('[tabindex="0"]');
     expect(badge).toHaveClass('leading-none');
+    expect(screen.getByText(/api@1\.2\.3/).parentElement).toHaveClass('min-h-5');
     expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
     expect(screen.getByText(/docs@unknown/)).toBeInTheDocument();
+  });
+
+  it('includes MCP server names in expanded scenario details', async () => {
+    const result = makeResult();
+    result.scenarios[0].servers = ['api'];
+    mockLibraryServers.push({
+      id: 'api',
+      name: 'API Server',
+      transport: 'streamable-http',
+      url: 'https://api.example.test/mcp'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText(/MCP: API Server/)).toBeInTheDocument();
+  });
+
+  it('shows the selected MCP badge beside the Scenarios title when embedded', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = { api: '1.2.3' };
+    result.server_variants = [{ id: 'baseline', serverIds: ['api'] }];
+    result.scenarios[0].server_variant = 'baseline';
+    mockLibraryServers.push({
+      id: 'api',
+      name: 'API Server',
+      transport: 'streamable-http',
+      url: 'https://api.example.test/mcp'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1?embed=1&variant=baseline']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('heading', { name: 'Scenarios' });
+    expect(screen.getByText('API Server@1.2.3')).toBeInTheDocument();
   });
 
   it('shows complete MCP server information on hover', async () => {
@@ -801,7 +939,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('MCP server')).not.toBeInTheDocument();
   });
 
   it('renders tool token totals and per-tool estimated breakdown', async () => {
@@ -849,10 +987,10 @@ describe('ResultDetail conversation toggle', () => {
     const row = screen.getByText('Scenario 1').closest('tr');
     expect(row).not.toBeNull();
     const cells = row!.querySelectorAll('td');
+    expect(cells[5]).toHaveClass('text-right');
     expect(cells[6]).toHaveClass('text-right');
     expect(cells[7]).toHaveClass('text-right');
     expect(cells[8]).toHaveClass('text-right');
-    expect(cells[9]).toHaveClass('text-right');
   });
 
   it('shows the formatted provider and model alongside the agent name', async () => {
@@ -985,6 +1123,8 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     expect(mockResultAssistantState.approveResultAssistantToolCall).toHaveBeenCalledWith('call-2');
     expect(mockResultAssistantState.denyResultAssistantToolCall).toHaveBeenCalledWith('call-2');
+    fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
+    expect(screen.queryByText('Search tags')).not.toBeInTheDocument();
   });
 
   it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {
@@ -1092,4 +1232,26 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();
     expect(container.querySelector('svg.lucide-clock3')).toBeTruthy();
   });
+});
+
+it('filters a full result to the requested server set', async () => {
+  const result = makeResult();
+  result.server_variants = [
+    { id: 'A', label: 'Baseline' },
+    { id: 'B', label: 'Candidate' }
+  ];
+  result.scenarios = ['A', 'B'].map((variant) => ({
+    ...result.scenarios[0],
+    server_variant: variant
+  }));
+  getResultMock.mockResolvedValue(result);
+  render(
+    <MemoryRouter initialEntries={['/results/run-1?variant=B']}>
+      <Routes>
+        <Route path="/results/:id" element={<ResultDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+  expect(await screen.findByText('Candidate')).toBeInTheDocument();
+  expect(screen.queryByText('Baseline')).not.toBeInTheDocument();
 });

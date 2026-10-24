@@ -1,3 +1,15 @@
+import type { ServerComparisonMetadata } from '@inspectr/mcplab-core';
+export type {
+  ServerSet,
+  ServerVariant,
+  ServerVariantResult,
+  ServerComparisonMetadata
+} from '@inspectr/mcplab-core';
+export {
+  scenarioExecutionKey,
+  serverComparisonMetadata,
+  toServerSets
+} from '@inspectr/mcplab-core';
 import type { EvalConfig, EvalResult, EvalRule, ScenarioRun, LlmAgentConfig } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
@@ -146,7 +158,7 @@ export interface WorkspaceConfigRecord {
   warnings?: string[];
 }
 
-export interface WorkspaceRunSummary {
+export interface WorkspaceRunSummary extends ServerComparisonMetadata {
   runId: string;
   evaluationRunId?: string;
   path: string;

@@ -89,3 +89,22 @@ Default pre-registered client:
 - `mcplab_results_context`
 - `mcplab_results_index`
 - `mcplab_read_run_artifact`
+
+
+## Runtime server selection
+
+Both `mcplab_run_eval` (immediate execution) and `mcplab_queue_run` (app queue) accept `servers` to use MCP servers together, or `server_sets` to compare sets in one evaluation result:
+
+```json
+{
+  "config_path": "eval.yaml",
+  "scenario_id": "basic-test",
+  "runs_per_scenario": 1,
+  "server_sets": [
+    { "id": "baseline" },
+    { "id": "candidate", "servers": ["server-v2"] }
+  ]
+}
+```
+
+Omit `servers` inside a set to use scenario defaults. For an override without comparison, use `"servers": ["server-v2"]` instead of `server_sets`. These two options are mutually exclusive; server sets also cannot be combined with per-scenario overrides.

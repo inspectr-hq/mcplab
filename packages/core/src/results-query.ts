@@ -1,3 +1,4 @@
+import { scenarioExecutionKey } from './server-variants.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ResultsJson, ScenarioRunTraceRecord } from './types.js';
@@ -164,11 +165,14 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
   });
 
   for (const scenario of results.scenarios) {
+    const identity = scenario.server_variant
+      ? scenarioExecutionKey(scenario.scenario_id, scenario.agent, scenario.server_variant)
+      : `${scenario.scenario_id}:${scenario.agent}`;
     const scenarioStatus: ResultStatus = scenario.runs.every((run) => run.pass)
       ? 'passed'
       : 'failed';
     docs.push({
-      id: `${runId}:scenario:${scenario.scenario_id}:${scenario.agent}`,
+      id: `${runId}:scenario:${identity}`,
       run_id: runId,
       run_timestamp: results.metadata.timestamp,
       scenario_id: scenario.scenario_id,
@@ -178,6 +182,8 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
       file: 'results.json',
       title: `Scenario ${scenario.scenario_id} (${scenario.agent})`,
       text: JSON.stringify({
+        server_variant: scenario.server_variant,
+        servers: scenario.servers,
         pass_rate: scenario.pass_rate,
         tool_usage_frequency: scenario.tool_usage_frequency,
         last_final_answer: scenario.last_final_answer,
@@ -190,7 +196,7 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
     for (const run of scenario.runs) {
       if (run.pass && run.failures.length === 0 && !run.error) continue;
       docs.push({
-        id: `${runId}:failure:${scenario.scenario_id}:${scenario.agent}:${run.run_index}`,
+        id: `${runId}:failure:${identity}:${run.run_index}`,
         run_id: runId,
         run_timestamp: results.metadata.timestamp,
         scenario_id: scenario.scenario_id,
@@ -200,6 +206,8 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
         file: 'results.json',
         title: `Failure ${scenario.scenario_id} run ${run.run_index}`,
         text: JSON.stringify({
+          server_variant: scenario.server_variant,
+          servers: scenario.servers,
           failures: run.failures,
           error: run.error,
           tool_calls: run.tool_calls,
@@ -510,7 +518,9 @@ function contextFromScenarioMixed(
   opts: Required<Pick<ContextOptions, 'runsDir' | 'runId' | 'scenarioId'>>
 ): ContextResult {
   const results = readResults(opts.runsDir, opts.runId);
-  const scenario = results.scenarios.find((entry) => entry.scenario_id === opts.scenarioId);
+  const matches = results.scenarios.filter((entry) => entry.scenario_id === opts.scenarioId);
+  if (matches.some((entry) => entry.server_variant)) return contextFromResults(opts);
+  const scenario = matches[0];
   if (!scenario) throw new Error(`Scenario not found in run: ${opts.scenarioId}`);
 
   const failedRuns = scenario.runs.filter((run) => !run.pass);
@@ -529,6 +539,8 @@ function contextFromScenarioMixed(
         scenario: {
           scenario_id: scenario.scenario_id,
           agent: scenario.agent,
+          server_variant: scenario.server_variant,
+          servers: scenario.servers,
           pass_rate: scenario.pass_rate,
           tool_usage_frequency: scenario.tool_usage_frequency,
           last_final_answer: scenario.last_final_answer

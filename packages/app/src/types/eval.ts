@@ -1,5 +1,7 @@
 // Core mcp-lab types
 import type {
+  ServerVariantResult,
+  ServerComparisonMetadata,
   CoreCheckCounts,
   ScenarioAttachment,
   ExecutionSource,
@@ -230,7 +232,7 @@ export interface ScenarioRun {
   checkResults?: CheckResult[];
 }
 
-export interface ScenarioResult {
+export interface ScenarioResult extends ServerVariantResult {
   scenarioId: string;
   scenarioName: string;
   agentId: string;
@@ -249,7 +251,7 @@ export interface ScenarioResult {
   toolTokenUsageByTool?: Record<string, TokenUsage>;
 }
 
-export interface EvalResult {
+export interface EvalResult extends ServerComparisonMetadata {
   id: string;
   configId: string;
   configHash: string;

@@ -221,19 +221,22 @@ export async function startAppServer(options: AppServerOptions) {
     runsDir: settings.runsDir,
     evalsDir: settings.evalsDir,
     cliVersion: pkgVersion,
-    readScenarios: (input) => {
-      if (!input?.evaluationRunId) return readLibraries(settings.librariesDir).scenarios;
+    readScenarios: () => readLibraries(settings.librariesDir).scenarios,
+    resolveExecution: (input) => {
+      if (!input.evaluationRunId) return undefined;
       for (const job of jobs.values()) {
         const run = job.runParams;
         if (
+          job.status === 'running' &&
           run.executionType === 'rover' &&
           run.evaluationRunId === input.evaluationRunId &&
           run.roverAgent.provider === input.client &&
           run.roverAgent.name === input.agentName
-        )
-          return run.roverScenarios ?? [];
+        ) {
+          return { scenarios: run.roverScenarios ?? [], serverVariant: run.serverVariant };
+        }
       }
-      return [];
+      return { scenarios: [] };
     },
     persist: persistAppRunArtifacts,
     getWorkspaceEvaluation: (scenario) => {

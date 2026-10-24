@@ -131,3 +131,8 @@ export {
 
 export { calculatePassRate } from './result-metrics.js';
 export * from './tool-rule-expressions.js';
+
+export * from './server-variants.js';
+
+export { projectEvaluationResult } from './evaluation-result-projection.js';
+export { runServerVariants } from './run-server-variants.js';

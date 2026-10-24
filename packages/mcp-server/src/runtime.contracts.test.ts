@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -202,7 +202,7 @@ describe('mcp tool contracts', () => {
       scenario_ids: ['one', 'two'],
       agents: ['gpt-5'],
       runs_per_scenario: 3,
-      server_override_all: ['mcp-lab'],
+      servers: ['mcp-lab'],
       scenario_server_overrides: { two: ['other-server'] }
     });
 
@@ -220,7 +220,7 @@ describe('mcp tool contracts', () => {
       runsPerScenario: 3,
       scenarioIds: ['one', 'two'],
       agents: ['gpt-5'],
-      serverOverrideAll: ['mcp-lab'],
+      servers: ['mcp-lab'],
       scenarioServerOverrides: { two: ['other-server'] }
     });
     vi.unstubAllGlobals();
@@ -539,4 +539,89 @@ describe('mcp tool contracts', () => {
     expect(parsed.limit).toBe(20);
     expect(parsed.offset).toBe(0);
   });
+});
+
+it('forwards structured server sets to the APP queue', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ jobId: 'comparison' }), {
+      status: 202,
+      headers: { 'content-type': 'application/json' }
+    })
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const sets = [{ id: 'A' }, { id: 'B', servers: ['candidate'] }];
+    const tool = setupTools().get('mcplab_queue_run');
+    await tool!.cb({ config_path: 'eval.yaml', server_sets: sets });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).server_sets).toEqual(sets);
+    expect((tool!.config as any).inputSchema.server_sets).toBeDefined();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(['mcplab_run_eval', 'mcplab_queue_run'])(
+  '%s advertises server_sets and servers',
+  (name) => {
+    const tool = setupTools().get(name)!;
+    const schema = asSchema(tool.config.inputSchema);
+    const sets = [{ id: 'baseline' }, { id: 'candidate', servers: ['prod'] }];
+    expect(schema.parse({ config_path: 'eval.yaml', server_sets: sets }).server_sets).toEqual(sets);
+    expect(schema.parse({ config_path: 'eval.yaml', servers: ['prod'] }).servers).toEqual(['prod']);
+    expect(
+      schema.safeParse({
+        config_path: 'eval.yaml',
+        server_sets: [{ id: 'a', serverIds: ['prod'] }]
+      }).success
+    ).toBe(false);
+  }
+);
+
+it.each([
+  { server_sets: [{ id: 'baseline' }, { id: 'candidate', servers: ['prod'] }] },
+  { servers: ['prod'] }
+])('forwards the preferred runtime names to the APP queue: %j', async (selection) => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ jobId: 'comparison' }), {
+      status: 202,
+      headers: { 'content-type': 'application/json' }
+    })
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const tool = setupTools().get('mcplab_queue_run')!;
+    const result = await tool.cb({ config_path: 'eval.yaml', ...selection });
+    expect(result.isError).not.toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject(selection);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  [
+    { server_sets: [{ id: 'candidate', servers: ['missing'] }] },
+    'Unknown server in server set: missing'
+  ],
+  [{ servers: ['missing'] }, 'Unknown server refs'],
+  [{ server_sets: [{ id: 'baseline' }], servers: ['dev'] }, 'mutually exclusive']
+])('validates immediate runtime selection before executing: %j', async (selection, message) => {
+  const root = mkdtempSync(join(tmpdir(), 'mcplab-runtime-selection-'));
+  try {
+    const configPath = join(root, 'eval.yaml');
+    writeFileSync(
+      configPath,
+      'servers:\n  - id: dev\n    transport: http\n    url: http://dev/mcp\nscenarios:\n  - id: test\n    prompt: hello\n    servers: [dev]\n'
+    );
+    const tool = setupTools().get('mcplab_run_eval')!;
+    const input = asSchema(tool.config.inputSchema).parse({
+      config_path: configPath,
+      ...selection
+    });
+    const result = await tool.cb(input);
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(message);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

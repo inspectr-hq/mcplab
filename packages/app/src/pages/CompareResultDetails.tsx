@@ -3,28 +3,61 @@ import { ArrowLeftRight, ExternalLink } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import type { EvalResult } from '@/types/eval';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
-const resultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
+const resultUrl = (
+  runId: string,
+  configId?: string | null,
+  agentId?: string | null,
+  variantId?: string | null
+) => {
   const params = new URLSearchParams();
   if (configId) params.set('configId', configId);
   if (agentId) params.set('agent', agentId);
+  if (variantId) params.set('variant', variantId);
   params.set('embed', '1');
   return `/results/${encodeURIComponent(runId)}?${params.toString()}`;
 };
 
-const openResultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
+const openResultUrl = (
+  runId: string,
+  configId?: string | null,
+  agentId?: string | null,
+  variantId?: string | null
+) => {
   const params = new URLSearchParams();
   if (configId) params.set('configId', configId);
   if (agentId) params.set('agent', agentId);
+  if (variantId) params.set('variant', variantId);
   const query = params.toString();
   return `/results/${encodeURIComponent(runId)}${query ? `?${query}` : ''}`;
 };
 
+function getServerVersionsForVariant(
+  result: EvalResult | null,
+  variantId: string | null
+): Record<string, string | null> {
+  if (!result || !variantId) return result?.mcpServerVersions ?? {};
+  const variant = result.server_variants?.find((candidate) => candidate.id === variantId);
+  if (!variant) return result.mcpServerVersions;
+  const serverIds =
+    variant.serverIds ??
+    result.scenarios.find((scenario) => scenario.server_variant === variantId)?.servers;
+  if (!serverIds) return result.mcpServerVersions;
+  return Object.fromEntries(
+    serverIds
+      .filter((serverId) => serverId in result.mcpServerVersions)
+      .map((serverId) => [serverId, result.mcpServerVersions[serverId]] as const)
+  );
+}
+
 const CompareResultDetails = () => {
   const { source } = useDataSource();
+  const mcpServerNames = useMcpServerNames();
   const [searchParams] = useSearchParams();
   const left = searchParams.get('left') ?? '';
   const right = searchParams.get('right') ?? '';
@@ -32,9 +65,11 @@ const CompareResultDetails = () => {
   const rightConfig = searchParams.get('rightConfig');
   const leftAgent = searchParams.get('leftAgent');
   const rightAgent = searchParams.get('rightAgent');
+  const leftVariant = searchParams.get('leftVariant');
+  const rightVariant = searchParams.get('rightVariant');
 
-  const leftLabel = leftAgent ? `${left} · ${leftAgent}` : left;
-  const rightLabel = rightAgent ? `${right} · ${rightAgent}` : right;
+  const leftLabel = [left, leftAgent, leftVariant].filter(Boolean).join(' · ');
+  const rightLabel = [right, rightAgent, rightVariant].filter(Boolean).join(' · ');
   const [leftResult, setLeftResult] = useState<EvalResult | null>(null);
   const [rightResult, setRightResult] = useState<EvalResult | null>(null);
 
@@ -103,14 +138,18 @@ const CompareResultDetails = () => {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href={openResultUrl(left, leftConfig, leftAgent)} target="_blank" rel="noreferrer">
+            <a
+              href={openResultUrl(left, leftConfig, leftAgent, leftVariant)}
+              target="_blank"
+              rel="noreferrer"
+            >
               Open Left
               <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild>
             <a
-              href={openResultUrl(right, rightConfig, rightAgent)}
+              href={openResultUrl(right, rightConfig, rightAgent, rightVariant)}
               target="_blank"
               rel="noreferrer"
             >
@@ -177,12 +216,19 @@ const CompareResultDetails = () => {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="py-3">
-            <CardTitle className="text-sm font-mono">{leftLabel}</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-sm font-mono">{leftLabel}</CardTitle>
+              <McpServerBadge
+                versions={getServerVersionsForVariant(leftResult, leftVariant)}
+                serverNames={mcpServerNames}
+                size="compact"
+              />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <iframe
               title={`Result ${leftLabel}`}
-              src={resultUrl(left, leftConfig, leftAgent)}
+              src={resultUrl(left, leftConfig, leftAgent, leftVariant)}
               className="h-[calc(100vh-12rem)] w-full border-0"
             />
           </CardContent>
@@ -190,12 +236,19 @@ const CompareResultDetails = () => {
 
         <Card className="overflow-hidden">
           <CardHeader className="py-3">
-            <CardTitle className="text-sm font-mono">{rightLabel}</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-sm font-mono">{rightLabel}</CardTitle>
+              <McpServerBadge
+                versions={getServerVersionsForVariant(rightResult, rightVariant)}
+                serverNames={mcpServerNames}
+                size="compact"
+              />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <iframe
               title={`Result ${rightLabel}`}
-              src={resultUrl(right, rightConfig, rightAgent)}
+              src={resultUrl(right, rightConfig, rightAgent, rightVariant)}
               className="h-[calc(100vh-12rem)] w-full border-0"
             />
           </CardContent>
