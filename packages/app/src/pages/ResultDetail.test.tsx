@@ -845,7 +845,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
+    const badge = screen.getAllByLabelText('MCP server')[0].closest('[tabindex="0"]');
     expect(badge).toHaveClass('leading-none');
     expect(screen.getByText(/api@1\.2\.3/).parentElement).toHaveClass('min-h-5');
     expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
@@ -939,7 +939,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('MCP server')).not.toBeInTheDocument();
   });
 
   it('renders tool token totals and per-tool estimated breakdown', async () => {

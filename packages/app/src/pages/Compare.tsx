@@ -1327,7 +1327,6 @@ const Compare = () => {
                               <McpServerBadge
                                 versions={item.run.mcpServerVersions}
                                 serverNames={mcpServerNames}
-                                showPrefix={false}
                                 size="compact"
                               />
                             </div>

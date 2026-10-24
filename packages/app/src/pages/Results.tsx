@@ -1198,7 +1198,6 @@ const Results = () => {
                                 <McpServerBadge
                                   versions={item.run.mcpServerVersions}
                                   serverNames={mcpServerNames}
-                                  showPrefix={false}
                                   size="compact"
                                   className="max-w-[18rem]"
                                 />

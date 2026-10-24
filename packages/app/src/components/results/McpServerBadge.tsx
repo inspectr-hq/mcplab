@@ -1,11 +1,12 @@
 import { Badge } from '@/components/ui/badge';
+import IconMcp from '@/components/ui/IconMcp';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type McpServerBadgeProps = {
   versions?: Record<string, string | null>;
   serverNames?: Record<string, string>;
-  showPrefix?: boolean;
+  showIcon?: boolean;
   className?: string;
   size?: 'default' | 'compact';
 };
@@ -13,7 +14,7 @@ type McpServerBadgeProps = {
 export function McpServerBadge({
   versions,
   serverNames,
-  showPrefix = true,
+  showIcon = true,
   className,
   size = 'default'
 }: McpServerBadgeProps) {
@@ -36,18 +37,25 @@ export function McpServerBadge({
               className
             )}
           >
-            {showPrefix ? <span className="shrink-0 text-xs font-medium">MCP:</span> : null}
             {entries.map(([serverId, version]) => (
               <Badge
                 key={serverId}
                 variant="outline"
                 className={cn(
-                  'max-w-full break-words font-normal',
+                  'max-w-full gap-1 break-words font-normal',
                   size === 'compact'
                     ? 'min-h-5 px-1 py-0 text-[9px] leading-3'
                     : 'min-h-7 px-2.5 py-0.5 text-xs leading-4'
                 )}
               >
+                {showIcon ? (
+                  <IconMcp
+                    role="img"
+                    aria-hidden={false}
+                    aria-label="MCP server"
+                    className={cn('shrink-0', size === 'compact' ? 'h-3 w-3' : 'h-3.5 w-3.5')}
+                  />
+                ) : null}
                 <span className="min-w-0 max-w-full break-words text-left font-mono">
                   {labelFor(serverId)}@{version ?? 'unknown'}
                 </span>

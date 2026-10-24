@@ -221,7 +221,6 @@ const CompareResultDetails = () => {
               <McpServerBadge
                 versions={getServerVersionsForVariant(leftResult, leftVariant)}
                 serverNames={mcpServerNames}
-                showPrefix={false}
                 size="compact"
               />
             </div>
@@ -242,7 +241,6 @@ const CompareResultDetails = () => {
               <McpServerBadge
                 versions={getServerVersionsForVariant(rightResult, rightVariant)}
                 serverNames={mcpServerNames}
-                showPrefix={false}
                 size="compact"
               />
             </div>

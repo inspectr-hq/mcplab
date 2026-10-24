@@ -319,10 +319,7 @@ export default function ToolAnalysisResultsPage() {
                               </span>
                             </div>
                             {Object.keys(item.mcpServerVersions ?? {}).length > 0 ? (
-                              <McpServerBadge
-                                versions={item.mcpServerVersions}
-                                showPrefix={false}
-                              />
+                              <McpServerBadge versions={item.mcpServerVersions} />
                             ) : (
                               <div className="font-mono text-xs text-foreground/80">
                                 {item.serverNames.slice(0, 2).join(', ')}

@@ -18,6 +18,7 @@ import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons'
 import { CopyButton } from '@/components/CopyButton';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { Badge } from '@/components/ui/badge';
+import IconMcp from '@/components/ui/IconMcp';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import {
@@ -134,7 +135,13 @@ export function ScenarioResultsTable({
                         />
                         <span>{sc.scenarioName}</span>
                         {!isEmbedded && sc.server_variant && (
-                          <Badge variant="outline">
+                          <Badge variant="outline" className="gap-1">
+                            <IconMcp
+                              role="img"
+                              aria-hidden={false}
+                              aria-label="MCP server"
+                              className="h-3 w-3 shrink-0"
+                            />
                             {result.server_variants?.find(
                               (variant) => variant.id === sc.server_variant
                             )?.label ||

@@ -258,7 +258,7 @@ describe('Results', () => {
       within(evaluationCell).getByText(/Second MCP Server@2\.0\.0/).parentElement;
     expect(serverBadge).toHaveClass('rounded-full', 'min-h-5');
     expect(secondServerBadge).toHaveClass('rounded-full', 'min-h-5');
-    expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();
+    expect(within(evaluationCell).getAllByLabelText('MCP server')).toHaveLength(2);
     expect(within(evaluationCell).queryByText('Search evaluation')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
   });

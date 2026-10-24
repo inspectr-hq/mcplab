@@ -96,7 +96,6 @@ export function ScenarioResultsComparison({
       <McpServerBadge
         versions={versions}
         serverNames={mcpServerNames}
-        showPrefix={false}
         size="compact"
       />
     ) : (

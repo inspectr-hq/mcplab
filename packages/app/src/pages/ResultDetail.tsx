@@ -1076,8 +1076,8 @@ const ResultDetail = () => {
                     <McpServerBadge
                       versions={getServerVersionsForVariant(result, requestedVariantId)}
                       serverNames={mcpServerNames}
-                      showPrefix={false}
                       size="compact"
+                      className="max-w-none"
                     />
                   )}
                 </div>
