@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
-import type { EvalConfig, AgentConfig } from '@/types/eval';
+import type { EvalConfig, AgentConfig, ServerConfig } from '@/types/eval';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
@@ -2041,17 +2041,19 @@ describe('RunEvaluation', () => {
 });
 
 describe('MCP server comparison setup', () => {
-  async function renderComparison() {
+  async function renderComparison(
+    servers: ServerConfig[] = [
+      { id: 'dev', name: 'Dev', transport: 'streamable-http', url: 'http://dev' },
+      { id: 'prod', name: 'Prod', transport: 'streamable-http', url: 'http://prod' }
+    ]
+  ) {
     configsRef.value = [
       {
         id: 'comparison',
         name: 'Comparison',
         sourcePath: '/eval.yaml',
         agents: [{ id: 'api', name: 'API', provider: 'openai', model: 'test', maxTokens: 100 }],
-        servers: [
-          { id: 'dev', name: 'Dev', transport: 'streamable-http', url: 'http://dev' },
-          { id: 'prod', name: 'Prod', transport: 'streamable-http', url: 'http://prod' }
-        ],
+        servers,
         scenarios: [
           {
             id: 's',
@@ -2154,6 +2156,35 @@ describe('MCP server comparison setup', () => {
       scenarioIds: ['s'],
       scenarioServerOverrides: { s: ['prod'] }
     });
+  });
+
+  it('sorts the per-scenario MCP server override picker by visible server name', async () => {
+    await renderComparison([
+      { id: 'weather', name: 'Weather MCP', transport: 'streamable-http', url: 'http://weather' },
+      { id: 'bookings', name: 'Bookings', transport: 'streamable-http', url: 'http://bookings' }
+    ]);
+    fireEvent.click(screen.getByRole('radio', { name: 'Use scenario defaults' }));
+    fireEvent.click(screen.getByRole('switch'));
+
+    expect(
+      screen
+        .getAllByRole('button', { name: /^(Bookings|Weather MCP)$/ })
+        .map((button) => button.textContent)
+    ).toEqual(['Bookings', 'Weather MCP']);
+  });
+
+  it('sorts the global override picker by visible server name', async () => {
+    await renderComparison([
+      { id: 'weather', name: 'Weather MCP', transport: 'streamable-http', url: 'http://weather' },
+      { id: 'bookings', name: 'Bookings', transport: 'streamable-http', url: 'http://bookings' }
+    ]);
+    fireEvent.click(screen.getByRole('radio', { name: 'Override servers' }));
+
+    expect(
+      screen
+        .getAllByRole('button', { name: /^(Bookings|Weather MCP)$/ })
+        .map((button) => button.textContent)
+    ).toEqual(['Bookings', 'Weather MCP']);
   });
 });
 
