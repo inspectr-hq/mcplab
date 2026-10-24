@@ -64,15 +64,13 @@ describe('rerunWithSameSettings', () => {
   function sourceWithConfigs(run: EvalResult, configs: Partial<EvalConfig>[]): EvalDataSource {
     return {
       getResult: vi.fn().mockResolvedValue(run),
-      listConfigs: vi
-        .fn()
-        .mockResolvedValue(
-          configs.map((config, index) => ({
-            id: `cfg-${index}`,
-            name: `Config ${index}`,
-            ...config
-          }))
-        ),
+      listConfigs: vi.fn().mockResolvedValue(
+        configs.map((config, index) => ({
+          id: `cfg-${index}`,
+          name: `Config ${index}`,
+          ...config
+        }))
+      ),
       startRun: vi.fn().mockResolvedValue({ jobId: 'job-1' })
     } as unknown as EvalDataSource;
   }

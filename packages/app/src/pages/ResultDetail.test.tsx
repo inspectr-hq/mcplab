@@ -16,44 +16,44 @@ const {
   mockLibraryScenarios,
   mockLibraryServers
 } = vi.hoisted(() => {
-    const getResult = vi.fn();
-    const listMarkdownReports = vi.fn().mockResolvedValue([]);
-    const updateRunNote = vi.fn().mockResolvedValue(undefined);
-    const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-    const openRunInspectrSession = vi.fn();
-    const configs: EvalConfig[] = [];
-    const libraryScenarios: EvalConfig['scenarios'] = [];
-    const libraryServers: ServerConfig[] = [];
-    const assistantState = {
-      assistantMessages: [] as ResultAssistantSessionView['messages'],
-      assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
-      assistantInput: '',
-      assistantLoading: false,
-      assistantChatEndRef: { current: null as HTMLDivElement | null },
-      assistantInputRef: { current: null as HTMLTextAreaElement | null },
-      setAssistantInput: vi.fn(),
-      askResultAssistant: vi.fn(),
-      approveResultAssistantToolCall: vi.fn(),
-      denyResultAssistantToolCall: vi.fn(),
-      applyResultAssistantSnippet: vi.fn(),
-      ensureIntroMessage: vi.fn(),
-      resetAssistantSession: vi.fn()
-    };
-    return {
-      getResultMock: getResult,
-      sourceMock: {
-        getResult,
-        listMarkdownReports,
-        updateRunNote,
-        startRun,
-        openRunInspectrSession
-      },
-      mockResultAssistantState: assistantState,
-      mockConfigs: configs,
-      mockLibraryScenarios: libraryScenarios,
-      mockLibraryServers: libraryServers
-    };
-  });
+  const getResult = vi.fn();
+  const listMarkdownReports = vi.fn().mockResolvedValue([]);
+  const updateRunNote = vi.fn().mockResolvedValue(undefined);
+  const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
+  const openRunInspectrSession = vi.fn();
+  const configs: EvalConfig[] = [];
+  const libraryScenarios: EvalConfig['scenarios'] = [];
+  const libraryServers: ServerConfig[] = [];
+  const assistantState = {
+    assistantMessages: [] as ResultAssistantSessionView['messages'],
+    assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
+    assistantInput: '',
+    assistantLoading: false,
+    assistantChatEndRef: { current: null as HTMLDivElement | null },
+    assistantInputRef: { current: null as HTMLTextAreaElement | null },
+    setAssistantInput: vi.fn(),
+    askResultAssistant: vi.fn(),
+    approveResultAssistantToolCall: vi.fn(),
+    denyResultAssistantToolCall: vi.fn(),
+    applyResultAssistantSnippet: vi.fn(),
+    ensureIntroMessage: vi.fn(),
+    resetAssistantSession: vi.fn()
+  };
+  return {
+    getResultMock: getResult,
+    sourceMock: {
+      getResult,
+      listMarkdownReports,
+      updateRunNote,
+      startRun,
+      openRunInspectrSession
+    },
+    mockResultAssistantState: assistantState,
+    mockConfigs: configs,
+    mockLibraryScenarios: libraryScenarios,
+    mockLibraryServers: libraryServers
+  };
+});
 
 vi.mock('@/hooks/use-result-assistant', () => ({
   useResultAssistant: () => mockResultAssistantState
@@ -175,7 +175,7 @@ describe('ResultDetail conversation toggle', () => {
   beforeEach(() => {
     mockConfigs.length = 0;
     mockLibraryScenarios.length = 0;
-  mockLibraryServers.length = 0;
+    mockLibraryServers.length = 0;
     mockResultAssistantState.assistantMessages = [];
     mockResultAssistantState.assistantPendingToolCalls = [];
     mockResultAssistantState.assistantInput = '';
@@ -270,9 +270,9 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Exit compare' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Swap' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length).toBeGreaterThan(
+      0
+    );
     expect(screen.getAllByText('Scenario 2').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Agent 1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Anthropic · claude-haiku-5-5').length).toBeGreaterThan(0);

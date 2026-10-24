@@ -253,10 +253,9 @@ describe('Results', () => {
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
     expect(within(evaluationCell).getByText('1 scenario · 1 agent · 2 MCP')).toBeInTheDocument();
-    const serverBadge = within(evaluationCell).getByText(/Long MCP Server@1\.2\.3/)
-      .parentElement;
-    const secondServerBadge = within(evaluationCell).getByText(/Second MCP Server@2\.0\.0/)
-      .parentElement;
+    const serverBadge = within(evaluationCell).getByText(/Long MCP Server@1\.2\.3/).parentElement;
+    const secondServerBadge =
+      within(evaluationCell).getByText(/Second MCP Server@2\.0\.0/).parentElement;
     expect(serverBadge).toHaveClass('rounded-full', 'min-h-5');
     expect(secondServerBadge).toHaveClass('rounded-full', 'min-h-5');
     expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();

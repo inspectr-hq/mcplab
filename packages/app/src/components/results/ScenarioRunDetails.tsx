@@ -28,7 +28,13 @@ import type { EvalConfig as UiEvalConfig, ScenarioResult } from '@/types/eval';
 export type ScenarioRun = ScenarioResult['runs'][number];
 export type ScenarioCheck = ReturnType<typeof buildCheckItems>[number];
 export type ScenarioDefinition = UiEvalConfig['scenarios'][number];
-export type ScenarioRunSection = 'failures' | 'checks' | 'extracts' | 'tools' | 'final' | 'conversation';
+export type ScenarioRunSection =
+  | 'failures'
+  | 'checks'
+  | 'extracts'
+  | 'tools'
+  | 'final'
+  | 'conversation';
 
 export function ScenarioRunHeader({ run }: { run: ScenarioRun }) {
   return (
@@ -385,9 +391,7 @@ export function ScenarioToolCallsSection({
                         <Badge variant="outline" className="font-mono text-xs bg-background">
                           <span className="mr-1 text-muted-foreground">#{index + 1}</span>
                           {toolCall.name}
-                          <span className="ml-1 text-muted-foreground">
-                            {toolCall.duration}ms
-                          </span>
+                          <span className="ml-1 text-muted-foreground">{toolCall.duration}ms</span>
                           {hasEstimate ? (
                             <span className="ml-1 text-muted-foreground">
                               · {formatTokenCount(usage?.totalTokens)} tok
@@ -410,7 +414,11 @@ export function ScenarioToolCallsSection({
               </TooltipProvider>
             ) : (
               run.toolCalls.map((toolCall, index) => (
-                <Badge key={`${toolCall.name}-${index}`} variant="outline" className="font-mono text-xs">
+                <Badge
+                  key={`${toolCall.name}-${index}`}
+                  variant="outline"
+                  className="font-mono text-xs"
+                >
                   #{index + 1} {toolCall.name} · {toolCall.duration}ms
                 </Badge>
               ))

@@ -30,12 +30,7 @@ import {
 } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { tallyCheckCounts } from '@/types/eval';
-import {
-  ChevronDown,
-  FileCode,
-  Pencil,
-  Sparkles
-} from 'lucide-react';
+import { ChevronDown, FileCode, Pencil, Sparkles } from 'lucide-react';
 import type {
   EvalResult,
   EvalConfig as UiEvalConfig,
@@ -325,7 +320,7 @@ export function ScenarioResultsTable({
                                 ? Object.keys(run.extractedValues ?? {}).length > 0
                                 : section === 'tools'
                                   ? run.toolCalls.length > 0
-                                : undefined
+                                  : undefined
                             );
                           const toggleSection = (
                             section: Parameters<typeof runSectionKey>[2],

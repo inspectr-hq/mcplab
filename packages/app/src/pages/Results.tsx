@@ -1176,7 +1176,9 @@ const Results = () => {
                               scopePreview: 'n/a',
                               modelSummary: ''
                             };
-                            const mcpServerCount = Object.keys(item.run.mcpServerVersions ?? {}).length;
+                            const mcpServerCount = Object.keys(
+                              item.run.mcpServerVersions ?? {}
+                            ).length;
                             return (
                               <div className="space-y-1">
                                 <div className="flex min-w-0 items-baseline gap-1.5">

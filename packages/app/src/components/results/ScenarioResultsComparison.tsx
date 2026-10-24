@@ -289,8 +289,7 @@ function ScenarioComparisonEvidence({
   scenarioDefinition?: UiEvalConfig['scenarios'][number];
 }) {
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
-  const sectionKey = (runIndex: number, section: ScenarioRunSection) =>
-    `${runIndex}-${section}`;
+  const sectionKey = (runIndex: number, section: ScenarioRunSection) => `${runIndex}-${section}`;
   const isOpen = (runIndex: number, section: ScenarioRunSection) => {
     const defaultOpen = section !== 'conversation';
     const key = sectionKey(runIndex, section);

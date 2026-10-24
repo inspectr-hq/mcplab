@@ -2325,7 +2325,6 @@ export function registerTools(server: McpServer): void {
             ...(input.run_note ? { runNote: input.run_note } : {}),
             ...(input.server_sets !== undefined ? { server_sets: input.server_sets } : {}),
             ...(input.servers !== undefined ? { servers: input.servers } : {}),
-            ...(input.servers !== undefined ? { servers: input.servers } : {}),
             ...(input.scenario_server_overrides
               ? { scenarioServerOverrides: input.scenario_server_overrides }
               : {})
