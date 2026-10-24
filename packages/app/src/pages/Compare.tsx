@@ -104,6 +104,7 @@ type CompareTableItem =
 
 const COMPARE_RUNS_TABLE_COLUMN_COUNT = 9;
 const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
+const compareActionButtonClassName = 'h-7 gap-1 px-2 text-xs';
 
 function parseLocalDateTime(value: string) {
   if (!value.trim()) return null;
@@ -1387,28 +1388,30 @@ const Compare = () => {
                         {runScopesById.get(item.run.id)?.agentCount ?? 0}
                       </TableCell>
                       <TableCell className="text-right">
-                        {(item.run.server_variants?.length ?? 0) > 1 && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startWithinRunFromRun(item.run, 'servers')}
-                          >
-                            Compare MCP servers
-                          </Button>
-                        )}
-                        {(runScopesById.get(item.run.id)?.agentCount ?? 0) > 1 ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startWithinRunFromRun(item.run)}
-                          >
-                            Compare agents
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {(item.run.server_variants?.length ?? 0) > 1 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className={compareActionButtonClassName}
+                              onClick={() => startWithinRunFromRun(item.run, 'servers')}
+                            >
+                              Compare MCP servers
+                            </Button>
+                          )}
+                          {(runScopesById.get(item.run.id)?.agentCount ?? 0) > 1 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className={compareActionButtonClassName}
+                              onClick={() => startWithinRunFromRun(item.run)}
+                            >
+                              Compare agents
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

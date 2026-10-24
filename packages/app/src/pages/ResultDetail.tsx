@@ -145,6 +145,24 @@ function formatCompactOneDecimal(value: number): string {
   return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
 }
 
+function getServerVersionsForVariant(
+  result: EvalResult,
+  variantId: string
+): Record<string, string | null> {
+  if (!variantId) return result.mcpServerVersions;
+  const variant = result.server_variants?.find((candidate) => candidate.id === variantId);
+  if (!variant) return result.mcpServerVersions;
+  const serverIds =
+    variant.serverIds ??
+    result.scenarios.find((scenario) => scenario.server_variant === variantId)?.servers;
+  if (!serverIds) return result.mcpServerVersions;
+  return Object.fromEntries(
+    serverIds
+      .filter((serverId) => serverId in result.mcpServerVersions)
+      .map((serverId) => [serverId, result.mcpServerVersions[serverId]] as const)
+  );
+}
+
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -846,11 +864,13 @@ const ResultDetail = () => {
             </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
-            <McpServerBadge
-              versions={result.mcpServerVersions}
-              serverNames={mcpServerNames}
-              size="compact"
-            />
+            {!isEmbedded && (
+              <McpServerBadge
+                versions={result.mcpServerVersions}
+                serverNames={mcpServerNames}
+                size="compact"
+              />
+            )}
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"
@@ -1034,7 +1054,17 @@ const ResultDetail = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base">Scenarios</CardTitle>
+                <div className="flex min-w-0 items-center gap-2">
+                  <CardTitle className="text-base">Scenarios</CardTitle>
+                  {isEmbedded && (
+                    <McpServerBadge
+                      versions={getServerVersionsForVariant(result, requestedVariantId)}
+                      serverNames={mcpServerNames}
+                      showPrefix={false}
+                      size="compact"
+                    />
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -1078,6 +1108,17 @@ const ResultDetail = () => {
                     const checkCounts = tallyCheckCounts(
                       sc.runs.flatMap((run) => run.checkResults ?? [])
                     );
+                    const scenarioServerIds =
+                      sc.servers?.length
+                        ? sc.servers
+                        : sc.server_variant
+                          ? result.server_variants?.find(
+                              (variant) => variant.id === sc.server_variant
+                            )?.serverIds
+                          : undefined;
+                    const scenarioServerNames = (scenarioServerIds ?? []).map(
+                      (serverId) => mcpServerNames[serverId]?.trim() || serverId
+                    );
                     const hasCheckResults = sc.runs.some(
                       (run) => (run.checkResults?.length ?? 0) > 0
                     );
@@ -1113,7 +1154,7 @@ const ResultDetail = () => {
                               <TableCell className="font-medium text-sm">
                                 <div className="flex items-center gap-1.5">
                                   <span>{sc.scenarioName}</span>
-                                  {sc.server_variant && (
+                                  {!isEmbedded && sc.server_variant && (
                                     <Badge variant="outline">
                                       {result.server_variants?.find(
                                         (variant) => variant.id === sc.server_variant
@@ -1221,7 +1262,11 @@ const ResultDetail = () => {
                                     <div className="min-w-0">
                                       <p className="text-xs font-semibold">Scenario details</p>
                                       <p className="text-[11px] text-muted-foreground">
-                                        {scenarioLabel} · {sc.agentName} ·{' '}
+                                        {scenarioLabel} · {sc.agentName}
+                                        {scenarioServerNames.length > 0
+                                          ? ` · MCP: ${scenarioServerNames.join(', ')}`
+                                          : ''}{' '}
+                                        ·{' '}
                                         {formatPassRate(sc.passRate)} pass rate ·{' '}
                                         {hasCheckResults
                                           ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${

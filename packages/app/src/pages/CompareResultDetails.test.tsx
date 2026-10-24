@@ -13,6 +13,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({ source: sourceMock })
 }));
 
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({ servers: [] })
+}));
+
 function makeResult(id: string, durationMs: number): EvalResult {
   return {
     id,
@@ -102,6 +106,32 @@ describe('CompareResultDetails', () => {
       'href',
       '/results/run-1?configId=cfg-1&agent=agent-b'
     );
+  });
+
+  it('shows the selected MCP server badges in each comparison pane header', async () => {
+    const leftResult = makeResult('run-1', 1200);
+    leftResult.mcpServerVersions = { api: '1.2.3', docs: '2.0.0' };
+    leftResult.server_variants = [
+      { id: 'baseline', label: 'Baseline', serverIds: ['api'] },
+      { id: 'candidate', label: 'Candidate', serverIds: ['docs'] }
+    ];
+    sourceMock.getResult.mockResolvedValue(leftResult);
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/compare/results?left=run-1&right=run-1&leftVariant=baseline&rightVariant=candidate'
+        ]}
+      >
+        <Routes>
+          <Route path="/compare/results" element={<CompareResultDetails />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('api@1.2.3')).toBeInTheDocument();
+    expect(await screen.findByText('docs@2.0.0')).toBeInTheDocument();
+    expect(screen.queryByText('Server set:')).not.toBeInTheDocument();
   });
 });
 

@@ -2,14 +2,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultDetail from './ResultDetail';
-import type { EvalConfig, EvalResult } from '@/types/eval';
+import type { EvalConfig, EvalResult, ServerConfig } from '@/types/eval';
 import type {
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView
 } from '@/lib/data-sources/types';
 
-const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLibraryScenarios } =
-  vi.hoisted(() => {
+const {
+  getResultMock,
+  sourceMock,
+  mockResultAssistantState,
+  mockConfigs,
+  mockLibraryScenarios,
+  mockLibraryServers
+} = vi.hoisted(() => {
     const getResult = vi.fn();
     const listMarkdownReports = vi.fn().mockResolvedValue([]);
     const updateRunNote = vi.fn().mockResolvedValue(undefined);
@@ -17,6 +23,7 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
     const openRunInspectrSession = vi.fn();
     const configs: EvalConfig[] = [];
     const libraryScenarios: EvalConfig['scenarios'] = [];
+    const libraryServers: ServerConfig[] = [];
     const assistantState = {
       assistantMessages: [] as ResultAssistantSessionView['messages'],
       assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
@@ -43,7 +50,8 @@ const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLi
       },
       mockResultAssistantState: assistantState,
       mockConfigs: configs,
-      mockLibraryScenarios: libraryScenarios
+      mockLibraryScenarios: libraryScenarios,
+      mockLibraryServers: libraryServers
     };
   });
 
@@ -72,7 +80,7 @@ vi.mock('@/contexts/ConfigContext', () => ({
 
 vi.mock('@/contexts/LibraryContext', () => ({
   useLibraries: () => ({
-    servers: [],
+    servers: mockLibraryServers,
     agents: [],
     scenarios: mockLibraryScenarios,
     loading: false,
@@ -167,6 +175,7 @@ describe('ResultDetail conversation toggle', () => {
   beforeEach(() => {
     mockConfigs.length = 0;
     mockLibraryScenarios.length = 0;
+  mockLibraryServers.length = 0;
     mockResultAssistantState.assistantMessages = [];
     mockResultAssistantState.assistantPendingToolCalls = [];
     mockResultAssistantState.assistantInput = '';
@@ -762,6 +771,55 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText(/api@1\.2\.3/).parentElement).toHaveClass('min-h-5');
     expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
     expect(screen.getByText(/docs@unknown/)).toBeInTheDocument();
+  });
+
+  it('includes MCP server names in expanded scenario details', async () => {
+    const result = makeResult();
+    result.scenarios[0].servers = ['api'];
+    mockLibraryServers.push({
+      id: 'api',
+      name: 'API Server',
+      transport: 'streamable-http',
+      url: 'https://api.example.test/mcp'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText(/MCP: API Server/)).toBeInTheDocument();
+  });
+
+  it('shows the selected MCP badge beside the Scenarios title when embedded', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = { api: '1.2.3' };
+    result.server_variants = [{ id: 'baseline', serverIds: ['api'] }];
+    result.scenarios[0].server_variant = 'baseline';
+    mockLibraryServers.push({
+      id: 'api',
+      name: 'API Server',
+      transport: 'streamable-http',
+      url: 'https://api.example.test/mcp'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1?embed=1&variant=baseline']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('heading', { name: 'Scenarios' });
+    expect(screen.getByText('API Server@1.2.3')).toBeInTheDocument();
   });
 
   it('shows complete MCP server information on hover', async () => {

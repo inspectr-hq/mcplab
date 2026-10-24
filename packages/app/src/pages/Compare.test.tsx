@@ -330,6 +330,29 @@ describe('Compare', () => {
     expect(screen.getAllByRole('button', { name: 'Compare agents' })).toHaveLength(2);
   });
 
+  it('does not show an empty action placeholder when only MCP comparison is available', async () => {
+    const run = makeRunAt('server-only', '2026-03-10T10:00:00.000Z');
+    run.server_variants = [{ id: 'baseline' }, { id: 'candidate' }];
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/compare']}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const row = (await screen.findByText('server-only')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row!).getByRole('button', { name: 'Compare MCP servers' })).toHaveClass(
+      'h-7',
+      'px-2',
+      'text-xs'
+    );
+    expect(within(row!).queryByText('—')).not.toBeInTheDocument();
+  });
+
   it('starts within-run compare directly from the run list action', async () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
