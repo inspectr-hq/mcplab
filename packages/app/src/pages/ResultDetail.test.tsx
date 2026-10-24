@@ -216,6 +216,56 @@ describe('ResultDetail conversation toggle', () => {
     expect(tools).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('switches the scenarios card into inline compare mode', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].failureReasons = ['The check failed'];
+    const secondScenario = {
+      ...result.scenarios[0],
+      scenarioId: 'scn-2',
+      scenarioName: 'Scenario 2',
+      passRate: 0,
+      runs: result.scenarios[0].runs.map((run) => ({
+        ...run,
+        passed: false,
+        failureReasons: ['The check failed']
+      }))
+    };
+    result.scenarios.push(secondScenario);
+    result.totalScenarios = 2;
+    result.totalRuns = 2;
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Compare scenarios' }));
+
+    expect(screen.getByRole('button', { name: 'Exit compare' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Metric' })).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Scenario 2 · Agent 1 · Scenario defaults/).length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Scenario 2').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('MCP servers')).toBeInTheDocument();
+    expect(screen.getByText('Total time')).toBeInTheDocument();
+    expect(screen.getAllByText(/Extracted values · 0 total/).length).toBe(2);
+    expect(screen.getAllByText(/Tool call sequence · 1 total/).length).toBe(2);
+    expect(screen.getAllByText('Final answer').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Conversation trace').length).toBeGreaterThanOrEqual(2);
+    const failureSections = screen.getAllByRole('button', { name: /Failure reasons · 1/ });
+    expect(failureSections).toHaveLength(2);
+    expect(failureSections[0]).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(failureSections[0]);
+    expect(failureSections[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(failureSections[1]).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('starts populated extracted values and tool call sequence expanded', async () => {
     const result = makeResult();
     result.scenarios[0].runs[0].extractedValues = { tag: 'TM5-BP2' };
@@ -1044,6 +1094,8 @@ describe('ResultDetail conversation toggle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
     expect(mockResultAssistantState.approveResultAssistantToolCall).toHaveBeenCalledWith('call-2');
     expect(mockResultAssistantState.denyResultAssistantToolCall).toHaveBeenCalledWith('call-2');
+    fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
+    expect(screen.queryByText('Search tags')).not.toBeInTheDocument();
   });
 
   it.each([true, false])('queues rerun with a stored config path: %s', async (hasStoredPath) => {

@@ -27,7 +27,8 @@ import {
   Play,
   Pencil,
   FileCode,
-  Trash2
+  Trash2,
+  GitCompare
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,21 +46,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
-import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
-import { ScenarioTraceButtons } from '@/components/results/ScenarioTraceButtons';
-import { CopyButton } from '@/components/CopyButton';
+import { ScenarioResultsTable } from '@/components/results/ScenarioResultsTable';
+import { ScenarioComparisonView } from '@/components/results/ScenarioComparisonView';
+import { formatCompactOneDecimal } from '@/lib/format-duration';
+import { isScenarioAssistantHandoffRelevant } from '@/lib/scenario-assistant';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -69,15 +63,8 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Tooltip as UiTooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateHtmlReport } from '@/lib/generate-html-report';
 import { sumTokenUsages } from '@/lib/token-usage';
@@ -99,12 +86,7 @@ import {
   getScenarioToolTimeMs,
   getScenarioTotalDurationMs
 } from '@/lib/run-duration';
-import type {
-  ConversationItem,
-  EvalResult,
-  EvalConfig as UiEvalConfig,
-  EvalRule
-} from '@/types/eval';
+import type { EvalResult, EvalConfig as UiEvalConfig } from '@/types/eval';
 import type { MarkdownReportContent, MarkdownReportSummary } from '@/lib/data-sources/types';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
@@ -138,11 +120,6 @@ const RESULT_ASSISTANT_SNIPPETS = [
 function defaultResultAssistantReportPath(runId: string): string {
   const stamp = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+/, '');
   return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
-}
-
-function formatCompactOneDecimal(value: number): string {
-  const fixed = value.toFixed(1);
-  return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
 }
 
 function getServerVersionsForVariant(
@@ -179,6 +156,8 @@ const ResultDetail = () => {
   const [savingRunNote, setSavingRunNote] = useState(false);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
+  const [scenarioCompareMode, setScenarioCompareMode] = useState(false);
+  const [scenarioCompareKeys, setScenarioCompareKeys] = useState<[string, string]>(['', '']);
   const [targetConfigId, setTargetConfigId] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
@@ -540,6 +519,31 @@ const ResultDetail = () => {
       .sort((a, b) => b.count - a.count);
   }, [filteredScenarios]);
 
+  const scenarioCompareOptions = useMemo(
+    () =>
+      filteredScenarios.map((scenario) => ({
+        key: scenarioExecutionKey(scenario.scenarioId, scenario.agentName, scenario.server_variant),
+        label: scenario.scenarioName || scenario.scenarioId
+      })),
+    [filteredScenarios]
+  );
+
+  useEffect(() => {
+    if (scenarioCompareOptions.length < 2) {
+      setScenarioCompareMode(false);
+      setScenarioCompareKeys(['', '']);
+      return;
+    }
+    setScenarioCompareKeys(([left, right]) => [
+      scenarioCompareOptions.some((option) => option.key === left)
+        ? left
+        : scenarioCompareOptions[0].key,
+      scenarioCompareOptions.some((option) => option.key === right && option.key !== left)
+        ? right
+        : scenarioCompareOptions[1].key
+    ]);
+  }, [scenarioCompareOptions]);
+
   if (loading)
     return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
@@ -594,6 +598,13 @@ const ResultDetail = () => {
     if (prompt) {
       setAssistantInput(prompt);
     }
+  };
+  const toggleAssistantPanel = () => {
+    if (assistantOpen) {
+      setAssistantOpen(false);
+      return;
+    }
+    openAssistantWithPrompt();
   };
 
   const openReportsPanel = (relativePath?: string) => {
@@ -924,7 +935,7 @@ const ResultDetail = () => {
                 className="max-w-full gap-1.5"
                 aria-label="MCP Lab Assistant"
                 title="Ask the MCP Lab Assistant about this result"
-                onClick={() => openAssistantWithPrompt()}
+                onClick={toggleAssistantPanel}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
                 Assistant
@@ -1065,921 +1076,67 @@ const ResultDetail = () => {
                     />
                   )}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 gap-1.5 px-2 text-xs"
-                  onClick={() =>
-                    openAssistantWithPrompt(
-                      `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
-                    )
-                  }
-                >
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  Ask Assistant
-                </Button>
+                <div className="flex items-center gap-2">
+                  {scenarioCompareOptions.length > 1 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2 text-xs"
+                      onClick={() => setScenarioCompareMode((previous) => !previous)}
+                    >
+                      <GitCompare className="h-3.5 w-3.5" />
+                      {scenarioCompareMode ? 'Exit compare' : 'Compare scenarios'}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs"
+                    onClick={() =>
+                      openAssistantWithPrompt(
+                        `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
+                      )
+                    }
+                  >
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    Ask Assistant
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Scenario</TableHead>
-                    <TableHead>Agent</TableHead>
-                    <TableHead>Runs</TableHead>
-                    <TableHead>Pass Rate</TableHead>
-                    <TableHead>Checks</TableHead>
-                    <TableHead className="text-right">Total Time</TableHead>
-                    <TableHead className="text-right">Tool Calls</TableHead>
-                    <TableHead className="text-right">Tool Tokens</TableHead>
-                    <TableHead className="text-right">Tool Duration</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredScenarios.map((sc) => {
-                    const rowKey = scenarioExecutionKey(
-                      sc.scenarioId,
-                      sc.agentName,
-                      sc.server_variant
-                    );
-                    const scenarioLabel = sc.scenarioName || sc.scenarioId;
-                    const checkCounts = tallyCheckCounts(
-                      sc.runs.flatMap((run) => run.checkResults ?? [])
-                    );
-                    const scenarioServerIds =
-                      sc.servers?.length
-                        ? sc.servers
-                        : sc.server_variant
-                          ? result.server_variants?.find(
-                              (variant) => variant.id === sc.server_variant
-                            )?.serverIds
-                          : undefined;
-                    const scenarioServerNames = (scenarioServerIds ?? []).map(
-                      (serverId) => mcpServerNames[serverId]?.trim() || serverId
-                    );
-                    const hasCheckResults = sc.runs.some(
-                      (run) => (run.checkResults?.length ?? 0) > 0
-                    );
-                    const scenarioConfigId = activeConfig?.id || result?.configId?.trim();
-                    const scenarioEditHref = scenarioConfigId
-                      ? `/mcp-evaluations/${encodeURIComponent(scenarioConfigId)}/scenarios`
-                      : null;
-                    const libraryTestCase = libraryScenarios.find(
-                      (scenario) => scenario.id === sc.scenarioId
-                    );
-                    const testCaseEditHref = libraryTestCase
-                      ? `/libraries/test-cases/${encodeURIComponent(
-                          libraryTestCase.id
-                        )}?returnTo=${encodeURIComponent(`/results/${result?.id ?? id}`)}`
-                      : null;
-                    return (
-                      <Collapsible
-                        key={rowKey}
-                        open={openScenarios.has(rowKey)}
-                        onOpenChange={() => toggle(rowKey)}
-                        asChild
-                      >
-                        <>
-                          <CollapsibleTrigger asChild>
-                            <TableRow className="cursor-pointer hover:bg-muted/50">
-                              <TableCell className="font-medium text-sm">
-                                <div className="flex items-center gap-1.5">
-                                  <ChevronDown
-                                    className={`h-4 w-4 shrink-0 transition-transform ${
-                                      openScenarios.has(rowKey) ? 'rotate-180' : ''
-                                    }`}
-                                  />
-                                  <span>{sc.scenarioName}</span>
-                                  {!isEmbedded && sc.server_variant && (
-                                    <Badge variant="outline">
-                                      {result.server_variants?.find(
-                                        (variant) => variant.id === sc.server_variant
-                                      )?.label ||
-                                        sc.servers?.join(' + ') ||
-                                        sc.server_variant}
-                                    </Badge>
-                                  )}
-                                  {scenarioEditHref ? (
-                                    <Link
-                                      to={scenarioEditHref}
-                                      aria-label="Edit scenario"
-                                      title="Edit scenario"
-                                      className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                                      onClick={(event) => event.stopPropagation()}
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </Link>
-                                  ) : null}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                <div>{sc.agentName}</div>
-                                {sc.provider || sc.model ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
-                                      .filter(Boolean)
-                                      .join(' · ')}
-                                  </div>
-                                ) : null}
-                              </TableCell>
-                              <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
-                              <TableCell>
-                                <PassRateBadge rate={sc.passRate} />
-                              </TableCell>
-                              <TableCell className="font-mono text-sm">
-                                {hasCheckResults ? (
-                                  <span
-                                    title={`${checkCounts.passed} passed · ${
-                                      checkCounts.failed
-                                    } failed${
-                                      checkCounts.not_evaluated
-                                        ? ` · ${checkCounts.not_evaluated} not evaluated`
-                                        : ''
-                                    }${
-                                      checkCounts.not_executed
-                                        ? ` · ${checkCounts.not_executed} not executed`
-                                        : ''
-                                    }`}
-                                    aria-label={`${checkCounts.passed} checks passed, ${
-                                      checkCounts.failed
-                                    } checks failed${
-                                      checkCounts.not_evaluated
-                                        ? `, ${checkCounts.not_evaluated} not evaluated`
-                                        : ''
-                                    }${
-                                      checkCounts.not_executed
-                                        ? `, ${checkCounts.not_executed} not executed`
-                                        : ''
-                                    }`}
-                                  >
-                                    <span className="text-success">{checkCounts.passed} ✓</span>
-                                    <span className="text-muted-foreground"> </span>
-                                    <span className="text-destructive">{checkCounts.failed} ✕</span>
-                                    {checkCounts.not_evaluated > 0 && (
-                                      <>
-                                        <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_evaluated} ○</span>
-                                      </>
-                                    )}
-                                    {checkCounts.not_executed > 0 && (
-                                      <>
-                                        <span className="text-muted-foreground"> </span>
-                                        <span>{checkCounts.not_executed} ⊘</span>
-                                      </>
-                                    )}
-                                  </span>
-                                ) : (
-                                  '—'
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatDurationMs(getScenarioTotalDurationMs(sc), {
-                                  preciseUnderTenSeconds: true
-                                })}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatCompactOneDecimal(sc.avgToolCalls)}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
-                                {formatDurationMs(getScenarioToolTimeMs(sc), {
-                                  preciseUnderTenSeconds: true
-                                })}
-                              </TableCell>
-                            </TableRow>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent asChild>
-                            <tr>
-                              <td colSpan={9} className="p-0">
-                                <div className="bg-muted/30 p-4 space-y-2">
-                                  <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-semibold">Scenario details</p>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        {scenarioLabel} · {sc.agentName}
-                                        {scenarioServerNames.length > 0
-                                          ? ` · MCP: ${scenarioServerNames.join(', ')}`
-                                          : ''}{' '}
-                                        ·{' '}
-                                        {formatPassRate(sc.passRate)} pass rate ·{' '}
-                                        {hasCheckResults
-                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕${
-                                              checkCounts.not_evaluated
-                                                ? ` · ${checkCounts.not_evaluated} ○`
-                                                : ''
-                                            }${
-                                              checkCounts.not_executed
-                                                ? ` · ${checkCounts.not_executed} ⊘`
-                                                : ''
-                                            } · `
-                                          : ''}
-                                        {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
-                                        tokens ·{' '}
-                                        {formatDurationMs(getScenarioTotalDurationMs(sc), {
-                                          preciseUnderTenSeconds: true
-                                        })}{' '}
-                                        total time ·{' '}
-                                        {formatDurationMs(getScenarioToolTimeMs(sc), {
-                                          preciseUnderTenSeconds: true
-                                        })}{' '}
-                                        tool time
-                                      </p>
-                                    </div>
-                                    <div className="flex shrink-0 items-center gap-1">
-                                      {testCaseEditHref ? (
-                                        <Button
-                                          asChild
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                                        >
-                                          <Link to={testCaseEditHref} aria-label="Edit test case">
-                                            <FileCode className="h-3.5 w-3.5" />
-                                            Edit test case
-                                          </Link>
-                                        </Button>
-                                      ) : null}
-                                      <ScenarioTraceButtons
-                                        runId={id}
-                                        scenario={sc}
-                                        langsmithTraceUrls={result.langsmithTraceUrls}
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 gap-1.5 px-2 text-xs"
-                                        onClick={() =>
-                                          openAssistantWithPrompt(
-                                            `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`,
-                                            { scenarioId: sc.scenarioId }
-                                          )
-                                        }
-                                      >
-                                        <Sparkles className="h-4 w-4 text-amber-500" />
-                                        Ask Assistant
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  {sc.runs.map((run) => (
-                                    <div
-                                      key={run.runIndex}
-                                      className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
-                                    >
-                                      <div className="mt-0.5">
-                                        {run.outcome === 'incomplete' ||
-                                        run.outcome === 'stopped' ? (
-                                          <Clock3 className="h-4 w-4 text-amber-500" />
-                                        ) : run.passed ? (
-                                          <CheckCircle2 className="h-4 w-4 text-success" />
-                                        ) : (
-                                          <XCircle className="h-4 w-4 text-destructive" />
-                                        )}
-                                      </div>
-                                      <div className="flex-1 space-y-1">
-                                        {(() => {
-                                          const scenarioDef = scenarioDefinitionByResultId.get(
-                                            sc.scenarioId
-                                          );
-                                          const checks = scenarioDef
-                                            ? buildRunCheckItems(
-                                                scenarioDef.evalRules,
-                                                run.failureReasons,
-                                                run.error,
-                                                run.checkResults
-                                              )
-                                            : [];
-                                          const failedChecks = checks.filter(
-                                            (c) => c.status === 'failed'
-                                          );
-                                          const passedChecks = checks.filter(
-                                            (c) => c.status === 'passed'
-                                          );
-                                          const notEvaluatedChecks = checks.filter(
-                                            (c) => c.status === 'not_evaluated'
-                                          );
-                                          const notExecutedChecks = checks.filter(
-                                            (c) => c.status === 'not_executed'
-                                          );
-                                          return (
-                                            <>
-                                              <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-mono text-xs text-muted-foreground">
-                                                  Run #{run.runIndex + 1}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                  ·
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                  {run.duration}ms
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                  ·
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                  {formatTokenCount(
-                                                    run.toolTokenUsage?.totalTokens
-                                                  )}{' '}
-                                                  tool tokens
-                                                </span>
-                                                {run.outcome === 'incomplete' ? (
-                                                  <Badge
-                                                    variant="outline"
-                                                    className="h-5 border-amber-500/30 bg-amber-500/10 text-amber-600 text-[10px]"
-                                                  >
-                                                    Incomplete
-                                                  </Badge>
-                                                ) : run.outcome === 'stopped' ? (
-                                                  <Badge
-                                                    variant="outline"
-                                                    className="h-5 border-muted-foreground/30 bg-muted text-muted-foreground text-[10px]"
-                                                  >
-                                                    Stopped
-                                                  </Badge>
-                                                ) : !run.passed ? (
-                                                  <Badge
-                                                    variant="outline"
-                                                    className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]"
-                                                  >
-                                                    Failed
-                                                  </Badge>
-                                                ) : null}
-                                              </div>
-                                              {run.failureReasons.length > 0 && (
-                                                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
-                                                  <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
-                                                    <XCircle className="h-3.5 w-3.5" />
-                                                    Failure reasons
-                                                  </p>
-                                                  <ul className="space-y-1 text-xs text-destructive">
-                                                    {run.failureReasons.map((reason, index) => (
-                                                      <li key={index}>
-                                                        • {formatFailureReason(reason)}
-                                                      </li>
-                                                    ))}
-                                                  </ul>
-                                                </div>
-                                              )}
-                                              {run.outcome === 'stopped' && run.stopReason ? (
-                                                <div className="rounded-md border border-muted-foreground/20 bg-muted/40 p-2">
-                                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    Stop reason
-                                                  </p>
-                                                  <p className="text-xs text-muted-foreground">
-                                                    {run.stopReason}
-                                                  </p>
-                                                </div>
-                                              ) : null}
-                                              {checks.length > 0 && (
-                                                <Collapsible
-                                                  open={isRunSectionOpen(
-                                                    runSectionKey(rowKey, run.runIndex, 'checks')
-                                                  )}
-                                                  onOpenChange={() =>
-                                                    toggleRunSection(
-                                                      runSectionKey(rowKey, run.runIndex, 'checks')
-                                                    )
-                                                  }
-                                                >
-                                                  <div className="rounded-md border bg-muted/20 p-2">
-                                                    <CollapsibleTrigger asChild>
-                                                      <button
-                                                        type="button"
-                                                        className="mb-2 flex w-full flex-wrap items-center gap-2 text-left"
-                                                      >
-                                                        <ChevronDown
-                                                          className={`h-3.5 w-3.5 transition-transform ${
-                                                            isRunSectionOpen(
-                                                              runSectionKey(
-                                                                rowKey,
-                                                                run.runIndex,
-                                                                'checks'
-                                                              )
-                                                            )
-                                                              ? 'rotate-180'
-                                                              : ''
-                                                          }`}
-                                                        />
-                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                          Checks
-                                                        </p>
-                                                        <Badge
-                                                          variant="outline"
-                                                          className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
-                                                        >
-                                                          {passedChecks.length} passed
-                                                        </Badge>
-                                                        <Badge
-                                                          variant="outline"
-                                                          className={`h-5 text-[10px] ${
-                                                            failedChecks.length > 0
-                                                              ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                                                              : ''
-                                                          }`}
-                                                        >
-                                                          {failedChecks.length} failed
-                                                        </Badge>
-                                                        {notEvaluatedChecks.length > 0 && (
-                                                          <Badge
-                                                            variant="outline"
-                                                            className="h-5 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
-                                                          >
-                                                            {notEvaluatedChecks.length} not
-                                                            evaluated
-                                                          </Badge>
-                                                        )}
-                                                        {notExecutedChecks.length > 0 && (
-                                                          <Badge
-                                                            variant="outline"
-                                                            className="h-5 border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-600"
-                                                          >
-                                                            {notExecutedChecks.length} not executed
-                                                          </Badge>
-                                                        )}
-                                                      </button>
-                                                    </CollapsibleTrigger>
-                                                    <CollapsibleContent>
-                                                      {notExecutedChecks.length > 0 && (
-                                                        <p className="mb-2 text-[11px] text-muted-foreground">
-                                                          Checks were not executed because this run
-                                                          ended before evaluation.
-                                                        </p>
-                                                      )}
-                                                      <div className="space-y-1">
-                                                        {checks.map((check, idx) => (
-                                                          <div
-                                                            key={`${check.rule.type}-${
-                                                              check.rule.value ??
-                                                              check.rule.path ??
-                                                              ''
-                                                            }-${idx}`}
-                                                            className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
-                                                              check.status === 'failed'
-                                                                ? 'border-destructive/20 bg-destructive/5'
-                                                                : check.status === 'not_executed'
-                                                                  ? 'border-amber-500/20 bg-amber-500/5'
-                                                                  : check.status === 'not_evaluated'
-                                                                    ? 'border-muted-foreground/20 bg-muted/40'
-                                                                    : 'border-success/20 bg-success/5'
-                                                            }`}
-                                                          >
-                                                            <div className="min-w-0">
-                                                              <div className="flex items-center gap-2">
-                                                                {check.status === 'failed' ? (
-                                                                  <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                                                                ) : check.status ===
-                                                                  'not_executed' ? (
-                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                                                ) : check.status ===
-                                                                  'not_evaluated' ? (
-                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                                                ) : (
-                                                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
-                                                                )}
-                                                                <EvalRuleLabel
-                                                                  rule={check.rule}
-                                                                  className="font-medium"
-                                                                />
-                                                              </div>
-                                                              {check.decisionInput && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground whitespace-pre-wrap break-words">
-                                                                  Assertion prompt:{' '}
-                                                                  {check.decisionInput}
-                                                                </p>
-                                                              )}
-                                                              {!check.decisionInput &&
-                                                                check.failureReason && (
-                                                                  <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
-                                                                    {formatFailureReason(
-                                                                      check.failureReason
-                                                                    )}
-                                                                  </p>
-                                                                )}
-                                                              {check.decisionDetails && (
-                                                                <p className="mt-1 pl-5 text-[9px] text-muted-foreground">
-                                                                  {check.decisionDetails}
-                                                                </p>
-                                                              )}
-                                                            </div>
-                                                            <Badge
-                                                              variant="outline"
-                                                              className={`shrink-0 text-[10px] ${
-                                                                check.status === 'failed'
-                                                                  ? 'border-destructive/30 text-destructive'
-                                                                  : check.status === 'not_executed'
-                                                                    ? 'border-amber-500/30 text-amber-600'
-                                                                    : check.status ===
-                                                                        'not_evaluated'
-                                                                      ? 'border-muted-foreground/30 text-muted-foreground'
-                                                                      : 'border-success/30 text-success'
-                                                              }`}
-                                                            >
-                                                              {formatCheckStatusLabel(check.status)}
-                                                            </Badge>
-                                                          </div>
-                                                        ))}
-                                                      </div>
-                                                    </CollapsibleContent>
-                                                  </div>
-                                                </Collapsible>
-                                              )}
-                                            </>
-                                          );
-                                        })()}
-                                        <Collapsible
-                                          open={isRunSectionOpen(
-                                            runSectionKey(rowKey, run.runIndex, 'extracts'),
-                                            Object.keys(run.extractedValues ?? {}).length > 0
-                                          )}
-                                          onOpenChange={() =>
-                                            toggleRunSection(
-                                              runSectionKey(rowKey, run.runIndex, 'extracts')
-                                            )
-                                          }
-                                        >
-                                          <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
-                                            <CollapsibleTrigger asChild>
-                                              <button
-                                                type="button"
-                                                className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left"
-                                              >
-                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                  <ChevronDown
-                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                      isRunSectionOpen(
-                                                        runSectionKey(
-                                                          rowKey,
-                                                          run.runIndex,
-                                                          'extracts'
-                                                        ),
-                                                        Object.keys(run.extractedValues ?? {})
-                                                          .length > 0
-                                                      )
-                                                        ? 'rotate-180'
-                                                        : ''
-                                                    }`}
-                                                  />
-                                                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    <Layers className="h-3.5 w-3.5 text-violet-600" />
-                                                    Extracted values
-                                                  </p>
-                                                </div>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="h-5 text-[10px]"
-                                                >
-                                                  {Object.keys(run.extractedValues ?? {}).length}{' '}
-                                                  total
-                                                </Badge>
-                                              </button>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent>
-                                              {Object.keys(run.extractedValues ?? {}).length ===
-                                              0 ? (
-                                                <p className="text-xs text-muted-foreground">
-                                                  No extracted values captured for this run.
-                                                </p>
-                                              ) : (
-                                                <div className="grid gap-1.5 sm:grid-cols-2">
-                                                  {Object.entries(run.extractedValues ?? {}).map(
-                                                    ([key, value]) => (
-                                                      <div
-                                                        key={key}
-                                                        className="rounded-md border bg-background px-2 py-1.5 text-xs"
-                                                      >
-                                                        <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                          {key}
-                                                        </div>
-                                                        <div className="font-mono break-all text-foreground">
-                                                          {value === null ? 'null' : String(value)}
-                                                        </div>
-                                                      </div>
-                                                    )
-                                                  )}
-                                                </div>
-                                              )}
-                                            </CollapsibleContent>
-                                          </div>
-                                        </Collapsible>
-                                        <Collapsible
-                                          open={isRunSectionOpen(
-                                            runSectionKey(rowKey, run.runIndex, 'tools'),
-                                            run.toolCalls.length > 0
-                                          )}
-                                          onOpenChange={() =>
-                                            toggleRunSection(
-                                              runSectionKey(rowKey, run.runIndex, 'tools')
-                                            )
-                                          }
-                                        >
-                                          <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
-                                            <CollapsibleTrigger asChild>
-                                              <button
-                                                type="button"
-                                                className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left"
-                                              >
-                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                  <ChevronDown
-                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                      isRunSectionOpen(
-                                                        runSectionKey(
-                                                          rowKey,
-                                                          run.runIndex,
-                                                          'tools'
-                                                        ),
-                                                        run.toolCalls.length > 0
-                                                      )
-                                                        ? 'rotate-180'
-                                                        : ''
-                                                    }`}
-                                                  />
-                                                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    <Wrench className="h-3.5 w-3.5 text-sky-600" />
-                                                    Tool call sequence
-                                                  </p>
-                                                </div>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="h-5 text-[10px]"
-                                                >
-                                                  {run.toolCalls.length} total
-                                                </Badge>
-                                              </button>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent>
-                                              {run.toolCalls.length === 0 ? (
-                                                <p className="text-xs text-muted-foreground">
-                                                  No tool calls captured for this run.
-                                                </p>
-                                              ) : (
-                                                <div className="space-y-2">
-                                                  <div className="flex flex-wrap gap-1">
-                                                    <TooltipProvider delayDuration={0}>
-                                                      {run.toolCalls.map((tc, i) => {
-                                                        const usage = run.conversation.filter(
-                                                          (item) => item.kind === 'tool_call'
-                                                        )[i]?.estimatedTokens;
-                                                        const hasEstimate =
-                                                          typeof usage?.totalTokens === 'number';
-                                                        return (
-                                                          <UiTooltip key={i}>
-                                                            <TooltipTrigger asChild>
-                                                              <Badge
-                                                                variant="outline"
-                                                                className="font-mono text-xs bg-background"
-                                                              >
-                                                                <span className="mr-1 text-muted-foreground">
-                                                                  #{i + 1}
-                                                                </span>
-                                                                {tc.name}
-                                                                <span className="ml-1 text-muted-foreground">
-                                                                  {tc.duration}ms
-                                                                </span>
-                                                                {hasEstimate && (
-                                                                  <span className="ml-1 text-muted-foreground">
-                                                                    ·{' '}
-                                                                    {formatTokenCount(
-                                                                      usage?.totalTokens
-                                                                    )}
-                                                                    tok
-                                                                  </span>
-                                                                )}
-                                                              </Badge>
-                                                            </TooltipTrigger>
-                                                            {hasEstimate && (
-                                                              <TooltipContent className="text-xs">
-                                                                {`${
-                                                                  tc.name
-                                                                } · tokens total: ${formatTokenCount(
-                                                                  usage?.totalTokens
-                                                                )} · in: ${formatTokenCount(
-                                                                  usage?.inputTokens
-                                                                )} · out: ${formatTokenCount(
-                                                                  usage?.outputTokens
-                                                                )}`}
-                                                              </TooltipContent>
-                                                            )}
-                                                          </UiTooltip>
-                                                        );
-                                                      })}
-                                                    </TooltipProvider>
-                                                  </div>
-                                                  <div className="rounded-md border bg-background p-2">
-                                                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                        Tool token estimate
-                                                      </p>
-                                                      <Badge
-                                                        variant="outline"
-                                                        className="h-5 text-[10px]"
-                                                      >
-                                                        estimated
-                                                      </Badge>
-                                                    </div>
-                                                    {Object.keys(run.toolTokenUsageByTool ?? {})
-                                                      .length === 0 ? (
-                                                      <p className="text-xs text-muted-foreground">
-                                                        n/a
-                                                      </p>
-                                                    ) : (
-                                                      <div className="grid gap-1.5 sm:grid-cols-2">
-                                                        {Object.entries(
-                                                          run.toolTokenUsageByTool ?? {}
-                                                        ).map(([toolName, usage]) => (
-                                                          <div
-                                                            key={toolName}
-                                                            className="rounded border bg-muted/30 px-2 py-1.5 text-xs"
-                                                          >
-                                                            <div className="font-mono text-[11px]">
-                                                              {toolName}
-                                                            </div>
-                                                            <div className="text-muted-foreground">
-                                                              total:{' '}
-                                                              {formatTokenCount(usage.totalTokens)}{' '}
-                                                              · in:{' '}
-                                                              {formatTokenCount(usage.inputTokens)}{' '}
-                                                              · out:{' '}
-                                                              {formatTokenCount(usage.outputTokens)}
-                                                            </div>
-                                                          </div>
-                                                        ))}
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              )}
-                                            </CollapsibleContent>
-                                          </div>
-                                        </Collapsible>
-                                        <Collapsible
-                                          open={isRunSectionOpen(
-                                            runSectionKey(rowKey, run.runIndex, 'final')
-                                          )}
-                                          onOpenChange={() =>
-                                            toggleRunSection(
-                                              runSectionKey(rowKey, run.runIndex, 'final')
-                                            )
-                                          }
-                                        >
-                                          <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
-                                            <div className="mb-2 flex items-center justify-between gap-2">
-                                              <CollapsibleTrigger asChild>
-                                                <button
-                                                  type="button"
-                                                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                                                >
-                                                  <ChevronDown
-                                                    className={`h-3.5 w-3.5 transition-transform ${
-                                                      isRunSectionOpen(
-                                                        runSectionKey(rowKey, run.runIndex, 'final')
-                                                      )
-                                                        ? 'rotate-180'
-                                                        : ''
-                                                    }`}
-                                                  />
-                                                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    <Bot className="h-3.5 w-3.5" />
-                                                    Final answer
-                                                  </p>
-                                                </button>
-                                              </CollapsibleTrigger>
-                                              <CopyButton
-                                                text={run.finalAnswer || ''}
-                                                label="Final answer"
-                                                iconOnly
-                                              />
-                                            </div>
-                                            <CollapsibleContent>
-                                              <ExpandableText
-                                                text={
-                                                  run.finalAnswer || 'No final answer captured.'
-                                                }
-                                                maxLength={1200}
-                                                className="text-xs text-foreground"
-                                              />
-                                            </CollapsibleContent>
-                                          </div>
-                                        </Collapsible>
-                                        <Collapsible
-                                          open={isRunSectionOpen(
-                                            runSectionKey(rowKey, run.runIndex, 'conversation')
-                                          )}
-                                          onOpenChange={() =>
-                                            toggleRunSection(
-                                              runSectionKey(rowKey, run.runIndex, 'conversation')
-                                            )
-                                          }
-                                        >
-                                          <div className="rounded-md border bg-muted/10 p-2">
-                                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                              <CollapsibleTrigger asChild>
-                                                <button
-                                                  type="button"
-                                                  className="flex min-w-0 items-center gap-2 text-left"
-                                                >
-                                                  <ChevronDown
-                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                      isRunSectionOpen(
-                                                        runSectionKey(
-                                                          rowKey,
-                                                          run.runIndex,
-                                                          'conversation'
-                                                        )
-                                                      )
-                                                        ? 'rotate-180'
-                                                        : ''
-                                                    }`}
-                                                  />
-                                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                    Conversation trace
-                                                  </p>
-                                                </button>
-                                              </CollapsibleTrigger>
-                                              <div className="flex flex-wrap gap-2">
-                                                <Button
-                                                  type="button"
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="h-7 gap-1.5 px-2 text-xs"
-                                                  onClick={() =>
-                                                    openAssistantWithPrompt(
-                                                      `Explain Run #${
-                                                        run.runIndex + 1
-                                                      } for scenario '${scenarioLabel}'. Its outcome was ${
-                                                        run.outcome ??
-                                                        (run.passed ? 'passed' : 'failed')
-                                                      } in ${
-                                                        run.duration
-                                                      }ms. Focus on the tool sequence and evaluated checks.`,
-                                                      { scenarioId: sc.scenarioId }
-                                                    )
-                                                  }
-                                                >
-                                                  <Sparkles className="h-4 w-4 text-amber-500" />
-                                                  Ask Assistant
-                                                </Button>
-                                              </div>
-                                            </div>
-                                            <CollapsibleContent>
-                                              <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                                                {run.conversation.length === 0 ? (
-                                                  <p className="text-xs text-muted-foreground">
-                                                    No conversation trace captured.
-                                                  </p>
-                                                ) : (
-                                                  run.conversation.map((item) => (
-                                                    <ConversationRow
-                                                      key={item.id}
-                                                      item={item}
-                                                      fallbackUserPrompt={
-                                                        scenarioDefinitionByResultId.get(
-                                                          sc.scenarioId
-                                                        )?.prompt
-                                                      }
-                                                    />
-                                                  ))
-                                                )}
-                                              </div>
-                                            </CollapsibleContent>
-                                            {!isRunSectionOpen(
-                                              runSectionKey(rowKey, run.runIndex, 'conversation')
-                                            ) && (
-                                              <button
-                                                type="button"
-                                                className="text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
-                                                onClick={() =>
-                                                  toggleRunSection(
-                                                    runSectionKey(
-                                                      rowKey,
-                                                      run.runIndex,
-                                                      'conversation'
-                                                    )
-                                                  )
-                                                }
-                                              >
-                                                Expand to inspect user/assistant/tool messages for
-                                                this run.
-                                              </button>
-                                            )}
-                                          </div>
-                                        </Collapsible>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          </CollapsibleContent>
-                        </>
-                      </Collapsible>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              {scenarioCompareMode && scenarioCompareKeys[0] && scenarioCompareKeys[1] ? (
+                <ScenarioComparisonView
+                  result={result}
+                  scenarios={filteredScenarios}
+                  leftKey={scenarioCompareKeys[0]}
+                  rightKey={scenarioCompareKeys[1]}
+                  onLeftChange={(value) => setScenarioCompareKeys(([, right]) => [value, right])}
+                  onRightChange={(value) => setScenarioCompareKeys(([left]) => [left, value])}
+                  onSwap={() => setScenarioCompareKeys(([left, right]) => [right, left])}
+                  mcpServerNames={mcpServerNames}
+                  scenarioDefinitionByResultId={scenarioDefinitionByResultId}
+                />
+              ) : (
+                <ScenarioResultsTable
+                  result={result}
+                  filteredScenarios={filteredScenarios}
+                  isEmbedded={isEmbedded}
+                  mcpServerNames={mcpServerNames}
+                  openScenarios={openScenarios}
+                  scenarioDefinitionByResultId={scenarioDefinitionByResultId}
+                  activeConfig={activeConfig}
+                  libraryScenarios={libraryScenarios}
+                  id={id}
+                  toggle={toggle}
+                  runSectionKey={runSectionKey}
+                  toggleRunSection={toggleRunSection}
+                  isRunSectionOpen={isRunSectionOpen}
+                  openAssistantWithPrompt={openAssistantWithPrompt}
+                />
+              )}
             </CardContent>
           </Card>
         </div>
@@ -2406,261 +1563,5 @@ const ResultDetail = () => {
     </div>
   );
 };
-
-function ConversationRow({
-  item,
-  fallbackUserPrompt
-}: {
-  item: ConversationItem;
-  fallbackUserPrompt?: string;
-}) {
-  if (item.kind === 'tool_call') {
-    const tokenSuffix = formatEstimatedTokenSuffix(item, 'input');
-    return (
-      <ToolEventRow
-        variant="call"
-        title={`Tool call · ${item.toolName || 'unknown'}${tokenSuffix}`}
-        text={item.text}
-        copyLabel={`tool call ${item.toolName || 'unknown'}`}
-      />
-    );
-  }
-  if (item.kind === 'tool_result') {
-    const tokenSuffix = formatEstimatedTokenSuffix(item, 'output');
-    const statusIcon = item.ok ? (
-      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
-    ) : (
-      <XCircle className="h-3.5 w-3.5 text-rose-700 dark:text-rose-300" />
-    );
-    return (
-      <ToolEventRow
-        variant={item.ok ? 'result_ok' : 'result_error'}
-        title={`Tool result · ${item.toolName || 'unknown'} · ${item.ok ? 'ok' : 'error'}${
-          typeof item.durationMs === 'number' ? ` · ${item.durationMs}ms` : ''
-        }${tokenSuffix}`}
-        text={item.text}
-        icon={statusIcon}
-        copyLabel={`tool result ${item.toolName || 'unknown'}`}
-      />
-    );
-  }
-
-  const isUser = item.kind === 'user_prompt';
-  const normalizedItemText = normalizeConversationText(item.text, item.kind);
-  const normalizedFallbackUserPrompt = fallbackUserPrompt
-    ? normalizeConversationText(fallbackUserPrompt, 'user_prompt')
-    : '';
-  const displayText =
-    isUser && !normalizedItemText && normalizedFallbackUserPrompt
-      ? normalizedFallbackUserPrompt
-      : normalizedItemText;
-  const label = isUser ? 'User prompt' : item.kind === 'assistant_final' ? 'Agent final' : 'Agent';
-  const Icon = isUser ? User : Bot;
-  return (
-    <div className={`flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`}>
-      {!isUser && (
-        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-          <Icon className="h-3 w-3" />
-        </div>
-      )}
-      <div className={`max-w-[90%] rounded-md p-2 ${isUser ? 'bg-primary/10' : 'bg-muted/50'}`}>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <p
-            className={`text-[11px] font-semibold text-muted-foreground ${isUser ? 'text-right' : ''}`}
-          >
-            {label}
-          </p>
-          <CopyButton text={displayText} label={label} iconOnly />
-        </div>
-        {isUser ? (
-          <ExpandableText text={displayText} maxLength={280} className="text-xs" />
-        ) : (
-          <ExpandableText text={displayText} maxLength={500} className="text-xs" />
-        )}
-      </div>
-      {isUser && (
-        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-          <Icon className="h-3 w-3" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function formatEstimatedTokenSuffix(item: ConversationItem, mode: 'input' | 'output'): string {
-  const value =
-    mode === 'input' ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
-  if (typeof value !== 'number') return '';
-  return ` · ${formatTokenCount(value)} tokens`;
-}
-
-function normalizeConversationText(text: string, kind: ConversationItem['kind']): string {
-  const raw = String(text ?? '');
-  const trimmedStart = raw.replace(/^\s+/, '');
-  if (kind === 'user_prompt') {
-    return trimmedStart.replace(/^user:\s*/i, '');
-  }
-  if (kind === 'assistant_final' || kind === 'assistant_thought') {
-    return trimmedStart.replace(/^assistant:\s*/i, '');
-  }
-  return trimmedStart;
-}
-
-function isScenarioAssistantHandoffRelevant(reply: string, hasScenarioContext: boolean): boolean {
-  if (!hasScenarioContext) return false;
-  const text = String(reply ?? '').toLowerCase();
-  if (!text.trim()) return false;
-
-  const editSignals = [
-    'check',
-    'checks',
-    'rule',
-    'rules',
-    'regex',
-    'pattern',
-    'value capture',
-    'extract rule',
-    'update',
-    'change',
-    'replace',
-    'modify',
-    'adjust',
-    'use ',
-    'set '
-  ];
-  const concreteSuggestionSignals = [
-    'change ',
-    'replace ',
-    'update ',
-    'use ',
-    'set the',
-    'suggested',
-    'you should',
-    'try ',
-    'text match failed',
-    'text must match pattern'
-  ];
-  const explanationOnlySignals = [
-    'i can only read',
-    "i don't have write access",
-    'i cannot directly edit',
-    'what happened',
-    'summary'
-  ];
-
-  if (
-    explanationOnlySignals.some((s) => text.includes(s)) &&
-    !concreteSuggestionSignals.some((s) => text.includes(s))
-  ) {
-    return false;
-  }
-
-  const hasEditSignal = editSignals.some((s) => text.includes(s));
-  const hasConcreteSuggestion = concreteSuggestionSignals.some((s) => text.includes(s));
-  const hasListStructure = /(^|\n)\s*[-*]\s+/.test(reply) || /(^|\n)\s*\d+\.\s+/.test(reply);
-  const hasQuotedPattern = /["'`][^"'`\n]{2,}["'`]/.test(reply);
-
-  return hasEditSignal && (hasConcreteSuggestion || hasListStructure || hasQuotedPattern);
-}
-
-function ToolEventRow({
-  variant,
-  title,
-  text,
-  icon,
-  copyLabel
-}: {
-  variant: 'call' | 'result_ok' | 'result_error';
-  title: string;
-  text: string;
-  icon?: React.ReactNode;
-  copyLabel: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const styleByVariant = {
-    call: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
-    result_ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-    result_error: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300'
-  } as const;
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <div className={`rounded-md border p-2 text-xs ${styleByVariant[variant]}`}>
-        <div className="flex items-center gap-2">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
-            >
-              <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                {icon ?? <Wrench className="h-3.5 w-3.5" />}
-                <span>{title}</span>
-              </div>
-              <span className="text-[11px] font-semibold">
-                {open ? 'Hide content' : 'Show content'}
-              </span>
-            </button>
-          </CollapsibleTrigger>
-          <CopyButton text={text} label={copyLabel} iconOnly />
-        </div>
-        <CollapsibleContent>
-          <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
-  );
-}
-
-function ExpandableText({
-  text,
-  maxLength,
-  className
-}: {
-  text: string;
-  maxLength: number;
-  className?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > maxLength;
-  const display = expanded || !isLong ? text : `${text.slice(0, maxLength)}...`;
-
-  return (
-    <div>
-      <MarkdownContent text={display} className={className} />
-      {isLong && (
-        <button
-          type="button"
-          className="mt-1 text-[11px] font-medium text-primary hover:underline"
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          {expanded ? 'Show less' : 'Show all'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function buildRunCheckItems(
-  evalRules: EvalRule[],
-  failureReasons: string[],
-  runError?: string,
-  checkResults?: Array<{
-    type: string;
-    label: string;
-    status: 'passed' | 'failed' | 'not_evaluated' | 'not_executed';
-    reason?: string;
-  }>
-) {
-  return buildCheckItems({ evalRules, failureReasons, runError, checkResults });
-}
-
-function formatFailureReason(reason: string): string {
-  const trimmed = String(reason ?? '').trim();
-  const regexMatch = trimmed.match(/^Regex assertion failed:\s*(.+)$/i);
-  if (regexMatch) {
-    return `Text match failed: ${regexMatch[1]}`;
-  }
-  return trimmed;
-}
 
 export default ResultDetail;
