@@ -52,7 +52,7 @@ import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel'
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { ScenarioResultsTable } from '@/components/results/ScenarioResultsTable';
-import { ScenarioComparisonView } from '@/components/results/ScenarioComparisonView';
+import { ScenarioResultsComparison } from '@/components/results/ScenarioResultsComparison';
 import { formatCompactOneDecimal } from '@/lib/format-duration';
 import { isScenarioAssistantHandoffRelevant } from '@/lib/scenario-assistant';
 import { MarkdownContent } from '@/components/MarkdownContent';
@@ -1126,7 +1126,7 @@ const ResultDetail = () => {
             </CardHeader>
             <CardContent className="p-0">
               {scenarioCompareMode && scenarioCompareKeys[0] && scenarioCompareKeys[1] ? (
-                <ScenarioComparisonView
+                <ScenarioResultsComparison
                   result={result}
                   scenarios={filteredScenarios}
                   leftKey={scenarioCompareKeys[0]}

@@ -281,8 +281,10 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getAllByText('1 ✕').length).toBeGreaterThan(0);
     expect(screen.getByText('MCP servers')).toBeInTheDocument();
     expect(screen.getByText('Total time')).toBeInTheDocument();
-    expect(screen.getAllByText(/Extracted values · 0 total/).length).toBe(2);
-    expect(screen.getAllByText(/Tool call sequence · 1 total/).length).toBe(2);
+    expect(screen.getAllByText('Extracted values').length).toBe(2);
+    expect(screen.getAllByText('0 total').length).toBe(2);
+    expect(screen.getAllByText('Tool call sequence').length).toBe(2);
+    expect(screen.getAllByText('1 total').length).toBe(2);
     expect(screen.getAllByText('Final answer').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('Conversation trace').length).toBeGreaterThanOrEqual(2);
     const failureSections = screen.getAllByRole('button', { name: /Failure reasons · 1/ });
