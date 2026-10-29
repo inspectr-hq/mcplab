@@ -111,6 +111,9 @@ function RuleTypeSelect({
         <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
         <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
         <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
+        <SelectItem value="tool_output_contains">Tool output contains</SelectItem>
+        <SelectItem value="tool_output_regex">Tool output regex</SelectItem>
+        <SelectItem value="tool_output_jsonpath">Tool output JSONPath</SelectItem>
         <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
         <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
         <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
@@ -133,7 +136,7 @@ function formatToolSequenceText(sequence: string[]): string {
 }
 
 function isToolInputRuleType(type: EvalRule['type']): boolean {
-  return type.startsWith('tool_input_');
+  return type.startsWith('tool_input_') || type.startsWith('tool_output_');
 }
 
 function parseEqualsValue(text: string): string | number | boolean | undefined {
@@ -392,7 +395,7 @@ function ScenarioCard({
     if (isToolInputRuleType(newRuleType)) {
       const tool = newRuleTool.trim();
       let nextRule: EvalRule;
-      if (newRuleType === 'tool_input_jsonpath') {
+      if (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath') {
         const path = newRulePath.trim();
         const equals = parseEqualsValue(newRuleEquals);
         nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
@@ -598,7 +601,10 @@ function ScenarioCard({
     'response_regex',
     'tool_input_contains',
     'tool_input_regex',
-    'tool_input_jsonpath'
+    'tool_input_jsonpath',
+    'tool_output_contains',
+    'tool_output_regex',
+    'tool_output_jsonpath'
   ];
 
   const addExtract = () => {
@@ -631,6 +637,9 @@ function ScenarioCard({
     tool_input_contains: 'Input Contains',
     tool_input_regex: 'Input Regex',
     tool_input_jsonpath: 'Input JSONPath',
+    tool_output_contains: 'Output Contains',
+    tool_output_regex: 'Output Regex',
+    tool_output_jsonpath: 'Output JSONPath',
     response_contains: 'Contains',
     response_not_contains: 'Not Contains',
     response_starts_with: 'Starts With',
@@ -650,6 +659,9 @@ function ScenarioCard({
     tool_input_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     tool_input_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     tool_input_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
+    tool_output_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
+    tool_output_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
+    tool_output_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
     response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
     response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
@@ -672,7 +684,9 @@ function ScenarioCard({
     if (isToolInputRule) {
       return Boolean(
         newRuleTool.trim() &&
-        (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
+        (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath'
+          ? newRulePath.trim()
+          : newRuleValue.trim())
       );
     }
     if (isJsonPathRule) return Boolean(newRulePath.trim());
@@ -1421,9 +1435,11 @@ function ScenarioCard({
                                   <ToolSequenceDisplay sequence={rule.sequence ?? []} />
                                 ) : isToolInputRuleType(rule.type) ? (
                                   <span className="font-mono break-all">
-                                    {rule.type === 'tool_input_contains'
+                                    {rule.type === 'tool_input_contains' ||
+                                    rule.type === 'tool_output_contains'
                                       ? `${rule.tool} contains ${String(rule.value)}`
-                                      : rule.type === 'tool_input_regex'
+                                      : rule.type === 'tool_input_regex' ||
+                                          rule.type === 'tool_output_regex'
                                         ? `${rule.tool} matches ${String(rule.value)}`
                                         : `${rule.tool} · ${rule.path} · ${
                                             rule.equals !== undefined
@@ -1583,7 +1599,8 @@ function ScenarioCard({
                                   canLoadTools={canLoadToolNames}
                                   onLoadTools={loadAvailableTools}
                                 />
-                                {newRuleType === 'tool_input_jsonpath' && (
+                                {(newRuleType === 'tool_input_jsonpath' ||
+                                  newRuleType === 'tool_output_jsonpath') && (
                                   <Input
                                     value={newRulePath}
                                     onChange={(e) => setNewRulePath(e.target.value)}
@@ -1591,7 +1608,8 @@ function ScenarioCard({
                                     className="h-8 min-w-0 flex-1 text-xs font-mono"
                                   />
                                 )}
-                                {newRuleType === 'tool_input_jsonpath' ? (
+                                {newRuleType === 'tool_input_jsonpath' ||
+                                newRuleType === 'tool_output_jsonpath' ? (
                                   <Input
                                     value={newRuleEquals}
                                     onChange={(e) => setNewRuleEquals(e.target.value)}
@@ -1603,9 +1621,12 @@ function ScenarioCard({
                                     value={newRuleValue}
                                     onChange={(e) => setNewRuleValue(e.target.value)}
                                     placeholder={
-                                      newRuleType === 'tool_input_regex'
+                                      newRuleType === 'tool_input_regex' ||
+                                      newRuleType === 'tool_output_regex'
                                         ? 'Regex pattern'
-                                        : 'Text present in input'
+                                        : newRuleType.startsWith('tool_output_')
+                                          ? 'Text present in output'
+                                          : 'Text present in input'
                                     }
                                     className="h-8 w-40 text-xs font-mono"
                                   />

@@ -3,6 +3,7 @@ import type { CheckResult, EvalRule } from '@/types/eval';
 import {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
+  formatToolAssertionLabel,
   formatToolExpression,
   formatToolSequenceLabel
 } from '@/lib/data-sources/types';
@@ -133,6 +134,21 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
     return `Required tool · ${formatToolExpression(String(rule.value ?? ''))}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
+  if (rule.type.startsWith('tool_output_')) {
+    const tool = String(rule.tool ?? '');
+    const assertion: CoreToolInputAssertion =
+      rule.type === 'tool_output_contains'
+        ? { type: 'contains', tool, value: String(rule.value ?? '') }
+        : rule.type === 'tool_output_regex'
+          ? { type: 'regex', tool, pattern: String(rule.value ?? '') }
+          : {
+              type: 'jsonpath',
+              tool,
+              path: String(rule.path ?? ''),
+              ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+            };
+    return formatToolAssertionLabel(assertion, 'output');
+  }
   if (rule.type === 'tool_input_contains')
     return formatToolInputAssertionLabel({
       type: 'contains',

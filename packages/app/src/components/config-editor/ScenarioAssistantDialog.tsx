@@ -37,6 +37,7 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
       'Propose concrete scenario updates and submit them with the local propose_scenario_changes tool so they can be applied directly.',
       'Then explain the proposal in ordinary prose.',
       'If tool usage is clear, include at least one required_tool check.',
+      'For tool responses, use tool_output_contains, tool_output_regex, or tool_output_jsonpath with the same fields as input checks.',
       'For argument validation, use tool_input_contains with tool and value, tool_input_regex with tool and value, or tool_input_jsonpath with tool and path plus optional equals.',
       'Prefer deterministic checks and concise capture patterns.'
     ].join('\n')

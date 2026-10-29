@@ -1019,3 +1019,133 @@ describe('evaluateScenarioWithAgentChecks — aliases', () => {
     expect(result.check_results[2]?.metadata?.tool).toBe('MCPLab:search');
   });
 });
+
+describe('tool_output_assertions', () => {
+  const output = {
+    content: [{ type: 'text', text: 'Paris' }],
+    structuredContent: { total: 5, ok: false }
+  };
+  const calls: ToolCall[] = [{ name: 'search', arguments: { query: 'London' }, result: output }];
+
+  it('checks the full MCP response with all three assertion types', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_output_assertions: [
+          { type: 'contains', tool: 'search', value: 'PARIS' },
+          { type: 'regex', tool: 'search', pattern: 'Par.s' },
+          { type: 'jsonpath', tool: 'search', path: '$.structuredContent.total', equals: 5 },
+          { type: 'jsonpath', tool: 'search', path: '$.structuredContent.ok', equals: false },
+          { type: 'jsonpath', tool: 'search', path: '$.content[0].text' }
+        ]
+      },
+      calls
+    );
+    expect(result.pass).toBe(true);
+    expect(result.check_results).toHaveLength(5);
+    expect(result.check_results[0]).toMatchObject({
+      type: 'tool_output_contains',
+      label: 'Tool output · search contains PARIS',
+      status: 'passed',
+      metadata: { matched_call_count: 1, observed_call_count: 1 }
+    });
+  });
+
+  it('fails missing tools, missing outputs, and mismatches without checking input arguments', () => {
+    const result = evaluateScenario(
+      'ok',
+      [],
+      {
+        tool_output_assertions: [
+          { type: 'contains', tool: 'missing', value: 'Paris' },
+          { type: 'jsonpath', tool: 'legacy', path: '$' },
+          { type: 'contains', tool: 'search', value: 'London' }
+        ]
+      },
+      [...calls, { name: 'legacy', arguments: {} }]
+    );
+    expect(result.failures).toEqual([
+      'Tool output assertion failed: tool not used: missing',
+      'Tool output assertion failed: output not available for legacy',
+      'Tool output assertion failed: search output did not match (expected: contains London)'
+    ]);
+  });
+
+  it('passes when a repeated call matches despite missing or unserializable earlier outputs', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result = evaluateScenario(
+      'ok',
+      [],
+      { tool_output_assertions: [{ type: 'contains', tool: 'search', value: 'Paris' }] },
+      [
+        { name: 'search', arguments: {} },
+        { name: 'search', arguments: {}, result: cyclic },
+        ...calls
+      ]
+    );
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0].metadata).toMatchObject({
+      matched_call_count: 1,
+      observed_call_count: 3
+    });
+  });
+
+  it.each([
+    [{ type: 'regex', tool: 'search', pattern: '[invalid(' }, 'invalid regex [invalid('],
+    [{ type: 'jsonpath', tool: 'search', path: '$[?(@.x === )]' }, 'invalid JSONPath']
+  ])('reports malformed expressions as failed checks', (assertion, message) => {
+    const result = evaluateScenario(
+      'ok',
+      [],
+      { tool_output_assertions: [assertion as never] },
+      calls
+    );
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toContain(message);
+  });
+
+  it('preserves JSON null outputs and reports serialization errors', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(
+      evaluateScenario(
+        '',
+        [],
+        { tool_output_assertions: [{ type: 'contains', tool: 'search', value: 'null' }] },
+        [{ name: 'search', arguments: {}, result: null }]
+      ).pass
+    ).toBe(true);
+    expect(
+      evaluateScenario(
+        '',
+        [],
+        { tool_output_assertions: [{ type: 'regex', tool: 'search', pattern: 'Paris' }] },
+        [{ name: 'search', arguments: {}, result: cyclic }]
+      ).failures[0]
+    ).toContain('could not serialize tool output');
+  });
+
+  it('resolves aliases while retaining authored names in result labels', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      '',
+      ['search'],
+      { tool_output_assertions: [{ type: 'contains', tool: 'MCPLab:search', value: 'Paris' }] },
+      { toolCalls: calls, availableToolNames: ['search'] }
+    );
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      label: 'Tool output · MCPLab:search contains Paris',
+      metadata: { tool: 'MCPLab:search' }
+    });
+  });
+
+  it('includes output assertions in checks that were not executed', () => {
+    expect(
+      buildNotExecutedCheckResults({
+        tool_output_assertions: [{ type: 'contains', tool: 'search', value: 'Paris' }]
+      })
+    ).toEqual([expect.objectContaining({ type: 'tool_output_contains', status: 'not_executed' })]);
+  });
+});

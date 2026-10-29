@@ -155,12 +155,13 @@ function assistantSystemPrompt(
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'Use the proposal tool with a complete replacement for every field you propose to change, plus a rationale.',
     'Include only the fields you are changing; omit the others entirely.',
-    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, tool_output_contains, tool_output_regex, tool_output_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
     'For required_tool, value may be one raw MCP tool name or alternatives such as `search | lookup`; any one alternative satisfies the rule.',
     'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order; each step may use alternatives such as `search | lookup`. Do not put the sequence in value.',
     'forbidden_tool accepts exactly one raw MCP tool name, never `|` alternatives.',
+    'Use tool_output_contains, tool_output_regex, or tool_output_jsonpath to check full MCP tool responses using the same fields as tool input checks.',
     'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
     'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.',
     'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
@@ -380,7 +381,10 @@ function normalizeEvalRuleToolNames(
     if (
       (rule.type === 'tool_input_contains' ||
         rule.type === 'tool_input_regex' ||
-        rule.type === 'tool_input_jsonpath') &&
+        rule.type === 'tool_input_jsonpath' ||
+        rule.type === 'tool_output_contains' ||
+        rule.type === 'tool_output_regex' ||
+        rule.type === 'tool_output_jsonpath') &&
       rule.tool
     ) {
       rule.tool = rule.tool.trim();
@@ -700,6 +704,9 @@ const ruleTypes = new Set<string>([
   'tool_input_contains',
   'tool_input_regex',
   'tool_input_jsonpath',
+  'tool_output_contains',
+  'tool_output_regex',
+  'tool_output_jsonpath',
   'response_contains',
   'response_not_contains',
   'response_starts_with',
@@ -870,14 +877,25 @@ export function validateScenarioAssistantProposal(
         return invalid(`${path}.sequence`, 'tool names must not be blank');
       if (type === 'tool_sequence' && !(r.sequence as string[]).every(isValidToolExpression))
         return invalid(`${path}.sequence`, 'tool alternatives must be non-empty and unique');
-      if (type.startsWith('tool_input_') && typeof r.tool !== 'string')
+      if (
+        (type.startsWith('tool_input_') || type.startsWith('tool_output_')) &&
+        typeof r.tool !== 'string'
+      )
         return invalid(`${path}.tool`, 'required and must be a string');
       if (
-        (type === 'tool_input_contains' || type === 'tool_input_regex') &&
+        (type === 'tool_input_contains' ||
+          type === 'tool_input_regex' ||
+          type === 'tool_output_contains' ||
+          type === 'tool_output_regex') &&
         typeof r.value !== 'string'
       )
         return invalid(`${path}.value`, 'required and must be a string');
-      if ((type === 'tool_input_regex' || type === 'response_regex') && typeof r.value !== 'string')
+      if (
+        (type === 'tool_input_regex' ||
+          type === 'tool_output_regex' ||
+          type === 'response_regex') &&
+        typeof r.value !== 'string'
+      )
         return invalid(`${path}.value`, 'required and must be a string');
       if (
         type.endsWith('jsonpath') ||

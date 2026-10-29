@@ -75,6 +75,7 @@ function countAssertions(scenario: Scenario): number {
     (rules.tool_constraints?.forbidden_tools?.length ?? 0) +
     (rules.tool_sequence?.length ? 1 : 0) +
     (rules.tool_input_assertions?.length ?? 0) +
+    (rules.tool_output_assertions?.length ?? 0) +
     (rules.response_assertions?.length ?? 0) +
     (rules.agent_assertions?.length ?? 0)
   );

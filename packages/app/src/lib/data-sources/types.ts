@@ -109,6 +109,7 @@ export {
   normalizeEvaluationDecisionConfig,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
+  formatToolAssertionLabel,
   formatToolSequenceLabel,
   formatToolExpression,
   normalizeToolExpression,

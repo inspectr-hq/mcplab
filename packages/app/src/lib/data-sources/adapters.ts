@@ -166,16 +166,19 @@ function toUiEvalRule(assertion: {
   }
 }
 
-function toUiToolInputRule(assertion: {
-  type: 'contains' | 'regex' | 'jsonpath';
-  tool: string;
-  path?: string;
-  equals?: string | number | boolean;
-  value?: string | number | boolean;
-  pattern?: string;
-}): EvalRule {
+function toUiToolInputRule(
+  assertion: {
+    type: 'contains' | 'regex' | 'jsonpath';
+    tool: string;
+    path?: string;
+    equals?: string | number | boolean;
+    value?: string | number | boolean;
+    pattern?: string;
+  },
+  target: 'input' | 'output' = 'input'
+): EvalRule {
   return {
-    type: `tool_input_${assertion.type}` as EvalRule['type'],
+    type: `tool_${target}_${assertion.type}` as EvalRule['type'],
     tool: assertion.tool,
     ...(assertion.path ? { path: assertion.path } : {}),
     ...(assertion.equals !== undefined ? { equals: assertion.equals } : {}),
@@ -265,6 +268,7 @@ function buildCoreEvalBlock(
         | { type: 'regex'; tool: string; pattern: string }
         | { type: 'jsonpath'; tool: string; path: string; equals?: string | number | boolean }
       >;
+      tool_output_assertions?: CoreToolInputAssertion[];
       agent_assertions?: Array<{ label: string; prompt: string }>;
       agent_context?: AgentContext;
     }
@@ -284,26 +288,29 @@ function buildCoreEvalBlock(
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
-  const tool_input_assertions = evalRules
-    .filter((rule) => rule.type.startsWith('tool_input_'))
-    .flatMap((rule): CoreToolInputAssertion[] => {
-      if (!rule.tool) return [];
-      const value = toComparableString(rule.value);
-      if (rule.type === 'tool_input_contains' && value !== undefined)
-        return [{ type: 'contains' as const, tool: rule.tool, value }];
-      if (rule.type === 'tool_input_regex' && value !== undefined)
-        return [{ type: 'regex' as const, tool: rule.tool, pattern: value }];
-      if (rule.type === 'tool_input_jsonpath' && rule.path)
-        return [
-          {
-            type: 'jsonpath' as const,
-            tool: rule.tool,
-            path: rule.path,
-            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
-          }
-        ];
-      return [];
-    });
+  const toolAssertions = (target: 'input' | 'output') =>
+    evalRules
+      .filter((rule) => rule.type.startsWith(`tool_${target}_`))
+      .flatMap((rule): CoreToolInputAssertion[] => {
+        if (!rule.tool) return [];
+        const value = toComparableString(rule.value);
+        if (rule.type === `tool_${target}_contains` && value !== undefined)
+          return [{ type: 'contains' as const, tool: rule.tool, value }];
+        if (rule.type === `tool_${target}_regex` && value !== undefined)
+          return [{ type: 'regex' as const, tool: rule.tool, pattern: value }];
+        if (rule.type === `tool_${target}_jsonpath` && rule.path)
+          return [
+            {
+              type: 'jsonpath' as const,
+              tool: rule.tool,
+              path: rule.path,
+              ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+            }
+          ];
+        return [];
+      });
+  const tool_input_assertions = toolAssertions('input');
+  const tool_output_assertions = toolAssertions('output');
   const agent_assertions = evalRules
     .filter((rule) => rule.type === 'agent_check')
     .flatMap((rule) =>
@@ -331,6 +338,7 @@ function buildCoreEvalBlock(
     !tool_constraints &&
     !tool_sequence?.length &&
     tool_input_assertions.length === 0 &&
+    tool_output_assertions.length === 0 &&
     response_assertions.length === 0 &&
     agent_assertions.length === 0 &&
     !hasAgentContext
@@ -341,6 +349,7 @@ function buildCoreEvalBlock(
     ...(tool_constraints ? { tool_constraints } : {}),
     ...(tool_sequence && tool_sequence.length > 0 ? { tool_sequence } : {}),
     ...(tool_input_assertions.length > 0 ? { tool_input_assertions } : {}),
+    ...(tool_output_assertions.length > 0 ? { tool_output_assertions } : {}),
     ...(response_assertions.length > 0 ? { response_assertions } : {}),
     ...(agent_assertions.length > 0 ? { agent_assertions } : {}),
     ...(hasAgentContext ? { agent_context } : {})
@@ -535,6 +544,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     }
     for (const assertion of scenario.eval?.tool_input_assertions ?? []) {
       evalRules.push(toUiToolInputRule(assertion));
+    }
+    for (const assertion of scenario.eval?.tool_output_assertions ?? []) {
+      evalRules.push(toUiToolInputRule(assertion, 'output'));
     }
     for (const assertion of scenario.eval?.agent_assertions ?? []) {
       evalRules.push({

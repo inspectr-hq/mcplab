@@ -134,7 +134,7 @@ When the request is about analyzing results, the assistant must:
 - This keeps prompt/eval in library test-case and swaps only MCP target per eval.
 
 6. Add optional `eval` and `extract` blocks after baseline run succeeds.
-   - The scenario authoring MCP tools also accept a full `eval` object containing `tool_constraints`, flat `tool_sequence`, `response_assertions` (`regex`, `contains`, `not_contains`, `starts_with`, `ends_with`, `equals`, and JSONPath variants), `tool_input_assertions` (`contains`, `regex`, `jsonpath`), `agent_assertions`, and `agent_context`.
+   - The scenario authoring MCP tools also accept a full `eval` object containing `tool_constraints`, flat `tool_sequence`, `response_assertions` (`regex`, `contains`, `not_contains`, `starts_with`, `ends_with`, `equals`, and JSONPath variants), `tool_input_assertions` and `tool_output_assertions` (`contains`, `regex`, `jsonpath`), `agent_assertions`, and `agent_context`.
    - Existing shorthand fields (`required_tools`, `forbidden_tools`, `tool_sequence`, and `response_regex_patterns`) remain supported for basic cases; do not provide a shorthand field and its equivalent `eval` field in the same request.
 7. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
 8. Add deterministic tool-input assertions when the requirement is structural:
@@ -333,6 +333,17 @@ eval:
       tool: search_tags
       path: $.query
       equals: TM5-BP2
+```
+
+Tool outputs use the same format. JSONPath addresses the full MCP response:
+
+```yaml
+eval:
+  tool_output_assertions:
+    - type: jsonpath
+      tool: search_tags
+      path: $.structuredContent.total
+      equals: 5
 ```
 
 3. Use a Judge check for semantic completeness and pass relevant context explicitly:

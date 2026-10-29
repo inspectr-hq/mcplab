@@ -145,6 +145,9 @@ describe('mcp tool contracts', () => {
       eval: {
         response_assertions: [{ type: 'contains', value: 'Paris' }],
         tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+        tool_output_assertions: [
+          { type: 'jsonpath', tool: 'fetch', path: '$.structuredContent.total', equals: 5 }
+        ],
         agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
       }
     });
@@ -152,6 +155,9 @@ describe('mcp tool contracts', () => {
     expect((parsed as any).data.eval).toEqual({
       response_assertions: [{ type: 'contains', value: 'Paris' }],
       tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+      tool_output_assertions: [
+        { type: 'jsonpath', tool: 'fetch', path: '$.structuredContent.total', equals: 5 }
+      ],
       agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
     });
   });

@@ -37,6 +37,7 @@ export type {
 export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
+  formatToolAssertionLabel,
   formatToolSequenceLabel,
   type ToolInputAssertionFailureKind
 } from './eval.js';

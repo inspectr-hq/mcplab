@@ -102,6 +102,7 @@ export type ScenarioAssistantSuggestionRuleType =
   | 'forbidden_tool'
   | 'tool_sequence'
   | `tool_input_${ToolInputAssertion['type']}`
+  | `tool_output_${ToolInputAssertion['type']}`
   | `response_${ResponseAssertion['type']}`
   | 'agent_check';
 
@@ -675,6 +676,7 @@ export interface EvalRules {
   /** Ordered tool expressions; each expression may contain `|` alternatives. */
   tool_sequence?: string[];
   tool_input_assertions?: ToolInputAssertion[];
+  tool_output_assertions?: ToolInputAssertion[];
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
   agent_context?: AgentContext;
@@ -797,6 +799,7 @@ export interface ToolCall {
   id?: string;
   name: string;
   arguments: Record<string, unknown> | unknown;
+  result?: unknown;
   server?: string;
 }
 

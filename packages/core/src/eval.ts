@@ -80,6 +80,14 @@ export function buildNotExecutedCheckResults(evalRules?: EvalRules): CheckResult
       }
     });
   }
+  for (const rule of evalRules.tool_output_assertions ?? []) {
+    results.push({
+      type: `tool_output_${rule.type}`,
+      label: formatToolAssertionLabel(rule, 'output'),
+      status: 'not_executed',
+      metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
+    });
+  }
   for (const assertion of evalRules.agent_assertions ?? []) {
     results.push({ type: 'agent_check', label: assertion.label, status: 'not_executed' });
   }
@@ -115,6 +123,15 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
     });
   }
+  for (const rule of evalRules.tool_output_assertions ?? []) {
+    results.push({
+      type: `tool_output_${rule.type}`,
+      label: formatToolAssertionLabel(rule, 'output'),
+      status: 'not_evaluated',
+      reason: 'Tool telemetry is not available for this execution source.',
+      metadata: { tool: rule.tool, ...(rule.type === 'jsonpath' ? { path: rule.path } : {}) }
+    });
+  }
   return results;
 }
 
@@ -137,7 +154,12 @@ export function evaluateScenario(
     check_results.push(...results.check_results);
   }
   if (evalRules?.tool_input_assertions?.length) {
-    const results = evaluateToolInputAssertions(toolCalls, evalRules.tool_input_assertions);
+    const results = evaluateToolAssertions(toolCalls, evalRules.tool_input_assertions, 'input');
+    failures.push(...results.failures);
+    check_results.push(...results.check_results);
+  }
+  if (evalRules?.tool_output_assertions?.length) {
+    const results = evaluateToolAssertions(toolCalls, evalRules.tool_output_assertions, 'output');
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
@@ -306,6 +328,14 @@ export function normalizeToolConstraintAliases(
             tool: resolve(a.tool)
           }))
         }
+      : {}),
+    ...(evalRules.tool_output_assertions
+      ? {
+          tool_output_assertions: evalRules.tool_output_assertions.map((a) => ({
+            ...a,
+            tool: resolve(a.tool)
+          }))
+        }
       : {})
   };
 }
@@ -399,6 +429,13 @@ function toolInputAssertionType(assertion: ToolInputAssertion): string {
 }
 
 export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): string {
+  return formatToolAssertionLabel(assertion, 'input');
+}
+
+export function formatToolAssertionLabel(
+  assertion: ToolInputAssertion,
+  target: 'input' | 'output'
+): string {
   const operator =
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
@@ -407,7 +444,7 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
         : assertion.equals !== undefined
           ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
           : `JSONPath ${assertion.path} exists`;
-  return `Tool input · ${assertion.tool} ${operator}`;
+  return `Tool ${target} · ${assertion.tool} ${operator}`;
 }
 
 function usesSerializedToolInput(
@@ -417,6 +454,7 @@ function usesSerializedToolInput(
 }
 
 export type ToolInputAssertionFailureKind =
+  | 'output_unavailable'
   | 'tool_not_used'
   | 'input_mismatch'
   | 'invalid_regex'
@@ -425,13 +463,16 @@ export type ToolInputAssertionFailureKind =
 
 export function formatToolInputAssertionFailureReason(
   assertion: ToolInputAssertion,
-  kind: ToolInputAssertionFailureKind
+  kind: ToolInputAssertionFailureKind,
+  target: 'input' | 'output' = 'input'
 ): string {
+  if (kind === 'output_unavailable')
+    return `Tool output assertion failed: output not available for ${assertion.tool}`;
   if (kind === 'tool_not_used') {
-    return `Tool input assertion failed: tool not used: ${assertion.tool}`;
+    return `Tool ${target} assertion failed: tool not used: ${assertion.tool}`;
   }
   if (kind === 'invalid_regex' && assertion.type === 'regex') {
-    return `Tool input assertion failed: invalid regex ${assertion.pattern}`;
+    return `Tool ${target} assertion failed: invalid regex ${assertion.pattern}`;
   }
   const expectation =
     assertion.type === 'contains'
@@ -442,17 +483,18 @@ export function formatToolInputAssertionFailureReason(
           ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
           : `JSONPath ${assertion.path} exists`;
   if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
-    return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
+    return `Tool ${target} assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
   }
   if (kind === 'serialization' && usesSerializedToolInput(assertion)) {
-    return `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`;
+    return `Tool ${target} assertion failed: could not serialize tool ${target} for ${assertion.tool} (expected: ${expectation})`;
   }
-  return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
+  return `Tool ${target} assertion failed: ${assertion.tool} ${target} did not match (expected: ${expectation})`;
 }
 
-function evaluateToolInputAssertions(
+function evaluateToolAssertions(
   toolCalls: ToolCall[],
-  assertions: ToolInputAssertion[]
+  assertions: ToolInputAssertion[],
+  target: 'input' | 'output'
 ): Pick<EvalResult, 'failures' | 'check_results'> {
   const failures: string[] = [];
   const check_results: CheckResult[] = assertions.map((assertion) => {
@@ -460,21 +502,27 @@ function evaluateToolInputAssertions(
     let reason: string | undefined;
     let matchedCallCount = 0;
     let inputErrorCount = 0;
+    let unavailableCount = 0;
 
     if (assertion.type === 'regex') {
       try {
         new RegExp(assertion.pattern);
       } catch {
-        reason = formatToolInputAssertionFailureReason(assertion, 'invalid_regex');
+        reason = formatToolInputAssertionFailureReason(assertion, 'invalid_regex', target);
       }
     }
 
     if (!reason) {
       for (const call of matchingCalls) {
+        if (target === 'output' && call.result === undefined) {
+          unavailableCount++;
+          continue;
+        }
+        const data = target === 'output' ? call.result : call.arguments;
         try {
           const values = usesSerializedToolInput(assertion)
-            ? [JSON.stringify(call.arguments)]
-            : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
+            ? [JSON.stringify(data)]
+            : (JSONPath({ path: assertion.path, json: data as any }) as unknown[]);
           if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
         } catch {
           inputErrorCount += 1;
@@ -485,17 +533,21 @@ function evaluateToolInputAssertions(
     if (matchedCallCount === 0 && !reason) {
       reason =
         matchingCalls.length === 0
-          ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
-          : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
-            ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
-            : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
-              ? formatToolInputAssertionFailureReason(assertion, 'serialization')
-              : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
+          ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used', target)
+          : unavailableCount === matchingCalls.length
+            ? formatToolInputAssertionFailureReason(assertion, 'output_unavailable', target)
+            : inputErrorCount + unavailableCount === matchingCalls.length &&
+                assertion.type === 'jsonpath'
+              ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath', target)
+              : inputErrorCount + unavailableCount === matchingCalls.length &&
+                  usesSerializedToolInput(assertion)
+                ? formatToolInputAssertionFailureReason(assertion, 'serialization', target)
+                : formatToolInputAssertionFailureReason(assertion, 'input_mismatch', target);
     }
     if (reason) failures.push(reason);
     return {
-      type: toolInputAssertionType(assertion),
-      label: formatToolInputAssertionLabel(assertion),
+      type: `tool_${target}_${assertion.type}`,
+      label: formatToolAssertionLabel(assertion, target),
       status: reason ? 'failed' : 'passed',
       reason,
       metadata: {

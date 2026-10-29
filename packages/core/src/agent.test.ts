@@ -285,6 +285,13 @@ describe('runAgentScenario', () => {
       trace: { startLlm, startTool, end: vi.fn() }
     });
 
+    expect(result.toolCalls).toEqual([
+      expect.objectContaining({
+        name: 'search_tags',
+        result: { matches: ['TM5'], ok: 'server-ok', durationMs: 42 }
+      })
+    ]);
+
     expect(startLlm).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({

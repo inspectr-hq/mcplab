@@ -448,6 +448,10 @@ const EvalRulesSchema = z
       .array(ToolInputAssertionSchema)
       .optional()
       .describe('Checks over MCP tool arguments.'),
+    tool_output_assertions: z
+      .array(ToolInputAssertionSchema)
+      .optional()
+      .describe('Checks over full MCP tool responses.'),
     response_assertions: z
       .array(ResponseAssertionSchema)
       .optional()
@@ -1757,7 +1761,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_evaluation_config',
     {
       description:
-        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/, optionally inside a relative folder such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/, optionally inside a relative folder such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       outputSchema: {
         file_name: z.string(),
         path: z.string(),
@@ -1778,7 +1782,7 @@ export function registerTools(server: McpServer): void {
             'Optional folder path relative to mcplab/evals/, such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected.'
           ),
         config: GenericObjectSchema.describe(
-          'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+          'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
         )
       }
     },
@@ -1835,7 +1839,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_evaluation_config',
     {
       description:
-        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       inputSchema: {
         config_path: z
           .string()
@@ -1843,7 +1847,7 @@ export function registerTools(server: McpServer): void {
             'Path to an existing eval YAML, relative to the MCPLab evals directory. Invalid, missing, or out-of-root paths return an error; the tool never silently coerces them.'
           ),
         config: GenericObjectSchema.describe(
-          'Complete replacement evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+          'Complete replacement evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
         ),
         confirm: z
           .literal(true)

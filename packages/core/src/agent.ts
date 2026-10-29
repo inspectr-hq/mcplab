@@ -384,7 +384,8 @@ export async function runAgentScenario(params: {
         }
       }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
-        toolCalls.push({ ...toolCall, server: resolved.server });
+        const observedCall: ToolCall = { ...toolCall, server: resolved.server };
+        toolCalls.push(observedCall);
         const toolSpan = params.trace?.startTool({
           server: resolved.server,
           tool: toolCall.name,
@@ -427,6 +428,7 @@ export async function runAgentScenario(params: {
           }
         }
 
+        observedCall.result = result;
         const tsEnd = new Date();
         const durationMs = tsEnd.getTime() - tsStart.getTime();
         toolResultBlocks.push({
