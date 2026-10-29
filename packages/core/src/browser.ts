@@ -35,6 +35,7 @@ export type {
   RunAgentSelectionSource
 } from './types.js';
 export {
+  formatToolAssertionFailureReason,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolAssertionLabel,

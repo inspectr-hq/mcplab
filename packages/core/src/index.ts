@@ -56,6 +56,7 @@ export {
   type ToolDefinitionTokenEstimates
 } from './tool-definition-token-estimates.js';
 export {
+  formatToolAssertionFailureReason,
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolAssertionLabel,

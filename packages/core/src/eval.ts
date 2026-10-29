@@ -461,7 +461,7 @@ export type ToolInputAssertionFailureKind =
   | 'invalid_jsonpath'
   | 'serialization';
 
-export function formatToolInputAssertionFailureReason(
+export function formatToolAssertionFailureReason(
   assertion: ToolInputAssertion,
   kind: ToolInputAssertionFailureKind,
   target: 'input' | 'output' = 'input'
@@ -491,6 +491,9 @@ export function formatToolInputAssertionFailureReason(
   return `Tool ${target} assertion failed: ${assertion.tool} ${target} did not match (expected: ${expectation})`;
 }
 
+/** @deprecated Use formatToolAssertionFailureReason. */
+export const formatToolInputAssertionFailureReason = formatToolAssertionFailureReason;
+
 function evaluateToolAssertions(
   toolCalls: ToolCall[],
   assertions: ToolInputAssertion[],
@@ -508,7 +511,7 @@ function evaluateToolAssertions(
       try {
         new RegExp(assertion.pattern);
       } catch {
-        reason = formatToolInputAssertionFailureReason(assertion, 'invalid_regex', target);
+        reason = formatToolAssertionFailureReason(assertion, 'invalid_regex', target);
       }
     }
 
@@ -533,16 +536,16 @@ function evaluateToolAssertions(
     if (matchedCallCount === 0 && !reason) {
       reason =
         matchingCalls.length === 0
-          ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used', target)
+          ? formatToolAssertionFailureReason(assertion, 'tool_not_used', target)
           : unavailableCount === matchingCalls.length
-            ? formatToolInputAssertionFailureReason(assertion, 'output_unavailable', target)
+            ? formatToolAssertionFailureReason(assertion, 'output_unavailable', target)
             : inputErrorCount + unavailableCount === matchingCalls.length &&
                 assertion.type === 'jsonpath'
-              ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath', target)
+              ? formatToolAssertionFailureReason(assertion, 'invalid_jsonpath', target)
               : inputErrorCount + unavailableCount === matchingCalls.length &&
                   usesSerializedToolInput(assertion)
-                ? formatToolInputAssertionFailureReason(assertion, 'serialization', target)
-                : formatToolInputAssertionFailureReason(assertion, 'input_mismatch', target);
+                ? formatToolAssertionFailureReason(assertion, 'serialization', target)
+                : formatToolAssertionFailureReason(assertion, 'input_mismatch', target);
     }
     if (reason) failures.push(reason);
     return {

@@ -107,7 +107,7 @@ export {
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
-  formatToolInputAssertionFailureReason,
+  formatToolAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolAssertionLabel,
   formatToolSequenceLabel,
