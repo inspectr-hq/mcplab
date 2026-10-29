@@ -422,13 +422,13 @@ export async function runAgentScenario(params: {
             result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments, {
               requestHeaders: Object.keys(requestHeaders).length > 0 ? requestHeaders : undefined
             });
+            observedCall.result = result;
           } catch (err: any) {
             ok = false;
             result = { error: String(err?.message ?? err) };
           }
         }
 
-        observedCall.result = result;
         const tsEnd = new Date();
         const durationMs = tsEnd.getTime() - tsStart.getTime();
         toolResultBlocks.push({

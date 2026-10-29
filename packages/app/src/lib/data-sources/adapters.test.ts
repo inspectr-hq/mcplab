@@ -881,7 +881,8 @@ describe('config adapters round-trip', () => {
       'tool_output_jsonpath'
     ]);
     const result = toCoreConfigYaml(ui);
-    expect((result.scenarios[0] as any).eval.tool_output_assertions).toEqual(assertions);
+    const scenario = (result.scenarios as unknown as AnyRecord[])[0];
+    expect((scenario.eval as AnyRecord).tool_output_assertions).toEqual(assertions);
   });
 
   it('maps YAML description separately from the source file path', () => {

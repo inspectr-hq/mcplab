@@ -24,6 +24,7 @@ import {
   chatWithAgent,
   runAgentScenario
 } from './agent.js';
+import { evaluateScenario } from './eval.js';
 
 describe('Azure Foundry agents', () => {
   beforeEach(() => {
@@ -206,6 +207,106 @@ describe('runAgentScenario', () => {
     expect(mcp.listTools).toHaveBeenCalledWith('oauth-server', undefined, {
       authorization: 'Bearer refreshed-token'
     });
+  });
+
+  it.each(['transport', 'headers'])(
+    'does not treat a %s failure as an MCP tool output',
+    async (failure) => {
+      openAiCreate
+        .mockReset()
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: '',
+                tool_calls: [
+                  { id: 'call-1', type: 'function', function: { name: 'search', arguments: '{}' } }
+                ]
+              }
+            }
+          ]
+        })
+        .mockResolvedValueOnce({ choices: [{ message: { content: 'Finished', tool_calls: [] } }] });
+      const mcp = {
+        listTools: vi
+          .fn()
+          .mockResolvedValue([{ name: 'search', inputSchema: { type: 'object', properties: {} } }]),
+        callTool: vi.fn().mockRejectedValue(new Error('connection failed'))
+      };
+      const resolveServerRequestHeaders =
+        failure === 'headers'
+          ? vi.fn().mockResolvedValueOnce({}).mockRejectedValue(new Error('connection failed'))
+          : undefined;
+      const run = await runAgentScenario({
+        scenario: { id: 'example', prompt: 'Search', servers: ['server'], agent: 'agent' } as any,
+        agent: { provider: 'openai', model: 'gpt-test' } as any,
+        mcp: mcp as any,
+        resolveServerRequestHeaders,
+        maxTurns: 2
+      });
+      const evaluation = evaluateScenario(
+        'Finished',
+        ['search'],
+        {
+          tool_output_assertions: [{ type: 'contains', tool: 'search', value: 'connection failed' }]
+        },
+        run.toolCalls
+      );
+      expect(evaluation.pass).toBe(false);
+      expect(evaluation.failures).toContain(
+        'Tool output assertion failed: output not available for search'
+      );
+      expect(openAiCreate.mock.calls[1][0].messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'tool',
+            content: expect.stringContaining('connection failed')
+          })
+        ])
+      );
+    }
+  );
+
+  it('allows assertions against real MCP error responses', async () => {
+    openAiCreate
+      .mockReset()
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: '',
+              tool_calls: [
+                { id: 'call-1', type: 'function', function: { name: 'search', arguments: '{}' } }
+              ]
+            }
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ choices: [{ message: { content: 'Finished', tool_calls: [] } }] });
+    const response = { isError: true, content: [{ type: 'text', text: 'No results' }] };
+    const run = await runAgentScenario({
+      scenario: { id: 'example', prompt: 'Search', servers: ['server'], agent: 'agent' } as any,
+      agent: { provider: 'openai', model: 'gpt-test' } as any,
+      mcp: {
+        listTools: vi
+          .fn()
+          .mockResolvedValue([{ name: 'search', inputSchema: { type: 'object', properties: {} } }]),
+        callTool: vi.fn().mockResolvedValue(response)
+      } as any,
+      maxTurns: 2
+    });
+    const evaluation = evaluateScenario(
+      'Finished',
+      ['search'],
+      {
+        tool_output_assertions: [
+          { type: 'jsonpath', tool: 'search', path: '$.isError', equals: true }
+        ]
+      },
+      run.toolCalls
+    );
+    expect(evaluation.pass).toBe(true);
+    expect(run.toolCalls[0].result).toEqual(response);
   });
 
   it('tags tool listing with the request id, like tool calls', async () => {
