@@ -13,13 +13,13 @@ const { sourceMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceMock
   })
 }));
 
-vi.mock('@/contexts/LibraryContext', () => ({
+vi.mock('@/contexts/useLibraries', () => ({
   useLibraries: () => ({ servers: [] })
 }));
 

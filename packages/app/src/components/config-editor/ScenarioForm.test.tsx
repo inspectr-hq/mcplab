@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderEvalRulePreview, ScenarioForm } from './ScenarioForm';
+import { ScenarioForm } from './ScenarioForm';
+import { renderEvalRulePreview } from './scenario-rule-preview';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
 
 const mockSource = {
@@ -10,7 +11,7 @@ const mockSource = {
 const mockEnsureOAuthForServers = vi.fn();
 let mockScenarioAssistantDialogProps: Record<string, unknown> | null = null;
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: mockSource
   })

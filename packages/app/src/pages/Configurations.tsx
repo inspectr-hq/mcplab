@@ -47,8 +47,8 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { useConfigs } from '@/contexts/ConfigContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useConfigs } from '@/contexts/useConfigs';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { getConfigDisplayPath } from '@/lib/config-file-path';

@@ -1,32 +1,10 @@
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode
-} from 'react';
-import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
-import type { BrowserProviderProfile } from '@inspectr/mcplab-core';
-import { useDataSource } from '@/contexts/DataSourceContext';
-
-interface LibraryState {
-  servers: ServerConfig[];
-  agents: AgentConfig[];
-  scenarios: Scenario[];
-  browserProviders: Record<string, BrowserProviderProfile>;
-}
-
-interface LibraryContextValue extends LibraryState {
-  loading: boolean;
-  setServers: (servers: ServerConfig[]) => Promise<void>;
-  setAgents: (agents: AgentConfig[]) => Promise<void>;
-  setScenarios: (scenarios: Scenario[]) => Promise<void>;
-  reload: () => Promise<void>;
-}
-
-const LibraryContext = createContext<LibraryContextValue | null>(null);
+  LibraryContext,
+  type LibraryState,
+  type LibraryContextValue
+} from '@/contexts/useLibraries';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useDataSource } from '@/contexts/useDataSource';
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const { source } = useDataSource();
@@ -50,7 +28,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void reload();
-  }, [source]);
+  }, [reload]);
 
   useEffect(() => {
     const handleFocus = () => {
@@ -60,7 +38,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [source]);
+  }, [reload]);
 
   const save = useCallback(
     async (next: LibraryState) => {
@@ -83,10 +61,4 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
-}
-
-export function useLibraries() {
-  const ctx = useContext(LibraryContext);
-  if (!ctx) throw new Error('useLibraries must be used within LibraryProvider');
-  return ctx;
 }

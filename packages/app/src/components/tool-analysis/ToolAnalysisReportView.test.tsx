@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from './ToolAnalysisReportView';
+import { ToolAnalysisReportView } from './ToolAnalysisReportView';
+import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 
 const report: ToolAnalysisReport = {

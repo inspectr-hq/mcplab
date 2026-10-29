@@ -32,9 +32,9 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { useConfigs } from '@/contexts/ConfigContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useConfigs } from '@/contexts/useConfigs';
+import { useDataSource } from '@/contexts/useDataSource';
+import { useLibraries } from '@/contexts/useLibraries';
 import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
 import { toast } from '@/hooks/use-toast';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';

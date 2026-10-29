@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot } from 'lucide-react';
 import { AgentTypeIcon } from '@/components/AgentTypeIcon';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useLibraries } from '@/contexts/useLibraries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SearchInput } from '@/components/SearchInput';

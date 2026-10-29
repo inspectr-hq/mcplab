@@ -9,7 +9,7 @@ const sourceRef = {
   }
 };
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceRef.current
   })

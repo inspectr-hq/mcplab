@@ -1,3 +1,4 @@
+import { isToolInputRuleType, renderEvalRulePreview } from './scenario-rule-preview';
 import {
   CheckCircle2,
   Clock3,
@@ -36,14 +37,10 @@ import type {
   Scenario,
   EvalRule
 } from '@/types/eval';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import {
-  formatToolSequenceLabel,
-  isValidToolExpression,
-  normalizeToolExpression
-} from '@/types/eval';
+import { isValidToolExpression, normalizeToolExpression } from '@/types/eval';
 import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import {
@@ -54,7 +51,7 @@ import {
 import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import {
   isSupportedAttachmentMediaType,
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
@@ -130,14 +127,6 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
-
-function formatToolSequenceText(sequence: string[]): string {
-  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
-}
-
-function isToolInputRuleType(type: EvalRule['type']): boolean {
-  return type.startsWith('tool_input_') || type.startsWith('tool_output_');
-}
 
 function parseEqualsValue(text: string): string | number | boolean | undefined {
   const value = text.trim();
@@ -385,10 +374,13 @@ function ScenarioCard({
     setExpanded((prev) => !prev);
   };
 
-  const findRuleIndex = (rule: EvalRule | null) => {
-    if (!rule) return -1;
-    return scenario.evalRules.findIndex((candidate) => candidate === rule);
-  };
+  const findRuleIndex = useCallback(
+    (rule: EvalRule | null) => {
+      if (!rule) return -1;
+      return scenario.evalRules.findIndex((candidate) => candidate === rule);
+    },
+    [scenario.evalRules]
+  );
 
   const addRule = () => {
     if (!canAddRule()) return;
@@ -518,8 +510,10 @@ function ScenarioCard({
   );
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
-  const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
+  const toolSequence = useMemo(
+    () => (toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : []),
+    [toolSequenceRule]
+  );
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
 
   const updateToolSequence = (nextSequence: string[]) => {
@@ -547,7 +541,7 @@ function ScenarioCard({
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
     setToolSequenceDraft(toolSequence);
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, JSON.stringify(toolSequence)]);
+  }, [toolSequenceEditorOpen, toolSequence]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -567,7 +561,7 @@ function ScenarioCard({
     if (valueRuleEditingRule && findRuleIndex(valueRuleEditingRule) < 0) {
       setValueRuleEditingRule(null);
     }
-  }, [scenario.evalRules, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
+  }, [findRuleIndex, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
 
   useEffect(() => {
     if (toolSequenceEditingRule && newRuleType !== 'tool_sequence') {
@@ -725,10 +719,11 @@ function ScenarioCard({
     setConsumedAutoOpenNonce(assistantAutoOpenNonce);
   }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
 
+  const serverIdsKey = scenario.serverIds.join('|');
   useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
-  }, [scenario.serverIds.join('|')]);
+  }, [serverIdsKey]);
 
   useEffect(() => {
     setNewRulePath('');
@@ -2017,30 +2012,6 @@ function buildPreviewCheckItems(
   }>
 ) {
   return buildCheckItems({ evalRules, failureReasons, checkResults });
-}
-
-export function renderEvalRulePreview(rule: EvalRule): string {
-  if (rule.type === 'agent_check') {
-    return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
-  }
-  if (rule.type === 'tool_sequence') {
-    return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
-  }
-  if (isToolInputRuleType(rule.type)) {
-    return `${rule.type}: ${rule.tool ?? ''}: ${renderEvalRuleValue(rule)}`;
-  }
-  if (rule.path) {
-    return `${rule.type}: ${renderEvalRuleValue(rule)}`;
-  }
-  return `${rule.type}: ${rule.value ?? ''}`;
-}
-
-function renderEvalRuleValue(rule: EvalRule): string {
-  return rule.path
-    ? rule.equals !== undefined
-      ? `${rule.path} == ${String(rule.equals)}`
-      : rule.path
-    : String(rule.value ?? '');
 }
 
 function formatPreviewFailureReason(reason: string): string {

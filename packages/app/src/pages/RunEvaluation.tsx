@@ -22,9 +22,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useConfigs } from '@/contexts/ConfigContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useConfigs } from '@/contexts/useConfigs';
+import { useDataSource } from '@/contexts/useDataSource';
+import { useLibraries } from '@/contexts/useLibraries';
 import { toast } from '@/hooks/use-toast';
 import {
   buildEvalNameBySourcePath,

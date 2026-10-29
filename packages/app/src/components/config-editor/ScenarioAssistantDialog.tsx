@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
 import { createScenarioAssistantApi } from '@/lib/assistant-session-api';

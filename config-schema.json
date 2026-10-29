@@ -6,6 +6,52 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["agents", "scenarios"],
+  "$defs": {
+    "toolAssertions": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "tool", "value"],
+            "properties": {
+              "type": { "const": "contains" },
+              "tool": { "type": "string", "minLength": 1 },
+              "value": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "tool", "pattern"],
+            "properties": {
+              "type": { "const": "regex" },
+              "tool": { "type": "string", "minLength": 1 },
+              "pattern": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "tool", "path"],
+            "properties": {
+              "type": { "const": "jsonpath" },
+              "tool": { "type": "string", "minLength": 1 },
+              "path": { "type": "string", "minLength": 1 },
+              "equals": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "number" },
+                  { "type": "boolean" }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
   "properties": {
     "name": {
       "type": "string",
@@ -382,94 +428,8 @@
                     "type": "array",
                     "items": { "type": "string", "minLength": 1, "pattern": "^(?!\\s*$)(?!.*(?:^|\\|)\\s*(?:\\||$)).+$" }
                   },
-                  "tool_input_assertions": {
-                    "type": "array",
-                    "items": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "value"],
-                          "properties": {
-                            "type": { "const": "contains" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "value": { "type": "string", "minLength": 1 }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "pattern"],
-                          "properties": {
-                            "type": { "const": "regex" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "pattern": { "type": "string", "minLength": 1 }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "path"],
-                          "properties": {
-                            "type": { "const": "jsonpath" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "path": { "type": "string", "minLength": 1 },
-                            "equals": {
-                              "oneOf": [
-                                { "type": "string" },
-                                { "type": "number" },
-                                { "type": "boolean" }
-                              ]
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  },
-                  "tool_output_assertions": {
-                    "type": "array",
-                    "items": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "value"],
-                          "properties": {
-                            "type": { "const": "contains" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "value": { "type": "string", "minLength": 1 }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "pattern"],
-                          "properties": {
-                            "type": { "const": "regex" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "pattern": { "type": "string", "minLength": 1 }
-                          }
-                        },
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": ["type", "tool", "path"],
-                          "properties": {
-                            "type": { "const": "jsonpath" },
-                            "tool": { "type": "string", "minLength": 1 },
-                            "path": { "type": "string", "minLength": 1 },
-                            "equals": {
-                              "oneOf": [
-                                { "type": "string" },
-                                { "type": "number" },
-                                { "type": "boolean" }
-                              ]
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  },
+                  "tool_input_assertions": { "$ref": "#/$defs/toolAssertions" },
+                  "tool_output_assertions": { "$ref": "#/$defs/toolAssertions" },
                   "response_assertions": {
                     "type": "array",
                     "items": {

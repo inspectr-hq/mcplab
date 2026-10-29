@@ -100,7 +100,7 @@ import type {
   ToolInputAssertion as CoreToolInputAssertion
 } from '@inspectr/mcplab-core';
 
-export type { CoreCheckCounts, CoreToolInputAssertion };
+export type { CoreCheckCounts, CoreToolInputAssertion, BrowserProviderProfile };
 export {
   calculatePassRate,
   DECISION_DEFAULTS,

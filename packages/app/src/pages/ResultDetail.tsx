@@ -70,14 +70,14 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recha
 import { generateHtmlReport } from '@/lib/generate-html-report';
 import { sumTokenUsages } from '@/lib/token-usage';
 import { formatTokenCount } from '@/lib/format-duration';
-import { useDataSource } from '@/contexts/DataSourceContext';
-import { useConfigs } from '@/contexts/ConfigContext';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useDataSource } from '@/contexts/useDataSource';
+import { useConfigs } from '@/contexts/useConfigs';
+import { useLibraries } from '@/contexts/useLibraries';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import {

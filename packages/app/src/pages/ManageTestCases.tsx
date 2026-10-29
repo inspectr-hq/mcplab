@@ -1,8 +1,8 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
-import { useLibraries } from '@/contexts/LibraryContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/useLibraries';
+import { useDataSource } from '@/contexts/useDataSource';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -350,7 +350,7 @@ const ManageTestCases = () => {
       setSaveStatus('idle');
       setSaveError('');
     }
-  }, [selectedScenario]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedScenario]);
 
   useEffect(() => {
     return () => {

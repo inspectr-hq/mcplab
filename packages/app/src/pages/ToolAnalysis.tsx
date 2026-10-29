@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import {
-  ToolAnalysisReportView,
-  toolAnalysisReportToMarkdown
-} from '@/components/tool-analysis/ToolAnalysisReportView';
-import { useDataSource } from '@/contexts/DataSourceContext';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
+import { useDataSource } from '@/contexts/useDataSource';
+import { useLibraries } from '@/contexts/useLibraries';
 import { toast } from '@/hooks/use-toast';
 import type {
   RunJobEvent,
@@ -35,33 +33,7 @@ import {
   type SchemaViewMode
 } from '@/components/tool-analysis/ToolSchemaPreview';
 
-type ProgressEvent = { payload?: { message?: unknown } };
-
-export function parseAnalysisProgressFromEvents(events: ProgressEvent[]): {
-  totalTools: number;
-  startedTools: number;
-  finishedTools: number;
-  percent: number;
-} {
-  let totalTools = 0;
-  const started = new Set<string>();
-  const finished = new Set<string>();
-  for (const event of events) {
-    const message = typeof event.payload?.message === 'string' ? event.payload.message : '';
-    if (!message) continue;
-    const totalMatch = message.match(/\((\d+)\s+selected\s+of\s+\d+\s+discovered\)/i);
-    if (totalMatch) {
-      totalTools = Math.max(totalTools, Number(totalMatch[1]) || 0);
-    }
-    const startedMatch = message.match(/^Started\s+(.+)$/);
-    if (startedMatch) started.add(startedMatch[1]);
-    const finishedMatch = message.match(/^Finished\s+(.+)$/);
-    if (finishedMatch) finished.add(finishedMatch[1]);
-  }
-  const percent =
-    totalTools > 0 ? Math.max(0, Math.min(100, Math.round((finished.size / totalTools) * 100))) : 0;
-  return { totalTools, startedTools: started.size, finishedTools: finished.size, percent };
-}
+import { parseAnalysisProgressFromEvents } from '@/lib/tool-analysis-progress';
 
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = 'mcplab.toolAnalysis.activeJobId';
 
@@ -202,13 +174,13 @@ const ToolAnalysisPage = () => {
     });
   }, [events.length]);
 
-  const clearActiveToolAnalysisJob = () => {
+  const clearActiveToolAnalysisJob = useCallback(() => {
     try {
       sessionStorage.removeItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY);
     } catch {
       // ignore sessionStorage access issues
     }
-  };
+  }, []);
 
   const setActiveToolAnalysisJob = (jobId: string) => {
     try {
@@ -218,40 +190,43 @@ const ToolAnalysisPage = () => {
     }
   };
 
-  const attachToJob = (jobId: string) => {
-    cleanupRef.current?.();
-    cleanupRef.current = source.subscribeToolAnalysisJob(jobId, (event) => {
-      setEvents((prev) => [...prev, event]);
-      if (event.type === 'completed') {
-        void source
-          .getToolAnalysisResult(jobId)
-          .then((result) => {
-            setReport(result.report);
-            setSavedReportId(result.savedReportId ?? null);
-          })
-          .catch((error: unknown) =>
-            toast({
-              title: 'Could not load analysis report',
-              description: error instanceof Error ? error.message : String(error),
-              variant: 'destructive'
+  const attachToJob = useCallback(
+    (jobId: string) => {
+      cleanupRef.current?.();
+      cleanupRef.current = source.subscribeToolAnalysisJob(jobId, (event) => {
+        setEvents((prev) => [...prev, event]);
+        if (event.type === 'completed') {
+          void source
+            .getToolAnalysisResult(jobId)
+            .then((result) => {
+              setReport(result.report);
+              setSavedReportId(result.savedReportId ?? null);
             })
-          )
-          .finally(() => {
-            clearActiveToolAnalysisJob();
-            setActiveJobId(null);
-            setSubmitting(false);
-            setRunState('idle');
-            setViewStep('run');
-          });
-      } else if (event.type === 'error') {
-        const message = String(event.payload?.message ?? '');
-        clearActiveToolAnalysisJob();
-        setRunState(message.toLowerCase().includes('abort') ? 'stopped' : 'error');
-        setActiveJobId(null);
-        setSubmitting(false);
-      }
-    });
-  };
+            .catch((error: unknown) =>
+              toast({
+                title: 'Could not load analysis report',
+                description: error instanceof Error ? error.message : String(error),
+                variant: 'destructive'
+              })
+            )
+            .finally(() => {
+              clearActiveToolAnalysisJob();
+              setActiveJobId(null);
+              setSubmitting(false);
+              setRunState('idle');
+              setViewStep('run');
+            });
+        } else if (event.type === 'error') {
+          const message = String(event.payload?.message ?? '');
+          clearActiveToolAnalysisJob();
+          setRunState(message.toLowerCase().includes('abort') ? 'stopped' : 'error');
+          setActiveJobId(null);
+          setSubmitting(false);
+        }
+      });
+    },
+    [source, clearActiveToolAnalysisJob]
+  );
 
   useEffect(() => {
     if (activeJobId || report) return;
@@ -272,7 +247,7 @@ const ToolAnalysisPage = () => {
     return () => {
       // no-op; cleanup handled by standard subscription cleanup
     };
-  }, [source, activeJobId, report]);
+  }, [attachToJob, activeJobId, report]);
 
   const discoverTools = async () => {
     if (selectedServerNames.length === 0) {

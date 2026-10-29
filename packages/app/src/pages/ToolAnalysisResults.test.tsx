@@ -12,7 +12,7 @@ const { sourceMock } = vi.hoisted(() => ({
   }
 }));
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({ source: sourceMock })
 }));
 

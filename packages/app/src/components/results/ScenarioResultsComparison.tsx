@@ -11,7 +11,7 @@ import { formatTokenCount } from '@/lib/format-duration';
 import { buildCheckItems } from '@/lib/check-presentation';
 import { tallyCheckCounts } from '@/types/eval';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
   ScenarioOutcomeIcon,

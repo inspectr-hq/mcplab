@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { MarkdownReportSummary } from '@/lib/data-sources/types';
 import { Clock, MoreHorizontal, NotepadText, Trash2 } from 'lucide-react';

@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentDetail from './AgentDetail';
 
 const mocks = vi.hoisted(() => ({ save: vi.fn(), test: vi.fn(), list: vi.fn() }));
-vi.mock('@/contexts/LibraryContext', () => ({
+vi.mock('@/contexts/useLibraries', () => ({
   useLibraries: () => ({ agents: [], setAgents: mocks.save, browserProviders: {} })
 }));
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: { testAgentConnection: mocks.test, listProviderModels: mocks.list }
   })
