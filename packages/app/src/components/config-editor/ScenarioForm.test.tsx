@@ -171,7 +171,9 @@ describe('ScenarioForm checks editor', () => {
       />
     );
     expect(screen.getByText('Output Contains')).toBeInTheDocument();
-    expect(screen.getByText('search_tags contains TM5-BP2')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'search_tags contains TM5-BP2')
+    ).toBeInTheDocument();
     expect(screen.queryByText(/"type"/)).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole('checkbox', {
@@ -247,9 +249,14 @@ describe('ScenarioForm checks editor', () => {
     expect(screen.getByText('Output Contains')).toBeInTheDocument();
     expect(screen.getByText('Output Regex')).toBeInTheDocument();
     expect(screen.getByText('Output JSONPath')).toBeInTheDocument();
-    expect(screen.getByText('search_tags contains TM5-BP2')).toBeInTheDocument();
     expect(
-      screen.getByText('search_tags · $.structuredContent.has_more · == false')
+      screen.getByText((_, element) => element?.textContent === 'search_tags contains TM5-BP2')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.textContent === 'search_tags · $.structuredContent.has_more · == false'
+      )
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit check 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit check 2' })).toBeInTheDocument();

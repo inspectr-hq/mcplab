@@ -5,7 +5,7 @@ function formatToolSequenceText(sequence: string[]): string {
   return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
 }
 
-export function isToolInputRuleType(type: EvalRule['type']): boolean {
+export function isToolAssertionRuleType(type: EvalRule['type']): boolean {
   return type.startsWith('tool_input_') || type.startsWith('tool_output_');
 }
 
@@ -16,7 +16,7 @@ export function renderEvalRulePreview(rule: EvalRule): string {
   if (rule.type === 'tool_sequence') {
     return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
   }
-  if (isToolInputRuleType(rule.type)) {
+  if (isToolAssertionRuleType(rule.type)) {
     return `${rule.type}: ${rule.tool ?? ''}: ${renderEvalRuleValue(rule)}`;
   }
   if (rule.path) {

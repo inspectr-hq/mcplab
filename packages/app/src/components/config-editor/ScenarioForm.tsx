@@ -1,5 +1,5 @@
 import { CheckDisplay } from './CheckDisplay';
-import { isToolInputRuleType, renderEvalRulePreview } from './scenario-rule-preview';
+import { isToolAssertionRuleType, renderEvalRulePreview } from './scenario-rule-preview';
 import {
   CheckCircle2,
   Clock3,
@@ -386,7 +386,7 @@ function ScenarioCard({
 
   const addRule = () => {
     if (!canAddRule()) return;
-    if (isToolInputRuleType(newRuleType)) {
+    if (isToolAssertionRuleType(newRuleType)) {
       const tool = newRuleTool.trim();
       let nextRule: EvalRule;
       if (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath') {
@@ -619,7 +619,7 @@ function ScenarioCard({
     onUpdate({ extractRules: scenario.extractRules.filter((_, i) => i !== ri) });
   };
 
-  const isToolInputRule = isToolInputRuleType(newRuleType);
+  const isToolAssertionRule = isToolAssertionRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
@@ -627,7 +627,7 @@ function ScenarioCard({
   const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
   const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
   const canAddRule = () => {
-    if (isToolInputRule) {
+    if (isToolAssertionRule) {
       return Boolean(
         newRuleTool.trim() &&
         (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath'
@@ -1476,7 +1476,7 @@ function ScenarioCard({
                                   />
                                 )}
                               </>
-                            ) : isToolInputRule ? (
+                            ) : isToolAssertionRule ? (
                               <>
                                 <ToolNameInput
                                   value={newRuleTool}

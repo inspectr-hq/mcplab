@@ -1,7 +1,7 @@
 import type { EvalRule } from '@/types/eval';
 import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ToolSequenceDisplay } from './ToolAlternativesEditor';
-import { isToolInputRuleType } from './scenario-rule-preview';
+import { isToolAssertionRuleType } from './scenario-rule-preview';
 
 const ruleTypeLabel: Record<EvalRule['type'], string> = {
   required_tool: 'Required',
@@ -67,7 +67,7 @@ function CheckValue({ rule }: { rule: EvalRule }) {
       <span>No tool steps</span>
     );
   }
-  if (isToolInputRuleType(rule.type)) {
+  if (isToolAssertionRuleType(rule.type)) {
     const toolName = <span className="font-mono">{rule.tool}</span>;
     if (rule.type.endsWith('_contains'))
       return <span className="break-all">{toolName} contains {String(rule.value)}</span>;
