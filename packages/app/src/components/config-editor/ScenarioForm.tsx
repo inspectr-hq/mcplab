@@ -1,3 +1,5 @@
+import { CheckDisplay } from './CheckDisplay';
+import { isToolAssertionRuleType, renderEvalRulePreview } from './scenario-rule-preview';
 import {
   CheckCircle2,
   Clock3,
@@ -36,25 +38,21 @@ import type {
   Scenario,
   EvalRule
 } from '@/types/eval';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import {
-  formatToolSequenceLabel,
-  isValidToolExpression,
-  normalizeToolExpression
-} from '@/types/eval';
+import { isValidToolExpression, normalizeToolExpression } from '@/types/eval';
 import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
+import { McpServerPicker } from '@/components/McpServerPicker';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import {
   AddToolAlternativeButton,
-  ToolAlternativesEditor,
-  ToolSequenceDisplay
+  ToolAlternativesEditor
 } from '@/components/config-editor/ToolAlternativesEditor';
 import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { EvalRuleLabel } from '@/components/results/EvalRuleLabel';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import {
   isSupportedAttachmentMediaType,
   SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
@@ -62,6 +60,7 @@ import {
 } from '@/lib/attachment-policy';
 import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { sortServersForDisplay } from '@/lib/server-display-order';
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -111,6 +110,9 @@ function RuleTypeSelect({
         <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
         <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
         <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
+        <SelectItem value="tool_output_contains">Tool output contains</SelectItem>
+        <SelectItem value="tool_output_regex">Tool output regex</SelectItem>
+        <SelectItem value="tool_output_jsonpath">Tool output JSONPath</SelectItem>
         <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
         <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
         <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
@@ -127,14 +129,6 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
-
-function formatToolSequenceText(sequence: string[]): string {
-  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
-}
-
-function isToolInputRuleType(type: EvalRule['type']): boolean {
-  return type.startsWith('tool_input_');
-}
 
 function parseEqualsValue(text: string): string | number | boolean | undefined {
   const value = text.trim();
@@ -382,17 +376,20 @@ function ScenarioCard({
     setExpanded((prev) => !prev);
   };
 
-  const findRuleIndex = (rule: EvalRule | null) => {
-    if (!rule) return -1;
-    return scenario.evalRules.findIndex((candidate) => candidate === rule);
-  };
+  const findRuleIndex = useCallback(
+    (rule: EvalRule | null) => {
+      if (!rule) return -1;
+      return scenario.evalRules.findIndex((candidate) => candidate === rule);
+    },
+    [scenario.evalRules]
+  );
 
   const addRule = () => {
     if (!canAddRule()) return;
-    if (isToolInputRuleType(newRuleType)) {
+    if (isToolAssertionRuleType(newRuleType)) {
       const tool = newRuleTool.trim();
       let nextRule: EvalRule;
-      if (newRuleType === 'tool_input_jsonpath') {
+      if (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath') {
         const path = newRulePath.trim();
         const equals = parseEqualsValue(newRuleEquals);
         nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
@@ -515,8 +512,10 @@ function ScenarioCard({
   );
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
-  const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
+  const toolSequence = useMemo(
+    () => (toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : []),
+    [toolSequenceRule]
+  );
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
 
   const updateToolSequence = (nextSequence: string[]) => {
@@ -544,7 +543,7 @@ function ScenarioCard({
   useEffect(() => {
     if (!toolSequenceEditorOpen) return;
     setToolSequenceDraft(toolSequence);
-  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, JSON.stringify(toolSequence)]);
+  }, [toolSequenceEditorOpen, toolSequence]);
 
   useEffect(() => {
     setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
@@ -564,7 +563,7 @@ function ScenarioCard({
     if (valueRuleEditingRule && findRuleIndex(valueRuleEditingRule) < 0) {
       setValueRuleEditingRule(null);
     }
-  }, [scenario.evalRules, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
+  }, [findRuleIndex, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
 
   useEffect(() => {
     if (toolSequenceEditingRule && newRuleType !== 'tool_sequence') {
@@ -598,7 +597,10 @@ function ScenarioCard({
     'response_regex',
     'tool_input_contains',
     'tool_input_regex',
-    'tool_input_jsonpath'
+    'tool_input_jsonpath',
+    'tool_output_contains',
+    'tool_output_regex',
+    'tool_output_jsonpath'
   ];
 
   const addExtract = () => {
@@ -617,51 +619,7 @@ function ScenarioCard({
     onUpdate({ extractRules: scenario.extractRules.filter((_, i) => i !== ri) });
   };
 
-  const toggleServer = (srvId: string) => {
-    const next = scenario.serverIds.includes(srvId)
-      ? scenario.serverIds.filter((id) => id !== srvId)
-      : [...scenario.serverIds, srvId];
-    onUpdate({ serverIds: next });
-  };
-
-  const ruleTypeLabel: Record<EvalRule['type'], string> = {
-    required_tool: 'Required',
-    forbidden_tool: 'Forbidden',
-    tool_sequence: 'Sequence',
-    tool_input_contains: 'Input Contains',
-    tool_input_regex: 'Input Regex',
-    tool_input_jsonpath: 'Input JSONPath',
-    response_contains: 'Contains',
-    response_not_contains: 'Not Contains',
-    response_starts_with: 'Starts With',
-    response_ends_with: 'Ends With',
-    response_equals: 'Equals',
-    response_regex: 'Regex',
-    response_jsonpath: 'JSONPath',
-    response_jsonpath_exists: 'JSONPath Exists',
-    response_jsonpath_not_exists: 'JSONPath Not Exists',
-    agent_check: 'Agent'
-  };
-
-  const ruleTypeBadgeColor: Record<EvalRule['type'], string> = {
-    required_tool: 'border-sky-300/60 bg-sky-500/10 text-sky-700',
-    forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
-    tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
-    tool_input_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_input_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_input_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
-    response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
-    response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
-    response_ends_with: 'border-indigo-300/60 bg-indigo-500/10 text-indigo-700',
-    response_equals: 'border-lime-300/60 bg-lime-500/10 text-lime-700',
-    response_regex: 'border-fuchsia-300/60 bg-fuchsia-500/10 text-fuchsia-700',
-    response_jsonpath: 'border-emerald-300/60 bg-emerald-500/10 text-emerald-700',
-    response_jsonpath_exists: 'border-green-300/60 bg-green-500/10 text-green-700',
-    response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700',
-    agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
-  };
-  const isToolInputRule = isToolInputRuleType(newRuleType);
+  const isToolAssertionRule = isToolAssertionRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
@@ -669,10 +627,12 @@ function ScenarioCard({
   const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
   const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
   const canAddRule = () => {
-    if (isToolInputRule) {
+    if (isToolAssertionRule) {
       return Boolean(
         newRuleTool.trim() &&
-        (newRuleType === 'tool_input_jsonpath' ? newRulePath.trim() : newRuleValue.trim())
+        (newRuleType === 'tool_input_jsonpath' || newRuleType === 'tool_output_jsonpath'
+          ? newRulePath.trim()
+          : newRuleValue.trim())
       );
     }
     if (isJsonPathRule) return Boolean(newRulePath.trim());
@@ -691,6 +651,7 @@ function ScenarioCard({
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
+  const sortedServers = useMemo(() => sortServersForDisplay(servers), [servers]);
   const availableAgentIds = agents.map((agent) => agent.id).filter(Boolean);
   const canLoadToolNames = selectedServerIds.length > 0;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>('');
@@ -711,10 +672,11 @@ function ScenarioCard({
     setConsumedAutoOpenNonce(assistantAutoOpenNonce);
   }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
 
+  const serverIdsKey = scenario.serverIds.join('|');
   useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
-  }, [scenario.serverIds.join('|')]);
+  }, [serverIdsKey]);
 
   useEffect(() => {
     setNewRulePath('');
@@ -1006,23 +968,16 @@ function ScenarioCard({
 
             <div className="space-y-1.5">
               <Label className="text-xs">Servers</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {servers.map((srv) => (
-                  <Badge
-                    key={srv.id}
-                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline'}
-                    className={`cursor-pointer text-xs ${
-                      scenario.serverIds.includes(srv.id) ? '' : 'opacity-50'
-                    }`}
-                    onClick={() => !readOnly && toggleServer(srv.id)}
-                  >
-                    {srv.name || srv.id}
-                  </Badge>
-                ))}
-                {servers.length === 0 && (
-                  <span className="text-xs text-muted-foreground">Add servers above first</span>
-                )}
-              </div>
+              {servers.length === 0 ? (
+                <span className="text-xs text-muted-foreground">Add servers above first</span>
+              ) : (
+                <McpServerPicker
+                  servers={sortedServers}
+                  selectedIds={scenario.serverIds}
+                  onChange={(serverIds) => onUpdate({ serverIds })}
+                  disabled={readOnly}
+                />
+              )}
             </div>
 
             <Card className="border bg-card">
@@ -1397,57 +1352,7 @@ function ScenarioCard({
                             key={ri}
                             className="flex items-start justify-between gap-2 rounded-md border bg-background px-2 py-2 text-xs"
                           >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                    ruleTypeBadgeColor[rule.type]
-                                  }`}
-                                >
-                                  {ruleTypeLabel[rule.type]}
-                                </span>
-                                {rule.type === 'agent_check' ? (
-                                  <div className="min-w-0">
-                                    <div className="font-medium leading-tight">
-                                      {rule.label || 'Unnamed check'}
-                                    </div>
-                                    {rule.prompt && (
-                                      <div className="mt-0.5 wrap-break-word text-[11px] leading-snug text-muted-foreground">
-                                        {rule.prompt}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : rule.type === 'tool_sequence' ? (
-                                  <ToolSequenceDisplay sequence={rule.sequence ?? []} />
-                                ) : isToolInputRuleType(rule.type) ? (
-                                  <span className="font-mono break-all">
-                                    {rule.type === 'tool_input_contains'
-                                      ? `${rule.tool} contains ${String(rule.value)}`
-                                      : rule.type === 'tool_input_regex'
-                                        ? `${rule.tool} matches ${String(rule.value)}`
-                                        : `${rule.tool} · ${rule.path} · ${
-                                            rule.equals !== undefined
-                                              ? `== ${String(rule.equals)}`
-                                              : 'exists'
-                                          }`}
-                                  </span>
-                                ) : (
-                                  <span className="font-mono break-all">
-                                    {rule.path ? (
-                                      rule.equals !== undefined ? (
-                                        `${rule.path} == ${String(rule.equals)}`
-                                      ) : (
-                                        rule.path
-                                      )
-                                    ) : rule.type === 'required_tool' ? (
-                                      <ToolAlternativesDisplay value={String(rule.value ?? '')} />
-                                    ) : (
-                                      rule.value
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                            <CheckDisplay rule={rule} />
                             {!readOnly && (
                               <div className="flex items-center gap-1">
                                 {(rule.type === 'tool_sequence' ||
@@ -1571,7 +1476,7 @@ function ScenarioCard({
                                   />
                                 )}
                               </>
-                            ) : isToolInputRule ? (
+                            ) : isToolAssertionRule ? (
                               <>
                                 <ToolNameInput
                                   value={newRuleTool}
@@ -1583,7 +1488,8 @@ function ScenarioCard({
                                   canLoadTools={canLoadToolNames}
                                   onLoadTools={loadAvailableTools}
                                 />
-                                {newRuleType === 'tool_input_jsonpath' && (
+                                {(newRuleType === 'tool_input_jsonpath' ||
+                                  newRuleType === 'tool_output_jsonpath') && (
                                   <Input
                                     value={newRulePath}
                                     onChange={(e) => setNewRulePath(e.target.value)}
@@ -1591,7 +1497,8 @@ function ScenarioCard({
                                     className="h-8 min-w-0 flex-1 text-xs font-mono"
                                   />
                                 )}
-                                {newRuleType === 'tool_input_jsonpath' ? (
+                                {newRuleType === 'tool_input_jsonpath' ||
+                                newRuleType === 'tool_output_jsonpath' ? (
                                   <Input
                                     value={newRuleEquals}
                                     onChange={(e) => setNewRuleEquals(e.target.value)}
@@ -1603,9 +1510,12 @@ function ScenarioCard({
                                     value={newRuleValue}
                                     onChange={(e) => setNewRuleValue(e.target.value)}
                                     placeholder={
-                                      newRuleType === 'tool_input_regex'
+                                      newRuleType === 'tool_input_regex' ||
+                                      newRuleType === 'tool_output_regex'
                                         ? 'Regex pattern'
-                                        : 'Text present in input'
+                                        : newRuleType.startsWith('tool_output_')
+                                          ? 'Text present in output'
+                                          : 'Text present in input'
                                     }
                                     className="h-8 w-40 text-xs font-mono"
                                   />
@@ -1996,30 +1906,6 @@ function buildPreviewCheckItems(
   }>
 ) {
   return buildCheckItems({ evalRules, failureReasons, checkResults });
-}
-
-export function renderEvalRulePreview(rule: EvalRule): string {
-  if (rule.type === 'agent_check') {
-    return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
-  }
-  if (rule.type === 'tool_sequence') {
-    return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
-  }
-  if (isToolInputRuleType(rule.type)) {
-    return `${rule.type}: ${rule.tool ?? ''}: ${renderEvalRuleValue(rule)}`;
-  }
-  if (rule.path) {
-    return `${rule.type}: ${renderEvalRuleValue(rule)}`;
-  }
-  return `${rule.type}: ${rule.value ?? ''}`;
-}
-
-function renderEvalRuleValue(rule: EvalRule): string {
-  return rule.path
-    ? rule.equals !== undefined
-      ? `${rule.path} == ${String(rule.equals)}`
-      : rule.path
-    : String(rule.value ?? '');
 }
 
 function formatPreviewFailureReason(reason: string): string {

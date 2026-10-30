@@ -123,7 +123,7 @@ const ServerSetSchema = z
     id: z.string().min(1),
     label: z.string().optional(),
     servers: z.array(z.string().min(1)).min(1).optional(),
-    scenarioServerOverrides: z.record(z.array(z.string())).optional()
+    scenarioServerOverrides: z.record(z.string(), z.array(z.string())).optional()
   })
   .strict();
 
@@ -160,7 +160,7 @@ const ResultsMetadataSchema = z
     timestamp: z.string(),
     config_hash: z.string(),
     cli_version: z.string(),
-    mcp_server_versions: z.record(z.string())
+    mcp_server_versions: z.record(z.string(), z.string())
   })
   .passthrough();
 
@@ -448,6 +448,10 @@ const EvalRulesSchema = z
       .array(ToolInputAssertionSchema)
       .optional()
       .describe('Checks over MCP tool arguments.'),
+    tool_output_assertions: z
+      .array(ToolInputAssertionSchema)
+      .optional()
+      .describe('Checks over full MCP tool responses.'),
     response_assertions: z
       .array(ResponseAssertionSchema)
       .optional()
@@ -586,7 +590,7 @@ const FlattenedTraceItemSchema = z.union([
     id: z.string(),
     name: z.string(),
     server: z.string(),
-    input: z.unknown()
+    input: z.unknown().optional()
   }),
   z.object({
     type: z.literal('tool_result'),
@@ -602,7 +606,7 @@ const FlattenedTraceItemSchema = z.union([
     server: z.string(),
     is_error: z.boolean().optional(),
     duration_ms: z.number().optional(),
-    content: z.unknown()
+    content: z.unknown().optional()
   })
 ]);
 
@@ -626,7 +630,7 @@ const ConversationTimelineItemSchema = z.union([
     id: z.string(),
     server: z.string(),
     tool: z.string(),
-    args: z.unknown()
+    args: z.unknown().optional()
   }),
   z.object({
     index: z.number().int().nonnegative(),
@@ -1757,7 +1761,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_evaluation_config',
     {
       description:
-        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/, optionally inside a relative folder such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/, optionally inside a relative folder such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       outputSchema: {
         file_name: z.string(),
         path: z.string(),
@@ -1778,7 +1782,7 @@ export function registerTools(server: McpServer): void {
             'Optional folder path relative to mcplab/evals/, such as mcp-dev/routines. Absolute paths and paths that escape the evals directory are rejected.'
           ),
         config: GenericObjectSchema.describe(
-          'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+          'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
         )
       }
     },
@@ -1835,7 +1839,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_evaluation_config',
     {
       description:
-        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       inputSchema: {
         config_path: z
           .string()
@@ -1843,7 +1847,7 @@ export function registerTools(server: McpServer): void {
             'Path to an existing eval YAML, relative to the MCPLab evals directory. Invalid, missing, or out-of-root paths return an error; the tool never silently coerces them.'
           ),
         config: GenericObjectSchema.describe(
-          'Complete replacement evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+          'Complete replacement evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, tool_output_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
         ),
         confirm: z
           .literal(true)
@@ -2006,8 +2010,8 @@ export function registerTools(server: McpServer): void {
         hash: z.string(),
         summary: ConfigSummarySchema,
         resolved_config: z.object({
-          servers: z.record(GenericObjectSchema),
-          agents: z.record(AgentEntrySchema),
+          servers: z.record(z.string(), GenericObjectSchema),
+          agents: z.record(z.string(), AgentEntrySchema),
           scenarios: z.array(ResolvedScenarioSchema),
           run_defaults: RunDefaultsSchema.optional()
         })
@@ -2065,11 +2069,13 @@ export function registerTools(server: McpServer): void {
             server_variant: z.string().optional(),
             servers: z.array(z.string()).optional(),
             pass_rate: z.number().nullable(),
-            tool_usage_frequency: z.record(z.number())
+            tool_usage_frequency: z.record(z.string(), z.number())
           })
         ),
-        effective_server_overrides: z.record(z.array(z.string())),
-        effective_server_variants: z.record(z.record(z.array(z.string()))).optional(),
+        effective_server_overrides: z.record(z.string(), z.array(z.string())),
+        effective_server_variants: z
+          .record(z.string(), z.record(z.string(), z.array(z.string())))
+          .optional(),
         report_html_preview: z.string()
       },
       inputSchema: {
@@ -2083,7 +2089,7 @@ export function registerTools(server: McpServer): void {
           .describe('Runs per scenario (default 1).'),
         ...RuntimeServerSelectionSchema,
         scenario_server_overrides: z
-          .record(z.array(z.string()))
+          .record(z.string(), z.array(z.string()))
           .optional()
           .describe('Optional per-scenario MCP server ref overrides for this run.')
       }
@@ -2294,7 +2300,7 @@ export function registerTools(server: McpServer): void {
           .describe('Optional note attached to the queued run.'),
         ...RuntimeServerSelectionSchema,
         scenario_server_overrides: z
-          .record(z.array(z.string()))
+          .record(z.string(), z.array(z.string()))
           .optional()
           .describe('Map scenario ids to replacement MCP server ids for this queued run.')
       },
@@ -2975,8 +2981,8 @@ export function registerTools(server: McpServer): void {
         run_id: z.string(),
         legacy_trace_detected: z.boolean().optional(),
         total_scenario_records: z.number().int().nonnegative(),
-        message_role_counts: z.record(z.number()),
-        block_type_counts: z.record(z.number()),
+        message_role_counts: z.record(z.string(), z.number()),
+        block_type_counts: z.record(z.string(), z.number()),
         scenario_agent_pairs: z.number().int().nonnegative(),
         tool_call_count: z.number().int().nonnegative(),
         tool_result_count: z.number().int().nonnegative(),

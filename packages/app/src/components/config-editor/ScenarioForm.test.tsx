@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderEvalRulePreview, ScenarioForm } from './ScenarioForm';
+import { useState } from 'react';
+import { ScenarioSuggestions } from './scenario-suggestions/ScenarioSuggestions';
+import { ScenarioForm } from './ScenarioForm';
+import { renderEvalRulePreview } from './scenario-rule-preview';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
 
 const mockSource = {
@@ -10,7 +13,7 @@ const mockSource = {
 const mockEnsureOAuthForServers = vi.fn();
 let mockScenarioAssistantDialogProps: Record<string, unknown> | null = null;
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: mockSource
   })
@@ -135,6 +138,129 @@ describe('ScenarioForm checks editor', () => {
 
     fireEvent.click(screen.getAllByRole('combobox')[1]);
     expect(screen.getByText('Tool input JSONPath')).toBeInTheDocument();
+  });
+
+  it('shows tool output check types before response checks in the dropdown', () => {
+    render(
+      <ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={vi.fn()} />
+    );
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(options).toContain('Tool output contains');
+    expect(options).toContain('Tool output regex');
+    expect(options).toContain('Tool output JSONPath');
+  });
+
+  it('displays assistant check suggestions as selectable checks without JSON', () => {
+    const onApplyPatch = vi.fn();
+    render(
+      <ScenarioSuggestions
+        messageId="message"
+        scenario={baseScenario()}
+        appliedKeys={new Set()}
+        onApplied={() => {}}
+        onApplyPatch={onApplyPatch}
+        suggestions={{
+          evalRules: {
+            replacement: [
+              { type: 'tool_output_contains', tool: 'search_tags', value: 'TM5-BP2' },
+              { type: 'tool_output_regex', tool: 'search_tags', value: 'Paris.*' }
+            ]
+          }
+        }}
+      />
+    );
+    expect(screen.getByText('Output Contains')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'search_tags contains TM5-BP2')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/"type"/)).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Select Tool output · search_tags matches regex Paris.*'
+      })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      evalRules: [{ type: 'tool_output_contains', tool: 'search_tags', value: 'TM5-BP2' }]
+    });
+  });
+
+  it('applies assistant output assertions with readable labels and edit controls', () => {
+    function Editor() {
+      const [scenario, setScenario] = useState(baseScenario());
+      return (
+        <>
+          <ScenarioSuggestions
+            messageId="assistant"
+            scenario={scenario}
+            appliedKeys={new Set()}
+            onApplied={() => {}}
+            onApplyPatch={(patch) => setScenario((current) => ({ ...current, ...patch }))}
+            suggestions={{
+              evalRules: {
+                replacement: [
+                  { type: 'tool_output_contains', tool: 'search_tags', value: 'TM5-BP2' },
+                  { type: 'tool_output_regex', tool: 'search_tags', value: '\\b9\\b' }
+                ]
+              }
+            }}
+          />
+          <ScenarioForm
+            scenarios={[scenario]}
+            agents={[]}
+            servers={[]}
+            onChange={(next) => setScenario(next[0])}
+          />
+        </>
+      );
+    }
+    render(<Editor />);
+    expect(
+      screen.getByRole('checkbox', { name: 'Select Tool output · search_tags contains TM5-BP2' })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Select Tool output · search_tags matches regex \\b9\\b'
+      })
+    ).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+    expect(screen.getAllByText('Output Contains')).toHaveLength(2);
+    expect(screen.getAllByText('Output Regex')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Edit check 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit check 2' })).toBeInTheDocument();
+  });
+
+  it('shows labels and edit controls for tool output checks', () => {
+    const scenario: Scenario = {
+      ...baseScenario(),
+      evalRules: [
+        { type: 'tool_output_contains', tool: 'search_tags', value: 'TM5-BP2' },
+        { type: 'tool_output_regex', tool: 'search_tags', value: 'Paris.*' },
+        {
+          type: 'tool_output_jsonpath',
+          tool: 'search_tags',
+          path: '$.structuredContent.has_more',
+          equals: false
+        }
+      ]
+    };
+    render(<ScenarioForm scenarios={[scenario]} agents={[]} servers={[]} onChange={vi.fn()} />);
+    expect(screen.getByText('Output Contains')).toBeInTheDocument();
+    expect(screen.getByText('Output Regex')).toBeInTheDocument();
+    expect(screen.getByText('Output JSONPath')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'search_tags contains TM5-BP2')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.textContent === 'search_tags · $.structuredContent.has_more · == false'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit check 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit check 2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit check 3' })).toBeInTheDocument();
   });
 
   it('includes the tool name in tool input previews', () => {

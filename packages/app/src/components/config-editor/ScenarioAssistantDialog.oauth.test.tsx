@@ -20,7 +20,7 @@ const mockSource = {
 const mockEnsureOAuthForServers = vi.fn();
 const mockToast = vi.fn();
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({ source: mockSource })
 }));
 

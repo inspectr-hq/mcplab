@@ -26,8 +26,8 @@ import {
 import { StatCard } from '@/components/StatCard';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useConfigs } from '@/contexts/ConfigContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useConfigs } from '@/contexts/useConfigs';
+import { useDataSource } from '@/contexts/useDataSource';
 import type { EvalResult } from '@/types/eval';
 import { buildRunScopeSummary } from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';

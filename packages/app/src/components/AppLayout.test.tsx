@@ -7,7 +7,7 @@ import { AppLayout } from './AppLayout';
 const mockUseDataSource = vi.fn();
 const mockUseRunQueueStatus = vi.fn();
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => mockUseDataSource()
 }));
 

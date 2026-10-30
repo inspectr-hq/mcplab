@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { MarkdownReportContent } from '@/lib/data-sources/types';
 

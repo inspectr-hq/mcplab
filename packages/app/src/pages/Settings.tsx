@@ -11,8 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { isDecisionEngineEnabled, type EvaluationDecisionConfig } from '@/types/eval';
 import { RefreshCw, Settings as SettingsIcon } from 'lucide-react';
-import { useLibraries } from '@/contexts/LibraryContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/useLibraries';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';

@@ -25,7 +25,7 @@ const { configRef, librariesRef, reloadMock, scenarioFormPropsRef, sourceMock } 
   })
 );
 
-vi.mock('@/contexts/ConfigContext', () => ({
+vi.mock('@/contexts/useConfigs', () => ({
   useConfigs: () => ({
     getConfig: (id: string) => (configRef.value?.id === id ? configRef.value : undefined),
     addConfig: vi.fn(),
@@ -38,14 +38,14 @@ vi.mock('@/contexts/ConfigContext', () => ({
   })
 }));
 
-vi.mock('@/contexts/LibraryContext', () => ({
+vi.mock('@/contexts/useLibraries', () => ({
   useLibraries: () => ({
     ...librariesRef.value,
     reload: vi.fn()
   })
 }));
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceMock
   })

@@ -48,9 +48,9 @@ import {
 } from '@/components/ui/table';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
@@ -250,7 +250,7 @@ const Compare = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const pageLimit = 100;
   const pagination = useOffsetPagination(pageLimit);
-  const { offset, hasMore, totalCount } = pagination;
+  const { offset, hasMore, totalCount, reset, updateMeta } = pagination;
 
   const initialWithinRunId = searchParams.get('runId') ?? '';
   const initialWithinRunAgents = (searchParams.get(columnsParam) ?? '')
@@ -303,7 +303,7 @@ const Compare = () => {
         if (apiTimeFilter.until) pageFilter.until = apiTimeFilter.until;
         const page = await source.listRunSummariesPage(pageFilter);
         if (refreshRequestIdRef.current !== requestId) return;
-        pagination.updateMeta(page);
+        updateMeta(page);
         setResults(page.data.map(summaryToResult));
       } else {
         const next = await source.listResults();
@@ -336,7 +336,7 @@ const Compare = () => {
           })
           .then((page) => {
             if (active) {
-              pagination.updateMeta(page);
+              updateMeta(page);
             }
             return page.data.map(summaryToResult);
           })
@@ -359,7 +359,7 @@ const Compare = () => {
     return () => {
       active = false;
     };
-  }, [offset, scenarioFilter, source, apiTimeFilter]);
+  }, [offset, scenarioFilter, source, apiTimeFilter, pageLimit, updateMeta]);
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -570,15 +570,8 @@ const Compare = () => {
   }, [detailedRunsById, selected, source, withinRunId]);
 
   useEffect(() => {
-    pagination.reset();
-  }, [
-    pagination.reset,
-    scenarioFilter,
-    timeFilterMode,
-    timeFilterPreset,
-    timeFilterStart,
-    timeFilterEnd
-  ]);
+    reset();
+  }, [reset, scenarioFilter, timeFilterMode, timeFilterPreset, timeFilterStart, timeFilterEnd]);
 
   const heldOptions = useMemo(
     () => withinRunOptions(withinRun, comparingServers ? 'agents' : 'servers'),

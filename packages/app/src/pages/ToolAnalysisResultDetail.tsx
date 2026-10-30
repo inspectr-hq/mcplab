@@ -11,15 +11,13 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { SavedToolAnalysisReportRecord } from '@/lib/data-sources/types';
-import {
-  ToolAnalysisReportView,
-  toolAnalysisReportToMarkdown
-} from '@/components/tool-analysis/ToolAnalysisReportView';
+import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { Clock, Download, Trash2 } from 'lucide-react';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 
 /** Identifies one Inspectr trace: a scenario run's request ID on an inspected origin. */

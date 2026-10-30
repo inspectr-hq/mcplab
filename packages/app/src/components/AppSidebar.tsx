@@ -30,9 +30,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarHeader,
-  useSidebar
+  SidebarHeader
 } from '@/components/ui/sidebar';
+import { useSidebar } from '@/components/ui/sidebar-context';
 
 const navSections = [
   {

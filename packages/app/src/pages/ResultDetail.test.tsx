@@ -59,13 +59,13 @@ vi.mock('@/hooks/use-result-assistant', () => ({
   useResultAssistant: () => mockResultAssistantState
 }));
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceMock
   })
 }));
 
-vi.mock('@/contexts/ConfigContext', () => ({
+vi.mock('@/contexts/useConfigs', () => ({
   useConfigs: () => ({
     configs: mockConfigs,
     loading: false,
@@ -78,7 +78,7 @@ vi.mock('@/contexts/ConfigContext', () => ({
   })
 }));
 
-vi.mock('@/contexts/LibraryContext', () => ({
+vi.mock('@/contexts/useLibraries', () => ({
   useLibraries: () => ({
     servers: mockLibraryServers,
     agents: [],

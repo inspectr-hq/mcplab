@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useLibraries } from '@/contexts/useLibraries';
 
 export function useMcpServerNames(): Record<string, string> {
   const { servers } = useLibraries();

@@ -61,7 +61,8 @@ function unobservedToolRules(rules: EvalRules | undefined): EvalRules | undefine
   return {
     tool_constraints: rules.tool_constraints,
     tool_sequence: rules.tool_sequence,
-    tool_input_assertions: rules.tool_input_assertions
+    tool_input_assertions: rules.tool_input_assertions,
+    tool_output_assertions: rules.tool_output_assertions
   };
 }
 

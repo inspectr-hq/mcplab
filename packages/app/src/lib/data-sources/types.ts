@@ -100,15 +100,16 @@ import type {
   ToolInputAssertion as CoreToolInputAssertion
 } from '@inspectr/mcplab-core';
 
-export type { CoreCheckCounts, CoreToolInputAssertion };
+export type { CoreCheckCounts, CoreToolInputAssertion, BrowserProviderProfile };
 export {
   calculatePassRate,
   DECISION_DEFAULTS,
   DECISION_PROVIDERS,
   isDecisionEngineEnabled,
   normalizeEvaluationDecisionConfig,
-  formatToolInputAssertionFailureReason,
+  formatToolAssertionFailureReason,
   formatToolInputAssertionLabel,
+  formatToolAssertionLabel,
   formatToolSequenceLabel,
   formatToolExpression,
   normalizeToolExpression,
@@ -239,7 +240,7 @@ export interface RunJobEvent {
 
 export type { QueueEntry, QueueResponse };
 export type RunQueueSseEvent =
-  | RunQueueEvent
+  | (RunQueueEvent & { replayed?: boolean })
   | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
 
 // Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo

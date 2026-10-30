@@ -20,7 +20,7 @@ import {
   type EvaluationDecisionConfig,
   type LlmAgentConfig
 } from '@/types/eval';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 
 type Props = {

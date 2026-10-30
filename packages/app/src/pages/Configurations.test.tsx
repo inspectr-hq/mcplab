@@ -13,7 +13,7 @@ const { configsRef, reloadMock, sourceMock, toastMock } = vi.hoisted(() => ({
   toastMock: vi.fn()
 }));
 
-vi.mock('@/contexts/ConfigContext', () => ({
+vi.mock('@/contexts/useConfigs', () => ({
   useConfigs: () => ({
     configs: configsRef.value,
     deleteConfig: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: (...args: unknown[]) => toastMock(...args)
 }));
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceMock
   })

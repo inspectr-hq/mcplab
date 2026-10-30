@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/CopyButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { WorkspaceHealthResponse } from '@/lib/data-sources/types';
 

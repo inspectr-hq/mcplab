@@ -34,8 +34,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { useLibraries } from '@/contexts/LibraryContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/useLibraries';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
@@ -46,7 +46,7 @@ import type {
   ProviderModelsResponse,
   LlmAgentConfig
 } from '@/types/eval';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const modelSuggestions: Record<string, string[]> = {

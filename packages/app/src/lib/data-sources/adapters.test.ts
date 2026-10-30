@@ -849,6 +849,42 @@ describe('fromCoreResultsJson check counts', () => {
 });
 
 describe('config adapters round-trip', () => {
+  it('preserves tool output assertions through YAML editing', () => {
+    const assertions = [
+      { type: 'contains' as const, tool: 'search', value: 'Paris' },
+      { type: 'regex' as const, tool: 'search', pattern: 'Par.s' },
+      { type: 'jsonpath' as const, tool: 'search', path: '$.structuredContent.total', equals: 5 }
+    ];
+    const source: WorkspaceConfigRecord = {
+      id: 'output',
+      name: 'output',
+      path: '/tmp/output.yaml',
+      mtime: '2026-01-01',
+      hash: 'hash',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'example',
+            servers: [],
+            prompt: 'Find Paris',
+            eval: { tool_output_assertions: assertions }
+          }
+        ]
+      }
+    };
+    const ui = fromCoreConfigYaml(source);
+    expect(ui.scenarios[0].evalRules.map((rule) => rule.type)).toEqual([
+      'tool_output_contains',
+      'tool_output_regex',
+      'tool_output_jsonpath'
+    ]);
+    const result = toCoreConfigYaml(ui);
+    const scenario = (result.scenarios as unknown as AnyRecord[])[0];
+    expect((scenario.eval as AnyRecord).tool_output_assertions).toEqual(assertions);
+  });
+
   it('maps YAML description separately from the source file path', () => {
     const sourceRecord: WorkspaceConfigRecord = {
       id: 'cfg-described',

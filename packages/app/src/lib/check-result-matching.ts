@@ -15,18 +15,21 @@ export function matchStructuredCheckResult(
   if (
     rule.type === 'tool_input_contains' ||
     rule.type === 'tool_input_regex' ||
-    rule.type === 'tool_input_jsonpath'
+    rule.type === 'tool_input_jsonpath' ||
+    rule.type === 'tool_output_contains' ||
+    rule.type === 'tool_output_regex' ||
+    rule.type === 'tool_output_jsonpath'
   ) {
     const candidates = checkResults.filter(
       (result) => result.type === rule.type && result.metadata?.tool === rule.tool
     );
     const matchesFields = (result: CheckResult) => {
-      if (rule.type === 'tool_input_contains')
+      if (rule.type === 'tool_input_contains' || rule.type === 'tool_output_contains')
         return (
           toComparableString(rule.value) !== undefined &&
           toComparableString(result.metadata?.value) === toComparableString(rule.value)
         );
-      if (rule.type === 'tool_input_regex')
+      if (rule.type === 'tool_input_regex' || rule.type === 'tool_output_regex')
         return (
           toComparableString(rule.value) !== undefined &&
           toComparableString(result.metadata?.pattern) === toComparableString(rule.value)

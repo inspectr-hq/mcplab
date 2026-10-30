@@ -50,13 +50,13 @@ const {
   };
 });
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
     source: sourceMock
   })
 }));
 
-vi.mock('@/contexts/ConfigContext', () => ({
+vi.mock('@/contexts/useConfigs', () => ({
   useConfigs: () => ({
     configs: configsRef.value,
     loading: false,
@@ -69,7 +69,7 @@ vi.mock('@/contexts/ConfigContext', () => ({
   })
 }));
 
-vi.mock('@/contexts/LibraryContext', () => ({
+vi.mock('@/contexts/useLibraries', () => ({
   useLibraries: () => ({
     servers: [],
     agents: libraryAgentsRef.value,

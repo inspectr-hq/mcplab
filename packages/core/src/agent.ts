@@ -384,7 +384,8 @@ export async function runAgentScenario(params: {
         }
       }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
-        toolCalls.push({ ...toolCall, server: resolved.server });
+        const observedCall: ToolCall = { ...toolCall, server: resolved.server };
+        toolCalls.push(observedCall);
         const toolSpan = params.trace?.startTool({
           server: resolved.server,
           tool: toolCall.name,
@@ -421,6 +422,7 @@ export async function runAgentScenario(params: {
             result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments, {
               requestHeaders: Object.keys(requestHeaders).length > 0 ? requestHeaders : undefined
             });
+            observedCall.result = result;
           } catch (err: any) {
             ok = false;
             result = { error: String(err?.message ?? err) };

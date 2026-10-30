@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2 } from 'lucide-react';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useLibraries } from '@/contexts/useLibraries';
 import { Button } from '@/components/ui/button';
 import IconMcp from '@/components/ui/IconMcp';
 import { Badge } from '@/components/ui/badge';

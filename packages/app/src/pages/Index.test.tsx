@@ -23,11 +23,11 @@ const { sourceMock, configsRef } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/contexts/DataSourceContext', () => ({
+vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({ source: sourceMock })
 }));
 
-vi.mock('@/contexts/ConfigContext', () => ({
+vi.mock('@/contexts/useConfigs', () => ({
   useConfigs: () => ({ configs: configsRef.value })
 }));
 

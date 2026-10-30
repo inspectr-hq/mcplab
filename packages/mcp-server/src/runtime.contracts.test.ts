@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createConfiguredServer, handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
 type RegisteredTool = {
@@ -11,9 +13,9 @@ type RegisteredTool = {
   cb: (args: Record<string, unknown>) => Promise<any> | any;
 };
 
-function asSchema(schemaOrShape: unknown): z.ZodTypeAny {
+function asSchema(schemaOrShape: unknown): z.ZodType<Record<string, any>> {
   if (schemaOrShape && typeof (schemaOrShape as { safeParse?: unknown }).safeParse === 'function') {
-    return schemaOrShape as z.ZodTypeAny;
+    return schemaOrShape as z.ZodType<Record<string, any>>;
   }
   return z.object((schemaOrShape ?? {}) as z.ZodRawShape);
 }
@@ -120,6 +122,98 @@ describe('mcp tool contracts', () => {
     expect(JSON.stringify(result)).not.toContain('json-schema.org/draft-07');
   });
 
+  it('accepts scenario server override records and rejects invalid values', () => {
+    const tool = setupTools().get('mcplab_queue_run')!;
+    const schema = asSchema(tool.config.inputSchema);
+    expect(
+      schema.safeParse({
+        config_path: 'sample.yaml',
+        scenario_server_overrides: { first: ['server-a'] }
+      }).success
+    ).toBe(true);
+    expect(
+      schema.safeParse({
+        config_path: 'sample.yaml',
+        scenario_server_overrides: { first: 'server-a' }
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts trace tool events with omitted unknown fields', () => {
+    const tools = setupTools();
+    const events = asSchema(tools.get('mcplab_trace_list_events')!.config.outputSchema);
+    const base = {
+      record_index: 0,
+      message_index: 0,
+      block_index: 0,
+      scenario_id: 'scenario',
+      agent: 'agent',
+      role: 'tool',
+      ts: 'now',
+      name: 'search',
+      server: 'server'
+    };
+    expect(
+      events.safeParse({
+        run_id: 'run',
+        total_matching: 2,
+        items: [
+          { ...base, type: 'tool_use', id: 'call' },
+          { ...base, type: 'tool_result', tool_use_id: 'call' }
+        ]
+      }).success
+    ).toBe(true);
+    const conversation = asSchema(tools.get('mcplab_trace_get_conversation')!.config.outputSchema);
+    expect(
+      conversation.safeParse({
+        run_id: 'run',
+        scenario_id: 'scenario',
+        agent: 'agent',
+        timeline: [
+          {
+            index: 0,
+            type: 'tool_call',
+            role: 'tool',
+            ts: 'now',
+            message_index: 0,
+            block_index: 0,
+            id: 'call',
+            server: 'server',
+            tool: 'search'
+          }
+        ]
+      }).success
+    ).toBe(true);
+  });
+
+  it('lists and invokes a tool through the MCP protocol', async () => {
+    const server = createConfiguredServer();
+    const client = new Client({ name: 'contract-test', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const tools = await client.listTools();
+      const tool = tools.tools.find((entry) => entry.name === 'mcplab_build_app_link');
+      expect(tool?.inputSchema.properties).toHaveProperty('view');
+      expect(tool?.outputSchema?.properties).toHaveProperty('url');
+      const result = await client.callTool({
+        name: 'mcplab_build_app_link',
+        arguments: { view: 'home' }
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({ view: 'home', path: '/' });
+      const invalid = await client.callTool({
+        name: 'mcplab_build_app_link',
+        arguments: { view: 'invalid' }
+      });
+      expect(invalid.isError).toBe(true);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('declares scenario names in the shared output schema', () => {
     const tools = setupTools();
     const tool = tools.get('mcplab_generate_scenario_entry');
@@ -145,6 +239,9 @@ describe('mcp tool contracts', () => {
       eval: {
         response_assertions: [{ type: 'contains', value: 'Paris' }],
         tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+        tool_output_assertions: [
+          { type: 'jsonpath', tool: 'fetch', path: '$.structuredContent.total', equals: 5 }
+        ],
         agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
       }
     });
@@ -152,6 +249,9 @@ describe('mcp tool contracts', () => {
     expect((parsed as any).data.eval).toEqual({
       response_assertions: [{ type: 'contains', value: 'Paris' }],
       tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+      tool_output_assertions: [
+        { type: 'jsonpath', tool: 'fetch', path: '$.structuredContent.total', equals: 5 }
+      ],
       agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
     });
   });

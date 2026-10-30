@@ -44,51 +44,61 @@ describe('App route tree compatibility', () => {
     vi.clearAllMocks();
   });
 
-  it('redirects the legacy scenarios index to the test-case index', () => {
+  it('shows a loading state while a route is being loaded', async () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/test-cases']}>
+        <AppRouteTree />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(await screen.findByTestId('route-path')).toHaveTextContent('/libraries/test-cases');
+  });
+
+  it('redirects the legacy scenarios index to the test-case index', async () => {
     render(
       <MemoryRouter initialEntries={['/libraries/scenarios']}>
         <AppRouteTree />
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('route-path')).toHaveTextContent('/libraries/test-cases');
+    expect(await screen.findByTestId('route-path')).toHaveTextContent('/libraries/test-cases');
     expect(screen.getByTestId('test-case-id')).toHaveTextContent('');
   });
 
-  it('redirects a legacy scenario URL and exposes the decoded test-case param', () => {
+  it('redirects a legacy scenario URL and exposes the decoded test-case param', async () => {
     render(
       <MemoryRouter initialEntries={['/libraries/scenarios/legacy%2Fscenario']}>
         <AppRouteTree />
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('route-path')).toHaveTextContent(
+    expect(await screen.findByTestId('route-path')).toHaveTextContent(
       '/libraries/test-cases/legacy%2Fscenario'
     );
     expect(screen.getByTestId('test-case-id')).toHaveTextContent('legacy/scenario');
   });
 
-  it('reads query parameters through the routed page', () => {
+  it('reads query parameters through the routed page', async () => {
     render(
       <MemoryRouter initialEntries={['/results?scenario=scenario-42&agent=claude']}>
         <AppRouteTree />
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('scenario-query')).toHaveTextContent('scenario-42');
+    expect(await screen.findByTestId('scenario-query')).toHaveTextContent('scenario-42');
   });
 
-  it('keeps an agent named browser on the dynamic detail route', () => {
+  it('keeps an agent named browser on the dynamic detail route', async () => {
     render(
       <MemoryRouter initialEntries={['/libraries/agents/browser']}>
         <AppRouteTree />
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('agent-detail-route')).toHaveTextContent('browser');
+    expect(await screen.findByTestId('agent-detail-route')).toHaveTextContent('browser');
   });
 
-  it('preserves encoded backslashes and navigates to an internal route', () => {
+  it('preserves encoded backslashes and navigates to an internal route', async () => {
     const decodedId = '\\evil.example\\path';
     const encodedId = '%5Cevil.example%5Cpath';
     expect(encodeURIComponent(decodedId)).toBe(encodedId);
@@ -110,7 +120,7 @@ describe('App route tree compatibility', () => {
 
     fireEvent.click(link);
 
-    expect(screen.getByTestId('route-path')).toHaveTextContent(expectedPath);
+    expect(await screen.findByTestId('route-path')).toHaveTextContent(expectedPath);
     expect(screen.getByTestId('test-case-id')).toHaveTextContent(decodedId);
   });
 });

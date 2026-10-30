@@ -59,7 +59,7 @@ import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel'
 import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { useMcpServerNames } from '@/hooks/use-mcp-server-names';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { useHeightToViewportBottom } from '@/hooks/use-height-to-viewport-bottom';
@@ -265,7 +265,7 @@ const Results = () => {
   const splitView = splitViewHeight !== undefined;
   const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
-  const { offset, totalCount, hasMore } = pagination;
+  const { offset, totalCount, hasMore, reset, updateMeta, setTotalCount, setHasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
   const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
   const toggleSort = (next: typeof sortBy) => {
@@ -324,7 +324,7 @@ const Results = () => {
           limit: PAGE_LIMIT,
           offset
         });
-        pagination.updateMeta(page);
+        updateMeta(page);
         setResults(page.data.map(summaryToResult));
       } else if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({
@@ -333,12 +333,12 @@ const Results = () => {
           limit: PAGE_LIMIT,
           offset
         });
-        pagination.setTotalCount(summaries.length);
-        pagination.setHasMore(false);
+        setTotalCount(summaries.length);
+        setHasMore(false);
         setResults(summaries.map(summaryToResult));
       } else {
-        pagination.setTotalCount(0);
-        pagination.setHasMore(false);
+        setTotalCount(0);
+        setHasMore(false);
         setResults(await source.listResults());
       }
       void refreshDashboard();
@@ -372,7 +372,7 @@ const Results = () => {
           })
           .then((page) => {
             if (active) {
-              pagination.updateMeta(page);
+              updateMeta(page);
             }
             return page.data.map(summaryToResult);
           })
@@ -386,8 +386,8 @@ const Results = () => {
             })
             .then((summaries) => {
               if (active) {
-                pagination.setTotalCount(summaries.length);
-                pagination.setHasMore(false);
+                setTotalCount(summaries.length);
+                setHasMore(false);
               }
               return summaries.map(summaryToResult);
             })
@@ -413,6 +413,9 @@ const Results = () => {
   }, [
     apiScenarioFilter,
     completionVersion,
+    updateMeta,
+    setTotalCount,
+    setHasMore,
     offset,
     source,
     timeFilterEnd,
@@ -603,15 +606,8 @@ const Results = () => {
   ]);
 
   useEffect(() => {
-    pagination.reset();
-  }, [
-    apiScenarioFilter,
-    pagination.reset,
-    timeFilterEnd,
-    timeFilterMode,
-    timeFilterPreset,
-    timeFilterStart
-  ]);
+    reset();
+  }, [apiScenarioFilter, reset, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
@@ -742,7 +738,7 @@ const Results = () => {
       await source.deleteResult(runId);
       setResults((prev) => prev.filter((r) => r.id !== runId));
       setDashboardRuns((prev) => prev.filter((r) => r.id !== runId));
-      pagination.setTotalCount((count) => Math.max(0, count - 1));
+      setTotalCount((count) => Math.max(0, count - 1));
       toast({ title: 'Run deleted', description: runId });
       setPendingDeleteRunId(null);
     } catch (error: unknown) {

@@ -30,8 +30,8 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useLibraries } from '@/contexts/LibraryContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/useLibraries';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import { formatDurationShort } from '@/lib/format-duration';
 import type {
@@ -191,6 +191,7 @@ export default function OAuthDebuggerPage() {
     [servers]
   );
   const selectedServer = oauthServers.find((s) => s.id === selectedServerId);
+  const initializedServerId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!selectedServerId) return;
@@ -200,7 +201,12 @@ export default function OAuthDebuggerPage() {
   }, [oauthServers, selectedServerId]);
 
   useEffect(() => {
-    if (!selectedServer) return;
+    if (!selectedServerId) {
+      initializedServerId.current = null;
+      return;
+    }
+    if (!selectedServer || initializedServerId.current === selectedServerId) return;
+    initializedServerId.current = selectedServerId;
     if (selectedServer.oauthMode === 'dcr') {
       setRegistrationMethod('dcr');
       setClientId('');
@@ -213,7 +219,7 @@ export default function OAuthDebuggerPage() {
     setScopesText(selectedServer.oauthScope ?? '');
     setAuthorizationEndpoint(selectedServer.oauthAuthorizationUrl ?? '');
     setTokenEndpoint(selectedServer.oauthTokenEndpoint ?? '');
-  }, [selectedServer?.id]);
+  }, [selectedServer, selectedServerId]);
 
   const progressModel = useMemo(() => {
     const total = session?.stepStates.length ?? 0;

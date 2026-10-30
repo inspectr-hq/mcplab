@@ -36,11 +36,11 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { ToolAnalysisResultSummary } from '@/lib/data-sources/types';
 import { Clock, Download, MoreHorizontal, Trash2, NotebookTabs, ChevronDown } from 'lucide-react';
-import { toolAnalysisReportToMarkdown } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
@@ -66,7 +66,7 @@ export default function ToolAnalysisResultsPage() {
   const [serverOptions, setServerOptions] = useState<string[]>([]);
   const limit = 100;
   const pagination = useOffsetPagination(limit);
-  const { offset, hasMore } = pagination;
+  const { offset, hasMore, reset, updateMeta } = pagination;
 
   const load = async () => {
     setLoading(true);
@@ -78,7 +78,7 @@ export default function ToolAnalysisResultsPage() {
           server: serverFilter === 'all' ? undefined : serverFilter
         });
         setItems(page.data);
-        pagination.updateMeta(page);
+        updateMeta(page);
       } else {
         setItems(
           await source.listToolAnalysisResults({
@@ -124,8 +124,8 @@ export default function ToolAnalysisResultsPage() {
   }, [items, source]);
 
   useEffect(() => {
-    pagination.reset();
-  }, [pagination.reset, serverFilter]);
+    reset();
+  }, [reset, serverFilter]);
 
   const deleteTarget = useMemo(
     () => items.find((i) => i.reportId === deleteId) ?? null,

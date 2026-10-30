@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useLibraries } from '@/contexts/LibraryContext';
+import { useLibraries } from '@/contexts/useLibraries';
 
 export function useLibrariesReady(): boolean {
   const { loading } = useLibraries();

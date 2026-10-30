@@ -1,3 +1,4 @@
+import { CheckDisplay } from '../CheckDisplay';
 import { useState } from 'react';
 import { CheckCircle2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -290,7 +291,7 @@ function EvalRulesSuggestionCard({
           return (
             <div
               key={`${rule.type}-${index}`}
-              className="flex items-start gap-2 rounded bg-background p-2"
+              className="flex items-start gap-2 rounded-md border bg-background px-2 py-2 text-xs"
             >
               <Checkbox
                 id={checkboxId}
@@ -299,11 +300,14 @@ function EvalRulesSuggestionCard({
                 onCheckedChange={(checked) => toggleRule(index, checked === true)}
                 aria-label={`Select ${label}`}
               />
-              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
-                <span className="block text-xs font-medium">{label}</span>
-                <code className="block wrap-break-word rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
-                  {JSON.stringify(rule)}
-                </code>
+              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
+                <CheckDisplay
+                  rule={
+                    rule.type === 'tool_sequence'
+                      ? { ...rule, sequence: sequenceFromSuggestedRule(rule) }
+                      : rule
+                  }
+                />
               </label>
             </div>
           );

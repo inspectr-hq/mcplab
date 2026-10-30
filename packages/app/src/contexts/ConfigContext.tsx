@@ -1,19 +1,7 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { ConfigContext } from '@/contexts/useConfigs';
+import { useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { EvalConfig } from '@/types/eval';
-import { useDataSource } from '@/contexts/DataSourceContext';
-
-interface ConfigContextValue {
-  configs: EvalConfig[];
-  loading: boolean;
-  getConfig: (id: string) => EvalConfig | undefined;
-  addConfig: (config: EvalConfig) => Promise<EvalConfig>;
-  updateConfig: (id: string, config: EvalConfig) => Promise<EvalConfig>;
-  deleteConfig: (id: string) => Promise<void>;
-  cloneConfig: (id: string) => Promise<EvalConfig>;
-  reload: () => Promise<void>;
-}
-
-const ConfigContext = createContext<ConfigContextValue | null>(null);
+import { useDataSource } from '@/contexts/useDataSource';
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const { source } = useDataSource();
@@ -96,10 +84,4 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       {children}
     </ConfigContext.Provider>
   );
-}
-
-export function useConfigs() {
-  const ctx = useContext(ConfigContext);
-  if (!ctx) throw new Error('useConfigs must be used within ConfigProvider');
-  return ctx;
 }

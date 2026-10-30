@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useDataSource } from '@/contexts/useDataSource';
 import type { QueueResponse } from '@/lib/data-sources/types';
 
 const MAX_SSE_RECONNECT_ATTEMPTS = 5;
@@ -98,6 +98,7 @@ export function useRunQueueStatus() {
           return;
         }
         if (event.type === 'queue_event' && queueEvent) {
+          if (event.replayed) return;
           revisionRef.current += 1;
           const nextQueueState = normalizeQueueState(queueEvent);
           const currentJobIds = new Set(
@@ -181,5 +182,5 @@ export function useRunQueueStatus() {
         setReconnectNonce((prev) => prev + 1);
       }
     };
-  }, [queueState, streamStatus]);
+  }, [completionVersion, queueState, streamStatus]);
 }

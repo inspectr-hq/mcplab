@@ -285,6 +285,49 @@ describe('buildCheckItems', () => {
     });
   });
 
+  it.each([
+    [
+      { type: 'tool_output_contains', tool: 'search', value: 'Paris' },
+      'Tool output assertion failed: search output did not match (expected: contains Paris)'
+    ],
+    [
+      { type: 'tool_output_regex', tool: 'search', value: '[invalid(' },
+      'Tool output assertion failed: invalid regex [invalid('
+    ],
+    [
+      { type: 'tool_output_jsonpath', tool: 'search', path: '$.total', equals: 5 },
+      'Tool output assertion failed: search output did not match (expected: JSONPath $.total == 5)'
+    ],
+    [
+      { type: 'tool_output_contains', tool: 'search', value: 'Paris' },
+      'Tool output assertion failed: output not available for search'
+    ],
+    [
+      { type: 'tool_output_contains', tool: 'search', value: 'Paris' },
+      'Tool output assertion failed: tool not used: search'
+    ]
+  ])('maps output failure without structured checks', (rule, reason) => {
+    const result = buildCheckItems({
+      evalRules: [rule as EvalRule],
+      failureReasons: [reason as string]
+    });
+    expect(result[0]).toMatchObject({ status: 'failed', failureReason: reason });
+  });
+
+  it('attributes output failures to the matching assertion', () => {
+    const result = buildCheckItems({
+      evalRules: [
+        { type: 'tool_output_contains', tool: 'search', value: 'Paris' },
+        { type: 'tool_output_contains', tool: 'search', value: 'London' },
+        { type: 'tool_input_contains', tool: 'search', value: 'London' }
+      ],
+      failureReasons: [
+        'Tool output assertion failed: search output did not match (expected: contains London)'
+      ]
+    });
+    expect(result.map((item) => item.status)).toEqual(['passed', 'failed', 'passed']);
+  });
+
   it('attributes same-tool fallback failures to the matching contains value', () => {
     const result = buildCheckItems({
       evalRules: [

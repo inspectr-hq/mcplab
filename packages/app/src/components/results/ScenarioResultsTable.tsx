@@ -1,6 +1,6 @@
 import { scenarioExecutionKey } from '@/lib/data-sources/types';
 import { formatPassRate } from '@/lib/utils';
-import { formatProvider } from '@/components/ProviderBadge';
+import { formatProvider } from '@/lib/provider-format';
 import { buildCheckItems } from '@/lib/check-presentation';
 import { formatCompactOneDecimal, formatTokenCount } from '@/lib/format-duration';
 import {

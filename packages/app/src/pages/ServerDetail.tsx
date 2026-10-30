@@ -26,8 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { useLibraries } from '@/contexts/LibraryContext';
-import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/useLibraries';
+import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
