@@ -6,13 +6,15 @@ export function McpServerPicker({
   selectedIds,
   onChange,
   defaultIds = [],
-  className
+  className,
+  disabled = false
 }: {
   servers: Array<{ id: string; name?: string }>;
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   defaultIds?: string[];
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={cn('flex flex-wrap gap-1.5', className)}>
@@ -24,13 +26,15 @@ export function McpServerPicker({
             asChild
             variant={selected ? 'default' : 'outline'}
             className={cn(
-              'min-h-7 max-w-full cursor-pointer break-words px-2.5 py-0.5 text-xs leading-4',
-              !selected && 'opacity-60 hover:opacity-100',
+              'min-h-7 max-w-full break-words px-2.5 py-0.5 text-xs leading-4',
+              disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+              !disabled && !selected && 'opacity-60 hover:opacity-100',
               !selected && defaultIds.includes(server.id) && 'border-primary'
             )}
           >
             <button
               type="button"
+              disabled={disabled}
               aria-pressed={selected}
               title={server.id}
               onClick={(event) => {

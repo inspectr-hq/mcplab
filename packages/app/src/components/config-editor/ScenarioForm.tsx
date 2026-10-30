@@ -43,6 +43,7 @@ import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { isValidToolExpression, normalizeToolExpression } from '@/types/eval';
 import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
+import { McpServerPicker } from '@/components/McpServerPicker';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import {
   AddToolAlternativeButton,
@@ -59,6 +60,7 @@ import {
 } from '@/lib/attachment-policy';
 import { buildCheckItems, formatCheckStatusLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { sortServersForDisplay } from '@/lib/server-display-order';
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -617,13 +619,6 @@ function ScenarioCard({
     onUpdate({ extractRules: scenario.extractRules.filter((_, i) => i !== ri) });
   };
 
-  const toggleServer = (srvId: string) => {
-    const next = scenario.serverIds.includes(srvId)
-      ? scenario.serverIds.filter((id) => id !== srvId)
-      : [...scenario.serverIds, srvId];
-    onUpdate({ serverIds: next });
-  };
-
   const isToolInputRule = isToolInputRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
@@ -656,6 +651,7 @@ function ScenarioCard({
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
+  const sortedServers = useMemo(() => sortServersForDisplay(servers), [servers]);
   const availableAgentIds = agents.map((agent) => agent.id).filter(Boolean);
   const canLoadToolNames = selectedServerIds.length > 0;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>('');
@@ -972,23 +968,16 @@ function ScenarioCard({
 
             <div className="space-y-1.5">
               <Label className="text-xs">Servers</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {servers.map((srv) => (
-                  <Badge
-                    key={srv.id}
-                    variant={scenario.serverIds.includes(srv.id) ? 'default' : 'outline'}
-                    className={`cursor-pointer text-xs ${
-                      scenario.serverIds.includes(srv.id) ? '' : 'opacity-50'
-                    }`}
-                    onClick={() => !readOnly && toggleServer(srv.id)}
-                  >
-                    {srv.name || srv.id}
-                  </Badge>
-                ))}
-                {servers.length === 0 && (
-                  <span className="text-xs text-muted-foreground">Add servers above first</span>
-                )}
-              </div>
+              {servers.length === 0 ? (
+                <span className="text-xs text-muted-foreground">Add servers above first</span>
+              ) : (
+                <McpServerPicker
+                  servers={sortedServers}
+                  selectedIds={scenario.serverIds}
+                  onChange={(serverIds) => onUpdate({ serverIds })}
+                  disabled={readOnly}
+                />
+              )}
             </div>
 
             <Card className="border bg-card">
