@@ -1,3 +1,4 @@
+import { CheckDisplay } from './CheckDisplay';
 import { isToolInputRuleType, renderEvalRulePreview } from './scenario-rule-preview';
 import {
   CheckCircle2,
@@ -45,8 +46,7 @@ import { ToolAlternativesDisplay } from '@/components/ToolAlternativesDisplay';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import {
   AddToolAlternativeButton,
-  ToolAlternativesEditor,
-  ToolSequenceDisplay
+  ToolAlternativesEditor
 } from '@/components/config-editor/ToolAlternativesEditor';
 import { ToolNameInput } from '@/components/config-editor/ToolNameInput';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
@@ -624,49 +624,6 @@ function ScenarioCard({
     onUpdate({ serverIds: next });
   };
 
-  const ruleTypeLabel: Record<EvalRule['type'], string> = {
-    required_tool: 'Required',
-    forbidden_tool: 'Forbidden',
-    tool_sequence: 'Sequence',
-    tool_input_contains: 'Input Contains',
-    tool_input_regex: 'Input Regex',
-    tool_input_jsonpath: 'Input JSONPath',
-    tool_output_contains: 'Output Contains',
-    tool_output_regex: 'Output Regex',
-    tool_output_jsonpath: 'Output JSONPath',
-    response_contains: 'Contains',
-    response_not_contains: 'Not Contains',
-    response_starts_with: 'Starts With',
-    response_ends_with: 'Ends With',
-    response_equals: 'Equals',
-    response_regex: 'Regex',
-    response_jsonpath: 'JSONPath',
-    response_jsonpath_exists: 'JSONPath Exists',
-    response_jsonpath_not_exists: 'JSONPath Not Exists',
-    agent_check: 'Agent'
-  };
-
-  const ruleTypeBadgeColor: Record<EvalRule['type'], string> = {
-    required_tool: 'border-sky-300/60 bg-sky-500/10 text-sky-700',
-    forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
-    tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
-    tool_input_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_input_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_input_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_output_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_output_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    tool_output_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
-    response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
-    response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
-    response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
-    response_ends_with: 'border-indigo-300/60 bg-indigo-500/10 text-indigo-700',
-    response_equals: 'border-lime-300/60 bg-lime-500/10 text-lime-700',
-    response_regex: 'border-fuchsia-300/60 bg-fuchsia-500/10 text-fuchsia-700',
-    response_jsonpath: 'border-emerald-300/60 bg-emerald-500/10 text-emerald-700',
-    response_jsonpath_exists: 'border-green-300/60 bg-green-500/10 text-green-700',
-    response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700',
-    agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
-  };
   const isToolInputRule = isToolInputRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
@@ -1406,59 +1363,7 @@ function ScenarioCard({
                             key={ri}
                             className="flex items-start justify-between gap-2 rounded-md border bg-background px-2 py-2 text-xs"
                           >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                    ruleTypeBadgeColor[rule.type]
-                                  }`}
-                                >
-                                  {ruleTypeLabel[rule.type]}
-                                </span>
-                                {rule.type === 'agent_check' ? (
-                                  <div className="min-w-0">
-                                    <div className="font-medium leading-tight">
-                                      {rule.label || 'Unnamed check'}
-                                    </div>
-                                    {rule.prompt && (
-                                      <div className="mt-0.5 wrap-break-word text-[11px] leading-snug text-muted-foreground">
-                                        {rule.prompt}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : rule.type === 'tool_sequence' ? (
-                                  <ToolSequenceDisplay sequence={rule.sequence ?? []} />
-                                ) : isToolInputRuleType(rule.type) ? (
-                                  <span className="font-mono break-all">
-                                    {rule.type === 'tool_input_contains' ||
-                                    rule.type === 'tool_output_contains'
-                                      ? `${rule.tool} contains ${String(rule.value)}`
-                                      : rule.type === 'tool_input_regex' ||
-                                          rule.type === 'tool_output_regex'
-                                        ? `${rule.tool} matches ${String(rule.value)}`
-                                        : `${rule.tool} · ${rule.path} · ${
-                                            rule.equals !== undefined
-                                              ? `== ${String(rule.equals)}`
-                                              : 'exists'
-                                          }`}
-                                  </span>
-                                ) : (
-                                  <span className="font-mono break-all">
-                                    {rule.path ? (
-                                      rule.equals !== undefined ? (
-                                        `${rule.path} == ${String(rule.equals)}`
-                                      ) : (
-                                        rule.path
-                                      )
-                                    ) : rule.type === 'required_tool' ? (
-                                      <ToolAlternativesDisplay value={String(rule.value ?? '')} />
-                                    ) : (
-                                      rule.value
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                            <CheckDisplay rule={rule} />
                             {!readOnly && (
                               <div className="flex items-center gap-1">
                                 {(rule.type === 'tool_sequence' ||
