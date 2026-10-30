@@ -259,4 +259,39 @@ describe('useRunQueueStatus', () => {
 
     await waitFor(() => expect(result.current.queuedCount).toBe(1));
   });
+
+  it('does not let a stale shared-worker replay overwrite the current queue snapshot', async () => {
+    const activeJob = {
+      jobId: 'stale-job',
+      status: 'running',
+      runParams: {
+        configPath: '/tmp/eval.yaml',
+        runsPerScenario: 1,
+        scenarioIds: null,
+        agents: null,
+        runNote: null,
+        serverOverrideAll: null,
+        scenarioServerOverrides: null
+      }
+    };
+    sourceRef.current = {
+      getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
+      subscribeRunQueue: (onEvent: (event: unknown) => void) => {
+        window.setTimeout(() => {
+          onEvent({
+            type: 'queue_event',
+            replayed: true,
+            payload: { event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] } }
+          });
+        }, 0);
+        return () => undefined;
+      }
+    };
+
+    const { result } = renderHook(() => useRunQueueStatus());
+
+    await waitFor(() => expect(result.current.isRunning).toBe(false));
+    await new Promise((resolve) => window.setTimeout(resolve, 10));
+    expect(result.current.isRunning).toBe(false);
+  });
 });

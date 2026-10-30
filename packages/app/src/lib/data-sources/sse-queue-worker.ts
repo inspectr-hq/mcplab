@@ -123,7 +123,7 @@ self.addEventListener('connect', (e: Event) => {
       ensureHeartbeat();
       openEventSource();
       if (latestQueueEvent) {
-        port.postMessage(latestQueueEvent);
+        port.postMessage({ ...latestQueueEvent, replayed: true });
       }
       // New tab connecting after SSE is already open: send connected immediately
       if (source?.readyState === 1) {

@@ -240,7 +240,7 @@ export interface RunJobEvent {
 
 export type { QueueEntry, QueueResponse };
 export type RunQueueSseEvent =
-  | RunQueueEvent
+  | (RunQueueEvent & { replayed?: boolean })
   | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
 
 // Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo

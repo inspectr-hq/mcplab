@@ -98,6 +98,7 @@ export function useRunQueueStatus() {
           return;
         }
         if (event.type === 'queue_event' && queueEvent) {
+          if (event.replayed) return;
           revisionRef.current += 1;
           const nextQueueState = normalizeQueueState(queueEvent);
           const currentJobIds = new Set(
