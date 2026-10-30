@@ -281,7 +281,9 @@ describe('useRunQueueStatus', () => {
           onEvent({
             type: 'queue_event',
             replayed: true,
-            payload: { event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] } }
+            payload: {
+              event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] }
+            }
           });
         }, 0);
         return () => undefined;

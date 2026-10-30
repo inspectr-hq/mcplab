@@ -70,12 +70,21 @@ function CheckValue({ rule }: { rule: EvalRule }) {
   if (isToolAssertionRuleType(rule.type)) {
     const toolName = <span className="font-mono">{rule.tool}</span>;
     if (rule.type.endsWith('_contains'))
-      return <span className="break-all">{toolName} contains {String(rule.value)}</span>;
+      return (
+        <span className="break-all">
+          {toolName} contains {String(rule.value)}
+        </span>
+      );
     if (rule.type.endsWith('_regex'))
-      return <span className="break-all">{toolName} matches {String(rule.value)}</span>;
+      return (
+        <span className="break-all">
+          {toolName} matches {String(rule.value)}
+        </span>
+      );
     return (
       <span className="break-all">
-        {toolName} · {rule.path} · {rule.equals !== undefined ? `== ${String(rule.equals)}` : 'exists'}
+        {toolName} · {rule.path} ·{' '}
+        {rule.equals !== undefined ? `== ${String(rule.equals)}` : 'exists'}
       </span>
     );
   }
