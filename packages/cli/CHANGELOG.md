@@ -1,5 +1,22 @@
 # @inspectr/mcplab
 
+## 1.35.0
+
+### Minor Changes
+
+- feat: add tool output assertions
+- perf: load app routes on demand
+- chore: Show check labels in assistant output
+- chore: sort scenario server pills by name
+- fix: ignore stale queue worker replays
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.29.0
+  - @inspectr/mcplab-mcp-server@1.13.0
+  - @inspectr/mcplab-reporting@1.5.1
+
 ## 1.34.0
 
 ### Minor Changes

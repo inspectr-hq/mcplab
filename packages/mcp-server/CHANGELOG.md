@@ -1,5 +1,17 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.13.0
+
+### Minor Changes
+
+- feat: add tool output assertions
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.29.0
+  - @inspectr/mcplab-reporting@1.5.1
+
 ## 1.12.0
 
 ### Minor Changes

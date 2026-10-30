@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.29.0
+
+### Minor Changes
+
+- feat: add tool output assertions
+
 ## 1.28.0
 
 ### Minor Changes
