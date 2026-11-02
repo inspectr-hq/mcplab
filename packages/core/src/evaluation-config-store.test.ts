@@ -5,12 +5,41 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createEvaluationConfigFile,
   readEvaluationConfigFile,
+  stringifyEvaluationConfig,
   updateEvaluationConfigFile
 } from './evaluation-config-store.js';
 
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe('stringifyEvaluationConfig', () => {
+  it('writes top-level keys in a fixed order regardless of input key order', () => {
+    const config = {
+      run_defaults: { selected_agents: ['a1'] },
+      agents: [{ ref: 'a1' }],
+      description: 'desc',
+      scenarios: [{ ref: 'shared' }],
+      name: 'suite',
+      servers: [{ ref: 's1' }]
+    } as any;
+
+    const yaml = stringifyEvaluationConfig(config);
+    const topLevelKeys = yaml
+      .split('\n')
+      .filter((line) => /^[a-z_]+:/i.test(line))
+      .map((line) => line.split(':')[0]);
+
+    expect(topLevelKeys).toEqual([
+      'name',
+      'description',
+      'scenarios',
+      'servers',
+      'agents',
+      'run_defaults'
+    ]);
+  });
 });
 
 describe('createEvaluationConfigFile', () => {

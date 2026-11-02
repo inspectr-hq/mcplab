@@ -14,11 +14,15 @@ export type CreatedEvaluationConfigFile = {
 export type UpdatedEvaluationConfigFile = CreatedEvaluationConfigFile;
 
 export function stringifyEvaluationConfig(config: SourceEvalConfig): string {
-  return `${stringifyYaml({
-    ...config,
+  const ordered = {
+    name: config.name,
+    description: config.description,
+    scenarios: config.scenarios,
     servers: config.servers?.length ? config.servers : undefined,
-    agents: config.agents?.length ? config.agents : undefined
-  })}\n`;
+    agents: config.agents?.length ? config.agents : undefined,
+    run_defaults: config.run_defaults
+  } satisfies Record<keyof SourceEvalConfig, unknown>;
+  return `${stringifyYaml(ordered)}\n`;
 }
 
 export function safeEvaluationConfigFileName(name: string): string {
