@@ -548,6 +548,7 @@ const RunEvaluation = () => {
       setActiveRunJob(jobId);
       attachRunJob(jobId);
       void refreshQueue();
+      toast({ title: 'Queued', description: `"${selectedConfig.name}" added to run queue.` });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       const extraHint = message.includes('Anthropic model not found')
