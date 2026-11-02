@@ -326,6 +326,23 @@ describe('mcp tool contracts', () => {
     vi.unstubAllGlobals();
   });
 
+  it('logs queue failures and returns the error to the client', async () => {
+    const failure = new Error('APP unavailable');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(failure));
+    try {
+      const result = await setupTools().get('mcplab_queue_run')!.cb({ config_path: 'eval.yaml' });
+      expect(result).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: 'Error: APP unavailable' }]
+      });
+      expect(log).toHaveBeenCalledWith('[mcplab-mcp] mcplab_queue_run error:', failure);
+    } finally {
+      log.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('clearly distinguishes queueing from immediate evaluation', () => {
     const tools = setupTools();
     const runDescription = (tools.get('mcplab_run_eval')!.config as any).description;

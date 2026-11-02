@@ -2350,7 +2350,7 @@ export function registerTools(server: McpServer): void {
           ...payload,
           queue_url: new URL('/run', appBaseUrl).toString()
         });
-      })
+      }, 'mcplab_queue_run')
   );
 
   registerTool(
@@ -4615,10 +4615,14 @@ function err(error: unknown): ToolResult {
   };
 }
 
-async function withToolHandling(fn: () => Promise<ToolResult> | ToolResult): Promise<ToolResult> {
+async function withToolHandling(
+  fn: () => Promise<ToolResult> | ToolResult,
+  toolName = 'tool'
+): Promise<ToolResult> {
   try {
     return await fn();
   } catch (error) {
+    console.error(`[mcplab-mcp] ${toolName} error:`, error);
     return err(error);
   }
 }
