@@ -22,6 +22,7 @@ import {
   parseServerVariant,
   toServerSets,
   runServerVariants,
+  stringifyEvaluationConfig,
   type EvalConfig,
   type SourceEvalConfig,
   type ExecutableEvalConfig,
@@ -488,7 +489,7 @@ program
             continue;
           }
           const nextConfig = migrateSourceConfig(sourceConfig);
-          writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+          writeFileSync(filePath, stringifyEvaluationConfig(nextConfig), 'utf8');
           migrated += 1;
           console.log(kleur.green(`Migrated: ${file}`));
         } catch (error: any) {

@@ -96,6 +96,7 @@ export {
   createEvaluationConfigFile,
   updateEvaluationConfigFile,
   readEvaluationConfigFile,
+  stringifyEvaluationConfig,
   safeEvaluationConfigFileName,
   type CreatedEvaluationConfigFile,
   type UpdatedEvaluationConfigFile

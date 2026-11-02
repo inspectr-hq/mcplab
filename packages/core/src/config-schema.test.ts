@@ -10,6 +10,10 @@ const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 const validate = ajv.compile(schema);
 
+it('accepts evaluation configs without top-level agents or servers', () => {
+  expect(validate({ scenarios: [] })).toBe(true);
+});
+
 const valid = [
   { type: 'contains', tool: 'search', value: 'Paris' },
   { type: 'regex', tool: 'search', pattern: 'Par.*' },

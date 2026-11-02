@@ -5,7 +5,7 @@
   "description": "Schema for MCPLab evaluation configs using mixed inline/reference lists.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["agents", "scenarios"],
+  "required": ["scenarios"],
   "$defs": {
     "toolAssertions": {
       "type": "array",

@@ -1,8 +1,11 @@
 import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
-import { stringify as stringifyYaml } from 'yaml';
-import { normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
+import {
+  normalizeSourceConfig,
+  stringifyEvaluationConfig,
+  type SourceEvalConfig
+} from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 export type EvalsRouteDeps = Pick<
@@ -66,7 +69,7 @@ export async function handleEvalsRoutes(params: {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
     }
-    writeFileSync(filePath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
+    writeFileSync(filePath, stringifyEvaluationConfig(normalizedConfig), 'utf8');
     asJson(res, 201, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
@@ -118,7 +121,7 @@ export async function handleEvalsRoutes(params: {
         targetPath = uniquePath;
       }
     }
-    writeFileSync(targetPath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
+    writeFileSync(targetPath, stringifyEvaluationConfig(normalizedConfig), 'utf8');
     asJson(res, 200, readConfigRecord(targetPath, settings.evalsDir, settings.librariesDir));
     return true;
   }

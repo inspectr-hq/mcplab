@@ -233,6 +233,7 @@ describe('handleEvalsRoutes', () => {
 
     expect(captured[0]?.status).toBe(200);
     expect(readFileSync(configPath, 'utf8')).toContain('description: Saved from API');
+    expect(readFileSync(configPath, 'utf8')).not.toMatch(/^agents:|^servers:/m);
     expect(
       (captured[0]?.body as { config?: { description?: string } } | undefined)?.config?.description
     ).toBe('Saved from API');

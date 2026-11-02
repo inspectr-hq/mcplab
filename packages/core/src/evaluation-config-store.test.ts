@@ -14,6 +14,24 @@ afterEach(() => {
 });
 
 describe('createEvaluationConfigFile', () => {
+  it('omits empty top-level agents and servers on create and update, preserving scenario overrides', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-eval-store-'));
+    roots.push(root);
+    const config = { agents: [], servers: [], scenarios: [{ ref: 'shared', mcp_servers: [] }] };
+    const created = createEvaluationConfigFile({ evalsDir: root, fileName: 'suite', config });
+    for (const save of [
+      () => {},
+      () => updateEvaluationConfigFile({ evalsDir: root, filePath: 'suite.yaml', config })
+    ]) {
+      save();
+      const yaml = readFileSync(created.path, 'utf8');
+      expect(yaml).not.toMatch(/^agents:|^servers:/m);
+      expect(yaml).toContain('mcp_servers: []');
+      expect(
+        readEvaluationConfigFile({ evalsDir: root, filePath: 'suite.yaml' }).config.agents
+      ).toEqual([]);
+    }
+  });
   it('normalizes names and creates unique YAML files', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-eval-store-'));
     roots.push(root);

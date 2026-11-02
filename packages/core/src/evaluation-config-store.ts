@@ -13,6 +13,14 @@ export type CreatedEvaluationConfigFile = {
 };
 export type UpdatedEvaluationConfigFile = CreatedEvaluationConfigFile;
 
+export function stringifyEvaluationConfig(config: SourceEvalConfig): string {
+  return `${stringifyYaml({
+    ...config,
+    servers: config.servers?.length ? config.servers : undefined,
+    agents: config.agents?.length ? config.agents : undefined
+  })}\n`;
+}
+
 export function safeEvaluationConfigFileName(name: string): string {
   return (
     name
@@ -59,7 +67,10 @@ export function createEvaluationConfigFile(params: {
   if (!resolvedTarget.startsWith(`${evalsDir}${sep}`))
     throw new Error('Evaluation config path is outside the configured evals directory.');
   try {
-    writeFileSync(resolvedTarget, `${stringifyYaml(config)}\n`, { encoding: 'utf8', flag: 'wx' });
+    writeFileSync(resolvedTarget, stringifyEvaluationConfig(config), {
+      encoding: 'utf8',
+      flag: 'wx'
+    });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
       throw new Error(`Evaluation config '${fileName}' already exists.`);
@@ -86,7 +97,7 @@ export function updateEvaluationConfigFile(params: {
     throw new Error('Evaluation config path is outside the configured evals directory.');
   if (!existsSync(path)) throw new Error(`Evaluation config not found: ${params.filePath}`);
   const { config, warnings } = normalizeSourceConfig(params.config, { forWrite: true });
-  writeFileSync(path, `${stringifyYaml(config)}\n`, { encoding: 'utf8' });
+  writeFileSync(path, stringifyEvaluationConfig(config), { encoding: 'utf8' });
   return {
     fileName: path.slice(evalsDir.length + 1).replace(/\.ya?ml$/i, ''),
     path,
