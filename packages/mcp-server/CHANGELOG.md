@@ -1,5 +1,15 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.13.1
+
+### Patch Changes
+
+- chore: log MCP tool errors
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.29.1
+  - @inspectr/mcplab-reporting@1.5.2
+
 ## 1.13.0
 
 ### Minor Changes

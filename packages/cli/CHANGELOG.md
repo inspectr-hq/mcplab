@@ -1,5 +1,19 @@
 # @inspectr/mcplab
 
+## 1.35.1
+
+### Patch Changes
+
+- chore: provide ordered evaluation yaml
+- fix: omit empty evaluation lists from yaml
+- chore: bump dependencies 
+- chore: log MCP tool errors
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.29.1
+  - @inspectr/mcplab-mcp-server@1.13.1
+  - @inspectr/mcplab-reporting@1.5.2
+
 ## 1.35.0
 
 ### Minor Changes

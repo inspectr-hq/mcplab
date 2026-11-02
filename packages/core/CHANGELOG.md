@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.29.1
+
+### Patch Changes
+
+- chore: provide ordered evaluation yaml
+- fix: omit empty evaluation lists from yaml
+
 ## 1.29.0
 
 ### Minor Changes
