@@ -21,6 +21,7 @@ const { sourceMock, libraryServers } = vi.hoisted(() => {
 });
 
 const queueMock = { completionVersion: 0 };
+let restoreClipboard: (() => void) | undefined;
 
 vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
@@ -160,10 +161,34 @@ function toDatetimeLocalValue(date: Date) {
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreClipboard?.();
+    restoreClipboard = undefined;
     libraryServers.length = 0;
     sourceMock.listRunSummaries = undefined as unknown as typeof sourceMock.listRunSummaries;
     localStorage.removeItem('mcplab:results:time-filter');
     queueMock.completionVersion = 0;
+  });
+
+  it('uses the scenario and all-time filters from the evaluation results link on first load', async () => {
+    localStorage.setItem(
+      'mcplab:results:time-filter',
+      JSON.stringify({ mode: 'last', preset: '15min', start: '', end: '' })
+    );
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/results?time_filter=all&scenario=scn-1']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(sourceMock.listRunSummaries).toHaveBeenCalled());
+    const firstRequest = sourceMock.listRunSummaries.mock.calls[0]![0];
+    expect(firstRequest.scenario).toBe('scn-1');
+    expect(firstRequest.since).toBeUndefined();
+    expect(firstRequest.until).toBeUndefined();
   });
 
   it('opens the global MCP Lab Assistant sidebar from the Results header', async () => {
@@ -224,6 +249,18 @@ describe('Results', () => {
     const avgToolsHeader = screen.getByRole('columnheader', { name: 'Avg Tools' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
     const evaluationName = within(runCell).getByText('Search evaluation');
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    });
+    restoreClipboard = () => {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    };
+    fireEvent.click(within(runCell).getByRole('button', { name: 'Copy Run ID' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('run-with-mcp'));
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );
