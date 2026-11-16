@@ -3,8 +3,16 @@ import { McpServerPicker } from '@/components/McpServerPicker';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDefaultEvaluationAgent } from '@/hooks/use-default-evaluation-agent';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
-import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
+import { Play, Square, CheckCircle2, RefreshCw, X, Clock, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from '@/components/ui/command';
 import { QueueProcessingIndicator } from '@/components/QueueProcessingIndicator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useConfigs } from '@/contexts/useConfigs';
 import { useDataSource } from '@/contexts/useDataSource';
@@ -109,6 +118,7 @@ function queueChildRows(evaluation: EvaluationQueueItem): Array<{
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState('');
+  const [openConfigPicker, setOpenConfigPicker] = useState(false);
   const [varianceRuns, setVarianceRuns] = useState('1');
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -174,6 +184,7 @@ const RunEvaluation = () => {
       }`
     : '/results';
   const selectedConfig = configs.find((item) => item.id === configId);
+  const selectedConfigSuiteLabel = selectedConfig ? configSuiteLabel(selectedConfig) : null;
   const queueRelativePathBySourcePath = useMemo(
     () => buildRelativePathBySourcePath(configs),
     [configs]
@@ -1059,24 +1070,61 @@ const RunEvaluation = () => {
             <div className="space-y-2">
               <Label>MCP Evaluation</Label>
               <div className="flex items-center gap-2">
-                <Select value={configId} onValueChange={setConfigId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a config" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {configs.map((c) => {
-                      const suiteLabel = configSuiteLabel(c);
-                      return (
-                        <SelectItem key={c.id} value={c.id}>
-                          <span>{displayConfigName(c)}</span>
-                          {suiteLabel && (
-                            <span className="ml-2 text-muted-foreground">({suiteLabel})</span>
-                          )}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Popover open={openConfigPicker} onOpenChange={setOpenConfigPicker}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openConfigPicker}
+                      aria-label="Select config"
+                      className="min-w-0 flex-1 justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {selectedConfig ? displayConfigName(selectedConfig) : 'Select a config'}
+                        {selectedConfigSuiteLabel && (
+                          <span className="ml-2 text-muted-foreground">
+                            ({selectedConfigSuiteLabel})
+                          </span>
+                        )}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                    align="start"
+                  >
+                    <Command>
+                      <CommandInput placeholder="Search evaluations..." />
+                      <CommandList>
+                        <CommandEmpty>No evaluations found.</CommandEmpty>
+                        <CommandGroup>
+                          {configs.map((c) => {
+                            const suiteLabel = configSuiteLabel(c);
+                            return (
+                              <CommandItem
+                                key={c.id}
+                                value={`${displayConfigName(c)} ${suiteLabel ?? ''} ${
+                                  c.relativePath ?? ''
+                                }`}
+                                onSelect={() => {
+                                  setConfigId(c.id);
+                                  setOpenConfigPicker(false);
+                                }}
+                              >
+                                <span>{displayConfigName(c)}</span>
+                                {suiteLabel && (
+                                  <span className="ml-2 text-muted-foreground">({suiteLabel})</span>
+                                )}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 <Button
                   type="button"
                   variant="outline"
