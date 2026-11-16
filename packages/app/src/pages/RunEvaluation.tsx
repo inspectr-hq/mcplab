@@ -1395,7 +1395,6 @@ const RunEvaluation = () => {
                           </span>
                         </div>
                         <div className="mt-0.5 flex max-w-[45%] shrink-0 flex-wrap items-center justify-end gap-1 text-[11px] text-muted-foreground">
-                          <span className="mr-0.5">MCP:</span>
                           {effectiveServerIds.length > 0 ? (
                             effectiveServerIds.map((serverId) => (
                               <Badge

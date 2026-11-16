@@ -197,7 +197,6 @@ describe('RunEvaluation', () => {
 
     await screen.findByText('Scenario With MCP');
     expect(screen.getByText('server-a')).toBeInTheDocument();
-    expect(screen.getByText('MCP:').parentElement).toHaveClass('justify-end');
     expect(screen.getByRole('switch')).not.toBeChecked();
   });
 
