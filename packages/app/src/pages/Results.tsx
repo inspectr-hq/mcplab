@@ -55,7 +55,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { PassRateBadge } from '@/components/PassRateBadge';
-import { CopyButton } from '@/components/CopyButton';
+import { RunIdCopyButton } from '@/components/RunIdCopyButton';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
@@ -1242,7 +1242,7 @@ const Results = () => {
                               >
                                 {item.run.id}
                               </Link>
-                              <CopyButton text={item.run.id} label="Run ID" iconOnly />
+                              <RunIdCopyButton runId={item.run.id} />
                             </div>
                             <div
                               className="min-w-0 truncate font-mono text-xs text-foreground/80"

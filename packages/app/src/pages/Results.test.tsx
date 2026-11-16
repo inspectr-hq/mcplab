@@ -299,8 +299,10 @@ describe('Results', () => {
       if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
       else Reflect.deleteProperty(navigator, 'clipboard');
     };
-    fireEvent.click(within(runCell).getByRole('button', { name: 'Copy Run ID' }));
+    const copyRunIdButton = within(runCell).getByRole('button', { name: 'Copy Run ID' });
+    fireEvent.click(copyRunIdButton);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('run-with-mcp'));
+    expect(copyRunIdButton.querySelector('svg')).toHaveClass('lucide-check');
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );

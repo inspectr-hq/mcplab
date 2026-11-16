@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -8,11 +8,13 @@ export function CopyButton({
   text,
   label,
   iconOnly = false,
+  showCheckmarkOnCopy = false,
   className
 }: {
   text: string;
   label: string;
   iconOnly?: boolean;
+  showCheckmarkOnCopy?: boolean;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -21,7 +23,9 @@ export function CopyButton({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast({ title: 'Copied', description: `${label} copied to clipboard.` });
+      if (!showCheckmarkOnCopy) {
+        toast({ title: 'Copied', description: `${label} copied to clipboard.` });
+      }
       window.setTimeout(() => setCopied(false), 1500);
     } catch (error: unknown) {
       toast({
@@ -43,7 +47,11 @@ export function CopyButton({
       title={`Copy ${label}`}
       onClick={() => void handleCopy()}
     >
-      <Copy className={iconOnly ? 'h-3.5 w-3.5' : 'mr-2 h-3.5 w-3.5'} />
+      {showCheckmarkOnCopy && copied ? (
+        <Check className={iconOnly ? 'h-3.5 w-3.5' : 'mr-2 h-3.5 w-3.5'} />
+      ) : (
+        <Copy className={iconOnly ? 'h-3.5 w-3.5' : 'mr-2 h-3.5 w-3.5'} />
+      )}
       {!iconOnly && (copied ? 'Copied' : 'Copy')}
     </Button>
   );
