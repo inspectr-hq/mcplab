@@ -1,12 +1,25 @@
 # @inspectr/mcplab
 
+## 1.35.2
+
+### Patch Changes
+
+- feat: make evaluation picker searchable
+- feat: add optional JSON formatting for tool results
+- feat: filter results by pass status
+- feat: add run ID copy button
+- chore: expand long tool descriptions
+- chore: show scenario MCP servers per run
+- fix: apply filters from evaluation results link
+- fix: confirm queued runs with toast
+
 ## 1.35.1
 
 ### Patch Changes
 
 - chore: provide ordered evaluation yaml
 - fix: omit empty evaluation lists from yaml
-- chore: bump dependencies 
+- chore: bump dependencies
 - chore: log MCP tool errors
 
 - Updated dependencies
