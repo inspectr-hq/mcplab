@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { ToolDescription } from '@/components/tool-analysis/ToolDescription';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
 import { useLibraries } from '@/contexts/useLibraries';
@@ -856,9 +857,7 @@ const ToolAnalysisPage = () => {
                                     />
                                   </div>
                                   {tool.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {tool.description}
-                                    </p>
+                                    <ToolDescription text={tool.description} />
                                   )}
                                   <ToolSchemaPreview
                                     inputSchema={tool.inputSchema}
