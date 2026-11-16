@@ -55,6 +55,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { CopyButton } from '@/components/CopyButton';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
@@ -1145,12 +1146,15 @@ const Results = () => {
                       <TableRow key={item.run.id}>
                         <TableCell className="results-table-column-run-id w-120 max-w-120">
                           <div className="space-y-1">
-                            <Link
-                              to={`/results/${item.run.id}`}
-                              className="font-mono text-xs text-primary hover:underline"
-                            >
-                              {item.run.id}
-                            </Link>
+                            <div className="flex items-center gap-1">
+                              <Link
+                                to={`/results/${item.run.id}`}
+                                className="font-mono text-xs text-primary hover:underline"
+                              >
+                                {item.run.id}
+                              </Link>
+                              <CopyButton text={item.run.id} label="Run ID" iconOnly />
+                            </div>
                             <div
                               className="min-w-0 truncate font-mono text-xs text-foreground/80"
                               title={runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}

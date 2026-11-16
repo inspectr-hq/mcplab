@@ -57,6 +57,7 @@ import { formatCompactOneDecimal } from '@/lib/format-duration';
 import { isScenarioAssistantHandoffRelevant } from '@/lib/scenario-assistant';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { CopyButton } from '@/components/CopyButton';
 import {
   Select,
   SelectContent,
@@ -824,6 +825,7 @@ const ResultDetail = () => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
+                <CopyButton text={result.id} label="Run ID" iconOnly />
                 <PassRateBadge rate={displayPassRate} />
               </div>
               <p className="text-xs text-muted-foreground">
