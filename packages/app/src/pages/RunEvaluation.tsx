@@ -271,6 +271,10 @@ const RunEvaluation = () => {
     }
     return sortServersForDisplay(Array.from(byId.values()));
   }, [selectedConfig?.servers, libraryServers]);
+  const serverNamesById = useMemo(
+    () => new Map(availableServers.map((server) => [server.id, server.name?.trim() || server.id])),
+    [availableServers]
+  );
   const comparedServerIds = useMemo(
     () => comparisonServerIds.filter((id) => availableServers.some((server) => server.id === id)),
     [comparisonServerIds, availableServers]
@@ -1296,6 +1300,10 @@ const RunEvaluation = () => {
                     !compareServers &&
                     scenarioOverrideEnabled &&
                     Array.isArray(perScenarioOverride);
+                  let effectiveServerIds = scenario.serverIds || [];
+                  if (globalServerOverrideEnabled) effectiveServerIds = globalServerOverrideIds;
+                  if (hasOverride) effectiveServerIds = perScenarioOverride ?? [];
+                  if (compareServers) effectiveServerIds = comparedServerIds;
                   return (
                     <div
                       key={scenario.id}
@@ -1334,6 +1342,22 @@ const RunEvaluation = () => {
                           </span>
                           <span className="block font-mono text-xs text-muted-foreground truncate">
                             {scenario.id}
+                          </span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                            <span className="mr-0.5">MCP:</span>
+                            {effectiveServerIds.length > 0 ? (
+                              effectiveServerIds.map((serverId) => (
+                                <Badge
+                                  key={serverId}
+                                  variant="outline"
+                                  className="px-1.5 py-0 text-[10px]"
+                                >
+                                  {serverNamesById.get(serverId) ?? serverId}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span>None</span>
+                            )}
                           </span>
                         </span>
                       </div>
