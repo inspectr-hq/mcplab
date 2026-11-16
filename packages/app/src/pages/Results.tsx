@@ -970,7 +970,7 @@ const Results = () => {
                 aria-label="Date and time filter"
                 aria-expanded={openTimeFilterPicker}
                 aria-controls="results-time-command-list"
-                className={`w-[320px] justify-between font-normal ${
+                className={`w-[280px] justify-between font-normal ${
                   timeFilterMode !== 'all' ? 'border-primary/40' : ''
                 }`}
               >
@@ -981,7 +981,7 @@ const Results = () => {
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[360px] p-0" align="start">
+            <PopoverContent className="w-[320px] p-0" align="start">
               <div className="border-b px-3 py-2">
                 <p className="text-sm font-medium">Date and time filter</p>
                 <p className="text-xs text-muted-foreground">Filter runs by timestamp.</p>
@@ -990,7 +990,7 @@ const Results = () => {
                 <Button
                   type="button"
                   variant={timeFilterMode === 'all' ? 'secondary' : 'ghost'}
-                  className="justify-start"
+                  className="w-fit justify-start"
                   onClick={() => {
                     resetTimeFilter();
                     setOpenTimeFilterPicker(false);
