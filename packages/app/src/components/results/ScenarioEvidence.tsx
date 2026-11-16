@@ -135,15 +135,10 @@ export function ToolEventRow({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left font-mono text-[11px]"
             >
-              <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                {icon ?? <Wrench className="h-3.5 w-3.5" />}
-                <span>{title}</span>
-              </div>
-              <span className="text-[11px] font-semibold">
-                {open ? 'Hide content' : 'Show content'}
-              </span>
+              {icon ?? <Wrench className="h-3.5 w-3.5" />}
+              <span className="truncate">{title}</span>
             </button>
           </CollapsibleTrigger>
           {formattedJson !== null && (
@@ -151,13 +146,18 @@ export function ToolEventRow({
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 shrink-0 px-2 text-[11px]"
+              className="h-7 shrink-0 cursor-pointer px-2 text-[11px]"
               aria-pressed={jsonFormatted}
               onClick={() => setJsonFormatted((formatted) => !formatted)}
             >
               {jsonFormatted ? 'Show raw' : 'Format JSON'}
             </Button>
           )}
+          <CollapsibleTrigger asChild>
+            <button type="button" className="shrink-0 cursor-pointer text-[11px] font-semibold">
+              {open ? 'Hide content' : 'Show content'}
+            </button>
+          </CollapsibleTrigger>
           <CopyButton text={text} label={copyLabel} iconOnly />
         </div>
         <CollapsibleContent>
