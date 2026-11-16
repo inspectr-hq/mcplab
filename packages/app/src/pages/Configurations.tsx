@@ -115,7 +115,7 @@ const resultsLinkForConfig = (cfg: {
   const firstScenarioId = firstScenarioIdForConfig(cfg);
   return firstScenarioId
     ? {
-        href: `/results?scenario=${encodeURIComponent(firstScenarioId)}`,
+        href: `/results?time_filter=all&scenario=${encodeURIComponent(firstScenarioId)}`,
         tooltipLabel: `Open results filtered by scenario ${firstScenarioId}`
       }
     : { href: '/results', tooltipLabel: 'Open results' };

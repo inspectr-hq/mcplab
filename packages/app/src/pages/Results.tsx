@@ -246,7 +246,9 @@ const Results = () => {
     'id' | 'timestamp' | 'passRate' | 'scenarios' | 'avgToolCalls' | 'toolTokens'
   >('timestamp');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [scenarioFilter, setScenarioFilter] = useState('all');
+  const [scenarioFilter, setScenarioFilter] = useState(
+    () => searchParams.get('scenario')?.trim() || 'all'
+  );
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
   const [timeFilterMode, setTimeFilterMode] = useState<TimeFilterMode>(initialTimeFilter.mode);
   const [timeFilterPreset, setTimeFilterPreset] = useState<TimeFilterPreset>(
