@@ -216,6 +216,7 @@ export const workspaceApiClient = {
     until?: string;
     lastDays?: number;
     scenario?: string;
+    passStatus?: 'passed' | 'not_passed';
     limit?: number;
     offset?: number;
   }) => {
@@ -230,6 +231,7 @@ export const workspaceApiClient = {
       query.set('last_days', String(Math.floor(filter.lastDays)));
     }
     if (filter?.scenario?.trim()) query.set('scenario', filter.scenario.trim());
+    if (filter?.passStatus) query.set('pass_status', filter.passStatus);
     appendPositiveIntegerParam(query, 'limit', filter?.limit);
     appendNonNegativeIntegerParam(query, 'offset', filter?.offset);
     const suffix = query.size > 0 ? `?${query.toString()}` : '';

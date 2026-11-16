@@ -86,6 +86,7 @@ import {
 type ResultTableItem =
   | { type: 'day-separator'; dayKey: string; dayLabel: string }
   | { type: 'run'; run: EvalResult };
+type PassStatusFilter = 'all' | 'passed' | 'not_passed';
 
 const RESULTS_TABLE_COLUMN_COUNT = 8;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
@@ -162,6 +163,10 @@ function hasExplicitTimeFilterQuery(searchParams: URLSearchParams): boolean {
     searchParams.has('time_start') ||
     searchParams.has('time_end')
   );
+}
+
+function isPassStatusFilter(value: string | null): value is Exclude<PassStatusFilter, 'all'> {
+  return value === 'passed' || value === 'not_passed';
 }
 
 function readStoredTimeFilter(): TimeFilterQueryState | null {
@@ -250,6 +255,11 @@ const Results = () => {
     () => searchParams.get('scenario')?.trim() || 'all'
   );
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
+  const [passStatusFilter, setPassStatusFilter] = useState<PassStatusFilter>(() => {
+    const value = searchParams.get('pass_status');
+    return isPassStatusFilter(value) ? value : 'all';
+  });
+  const [openPassStatusPicker, setOpenPassStatusPicker] = useState(false);
   const [timeFilterMode, setTimeFilterMode] = useState<TimeFilterMode>(initialTimeFilter.mode);
   const [timeFilterPreset, setTimeFilterPreset] = useState<TimeFilterPreset>(
     initialTimeFilter.preset
@@ -271,6 +281,7 @@ const Results = () => {
   const { offset, totalCount, hasMore, reset, updateMeta, setTotalCount, setHasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
   const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
+  const apiPassStatusFilter = passStatusFilter === 'all' ? undefined : passStatusFilter;
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -287,7 +298,8 @@ const Results = () => {
     try {
       const summaries = await source.listRunSummaries({
         ...resolveTimeFilterRange(timeFilterMode, timeFilterPreset, timeFilterStart, timeFilterEnd),
-        scenario: apiScenarioFilter
+        scenario: apiScenarioFilter,
+        passStatus: apiPassStatusFilter
       });
       if (dashboardRequestIdRef.current === requestId) {
         setDashboardRuns(summaries.map(summaryToResult));
@@ -302,6 +314,7 @@ const Results = () => {
       }
     }
   }, [
+    apiPassStatusFilter,
     apiScenarioFilter,
     dashboardVisible,
     source,
@@ -324,6 +337,7 @@ const Results = () => {
         const page = await source.listRunSummariesPage({
           ...timeFilter,
           scenario: apiScenarioFilter,
+          passStatus: apiPassStatusFilter,
           limit: PAGE_LIMIT,
           offset
         });
@@ -333,6 +347,7 @@ const Results = () => {
         const summaries = await source.listRunSummaries({
           ...timeFilter,
           scenario: apiScenarioFilter,
+          passStatus: apiPassStatusFilter,
           limit: PAGE_LIMIT,
           offset
         });
@@ -370,6 +385,7 @@ const Results = () => {
           .listRunSummariesPage({
             ...timeFilter,
             scenario: apiScenarioFilter,
+            passStatus: apiPassStatusFilter,
             limit: PAGE_LIMIT,
             offset
           })
@@ -384,6 +400,7 @@ const Results = () => {
             .listRunSummaries({
               ...timeFilter,
               scenario: apiScenarioFilter,
+              passStatus: apiPassStatusFilter,
               limit: PAGE_LIMIT,
               offset
             })
@@ -415,6 +432,7 @@ const Results = () => {
     };
   }, [
     apiScenarioFilter,
+    apiPassStatusFilter,
     completionVersion,
     updateMeta,
     setTotalCount,
@@ -526,6 +544,8 @@ const Results = () => {
       if (timeFilterEnd.trim()) next.set('time_end', timeFilterEnd.trim());
       else next.delete('time_end');
     }
+    if (passStatusFilter === 'all') next.delete('pass_status');
+    else next.set('pass_status', passStatusFilter);
 
     const nextString = next.toString();
     if (nextString !== searchParams.toString()) {
@@ -533,6 +553,7 @@ const Results = () => {
     }
   }, [
     searchParams,
+    passStatusFilter,
     setSearchParams,
     timeFilterEnd,
     timeFilterMode,
@@ -560,10 +581,18 @@ const Results = () => {
 
   const filteredResults = useMemo(() => {
     if (source.listRunSummariesPage) return results;
-    const scenarioFiltered =
-      scenarioFilter === 'all'
+    const passFiltered =
+      passStatusFilter === 'all'
         ? results
         : results.filter((run) =>
+            passStatusFilter === 'passed'
+              ? run.overallPassRate === 1
+              : run.overallPassRate !== 1
+          );
+    const scenarioFiltered =
+      scenarioFilter === 'all'
+        ? passFiltered
+        : passFiltered.filter((run) =>
             run.scenarios.some((scenario) => {
               const scenarioName = String(scenario.scenarioName ?? '').trim();
               const scenarioId = String(scenario.scenarioId ?? '').trim();
@@ -600,6 +629,7 @@ const Results = () => {
     });
   }, [
     results,
+    passStatusFilter,
     scenarioFilter,
     source.listRunSummariesPage,
     timeFilterEnd,
@@ -610,7 +640,15 @@ const Results = () => {
 
   useEffect(() => {
     reset();
-  }, [apiScenarioFilter, reset, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
+  }, [
+    apiPassStatusFilter,
+    apiScenarioFilter,
+    reset,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
@@ -619,6 +657,12 @@ const Results = () => {
     );
     return option?.label ?? scenarioFilter;
   }, [scenarioFilter, scenarioFilterOptions]);
+  const selectedPassStatusLabel =
+    passStatusFilter === 'passed'
+      ? 'Passed'
+      : passStatusFilter === 'not_passed'
+        ? 'Not passed'
+        : 'All outcomes';
 
   const selectedTimeFilterLabel = useMemo(() => {
     if (timeFilterMode === 'all') return 'All time';
@@ -875,12 +919,55 @@ const Results = () => {
               </Command>
             </PopoverContent>
           </Popover>
+          <Popover open={openPassStatusPicker} onOpenChange={setOpenPassStatusPicker}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-label="Pass status filter"
+                aria-expanded={openPassStatusPicker}
+                className={`w-[160px] justify-between font-normal ${
+                  passStatusFilter !== 'all' ? 'border-primary/40' : ''
+                }`}
+              >
+                <span className="truncate text-left">{selectedPassStatusLabel}</span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[180px] p-2" align="start">
+              <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">Pass status</p>
+              <div className="grid gap-1">
+                {(
+                  [
+                    { value: 'all', label: 'All outcomes' },
+                    { value: 'passed', label: 'Passed' },
+                    { value: 'not_passed', label: 'Not passed' }
+                  ] as const
+                ).map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={passStatusFilter === option.value ? 'secondary' : 'ghost'}
+                    className="justify-start"
+                    onClick={() => {
+                      setPassStatusFilter(option.value);
+                      setOpenPassStatusPicker(false);
+                    }}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Popover open={openTimeFilterPicker} onOpenChange={setOpenTimeFilterPicker}>
             <PopoverTrigger asChild>
               <Button
                 type="button"
                 variant="outline"
                 role="combobox"
+                aria-label="Date and time filter"
                 aria-expanded={openTimeFilterPicker}
                 aria-controls="results-time-command-list"
                 className={`w-[320px] justify-between font-normal ${

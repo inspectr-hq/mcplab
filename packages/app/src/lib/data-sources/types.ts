@@ -685,6 +685,7 @@ export interface EvalDataSource {
     until?: string;
     lastDays?: number;
     scenario?: string;
+    passStatus?: 'passed' | 'not_passed';
     limit?: number;
     offset?: number;
   }) => Promise<WorkspaceRunSummary[]>;
@@ -693,6 +694,7 @@ export interface EvalDataSource {
     until?: string;
     lastDays?: number;
     scenario?: string;
+    passStatus?: 'passed' | 'not_passed';
     limit?: number;
     offset?: number;
   }) => Promise<ListEnvelope<WorkspaceRunSummary>>;

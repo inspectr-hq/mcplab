@@ -156,6 +156,9 @@ export async function handleRunsRoutes(params: {
     const since = requestUrl.searchParams.get('since') ?? undefined;
     const until = requestUrl.searchParams.get('until') ?? undefined;
     const scenario = requestUrl.searchParams.get('scenario') ?? undefined;
+    const passStatusRaw = requestUrl.searchParams.get('pass_status');
+    const passStatus =
+      passStatusRaw === 'passed' || passStatusRaw === 'not_passed' ? passStatusRaw : undefined;
     const lastDaysRaw = requestUrl.searchParams.get('last_days');
     const lastDaysParsed = lastDaysRaw === null ? NaN : Number(lastDaysRaw);
     const lastDays =
@@ -170,7 +173,8 @@ export async function handleRunsRoutes(params: {
       since,
       until,
       lastDays,
-      scenario
+      scenario,
+      passStatus
     });
     const data = all.slice(offset, offset + limit);
     const totalCount = all.length;
