@@ -124,6 +124,82 @@ afterEach(() => {
 });
 
 describe('RunEvaluation', () => {
+  it('searches configurations by their relative path and selects the match', async () => {
+    configsRef.value = [
+      {
+        id: 'target-config',
+        name: 'Target evaluation',
+        relativePath: 'nested/needle.yaml',
+        sourcePath: '/nested/needle.yaml',
+        agents: [],
+        scenarios: [],
+        createdAt: '',
+        updatedAt: ''
+      },
+      {
+        id: 'other-config',
+        name: 'Other evaluation',
+        sourcePath: '/other.yaml',
+        agents: [],
+        scenarios: [],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Select config' }));
+    fireEvent.change(screen.getByPlaceholderText('Search evaluations...'), {
+      target: { value: 'needle.yaml' }
+    });
+    fireEvent.click(await screen.findByRole('option', { name: /Target evaluation/ }));
+
+    expect(screen.getByRole('combobox', { name: 'Select config' })).toHaveTextContent(
+      'Target evaluation'
+    );
+  });
+
+  it('shows each scenario default MCP server without opening its override controls', async () => {
+    configsRef.value = [
+      {
+        id: 'config-with-mcp',
+        name: 'Config with MCP',
+        agents: [],
+        scenarios: [
+          {
+            id: 'scenario-mcp',
+            name: 'Scenario With MCP',
+            prompt: 'Search',
+            serverIds: ['server-a'],
+            evalRules: [],
+            extractRules: []
+          }
+        ],
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=config-with-mcp']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Scenario With MCP');
+    expect(screen.getByText('server-a')).toBeInTheDocument();
+    expect(screen.getByRole('switch')).not.toBeChecked();
+  });
+
   it('refreshes the workspace default on focus without disabling agents during library refresh', async () => {
     configsRef.value = [
       {

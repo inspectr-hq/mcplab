@@ -87,6 +87,7 @@ export interface ListRunsFilter {
   until?: string;
   lastDays?: number;
   scenario?: string;
+  passStatus?: 'passed' | 'not_passed';
 }
 
 interface CachedRunSummary {
@@ -246,6 +247,9 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
     }
 
     if (!summary) continue;
+
+    if (filter?.passStatus === 'passed' && summary.passRate !== 1) continue;
+    if (filter?.passStatus === 'not_passed' && summary.passRate === 1) continue;
 
     const timestampMs = new Date(summary.timestamp).getTime();
     if (!Number.isFinite(timestampMs) || timestampMs < sinceMs || timestampMs > untilMs) {

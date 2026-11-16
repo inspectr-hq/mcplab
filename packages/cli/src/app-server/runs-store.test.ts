@@ -51,6 +51,31 @@ function writeRun(runsDir: string, runId: string, timestamp: string, evaluationR
 }
 
 describe('listRuns filters', () => {
+  it('filters runs by pass status', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-run-status-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    writeRun(runsDir, 'passed', '2026-03-10T10:00:00.000Z');
+    writeRun(runsDir, 'partial', '2026-03-10T10:01:00.000Z');
+    writeRun(runsDir, 'failed', '2026-03-10T10:02:00.000Z');
+
+    for (const [runId, passRate] of [
+      ['partial', 0.5],
+      ['failed', 0]
+    ] as const) {
+      const resultsPath = join(runsDir, runId, 'results.json');
+      const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+      results.summary.pass_rate = passRate;
+      writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
+    }
+
+    expect(listRuns(runsDir, { passStatus: 'passed' }).map((run) => run.runId)).toEqual(['passed']);
+    expect(listRuns(runsDir, { passStatus: 'not_passed' }).map((run) => run.runId)).toEqual([
+      'failed',
+      'partial'
+    ]);
+  });
+
   it('reads grouped execution traces without execution results.json', () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-grouped-trace-'));
     try {

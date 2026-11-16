@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Results from './Results';
 import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
@@ -21,6 +21,7 @@ const { sourceMock, libraryServers } = vi.hoisted(() => {
 });
 
 const queueMock = { completionVersion: 0 };
+let restoreClipboard: (() => void) | undefined;
 
 vi.mock('@/contexts/useDataSource', () => ({
   useDataSource: () => ({
@@ -157,13 +158,77 @@ function toDatetimeLocalValue(date: Date) {
   ].join('');
 }
 
+function CurrentSearchParams() {
+  const [searchParams] = useSearchParams();
+  return <output data-testid="current-search-params">{searchParams.toString()}</output>;
+}
+
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreClipboard?.();
+    restoreClipboard = undefined;
     libraryServers.length = 0;
     sourceMock.listRunSummaries = undefined as unknown as typeof sourceMock.listRunSummaries;
     localStorage.removeItem('mcplab:results:time-filter');
     queueMock.completionVersion = 0;
+  });
+
+  it('uses the scenario and all-time filters from the evaluation results link on first load', async () => {
+    localStorage.setItem(
+      'mcplab:results:time-filter',
+      JSON.stringify({ mode: 'last', preset: '15min', start: '', end: '' })
+    );
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/results?time_filter=all&scenario=scn-1']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(sourceMock.listRunSummaries).toHaveBeenCalled());
+    const firstRequest = sourceMock.listRunSummaries.mock.calls[0]![0];
+    expect(firstRequest.scenario).toBe('scn-1');
+    expect(firstRequest.since).toBeUndefined();
+    expect(firstRequest.until).toBeUndefined();
+  });
+
+  it('filters pass status while preserving the selected 30-minute time range', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:00:00.000Z').getTime());
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=30min']}>
+        <Routes>
+          <Route
+            path="/results"
+            element={
+              <>
+                <Results />
+                <CurrentSearchParams />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Results');
+    fireEvent.click(screen.getByRole('combobox', { name: 'Pass status filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Not passed' }));
+
+    await waitFor(() => {
+      expect(
+        sourceMock.listRunSummaries.mock.calls.some((call) => call[0]?.passStatus === 'not_passed')
+      ).toBe(true);
+    });
+    const params = new URLSearchParams(screen.getByTestId('current-search-params').textContent ?? '');
+    expect(params.get('time_filter')).toBe('last');
+    expect(params.get('time_preset')).toBe('30min');
+    expect(params.get('pass_status')).toBe('not_passed');
   });
 
   it('opens the global MCP Lab Assistant sidebar from the Results header', async () => {
@@ -224,6 +289,20 @@ describe('Results', () => {
     const avgToolsHeader = screen.getByRole('columnheader', { name: 'Avg Tools' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
     const evaluationName = within(runCell).getByText('Search evaluation');
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    });
+    restoreClipboard = () => {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    };
+    const copyRunIdButton = within(runCell).getByRole('button', { name: 'Copy Run ID' });
+    fireEvent.click(copyRunIdButton);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('run-with-mcp'));
+    expect(copyRunIdButton.querySelector('svg')).toHaveClass('lucide-check');
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );
@@ -687,7 +766,7 @@ describe('Results', () => {
     );
 
     await screen.findByText('run-inside');
-    fireEvent.click(screen.getAllByRole('combobox')[1]!);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Date and time filter' }));
 
     await waitFor(() => {
       expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe(

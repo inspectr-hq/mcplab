@@ -203,6 +203,7 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
+    expect(screen.getByRole('button', { name: 'Copy Run ID' })).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
 
     const extracts = screen.getByRole('button', { name: /Extracted values 0 total/i });

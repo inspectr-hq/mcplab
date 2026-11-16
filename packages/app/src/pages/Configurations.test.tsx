@@ -118,6 +118,35 @@ describe('Configurations suites', () => {
     ];
   });
 
+  it('opens results with all time and the config scenario filters applied', async () => {
+    configsRef.value[0]!.scenarios = [
+      {
+        id: 'scenario-a',
+        name: 'Scenario A',
+        prompt: 'Search',
+        serverIds: [],
+        evalRules: [],
+        extractRules: []
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
+        <Routes>
+          <Route path="/mcp-evaluations" element={<Configurations />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const resultsLink = await screen.findByRole('link', {
+      name: 'Open results filtered by scenario scenario-a'
+    });
+    expect(resultsLink).toHaveAttribute(
+      'href',
+      '/results?time_filter=all&scenario=scenario-a'
+    );
+  });
+
   it('renders grouped suite headers including root bucket', async () => {
     render(
       <MemoryRouter initialEntries={['/mcp-evaluations']}>

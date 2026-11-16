@@ -202,6 +202,33 @@ describe('workspaceApiClient SSE subscriptions', () => {
   });
 });
 
+describe('workspaceApiClient run filters', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('sends the pass status filter with run summary requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          object: 'list',
+          data: [],
+          has_more: false,
+          total_count: 0,
+          next_offset: null,
+          prev_offset: null
+        })
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await workspaceApiClient.listRuns({ passStatus: 'not_passed' });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs?pass_status=not_passed', expect.any(Object));
+  });
+});
+
 describe('workspaceApiClient assistant turns', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

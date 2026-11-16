@@ -1367,47 +1367,48 @@ const RunEvaluation = () => {
                         );
                       }}
                     >
-                      <div className="flex items-start gap-2">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(value) => {
-                            const isChecked = value === true;
-                            setSelectedScenarioIds((prev) =>
-                              isChecked
-                                ? [...prev, scenario.id]
-                                : prev.filter((id) => id !== scenario.id)
-                            );
-                          }}
-                        />
-                        <span className="min-w-0">
-                          <span className="block font-medium">
-                            {scenario.name || scenario.id}{' '}
-                            {hasOverride && (
-                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                                Override
-                              </span>
-                            )}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              const isChecked = value === true;
+                              setSelectedScenarioIds((prev) =>
+                                isChecked
+                                  ? [...prev, scenario.id]
+                                  : prev.filter((id) => id !== scenario.id)
+                              );
+                            }}
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-medium">
+                              {scenario.name || scenario.id}{' '}
+                              {hasOverride && (
+                                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                                  Override
+                                </span>
+                              )}
+                            </span>
+                            <span className="block truncate font-mono text-xs text-muted-foreground">
+                              {scenario.id}
+                            </span>
                           </span>
-                          <span className="block font-mono text-xs text-muted-foreground truncate">
-                            {scenario.id}
-                          </span>
-                          <span className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                            <span className="mr-0.5">MCP:</span>
-                            {effectiveServerIds.length > 0 ? (
-                              effectiveServerIds.map((serverId) => (
-                                <Badge
-                                  key={serverId}
-                                  variant="outline"
-                                  className="px-1.5 py-0 text-[10px]"
-                                >
-                                  {serverNamesById.get(serverId) ?? serverId}
-                                </Badge>
-                              ))
-                            ) : (
-                              <span>None</span>
-                            )}
-                          </span>
-                        </span>
+                        </div>
+                        <div className="mt-0.5 flex max-w-[45%] shrink-0 flex-wrap items-center justify-end gap-1 text-[11px] text-muted-foreground">
+                          {effectiveServerIds.length > 0 ? (
+                            effectiveServerIds.map((serverId) => (
+                              <Badge
+                                key={serverId}
+                                variant="outline"
+                                className="px-1.5 py-0 text-[10px]"
+                              >
+                                {serverNamesById.get(serverId) ?? serverId}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span>None</span>
+                          )}
+                        </div>
                       </div>
                       {checked && (
                         <div className="pl-6">
