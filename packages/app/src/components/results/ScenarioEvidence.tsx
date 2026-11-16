@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bot, CheckCircle2, Wrench, User, XCircle } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CopyButton } from '@/components/CopyButton';
+import { Button } from '@/components/ui/button';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { formatTokenCount } from '@/lib/format-duration';
 import type { ConversationItem } from '@/types/eval';
@@ -119,6 +120,8 @@ export function ToolEventRow({
   copyLabel: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [jsonFormatted, setJsonFormatted] = useState(false);
+  const formattedJson = variant === 'call' ? null : tryFormatJson(text);
   const styleByVariant = {
     call: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
     result_ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
@@ -143,14 +146,38 @@ export function ToolEventRow({
               </span>
             </button>
           </CollapsibleTrigger>
+          {formattedJson !== null && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 shrink-0 px-2 text-[11px]"
+              aria-pressed={jsonFormatted}
+              onClick={() => setJsonFormatted((formatted) => !formatted)}
+            >
+              {jsonFormatted ? 'Show raw' : 'Format JSON'}
+            </Button>
+          )}
           <CopyButton text={text} label={copyLabel} iconOnly />
         </div>
         <CollapsibleContent>
-          <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
+          {jsonFormatted && formattedJson !== null ? (
+            <pre className="mt-2 overflow-x-auto font-mono text-foreground">{formattedJson}</pre>
+          ) : (
+            <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
+          )}
         </CollapsibleContent>
       </div>
     </Collapsible>
   );
+}
+
+function tryFormatJson(text: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function ExpandableText({
