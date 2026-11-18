@@ -64,11 +64,23 @@ export {
   type ToolInputAssertionFailureKind
 } from './eval.js';
 export { McpClientManager } from './mcp.js';
+export {
+  getMcpResourceToolAccess,
+  MCP_LIST_RESOURCES_TOOL,
+  MCP_READ_RESOURCE_TOOL,
+  parseMcpResourceToolCatalog,
+  parseMcpResourceToolRead
+} from './mcp-resource-tools.js';
 export type {
+  McpCatalogList,
+  McpPreviewRequest,
+  McpPreviewResponse,
   McpPromptInfo,
   McpPromptResult,
   McpResourceContent,
   McpResourceInfo,
+  McpResourceTemplateInfo,
+  McpServerCatalog,
   McpServerFeatures
 } from './mcp.js';
 export { resolveConfigValue } from './config-values.js';

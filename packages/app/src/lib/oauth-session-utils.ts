@@ -16,8 +16,16 @@ export async function ensureOAuthForServers(params: {
     message?: string;
   }) => void;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<void> {
-  const { serverNames, source, onServerAuthStart, onServerStatus, timeoutMs = 5 * 60_000 } = params;
+  const {
+    serverNames,
+    source,
+    onServerAuthStart,
+    onServerStatus,
+    timeoutMs = 5 * 60_000,
+    signal
+  } = params;
   const uniqueServerNames = Array.from(new Set(serverNames.filter(Boolean)));
   if (uniqueServerNames.length === 0) return;
 
@@ -26,7 +34,9 @@ export async function ensureOAuthForServers(params: {
   const emittedServerStates = new Map<string, string>();
 
   while (Date.now() < timeoutAt) {
+    signal?.throwIfAborted();
     const ensured = await source.ensureOAuthServers({ serverNames: uniqueServerNames });
+    signal?.throwIfAborted();
     for (const entry of ensured.servers) {
       const stateKey = `${entry.status}:${entry.debugState ?? ''}:${entry.runtimeSessionId ?? ''}`;
       if (emittedServerStates.get(entry.serverName) !== stateKey) {
@@ -71,6 +81,7 @@ export async function ensureOAuthForServers(params: {
         sessionId: runtimeSessionId,
         source,
         serverName: entry.serverName,
+        signal,
         onLaunchUrl: openBrowserOnce,
         timeoutMs: Math.max(10_000, timeoutAt - Date.now())
       });

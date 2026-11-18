@@ -1,6 +1,15 @@
 export { tallyCheckCounts } from './check-counts.js';
 export { resolveRunAgentSelection } from './run-agent-selection.js';
 export { isLlmAgent } from './types.js';
+export type {
+  McpCatalogList,
+  McpPreviewRequest,
+  McpPreviewResponse,
+  McpPromptInfo,
+  McpResourceInfo,
+  McpResourceTemplateInfo,
+  McpServerCatalog
+} from './mcp.js';
 export {
   normalizeEvaluationDecisionConfig,
   isDecisionEngineEnabled,

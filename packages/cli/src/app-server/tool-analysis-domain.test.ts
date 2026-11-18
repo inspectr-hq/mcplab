@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   buildToolAnalysisExecutionReviewPayload,
   buildToolAnalysisMetadataPayload,
@@ -10,6 +11,86 @@ import {
 import { pickDefaultAssistantAgentName } from './assistant-agent.js';
 
 describe('discoverMcpToolsForServers', () => {
+  it('calls the advertised resource listing tool only on explicit request', async () => {
+    const servers = { docs: { transport: 'http' as const, url: 'https://example.com/mcp' } };
+    vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    vi.spyOn(McpClientManager.prototype, 'getServerFeatures').mockReturnValue({
+      tools: true,
+      resources: false,
+      prompts: false
+    });
+    vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([
+      { name: 'list_resources', inputSchema: { type: 'object' } },
+      {
+        name: 'read_resource',
+        inputSchema: { type: 'object', properties: { uri: { type: 'string' } } }
+      }
+    ]);
+    vi.spyOn(McpClientManager.prototype, 'listCatalog').mockImplementation(async () => ({
+      resources: { status: 'unsupported' },
+      resourceTemplates: { status: 'unsupported' },
+      prompts: { status: 'unsupported' }
+    }));
+    const call = vi.spyOn(McpClientManager.prototype, 'callTool').mockResolvedValue({
+      structuredContent: { resources: [{ name: 'Review', uri: 'skill://review/SKILL.md' }] }
+    });
+    try {
+      const initial = await discoverMcpToolsForServers(servers, ['docs'], { includeCatalog: true });
+      expect(initial.servers[0].catalog?.toolResources).toEqual({ status: 'available' });
+      expect(call).not.toHaveBeenCalled();
+      const requested = await discoverMcpToolsForServers(servers, ['docs'], {
+        includeCatalog: true,
+        includeToolResources: true
+      });
+      expect(requested.servers[0].catalog?.toolResources).toEqual({
+        status: 'ready',
+        canRead: true,
+        resources: [{ name: 'Review', uri: 'skill://review/SKILL.md' }],
+        resourceTemplates: []
+      });
+      expect(call).toHaveBeenCalledWith('docs', 'list_resources', {});
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it.each([true, false])(
+    'preserves tools-only discovery and lists a resource-only server when catalog access is %s',
+    async (includeCatalog) => {
+      const servers = { docs: { transport: 'http' as const, url: 'https://example.com/mcp' } };
+      const catalog = {
+        resources: { status: 'ready' as const, items: [{ name: 'Guide', uri: 'docs://guide' }] },
+        resourceTemplates: { status: 'ready' as const, items: [] },
+        prompts: { status: 'unsupported' as const }
+      };
+      const connect = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+      const features = vi.spyOn(McpClientManager.prototype, 'getServerFeatures').mockReturnValue({
+        tools: false,
+        resources: true,
+        prompts: false
+      });
+      const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+      const listCatalog = vi
+        .spyOn(McpClientManager.prototype, 'listCatalog')
+        .mockResolvedValue(catalog);
+      try {
+        const {
+          servers: [discovered]
+        } = await discoverMcpToolsForServers(servers, ['docs'], { includeCatalog });
+        expect(discovered.catalog).toEqual(includeCatalog ? catalog : undefined);
+        expect(discovered.tools).toEqual([]);
+        expect(discovered.warnings).toEqual([]);
+        expect(listCatalog).toHaveBeenCalledTimes(includeCatalog ? 1 : 0);
+        expect(listTools).toHaveBeenCalledTimes(includeCatalog ? 0 : 1);
+      } finally {
+        connect.mockRestore();
+        features.mockRestore();
+        listTools.mockRestore();
+        listCatalog.mockRestore();
+      }
+    }
+  );
+
   it('returns a "not found" warning when server name does not match any key', async () => {
     const servers = {
       trendminer: { transport: 'http' as const, url: 'https://example.com/mcp' }

@@ -261,8 +261,11 @@ export const workspaceSource: EvalDataSource = {
   subscribeScenarioAssistantSessionEvents(sessionId, onEvent) {
     return workspaceApiClient.subscribeScenarioAssistantSessionEvents(sessionId, onEvent);
   },
-  async discoverToolsForAnalysis(params) {
-    return workspaceApiClient.discoverToolsForAnalysis(params);
+  async discoverToolsForAnalysis(params, signal) {
+    return workspaceApiClient.discoverToolsForAnalysis(params, signal);
+  },
+  async previewMcpForAnalysis(params, signal) {
+    return workspaceApiClient.previewMcpForAnalysis(params, signal);
   },
   async startToolAnalysis(params) {
     return workspaceApiClient.startToolAnalysis(params);

@@ -1,4 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  getMcpResourceToolAccess,
+  McpClientManager,
+  MCP_READ_RESOURCE_TOOL,
+  parseMcpResourceToolRead
+} from '@inspectr/mcplab-core';
+import type { EvalConfig, McpPreviewRequest, McpPreviewResponse } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
 import {
@@ -57,6 +64,29 @@ function resolveToolAnalysisReadDirs(settings: AppRouteRequestContext['settings'
   return dirs;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parsePreviewRequest(body: unknown): McpPreviewRequest | null {
+  if (!isRecord(body) || typeof body.serverName !== 'string' || !body.serverName.trim()) {
+    return null;
+  }
+  const serverName = body.serverName.trim();
+  if (body.kind === 'resource' && typeof body.uri === 'string') {
+    const uri = body.uri.trim();
+    if (!/^[a-z][a-z\d+.-]*:[^\s{}]*$/i.test(uri)) return null;
+    if (body.via === 'tool') return { kind: 'resource', serverName, uri, via: 'tool' };
+    return body.via === undefined ? { kind: 'resource', serverName, uri } : null;
+  }
+  if (body.kind !== 'prompt' || typeof body.name !== 'string' || !body.name.trim()) return null;
+  const args = body.arguments;
+  if (args === undefined) return { kind: 'prompt', serverName, name: body.name };
+  if (!isRecord(args) || !Object.values(args).every((value) => typeof value === 'string'))
+    return null;
+  return { kind: 'prompt', serverName, name: body.name, arguments: args as Record<string, string> };
+}
+
 export async function handleToolAnalysisRoutes(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -81,6 +111,25 @@ export async function handleToolAnalysisRoutes(params: {
 
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+  async function analysisConnectionOptions(servers: EvalConfig['servers'], serverNames: string[]) {
+    const oauthServers = serverNames.filter(
+      (name) =>
+        Object.hasOwn(servers, name) && servers[name]?.auth?.type === 'oauth_authorization_code'
+    );
+    try {
+      return {
+        serverAuthHeaders:
+          oauthServers.length > 0
+            ? await oauthSessionManager.getAuthHeadersForServers(oauthServers, req.headers.host)
+            : undefined
+      };
+    } catch (error) {
+      if (!(error instanceof OAuthAuthorizationRequiredError)) throw error;
+      asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+      return null;
+    }
+  }
+
   if (pathname === '/api/tool-analysis/discover-tools' && method === 'POST') {
     const body = await parseBody(req);
     const serverNames = Array.isArray(body.serverNames)
@@ -91,46 +140,112 @@ export async function handleToolAnalysisRoutes(params: {
       return true;
     }
     const libraries = readLibraries(settings.librariesDir);
-    const oauthServers = serverNames.filter(
-      (serverName: string) =>
-        libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
-    );
-    let serverAuthHeaders: Record<string, Record<string, string>> | undefined;
+    const connectionOptions = await analysisConnectionOptions(libraries.servers, serverNames);
+    if (!connectionOptions) return true;
+    const { mcp, servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
+      ...connectionOptions,
+      includeCatalog: body.includeCatalog === true,
+      ...(body.includeToolResources === true ? { includeToolResources: true } : {})
+    });
     try {
-      serverAuthHeaders =
-        oauthServers.length > 0
-          ? await oauthSessionManager.getAuthHeadersForServers(oauthServers, req.headers.host)
-          : undefined;
-    } catch (error: unknown) {
-      if (error instanceof OAuthAuthorizationRequiredError) {
-        asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+      const mcpServerVersions = mcp.getServerVersions();
+      const mcpServerImplementations = mcp.getServerImplementations();
+      asJson(res, 200, {
+        servers: servers.map((entry) => ({
+          serverName: entry.serverName,
+          mcpServerVersion: mcpServerVersions[entry.serverName] ?? null,
+          mcpServerImplementation: mcpServerImplementations[entry.serverName] ?? null,
+          warnings: entry.warnings,
+          tokenEstimate: entry.tokenEstimate,
+          ...(entry.catalog ? { catalog: entry.catalog } : {}),
+          tools: entry.tools.map((tool) => ({
+            name: tool.tool.name,
+            title: tool.tool.title,
+            description: tool.tool.description,
+            inputSchema: tool.tool.inputSchema,
+            outputSchema: tool.tool.outputSchema,
+            safetyClassification: tool.safetyClassification,
+            classificationReason: tool.classificationReason
+          }))
+        }))
+      });
+    } finally {
+      await mcp.disconnectAll();
+    }
+    return true;
+  }
+
+  if (pathname === '/api/tool-analysis/preview' && method === 'POST') {
+    const body: unknown = await parseBody(req).catch((error) => {
+      if (!(error instanceof SyntaxError)) throw error;
+      return null;
+    });
+    const preview = parsePreviewRequest(body);
+    if (!preview) {
+      asJson(res, 400, {
+        error: 'Provide a server and a resource URI or prompt name with string arguments.'
+      });
+      return true;
+    }
+    const { serverName } = preview;
+    const { servers } = readLibraries(settings.librariesDir);
+    if (!Object.hasOwn(servers, serverName)) {
+      asJson(res, 404, { error: `Server '${serverName}' not found.` });
+      return true;
+    }
+    const connectionOptions = await analysisConnectionOptions(servers, [serverName]);
+    if (!connectionOptions || res.destroyed) return true;
+
+    const mcp = new McpClientManager();
+    const controller = new AbortController();
+    const { signal } = controller;
+    const abort = () => controller.abort();
+    res.once('close', abort);
+    try {
+      await mcp.connectAll({ [serverName]: servers[serverName] }, signal, connectionOptions);
+      const features = mcp.getServerFeatures(serverName);
+      if (preview.kind === 'resource' && preview.via === 'tool') {
+        const tools = features.tools ? await mcp.listTools(serverName, signal) : [];
+        const { readArgument } = getMcpResourceToolAccess(tools);
+        if (!readArgument) {
+          if (!signal.aborted)
+            asJson(res, 400, {
+              error: 'The server needs a compatible read_resource tool to preview this resource.'
+            });
+          return true;
+        }
+        const result = await mcp.callTool(
+          serverName,
+          MCP_READ_RESOURCE_TOOL,
+          { [readArgument]: preview.uri },
+          { signal }
+        );
+        const response: McpPreviewResponse = {
+          kind: 'resource',
+          contents: parseMcpResourceToolRead(preview.uri, result)
+        };
+        if (!signal.aborted) asJson(res, 200, response);
         return true;
       }
-      throw error;
+      const feature = preview.kind === 'resource' ? 'resources' : 'prompts';
+      if (!features[feature]) {
+        asJson(res, 400, { error: `Server '${serverName}' does not advertise ${feature}.` });
+        return true;
+      }
+      const response: McpPreviewResponse =
+        preview.kind === 'resource'
+          ? { kind: 'resource', contents: await mcp.readResource(serverName, preview.uri, signal) }
+          : {
+              kind: 'prompt',
+              ...(await mcp.getPrompt(serverName, preview.name, preview.arguments, signal))
+            };
+      if (!signal.aborted) asJson(res, 200, response);
+    } catch (error: unknown) {
+      if (!signal.aborted) asJson(res, 502, { error: errorMessage(error) });
+    } finally {
+      res.off('close', abort);
+      await mcp.disconnectAll();
     }
-    const { mcp, servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
-      serverAuthHeaders
-    });
-    const mcpServerVersions = mcp.getServerVersions();
-    const mcpServerImplementations = mcp.getServerImplementations();
-    asJson(res, 200, {
-      servers: servers.map((entry) => ({
-        serverName: entry.serverName,
-        mcpServerVersion: mcpServerVersions[entry.serverName] ?? null,
-        mcpServerImplementation: mcpServerImplementations[entry.serverName] ?? null,
-        warnings: entry.warnings,
-        tokenEstimate: entry.tokenEstimate,
-        tools: entry.tools.map((tool) => ({
-          name: tool.tool.name,
-          title: tool.tool.title,
-          description: tool.tool.description,
-          inputSchema: tool.tool.inputSchema,
-          outputSchema: tool.tool.outputSchema,
-          safetyClassification: tool.safetyClassification,
-          classificationReason: tool.classificationReason
-        }))
-      }))
-    });
     return true;
   }
 
