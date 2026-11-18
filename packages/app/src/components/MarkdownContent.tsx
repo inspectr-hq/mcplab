@@ -9,17 +9,20 @@ import { cn } from '@/lib/utils';
 export function MarkdownContent({
   text,
   variant = 'assistant',
-  className
+  className,
+  renderImages = true
 }: {
   text: string;
   variant?: 'assistant' | 'system';
   className?: string;
+  renderImages?: boolean;
 }) {
+  const styles = variant === 'system' ? systemComponents : components;
   return (
     <div className={cn('space-y-2', variant === 'system' && 'text-xs', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        components={variant === 'system' ? systemComponents : components}
+        components={renderImages ? styles : { ...styles, img: ({ alt }) => alt || null }}
       >
         {text}
       </ReactMarkdown>

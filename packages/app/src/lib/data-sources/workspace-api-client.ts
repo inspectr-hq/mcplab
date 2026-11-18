@@ -17,7 +17,10 @@ import type {
   OAuthDebuggerSessionView,
   OAuthEnsureServerStatus,
   OAuthRuntimeSessionView,
+  McpPreviewRequest,
+  McpPreviewResponse,
   ToolAnalysisDiscoverResponse,
+  ToolAnalysisDiscoverRequest,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
   ListEnvelope,
@@ -482,9 +485,16 @@ export const workspaceApiClient = {
       `/api/scenario-assistant/sessions/${sessionId}/events`,
       onEvent
     ),
-  discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
+  discoverToolsForAnalysis: (params: ToolAnalysisDiscoverRequest, signal?: AbortSignal) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',
+      body: JSON.stringify(params),
+      signal
+    }),
+  previewMcpForAnalysis: (params: McpPreviewRequest, signal?: AbortSignal) =>
+    request<McpPreviewResponse>('/api/tool-analysis/preview', {
+      method: 'POST',
+      signal,
       body: JSON.stringify(params)
     }),
   startToolAnalysis: (params: {

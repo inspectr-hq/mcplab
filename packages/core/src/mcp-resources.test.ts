@@ -50,18 +50,56 @@ describe('McpClientManager resources and prompts', () => {
     expect(listResources).toHaveBeenNthCalledWith(2, { cursor: 'page-2' }, { signal: undefined });
   });
 
+  it('follows template pagination and keeps catalog sections available when another list fails', async () => {
+    const listResourceTemplates = vi
+      .fn()
+      .mockResolvedValueOnce({
+        resourceTemplates: [{ name: 'Page', uriTemplate: 'docs://pages/{id}', extra: true }],
+        nextCursor: 'page-2'
+      })
+      .mockResolvedValueOnce({
+        resourceTemplates: [
+          { name: 'Logo', uriTemplate: 'docs://logos/{id}', mimeType: 'image/png' }
+        ]
+      });
+    const listPrompts = vi.fn();
+    const manager = managerWith({
+      getServerCapabilities: () => ({ resources: {} }),
+      listResources: vi.fn().mockRejectedValue(new Error('unavailable')),
+      listResourceTemplates,
+      listPrompts
+    });
+    await expect(manager.listCatalog('docs')).resolves.toEqual({
+      resources: { status: 'error', message: expect.stringContaining('unavailable') },
+      resourceTemplates: {
+        status: 'ready',
+        items: [
+          { name: 'Page', uriTemplate: 'docs://pages/{id}' },
+          { name: 'Logo', uriTemplate: 'docs://logos/{id}', mimeType: 'image/png' }
+        ]
+      },
+      prompts: { status: 'unsupported' }
+    });
+    expect(listResourceTemplates).toHaveBeenNthCalledWith(
+      2,
+      { cursor: 'page-2' },
+      { signal: undefined }
+    );
+    expect(listPrompts).not.toHaveBeenCalled();
+  });
+
   it('returns text content and reports binary content by size only', async () => {
     const manager = managerWith({
       readResource: vi.fn().mockResolvedValue({
         contents: [
           { uri: 'docs://a', mimeType: 'text/plain', text: 'hello' },
-          { uri: 'docs://logo', mimeType: 'image/png', blob: 'AAAA' }
+          { uri: 'docs://logo', mimeType: 'image/png', blob: 'YQ==' }
         ]
       })
     });
     await expect(manager.readResource('docs', 'docs://a')).resolves.toEqual([
       { uri: 'docs://a', mimeType: 'text/plain', text: 'hello' },
-      { uri: 'docs://logo', mimeType: 'image/png', blobBytes: 3 }
+      { uri: 'docs://logo', mimeType: 'image/png', blobBytes: 1 }
     ]);
   });
 

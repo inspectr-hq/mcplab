@@ -53,6 +53,10 @@ export interface McpResourceInfo {
   mimeType?: string;
 }
 
+export interface McpResourceTemplateInfo extends Omit<McpResourceInfo, 'uri'> {
+  uriTemplate: string;
+}
+
 /** Text is returned as-is; binary content is reported by type and size, not included. */
 export interface McpResourceContent {
   uri: string;
@@ -73,7 +77,82 @@ export interface McpPromptResult {
   messages: Array<{ role: string; text: string }>;
 }
 
+export type McpCatalogList<T> =
+  | { status: 'ready'; items: T[] }
+  | { status: 'unsupported' }
+  | { status: 'error'; message: string };
+
+export type McpCatalogDefinition<T> = T & { estimatedTokens?: number };
+
+export interface McpToolResourceCatalog {
+  resources: McpCatalogDefinition<McpResourceInfo>[];
+  resourceTemplates: McpCatalogDefinition<McpResourceTemplateInfo>[];
+}
+
+export interface McpServerCatalog {
+  resources: McpCatalogList<McpCatalogDefinition<McpResourceInfo>>;
+  resourceTemplates: McpCatalogList<McpCatalogDefinition<McpResourceTemplateInfo>>;
+  prompts: McpCatalogList<McpCatalogDefinition<McpPromptInfo>>;
+  toolResources?:
+    | { status: 'available' }
+    | ({ status: 'ready'; canRead: boolean } & McpToolResourceCatalog)
+    | { status: 'error'; message: string };
+}
+
+export type McpPreviewRequest = { serverName: string } & (
+  | { kind: 'resource'; uri: string; via?: 'tool' }
+  | { kind: 'prompt'; name: string; arguments?: Record<string, string> }
+);
+
+export type McpPreviewResponse =
+  | { kind: 'resource'; contents: McpResourceContent[] }
+  | ({ kind: 'prompt' } & McpPromptResult);
+
 const MAX_LIST_PAGES = 10;
+
+async function collectListPages<T>(
+  list: (params?: { cursor: string }) => Promise<{ items: T[]; nextCursor?: string }>,
+  errorContext: string,
+  signal?: AbortSignal
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  try {
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const result = await list(cursor ? { cursor } : undefined);
+      items.push(...result.items);
+      cursor = result.nextCursor;
+      if (!cursor) break;
+    }
+    return items;
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw error;
+    throw new Error(formatMcpError(errorContext, undefined, error));
+  }
+}
+
+function resourceMetadata({ name, title, description, mimeType }: Omit<McpResourceInfo, 'uri'>) {
+  return {
+    name,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    ...(mimeType ? { mimeType } : {})
+  };
+}
+
+async function listCatalogSection<T>(
+  supported: boolean,
+  list: () => Promise<T[]>,
+  signal?: AbortSignal
+): Promise<McpCatalogList<T>> {
+  if (!supported) return { status: 'unsupported' };
+  try {
+    return { status: 'ready', items: await list() };
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw error;
+    return { status: 'error', message: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export function normalizeListedTool(tool: any): ToolDef {
   const annotations =
@@ -256,29 +335,58 @@ export class McpClientManager {
   async listResources(serverName: string, signal?: AbortSignal): Promise<McpResourceInfo[]> {
     if (!this.getServerFeatures(serverName).resources) return [];
     const client = this.getClient(serverName);
-    const resources: McpResourceInfo[] = [];
-    let cursor: string | undefined;
-    try {
-      for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-        const result = await client.listResources(cursor ? { cursor } : undefined, { signal });
-        for (const resource of result.resources ?? [])
-          resources.push({
+    return collectListPages(
+      async (params) => {
+        const { resources, nextCursor } = await client.listResources(params, { signal });
+        return {
+          items: (resources ?? []).map((resource) => ({
             uri: resource.uri,
-            name: resource.name,
-            ...(resource.title ? { title: resource.title } : {}),
-            ...(resource.description ? { description: resource.description } : {}),
-            ...(resource.mimeType ? { mimeType: resource.mimeType } : {})
-          });
-        cursor = result.nextCursor;
-        if (!cursor) break;
-      }
-      return resources;
-    } catch (err: any) {
-      if (signal?.aborted || isAbortError(err)) throw err;
-      throw new Error(
-        formatMcpError(`Failed to list resources for server '${serverName}'`, undefined, err)
-      );
-    }
+            ...resourceMetadata(resource)
+          })),
+          nextCursor
+        };
+      },
+      `Failed to list resources for server '${serverName}'`,
+      signal
+    );
+  }
+
+  async listResourceTemplates(
+    serverName: string,
+    signal?: AbortSignal
+  ): Promise<McpResourceTemplateInfo[]> {
+    if (!this.getServerFeatures(serverName).resources) return [];
+    const client = this.getClient(serverName);
+    return collectListPages(
+      async (params) => {
+        const { resourceTemplates, nextCursor } = await client.listResourceTemplates(params, {
+          signal
+        });
+        return {
+          items: (resourceTemplates ?? []).map((template) => ({
+            uriTemplate: template.uriTemplate,
+            ...resourceMetadata(template)
+          })),
+          nextCursor
+        };
+      },
+      `Failed to list resource templates for server '${serverName}'`,
+      signal
+    );
+  }
+
+  async listCatalog(serverName: string, signal?: AbortSignal): Promise<McpServerCatalog> {
+    const features = this.getServerFeatures(serverName);
+    const [resources, resourceTemplates, prompts] = await Promise.all([
+      listCatalogSection(features.resources, () => this.listResources(serverName, signal), signal),
+      listCatalogSection(
+        features.resources,
+        () => this.listResourceTemplates(serverName, signal),
+        signal
+      ),
+      listCatalogSection(features.prompts, () => this.listPrompts(serverName, signal), signal)
+    ]);
+    return { resources, resourceTemplates, prompts };
   }
 
   async readResource(
@@ -294,7 +402,7 @@ export class McpClientManager {
         ...(typeof content.text === 'string'
           ? { text: content.text }
           : typeof content.blob === 'string'
-            ? { blobBytes: Math.floor((content.blob.length * 3) / 4) }
+            ? { blobBytes: Buffer.byteLength(content.blob, 'base64') }
             : {})
       }));
     } catch (err: any) {
@@ -308,28 +416,22 @@ export class McpClientManager {
   async listPrompts(serverName: string, signal?: AbortSignal): Promise<McpPromptInfo[]> {
     if (!this.getServerFeatures(serverName).prompts) return [];
     const client = this.getClient(serverName);
-    const prompts: McpPromptInfo[] = [];
-    let cursor: string | undefined;
-    try {
-      for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-        const result = await client.listPrompts(cursor ? { cursor } : undefined, { signal });
-        for (const prompt of result.prompts ?? [])
-          prompts.push({
+    return collectListPages(
+      async (params) => {
+        const { prompts, nextCursor } = await client.listPrompts(params, { signal });
+        return {
+          items: (prompts ?? []).map((prompt) => ({
             name: prompt.name,
             ...(prompt.title ? { title: prompt.title } : {}),
             ...(prompt.description ? { description: prompt.description } : {}),
             ...(prompt.arguments?.length ? { arguments: prompt.arguments } : {})
-          });
-        cursor = result.nextCursor;
-        if (!cursor) break;
-      }
-      return prompts;
-    } catch (err: any) {
-      if (signal?.aborted || isAbortError(err)) throw err;
-      throw new Error(
-        formatMcpError(`Failed to list prompts for server '${serverName}'`, undefined, err)
-      );
-    }
+          })),
+          nextCursor
+        };
+      },
+      `Failed to list prompts for server '${serverName}'`,
+      signal
+    );
   }
 
   async getPrompt(

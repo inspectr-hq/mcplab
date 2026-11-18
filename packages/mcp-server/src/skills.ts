@@ -17,6 +17,7 @@ export type SkillManifest = {
 
 export type LoadedSkill = {
   name: string;
+  frontmatterName?: string;
   description: string;
   /** Relative file paths within the skill directory, SKILL.md always first. */
   files: string[];
@@ -34,18 +35,19 @@ export function resolveSkillsDir(): string {
   return repositorySkills;
 }
 
-function parseFrontmatterDescription(skillMdContent: string): string {
+function parseSkillFrontmatter(skillMdContent: string): { name?: string; description: string } {
   const match = skillMdContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return '';
+  if (!match) return { description: '' };
   try {
     const frontmatter = parseYaml(match[1]);
-    const description =
-      frontmatter && typeof frontmatter === 'object'
-        ? (frontmatter as Record<string, unknown>).description
-        : undefined;
-    return typeof description === 'string' ? description.trim() : '';
+    if (!frontmatter || typeof frontmatter !== 'object') return { description: '' };
+    const { name, description } = frontmatter as Record<string, unknown>;
+    return {
+      name: typeof name === 'string' ? name.trim() || undefined : undefined,
+      description: typeof description === 'string' ? description.trim() : ''
+    };
   } catch {
-    return '';
+    return { description: '' };
   }
 }
 
@@ -94,10 +96,11 @@ function loadSkill(skillsRoot: string, name: string, logger: Pick<Console, 'erro
       sha256: createHash('sha256').update(content).digest('hex')
     };
   });
-  const description = parseFrontmatterDescription(skillMdContent);
+  const frontmatter = parseSkillFrontmatter(skillMdContent);
   return {
     name,
-    description,
+    frontmatterName: frontmatter.name,
+    description: frontmatter.description,
     files: orderedFiles,
     manifest: { name, files: manifestFiles }
   };
@@ -171,7 +174,7 @@ export type MinimalResourceServer = {
   registerResource: (
     name: string,
     uri: string,
-    config: { title?: string; mimeType?: string },
+    config: { title?: string; description?: string; mimeType?: string },
     readCallback: (
       uri: URL
     ) => Promise<{ contents: Array<{ uri: string; mimeType?: string; text: string }> }>
@@ -205,10 +208,15 @@ export function registerSkills(
       for (const relPath of skill.files) {
         const uri = `skill://${skill.name}/${relPath}`;
         const mimeType = mimeTypeFor(relPath);
+        const isSkillDocument = relPath === 'SKILL.md';
         server.registerResource(
-          `skill-${skill.name}-${relPath}`,
+          isSkillDocument
+            ? (skill.frontmatterName ?? skill.name)
+            : `skill-${skill.name}-${relPath}`,
           uri,
-          { title: `${skill.name}: ${relPath}`, mimeType },
+          isSkillDocument
+            ? { description: skill.description || undefined, mimeType }
+            : { title: `${skill.name}: ${relPath}`, mimeType },
           async () => ({
             contents: [{ uri, mimeType, text: readSkillFile(skill.name, relPath) }]
           })

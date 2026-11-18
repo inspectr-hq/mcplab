@@ -1,9 +1,13 @@
 import type { ServerResponse } from 'node:http';
-import type { AgentConfig, EvalConfig, ToolDef } from '@inspectr/mcplab-core';
+import type { AgentConfig, EvalConfig, McpServerCatalog, ToolDef } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
   estimateToolDefinitionTokens,
-  McpClientManager
+  getMcpResourceToolAccess,
+  McpClientManager,
+  MCP_LIST_RESOURCES_TOOL,
+  parseMcpResourceToolCatalog,
+  withMcpCatalogTokenEstimates
 } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
@@ -534,48 +538,61 @@ export function buildToolAnalysisExecutionReviewPayload(params: {
   };
 }
 
+interface DiscoveredMcpServer {
+  serverName: string;
+  warnings: string[];
+  tools: ToolAnalysisToolContext[];
+  tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
+  catalog?: McpServerCatalog;
+}
+
 export async function discoverMcpToolsForServers(
   serversByName: EvalConfig['servers'],
   serverNames: string[],
   options?: {
     serverAuthHeaders?: Record<string, Record<string, string>>;
     tokenEstimateModel?: string;
+    includeCatalog?: boolean;
+    includeToolResources?: boolean;
   }
 ): Promise<{
   mcp: McpClientManager;
-  servers: Array<{
-    serverName: string;
-    warnings: string[];
-    tools: ToolAnalysisToolContext[];
-    tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
-  }>;
+  servers: DiscoveredMcpServer[];
 }> {
   const mcp = new McpClientManager();
   const tokenEstimateModel = options?.tokenEstimateModel ?? 'unknown-model';
-  const discovered: Array<{
-    serverName: string;
-    warnings: string[];
-    tools: ToolAnalysisToolContext[];
-    tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
-  }> = [];
+  const discovered: DiscoveredMcpServer[] = [];
   for (const serverName of serverNames) {
     const server = serversByName[serverName];
-    const entry = {
+    const entry: DiscoveredMcpServer = {
       serverName,
-      warnings: [] as string[],
-      tools: [] as ToolAnalysisToolContext[],
+      warnings: [],
+      tools: [],
       tokenEstimate: estimateToolDefinitionTokens([], tokenEstimateModel)
     };
-    if (!server) {
+    discovered.push(entry);
+    if (!Object.hasOwn(serversByName, serverName) || !server) {
       entry.warnings.push(`Server '${serverName}' not found.`);
-      discovered.push(entry);
       continue;
     }
     try {
       await mcp.connectAll({ [serverName]: server }, undefined, {
         serverAuthHeaders: options?.serverAuthHeaders
       });
-      const tools = await mcp.listTools(serverName);
+    } catch (error: unknown) {
+      entry.warnings.push(
+        `Failed to connect: ${error instanceof Error ? error.message : String(error)}`
+      );
+      continue;
+    }
+
+    const catalog = options?.includeCatalog ? mcp.listCatalog(serverName) : undefined;
+    let tools: ToolDef[] = [];
+    try {
+      tools =
+        !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
+          ? await mcp.listTools(serverName)
+          : [];
       entry.tools = tools.map((tool) => {
         const safety = classifyToolSafety(tool.name, tool.inputSchema, tool.annotations);
         return {
@@ -600,7 +617,28 @@ export async function discoverMcpToolsForServers(
         `Failed to load tools: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    discovered.push(entry);
+    const serverCatalog = await catalog;
+    if (!serverCatalog) continue;
+    const { canList, readArgument } = getMcpResourceToolAccess(tools);
+    if (canList) {
+      serverCatalog.toolResources = { status: 'available' };
+      if (options?.includeToolResources) {
+        try {
+          const result = await mcp.callTool(serverName, MCP_LIST_RESOURCES_TOOL, {});
+          serverCatalog.toolResources = {
+            status: 'ready',
+            canRead: Boolean(readArgument),
+            ...parseMcpResourceToolCatalog(result)
+          };
+        } catch (error) {
+          serverCatalog.toolResources = {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
+    }
+    entry.catalog = withMcpCatalogTokenEstimates(serverCatalog, tokenEstimateModel);
   }
   return { mcp, servers: discovered };
 }

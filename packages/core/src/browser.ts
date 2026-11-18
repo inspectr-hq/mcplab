@@ -2,6 +2,24 @@ export { tallyCheckCounts } from './check-counts.js';
 export { resolveRunAgentSelection } from './run-agent-selection.js';
 export { isLlmAgent } from './types.js';
 export {
+  discoverMcpCatalogSkills,
+  parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles,
+  type McpCatalogSkill,
+  type McpSkillFileEntry,
+  type McpSkillManifestFile
+} from './mcp-skill-catalog.js';
+export type {
+  McpCatalogDefinition,
+  McpCatalogList,
+  McpPreviewRequest,
+  McpPreviewResponse,
+  McpPromptInfo,
+  McpResourceInfo,
+  McpResourceTemplateInfo,
+  McpServerCatalog
+} from './mcp.js';
+export {
   normalizeEvaluationDecisionConfig,
   isDecisionEngineEnabled,
   DECISION_PROVIDERS,

@@ -1,4 +1,12 @@
 import type { ServerComparisonMetadata } from '@inspectr/mcplab-core';
+export {
+  discoverMcpCatalogSkills,
+  parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles,
+  type McpCatalogSkill,
+  type McpSkillFileEntry,
+  type McpSkillManifestFile
+} from '@inspectr/mcplab-core';
 export type {
   ServerSet,
   ServerVariant,
@@ -35,6 +43,9 @@ import type {
   EvaluationQueueItem,
   RunQueueEvent,
   ToolDefinitionTokenEstimates,
+  McpPreviewRequest,
+  McpPreviewResponse,
+  McpServerCatalog,
   RoverAgentProvider,
   RunOutcome,
   ExecutionSource,
@@ -68,6 +79,16 @@ import type {
   WorkspaceSettingsPatch,
   WorkspaceEvaluationSettings,
   EvaluationRunRequest
+} from '@inspectr/mcplab-core';
+export type {
+  McpCatalogDefinition,
+  McpCatalogList,
+  McpPreviewRequest,
+  McpPreviewResponse,
+  McpPromptInfo,
+  McpResourceInfo,
+  McpResourceTemplateInfo,
+  McpServerCatalog
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -468,7 +489,14 @@ export interface ToolAnalysisDiscoverResponse {
     warnings: string[];
     tokenEstimate?: ToolDefinitionTokenEstimates;
     tools: ToolAnalysisDiscoveredTool[];
+    catalog?: McpServerCatalog;
   }>;
+}
+
+export interface ToolAnalysisDiscoverRequest {
+  serverNames: string[];
+  includeCatalog?: boolean;
+  includeToolResources?: boolean;
 }
 
 export type OAuthDebuggerSessionStatus =
@@ -866,9 +894,14 @@ export interface EvalDataSource {
       extractRules: Array<{ name: string; pattern: string }>;
     };
   }) => Promise<ScenarioPreviewResult>;
-  discoverToolsForAnalysis: (params: {
-    serverNames: string[];
-  }) => Promise<ToolAnalysisDiscoverResponse>;
+  discoverToolsForAnalysis: (
+    params: ToolAnalysisDiscoverRequest,
+    signal?: AbortSignal
+  ) => Promise<ToolAnalysisDiscoverResponse>;
+  previewMcpForAnalysis: (
+    params: McpPreviewRequest,
+    signal?: AbortSignal
+  ) => Promise<McpPreviewResponse>;
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];

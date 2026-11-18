@@ -6,12 +6,15 @@ export async function waitForOAuthRuntimeSession(params: {
   serverName: string;
   onLaunchUrl?: (url: string) => void;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<void> {
-  const { sessionId, source, serverName, onLaunchUrl, timeoutMs = 5 * 60_000 } = params;
+  const { sessionId, source, serverName, onLaunchUrl, timeoutMs = 5 * 60_000, signal } = params;
   const timeoutAt = Date.now() + timeoutMs;
   let completed = false;
   while (Date.now() < timeoutAt) {
+    signal?.throwIfAborted();
     const { session } = await source.getOAuthRuntimeSession(sessionId);
+    signal?.throwIfAborted();
     const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || '';
     if (launchUrl && onLaunchUrl) onLaunchUrl(launchUrl);
     if (session.status === 'completed' && session.hasAccessToken) {

@@ -1,5 +1,20 @@
-import { encodingForModel, getEncoding } from 'js-tiktoken';
+import {
+  getEncoding,
+  getEncodingNameForModel,
+  type Tiktoken,
+  type TiktokenEncoding
+} from 'js-tiktoken';
 import type { EstimatedTokens, TraceMessage } from './types.js';
+
+const encoders = new Map<TiktokenEncoding, Tiktoken>();
+
+function getTokenEncoder(name: TiktokenEncoding): Tiktoken {
+  const cached = encoders.get(name);
+  if (cached) return cached;
+  const encoder = getEncoding(name);
+  encoders.set(name, encoder);
+  return encoder;
+}
 
 function normalizeJson(value: unknown): string {
   try {
@@ -13,12 +28,14 @@ export function estimateTextTokens(
   text: string,
   model: string
 ): { count: number; method: EstimatedTokens['method'] } {
+  // Treat special-token markers in external text as literal characters.
   try {
-    const encoding = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
-    return { count: encoding.encode(text).length, method: 'js_tiktoken_estimate' };
+    const name = getEncodingNameForModel(model as Parameters<typeof getEncodingNameForModel>[0]);
+    const encoding = getTokenEncoder(name);
+    return { count: encoding.encode(text, [], []).length, method: 'js_tiktoken_estimate' };
   } catch {
-    const encoding = getEncoding('cl100k_base');
-    return { count: encoding.encode(text).length, method: 'js_tiktoken_fallback' };
+    const encoding = getTokenEncoder('cl100k_base');
+    return { count: encoding.encode(text, [], []).length, method: 'js_tiktoken_fallback' };
   }
 }
 
