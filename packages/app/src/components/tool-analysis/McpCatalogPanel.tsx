@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -97,8 +97,7 @@ function CatalogSection<T>({
 function CatalogEntry({
   title,
   description,
-  action,
-  inlinePreview,
+  preview,
   children,
   estimatedTokens,
   checked,
@@ -106,14 +105,37 @@ function CatalogEntry({
 }: {
   title: string;
   description?: string;
-  action?: ReactNode;
-  inlinePreview?: ReactNode;
+  preview?: Omit<ComponentProps<typeof McpPreview>, 'renderTrigger'>;
   children?: ReactNode;
   estimatedTokens?: number;
   checked: boolean;
   onToggle: (checked: boolean) => void;
 }) {
   const id = useId();
+  const renderHeader = (action?: ReactNode) => (
+    <div className="flex items-start justify-between gap-3 sm:gap-4">
+      <div className="min-w-0 space-y-1">
+        <label htmlFor={id} className="block cursor-pointer wrap-anywhere text-sm font-medium">
+          {title}
+        </label>
+        {children}
+        {description && (
+          <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
+            {description}
+          </p>
+        )}
+      </div>
+      {(action || estimatedTokens !== undefined) && (
+        <div className="flex shrink-0 flex-col-reverse items-end gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+          <ToolTokenEstimateBadge
+            total={estimatedTokens}
+            title="Estimated tokens for this entry’s metadata"
+          />
+          {action}
+        </div>
+      )}
+    </div>
+  );
   return (
     <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0 sm:gap-4">
       <Checkbox
@@ -122,25 +144,9 @@ function CatalogEntry({
         checked={checked}
         onCheckedChange={(value) => onToggle(Boolean(value))}
       />
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <label htmlFor={id} className="cursor-pointer wrap-anywhere text-sm font-medium">
-            {title}
-          </label>
-          <ToolTokenEstimateBadge
-            total={estimatedTokens}
-            title="Estimated tokens for this entry’s metadata"
-          />
-        </div>
-        {description && (
-          <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
-            {description}
-          </p>
-        )}
-        {children}
-        {inlinePreview}
+      <div className="min-w-0 flex-1">
+        {preview ? <McpPreview {...preview} renderTrigger={renderHeader} /> : renderHeader()}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
     </li>
   );
 }
@@ -271,37 +277,32 @@ export function McpCatalogPanel({
     const title = resource.title || resource.name;
     const inline = resourceInlinePreview(uri, resource.mimeType);
     const row = catalogRow(resource, via);
-    const preview = canRead && (
-      <McpPreview
-        title={title}
-        serverName={serverName}
-        target={target}
-        load={loadPreview}
-        via={via}
-        inline={inline}
-      />
-    );
+    const resourceName = title !== resource.name ? resource.name : undefined;
+    const listedResource = 'uri' in resource ? resource : undefined;
     return (
       <CatalogEntry
         key={row.id}
         {...selectable(row)}
         title={title}
         description={resource.description}
-        action={!inline && preview}
-        inlinePreview={inline && preview}
+        preview={
+          canRead
+            ? { title, serverName, target, load: loadPreview, via, inline, listedResource }
+            : undefined
+        }
       >
-        {resource.title && resource.title !== resource.name && (
-          <p className="wrap-anywhere font-mono text-xs">{resource.name}</p>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="break-all font-mono text-xs">{uri}</p>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <code className="wrap-anywhere">{uri}</code>
+          {resource.mimeType && <span className="wrap-anywhere">{resource.mimeType}</span>}
           {inline === 'skill' && (
             <Badge variant="secondary">
               {target.kind === 'resource' ? 'Skill file' : 'Skill file template'}
             </Badge>
           )}
         </div>
-        {resource.mimeType && <p className="text-xs text-muted-foreground">{resource.mimeType}</p>}
+        {resourceName && (
+          <p className="wrap-anywhere font-mono text-xs text-muted-foreground">{resourceName}</p>
+        )}
       </CatalogEntry>
     );
   };
@@ -327,14 +328,12 @@ export function McpCatalogPanel({
                   {...selectable(row)}
                   title={title}
                   description={prompt.description}
-                  action={
-                    <McpPreview
-                      title={title}
-                      serverName={serverName}
-                      target={{ kind: 'prompt', prompt }}
-                      load={loadPreview}
-                    />
-                  }
+                  preview={{
+                    title,
+                    serverName,
+                    target: { kind: 'prompt', prompt },
+                    load: loadPreview
+                  }}
                 >
                   {prompt.title && prompt.title !== prompt.name && (
                     <p className="wrap-anywhere font-mono text-xs">{prompt.name}</p>

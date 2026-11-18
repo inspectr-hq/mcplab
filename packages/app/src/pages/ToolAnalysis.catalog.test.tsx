@@ -133,7 +133,7 @@ describe('Analyze MCP catalog', () => {
     });
     source.previewMcpForAnalysis.mockResolvedValueOnce({
       kind: 'resource',
-      contents: [{ uri: referenceUri, text: '# Search reference' }]
+      contents: [{ uri: referenceUri, mimeType: 'text/markdown', text: '# Search reference' }]
     });
     source.previewMcpForAnalysis.mockResolvedValueOnce({
       kind: 'resource',
@@ -187,11 +187,10 @@ describe('Analyze MCP catalog', () => {
     expect(referencePreview).toHaveAttribute('aria-expanded', 'false');
     expect(manifestPreview).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(referencePreview);
-    expect(
-      await within(referencePreview.closest('li')!).findByRole('heading', {
-        name: 'Search reference'
-      })
-    ).toBeVisible();
+    const referenceRow = within(referencePreview.closest('li')!);
+    expect(await referenceRow.findByRole('heading', { name: 'Search reference' })).toBeVisible();
+    expect(referenceRow.getAllByText(referenceUri)).toHaveLength(1);
+    expect(referenceRow.getAllByText('text/markdown')).toHaveLength(1);
     fireEvent.click(manifestPreview);
     expect(
       await within(manifestPreview.closest('li')!).findByRole('list', { name: 'Files in manifest' })

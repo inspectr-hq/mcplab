@@ -20,6 +20,7 @@ import type {
   McpPreviewRequest,
   McpPreviewResponse,
   McpPromptInfo,
+  McpResourceInfo,
   McpSkillManifestFile
 } from '@/lib/data-sources/types';
 
@@ -32,6 +33,8 @@ type PreviewState =
   | { status: 'idle' | 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; response: McpPreviewResponse };
+
+type ResourceMetadata = Pick<McpResourceInfo, 'uri' | 'mimeType'>;
 
 export type InlinePreview = 'skill' | 'manifest' | 'markdown' | 'raw';
 
@@ -72,10 +75,12 @@ function ManifestFiles({ files }: { files: McpSkillManifestFile[] }) {
 
 function PreviewResult({
   response,
-  inline
+  inline,
+  listedResource
 }: {
   response: McpPreviewResponse;
   inline?: InlinePreview;
+  listedResource?: ResourceMetadata;
 }) {
   const [raw, setRaw] = useState(false);
   const textStyle = 'whitespace-pre-wrap wrap-anywhere rounded bg-muted p-3 text-sm';
@@ -119,7 +124,7 @@ function PreviewResult({
   return (
     <div className="space-y-3" aria-live="polite">
       {canFormat && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b pb-2">
           <div
             role="group"
             aria-label={modeLabel}
@@ -131,7 +136,7 @@ function PreviewResult({
                 type="button"
                 size="sm"
                 variant={raw === mode.raw ? 'secondary' : 'ghost'}
-                className="h-11 sm:h-8"
+                className="h-11 px-2 sm:h-8 sm:px-3"
                 aria-pressed={raw === mode.raw}
                 onClick={() => setRaw(mode.raw)}
               >
@@ -144,7 +149,7 @@ function PreviewResult({
               type="button"
               size="sm"
               variant="outline"
-              className="h-11 bg-transparent sm:h-8"
+              className="h-11 bg-transparent px-2 sm:h-8 sm:px-3"
               aria-label="Copy raw Markdown"
               onClick={() => void copyTextToClipboard('Raw Markdown', markdownParts.join('\n\n'))}
             >
@@ -158,6 +163,9 @@ function PreviewResult({
         <p className="text-sm">The resource returned no content.</p>
       )}
       {contents.map(({ item, manifest }, index) => {
+        const showUri = contents.length > 1 || item.uri !== listedResource?.uri;
+        const showMimeType =
+          item.mimeType && (showUri || item.mimeType !== listedResource?.mimeType);
         let textPreview: ReactNode = null;
         if (typeof item.text === 'string') {
           if (!raw && manifest) textPreview = <ManifestFiles files={manifest} />;
@@ -173,8 +181,10 @@ function PreviewResult({
         }
         return (
           <div key={index} className="space-y-1">
-            <p className="break-all font-mono text-xs">{item.uri}</p>
-            {item.mimeType && <p className="text-xs text-muted-foreground">{item.mimeType}</p>}
+            {showUri && <p className="wrap-anywhere font-mono text-xs">{item.uri}</p>}
+            {showMimeType && (
+              <p className="wrap-anywhere text-xs text-muted-foreground">{item.mimeType}</p>
+            )}
             {textPreview}
             {item.blobBytes !== undefined && (
               <p className="text-sm">Binary content ({item.blobBytes.toLocaleString()} bytes)</p>
@@ -192,7 +202,9 @@ export function McpPreview({
   target,
   load,
   via,
-  inline
+  inline,
+  listedResource,
+  renderTrigger
 }: {
   title: string;
   serverName: string;
@@ -200,6 +212,8 @@ export function McpPreview({
   load: LoadMcpPreview;
   via?: 'tool';
   inline?: InlinePreview;
+  listedResource?: ResourceMetadata;
+  renderTrigger?: (trigger: ReactNode) => ReactNode;
 }) {
   const id = useId();
   const [state, setState] = useState<PreviewState>({ status: 'idle' });
@@ -258,25 +272,26 @@ export function McpPreview({
   else if (target.kind === 'resource') detail = target.uri;
   else detail = target.prompt.name;
   let triggerLabel = 'Preview';
-  if (inline === 'skill') triggerLabel = 'Skill preview';
-  if (inline === 'manifest') triggerLabel = 'Manifest';
+  if (!renderTrigger && inline === 'skill') triggerLabel = 'Skill preview';
+  if (!renderTrigger && inline === 'manifest') triggerLabel = 'Manifest';
   const trigger = (
     <Button
       type="button"
-      variant={inline ? 'ghost' : 'outline'}
+      variant={inline && !renderTrigger ? 'ghost' : 'outline'}
       size="sm"
       className="group h-11 sm:h-8"
       aria-label={`Preview ${title}`}
     >
+      {triggerLabel}
       {inline && (
         <ChevronRight
           aria-hidden="true"
           className="motion-safe:transition-transform group-data-[state=open]:rotate-90"
         />
       )}
-      {triggerLabel}
     </Button>
   );
+  const placeTrigger = renderTrigger ?? ((trigger: ReactNode) => trigger);
   const content = (
     <>
       {target.kind !== 'resource' && (
@@ -341,14 +356,20 @@ export function McpPreview({
           )}
         </div>
       )}
-      {state.status === 'ready' && <PreviewResult response={state.response} inline={inline} />}
+      {state.status === 'ready' && (
+        <PreviewResult
+          response={state.response}
+          inline={inline}
+          listedResource={inline ? listedResource : undefined}
+        />
+      )}
     </>
   );
 
   if (inline) {
     return (
-      <Collapsible onOpenChange={handleOpenChange}>
-        <CollapsibleTrigger asChild>{trigger}</CollapsibleTrigger>
+      <Collapsible className="space-y-3" onOpenChange={handleOpenChange}>
+        {placeTrigger(<CollapsibleTrigger asChild>{trigger}</CollapsibleTrigger>)}
         <CollapsibleContent className="min-w-0 space-y-3 rounded-md border p-3">
           {content}
         </CollapsibleContent>
@@ -358,7 +379,7 @@ export function McpPreview({
 
   return (
     <Dialog onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {placeTrigger(<DialogTrigger asChild>{trigger}</DialogTrigger>)}
       <DialogContent className="max-h-[85dvh] w-11/12 overflow-y-auto sm:max-w-2xl">
         <DialogHeader className="pr-5">
           <DialogTitle className="wrap-anywhere">{title}</DialogTitle>

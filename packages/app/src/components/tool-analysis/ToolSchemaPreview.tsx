@@ -283,7 +283,7 @@ export function ToolSchemaPreview({
 
   const modeControls = (
     <span
-      className="inline-flex rounded-md border bg-muted p-0.5"
+      className={`rounded-md border bg-muted p-0.5 ${compact ? 'hidden group-open/schema:inline-flex' : 'inline-flex'}`}
       role="tablist"
       aria-label="Schema view mode"
     >
@@ -329,7 +329,7 @@ export function ToolSchemaPreview({
           )}
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          {!compact && modeControls}
+          {modeControls}
           <ChevronDown
             aria-hidden="true"
             className="size-4 text-muted-foreground motion-safe:transition-transform group-open/schema:rotate-180"
@@ -337,7 +337,6 @@ export function ToolSchemaPreview({
         </span>
       </summary>
       <div className="mt-2">
-        {compact && <div className="flex justify-end">{modeControls}</div>}
         {mode === 'json' && (
           <div className="mt-2 space-y-2">
             {inputSchema !== undefined && (
