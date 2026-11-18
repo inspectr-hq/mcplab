@@ -122,12 +122,12 @@ function CatalogEntry({
             title="Estimated tokens for this entry’s metadata"
           />
         </div>
-        {children}
         {description && (
           <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
             {description}
           </p>
         )}
+        {children}
         {inlinePreview}
       </div>
       {action && <div className="shrink-0">{action}</div>}

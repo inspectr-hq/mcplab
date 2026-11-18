@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const originalEnv = { ...process.env };
@@ -117,6 +120,30 @@ describe('loadSkills', () => {
     expect(skills).toHaveLength(1);
     expect(skills[0].name).toBe('demo-skill');
     expect(skills[0].files).toEqual(['SKILL.md', 'references/notes.md']);
+  });
+});
+
+describe('registerSkills', () => {
+  it('advertises the skill name and description in the resource listing', async () => {
+    makeFixtureSkillsDir();
+    const { registerSkills } = await import('./skills.js');
+    const server = new McpServer({ name: 'skill-server', version: '1.0.0' });
+    const client = new Client({ name: 'skill-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    registerSkills(server);
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const { resources } = await client.listResources();
+      expect(resources.find(({ uri }) => uri === 'skill://demo-skill/SKILL.md')).toMatchObject({
+        name: 'demo-skill',
+        description: 'A demo skill for tests.',
+        mimeType: 'text/markdown'
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 });
 

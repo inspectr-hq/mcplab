@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -34,7 +35,15 @@ export type LoadMcpPreview = (
   signal: AbortSignal
 ) => Promise<McpPreviewResponse>;
 
-function PreviewResult({ response }: { response: McpPreviewResponse }) {
+function skillMarkdownBody(text: string): string {
+  return text.replace(
+    /^\uFEFF?---[ \t]*\r?\n(?:[^\r\n]*\r?\n)*?(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/,
+    ''
+  );
+}
+
+function PreviewResult({ response, skill }: { response: McpPreviewResponse; skill: boolean }) {
+  const [mode, setMode] = useState<'Markdown' | 'Raw'>('Markdown');
   const textStyle = 'whitespace-pre-wrap wrap-anywhere rounded bg-muted p-3 text-sm';
   if (response.kind === 'prompt') {
     return (
@@ -54,8 +63,31 @@ function PreviewResult({ response }: { response: McpPreviewResponse }) {
       </div>
     );
   }
+  const showMode = skill && response.contents.some((item) => typeof item.text === 'string');
+  const renderMarkdown = showMode && mode === 'Markdown';
   return (
     <div className="space-y-3" aria-live="polite">
+      {showMode && (
+        <div
+          role="group"
+          aria-label="Skill preview mode"
+          className="inline-flex gap-0.5 rounded-md border p-0.5"
+        >
+          {(['Markdown', 'Raw'] as const).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={mode === option ? 'secondary' : 'ghost'}
+              className="h-11 sm:h-8"
+              aria-pressed={mode === option}
+              onClick={() => setMode(option)}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      )}
       {response.contents.length === 0 && (
         <p className="text-sm">The resource returned no content.</p>
       )}
@@ -63,7 +95,16 @@ function PreviewResult({ response }: { response: McpPreviewResponse }) {
         <div key={index} className="space-y-1">
           <p className="break-all font-mono text-xs">{item.uri}</p>
           {item.mimeType && <p className="text-xs text-muted-foreground">{item.mimeType}</p>}
-          {typeof item.text === 'string' && <pre className={textStyle}>{item.text}</pre>}
+          {typeof item.text === 'string' &&
+            (renderMarkdown ? (
+              <MarkdownContent
+                text={skillMarkdownBody(item.text)}
+                renderImages={false}
+                className="min-w-0 wrap-anywhere text-sm"
+              />
+            ) : (
+              <pre className={textStyle}>{item.text}</pre>
+            ))}
           {item.blobBytes !== undefined && (
             <p className="text-sm">Binary content ({item.blobBytes.toLocaleString()} bytes)</p>
           )}
@@ -225,7 +266,7 @@ export function McpPreview({
           )}
         </div>
       )}
-      {state.status === 'ready' && <PreviewResult response={state.response} />}
+      {state.status === 'ready' && <PreviewResult response={state.response} skill={inline} />}
     </>
   );
 

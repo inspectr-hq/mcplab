@@ -83,6 +83,16 @@ describe('Analyze MCP catalog', () => {
     vi.unstubAllGlobals();
   });
 
+  it('uses the selected server name as the catalog heading', async () => {
+    renderPage();
+    await screen.findByText('fetch_docs');
+    expect(screen.getByRole('heading', { name: 'Alpha' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Server catalog' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alpha' }));
+    expect(screen.getByRole('heading', { name: 'Server catalog' })).toBeVisible();
+  });
+
   it('lists tool-backed resources explicitly and previews a skill file via its server tool', async () => {
     const catalog = {
       ...alpha.catalog,
@@ -101,16 +111,34 @@ describe('Analyze MCP catalog', () => {
             toolResources: {
               status: 'ready',
               canRead: true,
-              resources: [{ name: 'Review', uri: 'skill://review/SKILL.md' }],
+              resources: [
+                {
+                  name: 'review',
+                  uri: 'skill://review/SKILL.md',
+                  description: 'Review MCP scenarios and results.'
+                }
+              ],
               resourceTemplates: [{ name: 'Page', uriTemplate: 'docs://pages/{id}' }]
             }
           }
         }
       ]
     });
+    const skillSource = [
+      '---',
+      'name: review',
+      'description: Review MCP scenarios and results.',
+      '---',
+      '',
+      '# Review',
+      '',
+      '**Check** the trace.',
+      '',
+      '![Trace diagram](https://example.invalid/trace.png)'
+    ].join('\r\n');
     source.previewMcpForAnalysis.mockResolvedValue({
       kind: 'resource',
-      contents: [{ uri: 'skill://review/SKILL.md', text: '# Review' }]
+      contents: [{ uri: 'skill://review/SKILL.md', text: skillSource }]
     });
     renderPage();
     await screen.findByText('fetch_docs');
@@ -121,17 +149,33 @@ describe('Analyze MCP catalog', () => {
     openTab('Resources');
     fireEvent.click(screen.getByRole('button', { name: 'List via server tool' }));
     expect(await screen.findByText('Skill file')).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'review' })).toBeVisible();
+    expect(screen.getByText('Review MCP scenarios and results.')).toBeVisible();
     expect(screen.getByText('docs://pages/{id}')).toBeVisible();
     expect(source.discoverToolsForAnalysis).toHaveBeenLastCalledWith(
       { serverNames: ['alpha'], includeCatalog: true, includeToolResources: true },
       expect.any(AbortSignal)
     );
-    const preview = screen.getByRole('button', { name: 'Preview Review' });
+    const preview = screen.getByRole('button', { name: 'Preview review' });
     expect(preview).toHaveAttribute('aria-expanded', 'false');
     expect(source.previewMcpForAnalysis).not.toHaveBeenCalled();
     fireEvent.click(preview);
     expect(preview).toHaveAttribute('aria-expanded', 'true');
-    expect(await within(preview.closest('li')!).findByText('# Review')).toBeVisible();
+    const row = preview.closest('li')!;
+    const previewRow = within(row);
+    expect(await previewRow.findByRole('heading', { name: 'Review' })).toBeVisible();
+    expect(previewRow.getByRole('button', { name: 'Markdown' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(previewRow.queryByText(/name: review/)).not.toBeInTheDocument();
+    expect(previewRow.getByText('Trace diagram')).toBeVisible();
+    expect(previewRow.queryByRole('img')).not.toBeInTheDocument();
+    fireEvent.click(previewRow.getByRole('button', { name: 'Raw' }));
+    expect(row.querySelector('pre')?.textContent).toBe(skillSource);
+    fireEvent.click(previewRow.getByRole('button', { name: 'Markdown' }));
+    expect(previewRow.getByRole('heading', { name: 'Review' })).toBeVisible();
+    expect(source.previewMcpForAnalysis).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(source.previewMcpForAnalysis).toHaveBeenCalledWith(
       { kind: 'resource', serverName: 'alpha', uri: 'skill://review/SKILL.md', via: 'tool' },
@@ -139,7 +183,7 @@ describe('Analyze MCP catalog', () => {
     );
     fireEvent.click(preview);
     expect(preview).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('# Review')).not.toBeInTheDocument();
+    expect(previewRow.queryByRole('heading', { name: 'Review' })).not.toBeInTheDocument();
   });
 
   it('previews resource content and reads a concrete URI from a template', async () => {
