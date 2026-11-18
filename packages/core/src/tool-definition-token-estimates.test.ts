@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { getEncoding } from 'js-tiktoken';
 import { estimateToolDefinitionTokens } from './tool-definition-token-estimates.js';
+
+vi.mock('js-tiktoken', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-tiktoken')>();
+  return { ...actual, getEncoding: vi.fn(actual.getEncoding) };
+});
 
 describe('estimateToolDefinitionTokens', () => {
   it('returns a per-tool estimate and a matching aggregate', () => {
@@ -25,10 +31,16 @@ describe('estimateToolDefinitionTokens', () => {
     expect(result.method).toBe('js_tiktoken_estimate');
   });
 
-  it('uses the fallback tokenizer for unknown models', () => {
-    const result = estimateToolDefinitionTokens([{ name: 'health' }], 'unknown-model');
+  it('reuses the fallback tokenizer across definitions and unknown models', () => {
+    const tools = [{ name: 'health' }, { name: 'search' }];
+    const result = estimateToolDefinitionTokens(tools, 'unknown-model');
+    const repeated = estimateToolDefinitionTokens(tools, 'another-unknown-model');
 
     expect(result.method).toBe('js_tiktoken_fallback');
     expect(result.tools[0]?.total).toBeGreaterThan(0);
+    expect(repeated).toEqual(result);
+    expect(
+      vi.mocked(getEncoding).mock.calls.filter(([encoding]) => encoding === 'cl100k_base')
+    ).toHaveLength(1);
   });
 });
