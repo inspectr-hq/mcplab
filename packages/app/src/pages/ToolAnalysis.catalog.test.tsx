@@ -259,7 +259,8 @@ describe('Analyze MCP catalog', () => {
     openTab('Prompts');
     openTab('Tools');
     expect(screen.getByRole('checkbox', { name: /fetch_docs/ })).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Download Tool Info' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Export' }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Download Tool Info' }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze Tools' }));
@@ -272,5 +273,21 @@ describe('Analyze MCP catalog', () => {
     await waitFor(() =>
       expect(source.subscribeToolAnalysisJob).toHaveBeenCalledWith('test-job', expect.any(Function))
     );
+  });
+
+  it('selects visible tools without clearing selections hidden by the filter', async () => {
+    source.discoverToolsForAnalysis.mockResolvedValueOnce({
+      servers: [{ ...alpha, tools: [...alpha.tools, { ...alpha.tools[0], name: 'search_pages' }] }]
+    });
+    renderPage();
+    await screen.findByText('search_pages');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'search_pages' }));
+    const filter = screen.getByRole('searchbox', { name: 'Filter tools' });
+    fireEvent.change(filter, { target: { value: 'search' } });
+    expect(screen.queryByText('fetch_docs')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Select visible' }));
+    fireEvent.change(filter, { target: { value: '' } });
+    expect(screen.getByRole('checkbox', { name: 'fetch_docs' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'search_pages' })).toBeChecked();
   });
 });

@@ -143,7 +143,13 @@ export function McpPreviewDialog({
   return (
     <Dialog onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" aria-label={`Preview ${title}`}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-11 sm:h-8"
+          aria-label={`Preview ${title}`}
+        >
           Preview
         </Button>
       </DialogTrigger>

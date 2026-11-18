@@ -173,7 +173,7 @@ export function AppLayout() {
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar version={version} />
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-12 items-center gap-2 border-b bg-card px-4">
             <SidebarTrigger />
             <Breadcrumb>
@@ -259,7 +259,7 @@ export function AppLayout() {
               </button>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-4 sm:p-6">
             <Outlet />
           </main>
         </div>

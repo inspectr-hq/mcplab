@@ -31,7 +31,7 @@ function CatalogSection<T>({
   if (section.items.length === 0) {
     return <p className="text-sm text-muted-foreground">No {label} listed.</p>;
   }
-  return <ul className="space-y-2">{section.items.map((item) => render(item))}</ul>;
+  return <ul className="divide-y">{section.items.map((item) => render(item))}</ul>;
 }
 
 function CatalogEntry({
@@ -46,17 +46,17 @@ function CatalogEntry({
   children?: ReactNode;
 }) {
   return (
-    <li className="space-y-2 rounded-md border p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h4 className="min-w-0 wrap-anywhere text-sm font-medium">{title}</h4>
-        {action}
+    <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0 sm:gap-4">
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="wrap-anywhere text-sm font-medium">{title}</p>
+        {children}
+        {description && (
+          <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
+            {description}
+          </p>
+        )}
       </div>
-      {children}
-      {description && (
-        <p className="whitespace-pre-wrap wrap-anywhere text-sm text-muted-foreground">
-          {description}
-        </p>
-      )}
+      {action && <div className="shrink-0">{action}</div>}
     </li>
   );
 }
@@ -192,6 +192,7 @@ export function McpCatalogPanel({
               type="button"
               size="sm"
               variant="outline"
+              className="h-11 sm:h-8"
               disabled={discovering}
               onClick={listViaTool}
             >
@@ -213,7 +214,7 @@ export function McpCatalogPanel({
               {toolResources.resourceTemplates.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Resource templates</h4>
-                  <ul className="space-y-2">
+                  <ul className="divide-y">
                     {toolResources.resourceTemplates.map((item) =>
                       renderResource(item, 'tool', toolResources.canRead)
                     )}

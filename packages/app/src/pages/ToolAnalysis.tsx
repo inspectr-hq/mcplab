@@ -8,12 +8,18 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { McpCatalogPanel } from '@/components/tool-analysis/McpCatalogPanel';
 import type { LoadMcpPreview } from '@/components/tool-analysis/McpPreviewDialog';
+import { McpToolList } from '@/components/tool-analysis/McpToolList';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
-import { ToolDescription } from '@/components/tool-analysis/ToolDescription';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
 import { useLibraries } from '@/contexts/useLibraries';
@@ -23,23 +29,33 @@ import type {
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport
 } from '@/lib/data-sources/types';
-import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
+import {
+  ChevronDown,
+  CircleHelp,
+  Copy,
+  Download,
+  Loader2,
+  RefreshCw,
+  Search,
+  Microscope
+} from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
 import {
   formatToolAnalysisTokenCount,
   selectedToolContextTokens
 } from '@/lib/tool-analysis-token-estimates';
 import { ToolTokenEstimateBadge } from '@/components/tool-analysis/ToolTokenEstimateBadge';
-import {
-  ToolSchemaPreview,
-  type SchemaViewMode
-} from '@/components/tool-analysis/ToolSchemaPreview';
+import type { SchemaViewMode } from '@/components/tool-analysis/ToolSchemaPreview';
 
 import { parseAnalysisProgressFromEvents } from '@/lib/tool-analysis-progress';
 
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = 'mcplab.toolAnalysis.activeJobId';
+const CATALOG_TABS = [
+  { value: 'tools', label: 'Tools' },
+  { value: 'resources', label: 'Resources' },
+  { value: 'prompts', label: 'Prompts' }
+] as const;
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -90,31 +106,6 @@ function formatToolDiscoveryWarning(serverName: string, warning: string): string
     return `Could not load tools from '${serverName}'. Check that the MCP server is running and reachable, then try Discover again.`;
   }
   return warning;
-}
-
-function SafetyBadge({
-  label,
-  reason,
-  variantClassName
-}: {
-  label: string;
-  reason: string;
-  variantClassName: string;
-}) {
-  return (
-    <TooltipProvider delayDuration={0}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant="outline" className={variantClassName}>
-            {label}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-sm text-xs">
-          <p>{reason}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 }
 
 const ToolAnalysisPage = () => {
@@ -326,21 +317,6 @@ const ToolAnalysisPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServerNames.join('|')]);
 
-  const filteredDiscovered = useMemo(() => {
-    const q = toolQuery.trim().toLowerCase();
-    if (!q) return discovered;
-    return discovered
-      .map((server) => ({
-        ...server,
-        tools: server.tools.filter(
-          (tool) =>
-            tool.name.toLowerCase().includes(q) ||
-            (tool.description || '').toLowerCase().includes(q)
-        )
-      }))
-      .filter((server) => server.tools.length > 0);
-  }, [discovered, toolQuery]);
-
   const totalSelectedTools = useMemo(
     () => Object.values(selectedToolsByServer).reduce((sum, list) => sum + list.length, 0),
     [selectedToolsByServer]
@@ -351,12 +327,30 @@ const ToolAnalysisPage = () => {
   );
   const selectedServerLabel = selectedServerNames[0] ?? '';
   const serverDiscovery = discovered.find((entry) => entry.serverName === selectedServerLabel);
+  const serverDisplayName =
+    servers.find((server) => server.id === selectedServerLabel)?.name || selectedServerLabel;
   const catalog = serverDiscovery?.catalog;
   const toolDiscoveryWarnings = catalog ? (serverDiscovery?.warnings ?? []) : [];
+  const toolQueryText = toolQuery.trim().toLowerCase();
+  const visibleTools = useMemo(() => {
+    const tools = serverDiscovery?.tools ?? [];
+    if (!toolQueryText) return tools;
+    return tools.filter((tool) =>
+      [tool.name, tool.title, tool.description].some((value) =>
+        value?.toLowerCase().includes(toolQueryText)
+      )
+    );
+  }, [serverDiscovery, toolQueryText]);
+  const selectedTools = new Set(selectedToolsByServer[selectedServerLabel]);
+  const hasTools = Boolean(serverDiscovery?.tools.length);
+  const allVisibleSelected = visibleTools.every((tool) => selectedTools.has(tool.name));
+  const discoveryBusy = discovering || authInProgress;
   let catalogMessage = 'Select a server to discover its capabilities.';
   if (selectedServerLabel) {
     catalogMessage = discovering ? 'Loading server capabilities…' : 'No catalog available.';
   }
+  let toolsMessage = catalogMessage;
+  if (serverDiscovery) toolsMessage = hasTools ? 'No tools match your search.' : 'No tools listed.';
 
   const startAnalysis = async () => {
     if (!metadataReview && !deeperAnalysis) {
@@ -447,6 +441,18 @@ const ToolAnalysisPage = () => {
     );
   };
 
+  const copyToolList = () => {
+    const tools = visibleTools.map(({ name, title, description }) => ({
+      name,
+      title,
+      description
+    }));
+    void copyTextToClipboard(
+      'Tool list',
+      `${JSON.stringify({ server: selectedServerLabel, tools }, null, 2)}\n`
+    );
+  };
+
   const stopAnalysis = async () => {
     if (!activeJobId) return;
     const jobId = activeJobId;
@@ -525,8 +531,17 @@ const ToolAnalysisPage = () => {
     });
   };
 
-  const setAllToolsForServer = (serverName: string, toolNames: string[]) => {
-    setSelectedToolsByServer((prev) => ({ ...prev, [serverName]: toolNames }));
+  const selectVisibleTools = () => {
+    setSelectedToolsByServer((prev) => ({
+      ...prev,
+      [selectedServerLabel]: [
+        ...new Set([...(prev[selectedServerLabel] ?? []), ...visibleTools.map((tool) => tool.name)])
+      ]
+    }));
+  };
+
+  const clearToolSelection = () => {
+    setSelectedToolsByServer((prev) => ({ ...prev, [selectedServerLabel]: [] }));
   };
 
   const canOpenConfigureStep = true;
@@ -607,14 +622,14 @@ const ToolAnalysisPage = () => {
 
       {viewStep === 'configure' && (
         <Card>
-          <CardHeader>
+          <CardHeader className="p-3 sm:p-6">
             <CardTitle className="text-base">Run MCP analysis</CardTitle>
             <CardDescription>
               Select servers and tools, choose metadata review and/or deeper sample-call analysis,
               then run the report.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-5 p-3 pt-0 sm:p-6 sm:pt-0">
             {!effectiveAssistantAgentName && (
               <Alert>
                 <AlertTitle>No assistant agent available</AlertTitle>
@@ -645,7 +660,7 @@ const ToolAnalysisPage = () => {
                   Refresh Servers
                 </Button>
               </div>
-              <div className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 rounded-md border p-3 md:grid-cols-2">
                 {servers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No library servers configured.</p>
                 ) : (
@@ -661,7 +676,9 @@ const ToolAnalysisPage = () => {
                           onCheckedChange={(value) => toggleServer(server.id, Boolean(value))}
                         />
                         <div className="min-w-0">
-                          <div className="font-medium">{server.name || server.id}</div>
+                          <div className="wrap-anywhere font-medium">
+                            {server.name || server.id}
+                          </div>
                           {server.url && (
                             <div className="truncate text-xs text-muted-foreground">
                               {server.url}
@@ -678,246 +695,189 @@ const ToolAnalysisPage = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="tools">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <TabsList aria-label="MCP server capabilities">
-                  <TabsTrigger value="tools">Tools</TabsTrigger>
-                  <TabsTrigger value="resources">Resources</TabsTrigger>
-                  <TabsTrigger value="prompts">Prompts</TabsTrigger>
-                </TabsList>
+            <Tabs defaultValue="tools" className="min-w-0 rounded-lg border bg-background">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-3 sm:px-4">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold">Server catalog</h2>
+                  {serverDisplayName && (
+                    <p className="wrap-anywhere text-sm text-muted-foreground">
+                      {serverDisplayName}
+                    </p>
+                  )}
+                </div>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => void discoverTools()}
-                  disabled={discovering || authInProgress || !selectedServerLabel}
+                  disabled={discoveryBusy || !selectedServerLabel}
+                  className="h-11 hover:bg-muted hover:text-foreground sm:h-8"
                 >
-                  {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Discover
+                  {discovering ? (
+                    <Loader2 aria-hidden="true" className="motion-safe:animate-spin" />
+                  ) : (
+                    <RefreshCw aria-hidden="true" />
+                  )}
+                  Refresh catalog
                 </Button>
               </div>
+              <TabsList
+                aria-label="MCP server capabilities"
+                className="grid h-auto w-full grid-cols-3 gap-0 rounded-none border-b bg-transparent p-0 px-2 sm:flex sm:justify-start sm:px-4"
+              >
+                {CATALOG_TABS.map(({ value, label }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="min-h-11 rounded-none border-b-2 border-transparent bg-transparent px-2 py-2 transition-none hover:text-foreground focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-4"
+                  >
+                    {label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
               {discoveryError && (
-                <p role="alert" className="mt-2 wrap-anywhere text-sm text-destructive">
+                <p
+                  role="alert"
+                  className="px-3 pt-3 wrap-anywhere text-sm text-destructive sm:px-4"
+                >
                   {discoveryError}
                 </p>
               )}
               {!catalog &&
                 serverDiscovery?.warnings.map((warning) => (
-                  <p key={warning} role="alert" className="mt-2 text-sm text-amber-700">
+                  <p
+                    key={warning}
+                    role="alert"
+                    className="px-3 pt-3 wrap-anywhere text-sm text-muted-foreground sm:px-4"
+                  >
                     {warning}
                   </p>
                 ))}
-              <TabsContent value="tools" className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Filter visible tools</Label>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      className="h-9 pl-8"
-                      placeholder="Filter tools by name or description..."
-                      value={toolQuery}
-                      onChange={(e) => setToolQuery(e.target.value)}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Filtering only changes what is shown; selected tools remain selected.
-                  </p>
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label className="text-xs">
-                      {selectedServerLabel ? `Tools for ${selectedServerLabel}` : 'Tools'}
-                    </Label>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={downloadToolInfo}
-                        disabled={discovering || authInProgress || !serverDiscovery?.tools.length}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Tool Info
-                      </Button>
+              <TabsContent
+                value="tools"
+                className="mt-0 focus-visible:ring-inset focus-visible:ring-offset-0"
+              >
+                {hasTools && (
+                  <div className="space-y-2 px-3 py-3 sm:px-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="relative w-full sm:w-72">
+                        <Label htmlFor="mcp-tool-filter" className="sr-only">
+                          Filter tools
+                        </Label>
+                        <Search
+                          aria-hidden="true"
+                          className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                          id="mcp-tool-filter"
+                          type="search"
+                          className="h-11 ps-9 sm:h-9"
+                          placeholder="Filter tools…"
+                          value={toolQuery}
+                          onChange={(e) => setToolQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 sm:h-8"
+                          onClick={selectVisibleTools}
+                          disabled={allVisibleSelected}
+                        >
+                          {toolQueryText ? 'Select visible' : 'Select all'}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 sm:h-8"
+                          aria-label="Clear selection"
+                          onClick={clearToolSelection}
+                          disabled={totalSelectedTools === 0}
+                        >
+                          Clear
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-11 sm:h-8"
+                              disabled={discoveryBusy}
+                            >
+                              Export
+                              <ChevronDown aria-hidden="true" className="size-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onSelect={copyToolList}
+                              disabled={visibleTools.length === 0}
+                            >
+                              <Copy aria-hidden="true" className="size-4" />
+                              {toolQueryText ? 'Copy visible tool list' : 'Copy tool list'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={downloadToolInfo}>
+                              <Download aria-hidden="true" className="size-4" />
+                              Download Tool Info
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span role="status">
+                        {totalSelectedTools} of {serverDiscovery?.tools.length} selected
+                      </span>
+                      {selectedToolTokens !== undefined && (
+                        <span>
+                          ~{formatToolAnalysisTokenCount(selectedToolTokens)} tokens selected
+                        </span>
+                      )}
+                      {serverDiscovery?.tokenEstimate?.total !== selectedToolTokens && (
+                        <ToolTokenEstimateBadge
+                          total={serverDiscovery?.tokenEstimate?.total}
+                          title="Estimated tokens for all discovered tool definitions and their schemas"
+                        />
+                      )}
                     </div>
                   </div>
-                  <div className="space-y-3 rounded-md border p-3">
-                    {selectedServerNames.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        Select a server to discover tools.
-                      </p>
-                    ) : discovering && discovered.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Loading tools...</p>
-                    ) : toolDiscoveryWarnings.length > 0 ? (
-                      toolDiscoveryWarnings.map((warning) => (
-                        <p key={warning} role="alert" className="text-sm text-amber-700">
-                          {formatToolDiscoveryWarning(selectedServerLabel, warning)}
-                        </p>
-                      ))
-                    ) : serverDiscovery?.tools.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No tools listed.</p>
-                    ) : filteredDiscovered.length === 0 && !discovering ? (
-                      <p className="text-sm text-muted-foreground">
-                        No discovered tools match the current filters.
-                      </p>
-                    ) : (
-                      filteredDiscovered.map((server) => {
-                        const selected = new Set(selectedToolsByServer[server.serverName] ?? []);
-                        return (
-                          <div key={server.serverName} className="rounded-md border p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <div className="font-medium">{server.serverName}</div>
-                                <ToolTokenEstimateBadge
-                                  total={server.tokenEstimate?.total}
-                                  title="Estimated tokens for all discovered tool definitions and their schemas"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    void copyTextToClipboard(
-                                      'Tool list',
-                                      `${JSON.stringify(
-                                        {
-                                          server: server.serverName,
-                                          tools: server.tools.map((tool) => ({
-                                            name: tool.name,
-                                            title: tool.title,
-                                            description: tool.description
-                                          }))
-                                        },
-                                        null,
-                                        2
-                                      )}\n`
-                                    )
-                                  }
-                                >
-                                  <Copy className="mr-1.5 h-3.5 w-3.5" />
-                                  Copy
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    setAllToolsForServer(
-                                      server.serverName,
-                                      server.tools.map((t) => t.name)
-                                    )
-                                  }
-                                >
-                                  Select all
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setAllToolsForServer(server.serverName, [])}
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              {server.tools.map((tool) => {
-                                const tokenEstimate = server.tokenEstimate?.tools.find(
-                                  (item) => item.name === tool.name
-                                );
-                                const isWriteDelete = isWriteDeleteClassification(
-                                  tool.classificationReason
-                                );
-                                const safetyLabel =
-                                  tool.safetyClassification === 'read_only'
-                                    ? 'read-only'
-                                    : isWriteDelete
-                                      ? 'write/delete'
-                                      : 'unsafe/unknown';
-                                const safetyVariantClass =
-                                  tool.safetyClassification === 'read_only'
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                    : isWriteDelete
-                                      ? 'border-amber-300 bg-amber-50 text-amber-800'
-                                      : 'border-slate-300 bg-slate-100 text-slate-700';
-                                return (
-                                  <label
-                                    key={`${server.serverName}-${tool.name}`}
-                                    className="flex items-start gap-2 rounded border p-2"
-                                  >
-                                    <Checkbox
-                                      checked={selected.has(tool.name)}
-                                      onCheckedChange={(value) =>
-                                        toggleTool(server.serverName, tool.name, Boolean(value))
-                                      }
-                                    />
-                                    <div className="min-w-0 flex-1 space-y-1">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono text-xs">{tool.name}</span>
-                                        {tool.title && (
-                                          <span className="text-xs text-muted-foreground">
-                                            {tool.title}
-                                          </span>
-                                        )}
-                                        <SafetyBadge
-                                          label={safetyLabel}
-                                          reason={tool.classificationReason}
-                                          variantClassName={safetyVariantClass}
-                                        />
-                                        {tool.inputSchema && (
-                                          <Badge
-                                            variant="outline"
-                                            className="border-border text-[10px] text-muted-foreground"
-                                          >
-                                            schema: input
-                                          </Badge>
-                                        )}
-                                        {tool.outputSchema && (
-                                          <Badge
-                                            variant="outline"
-                                            className="border-border text-[10px] text-muted-foreground"
-                                          >
-                                            schema: output
-                                          </Badge>
-                                        )}
-                                        <ToolTokenEstimateBadge
-                                          total={tokenEstimate?.total}
-                                          className="text-[10px]"
-                                        />
-                                      </div>
-                                      {tool.description && (
-                                        <ToolDescription text={tool.description} />
-                                      )}
-                                      <ToolSchemaPreview
-                                        inputSchema={tool.inputSchema}
-                                        outputSchema={tool.outputSchema}
-                                        mode={schemaMode}
-                                        onModeChange={setSchemaMode}
-                                      />
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Selected tools: {totalSelectedTools}
-                    {selectedToolTokens !== undefined &&
-                      ` · estimated context: ~${formatToolAnalysisTokenCount(
-                        selectedToolTokens
-                      )} tokens`}
+                )}
+                {toolDiscoveryWarnings.map((warning) => (
+                  <p
+                    key={warning}
+                    role="alert"
+                    className="px-3 py-3 wrap-anywhere text-sm text-muted-foreground sm:px-4"
+                  >
+                    {formatToolDiscoveryWarning(selectedServerLabel, warning)}
                   </p>
-                </div>
+                ))}
+                {visibleTools.length > 0 && (
+                  <McpToolList
+                    tools={visibleTools}
+                    selected={selectedTools}
+                    tokenEstimate={serverDiscovery?.tokenEstimate}
+                    schemaMode={schemaMode}
+                    onSchemaModeChange={setSchemaMode}
+                    onToggle={(name, checked) => toggleTool(selectedServerLabel, name, checked)}
+                  />
+                )}
+                {visibleTools.length === 0 && toolDiscoveryWarnings.length === 0 && (
+                  <p role="status" className="px-3 py-4 text-sm text-muted-foreground sm:px-4">
+                    {toolsMessage}
+                  </p>
+                )}
               </TabsContent>
               {(['resources', 'prompts'] as const).map((kind) => (
-                <TabsContent key={kind} value={kind} className="rounded-md border p-3">
+                <TabsContent
+                  key={kind}
+                  value={kind}
+                  className="mt-0 px-3 py-4 focus-visible:ring-inset focus-visible:ring-offset-0 sm:px-4"
+                >
                   {catalog ? (
                     <McpCatalogPanel
                       key={selectedServerLabel}
@@ -926,7 +886,7 @@ const ToolAnalysisPage = () => {
                       serverName={selectedServerLabel}
                       loadPreview={previewMcp}
                       listViaTool={() => void discoverTools(true)}
-                      discovering={discovering || authInProgress}
+                      discovering={discoveryBusy}
                     />
                   ) : (
                     <p role="status" className="text-sm text-muted-foreground">
