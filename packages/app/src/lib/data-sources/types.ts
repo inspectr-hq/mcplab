@@ -73,6 +73,7 @@ import type {
   EvaluationRunRequest
 } from '@inspectr/mcplab-core';
 export type {
+  McpCatalogDefinition,
   McpCatalogList,
   McpPreviewRequest,
   McpPreviewResponse,

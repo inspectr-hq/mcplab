@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import ToolAnalysisPage from './ToolAnalysis';
 
@@ -59,6 +59,17 @@ function openTab(name: string) {
   fireEvent.keyDown(screen.getByRole('tab', { name }), { key: 'Enter' });
 }
 
+function mockClipboard() {
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  onTestFinished(() => {
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+  });
+  return writeText;
+}
+
 describe('Analyze MCP catalog', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -115,12 +126,20 @@ describe('Analyze MCP catalog', () => {
       { serverNames: ['alpha'], includeCatalog: true, includeToolResources: true },
       expect.any(AbortSignal)
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Preview Review' }));
-    expect(await screen.findByText('# Review')).toBeVisible();
+    const preview = screen.getByRole('button', { name: 'Preview Review' });
+    expect(preview).toHaveAttribute('aria-expanded', 'false');
+    expect(source.previewMcpForAnalysis).not.toHaveBeenCalled();
+    fireEvent.click(preview);
+    expect(preview).toHaveAttribute('aria-expanded', 'true');
+    expect(await within(preview.closest('li')!).findByText('# Review')).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(source.previewMcpForAnalysis).toHaveBeenCalledWith(
       { kind: 'resource', serverName: 'alpha', uri: 'skill://review/SKILL.md', via: 'tool' },
       expect.any(AbortSignal)
     );
+    fireEvent.click(preview);
+    expect(preview).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('# Review')).not.toBeInTheDocument();
   });
 
   it('previews resource content and reads a concrete URI from a template', async () => {
@@ -242,9 +261,10 @@ describe('Analyze MCP catalog', () => {
     expect(screen.queryByText('Stale content')).not.toBeInTheDocument();
   });
 
-  it('preserves selected tools for download and analysis after browsing prompts', async () => {
+  it('offers direct copy and download actions and preserves selection after browsing prompts', async () => {
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const createObjectURL = vi.fn(() => 'blob:tools');
+    const writeText = mockClipboard();
     vi.stubGlobal(
       'URL',
       class extends URL {
@@ -259,8 +279,11 @@ describe('Analyze MCP catalog', () => {
     openTab('Prompts');
     openTab('Tools');
     expect(screen.getByRole('checkbox', { name: /fetch_docs/ })).toBeChecked();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Export' }), { key: 'Enter' });
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Download Tool Info' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy tool list' }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('fetch_docs'))
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Download Tool Info' }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Analyze Tools' }));
@@ -289,5 +312,80 @@ describe('Analyze MCP catalog', () => {
     fireEvent.change(filter, { target: { value: '' } });
     expect(screen.getByRole('checkbox', { name: 'fetch_docs' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'search_pages' })).toBeChecked();
+  });
+
+  it('offers selection, filtering, tokens and export actions for resources and prompts', async () => {
+    const writeText = mockClipboard();
+    const createObjectURL = vi.fn((_file: Blob) => 'blob:resources');
+    const filenames: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      filenames.push(this.download);
+    });
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL = createObjectURL;
+        static revokeObjectURL = vi.fn();
+      }
+    );
+    source.discoverToolsForAnalysis.mockResolvedValueOnce({
+      servers: [
+        {
+          ...alpha,
+          catalog: {
+            resources: {
+              status: 'ready',
+              items: [{ name: 'Guide', uri: 'docs://guide', estimatedTokens: 12 }]
+            },
+            resourceTemplates: {
+              status: 'ready',
+              items: [{ name: 'Page', uriTemplate: 'docs://pages/{id}', estimatedTokens: 8 }]
+            },
+            prompts: { status: 'ready', items: [{ name: 'review', estimatedTokens: 5 }] }
+          }
+        }
+      ]
+    });
+    renderPage();
+    await screen.findByText('fetch_docs');
+    openTab('Resources');
+    expect(screen.getByText('2 of 2 selected')).toBeVisible();
+    expect(screen.getByText('~20 tokens selected')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Copy resource list' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Download Resource Info' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Guide' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter resources' }), {
+      target: { value: 'pages/{id}' }
+    });
+    expect(screen.queryByRole('checkbox', { name: 'Guide' })).not.toBeInTheDocument();
+    expect(screen.getByText('~8 tokens selected')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy visible resource list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Download Resource Info' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(writeText.mock.calls[0][0])).toEqual({
+      serverName: 'alpha',
+      resources: [],
+      resourceTemplates: [{ name: 'Page', uriTemplate: 'docs://pages/{id}' }]
+    });
+    openTab('Prompts');
+    expect(screen.getByRole('searchbox', { name: 'Filter prompts' })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'review' })).toBeChecked();
+    expect(screen.getByText('~5 tokens selected')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Copy prompt list' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Download Prompt Info' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy prompt list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Download Prompt Info' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(writeText.mock.calls[1][0])).toEqual({
+      serverName: 'alpha',
+      prompts: [{ name: 'review' }]
+    });
+    expect(filenames).toEqual(['resource-info-alpha.json', 'prompt-info-alpha.json']);
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    openTab('Resources');
+    expect(screen.getByRole('searchbox', { name: 'Filter resources' })).toHaveValue('pages/{id}');
+    expect(screen.getByText('1 of 2 selected')).toBeVisible();
   });
 });

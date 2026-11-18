@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -71,18 +73,20 @@ function PreviewResult({ response }: { response: McpPreviewResponse }) {
   );
 }
 
-export function McpPreviewDialog({
+export function McpPreview({
   title,
   serverName,
   target,
   load,
-  via
+  via,
+  inline = false
 }: {
   title: string;
   serverName: string;
   target: PreviewTarget;
   load: LoadMcpPreview;
   via?: 'tool';
+  inline?: boolean;
 }) {
   const id = useId();
   const [state, setState] = useState<PreviewState>({ status: 'idle' });
@@ -140,87 +144,111 @@ export function McpPreviewDialog({
   if (target.kind === 'template') detail = target.uriTemplate;
   else if (target.kind === 'resource') detail = target.uri;
   else detail = target.prompt.name;
+  const trigger = (
+    <Button
+      type="button"
+      variant={inline ? 'ghost' : 'outline'}
+      size="sm"
+      className="group h-11 sm:h-8"
+      aria-label={`Preview ${title}`}
+    >
+      {inline && (
+        <ChevronRight
+          aria-hidden="true"
+          className="motion-safe:transition-transform group-data-[state=open]:rotate-90"
+        />
+      )}
+      {inline ? 'Skill preview' : 'Preview'}
+    </Button>
+  );
+  const content = (
+    <>
+      {target.kind !== 'resource' && (
+        <form className="space-y-3" onSubmit={submit}>
+          {target.kind === 'template' && (
+            <div className="space-y-1">
+              <Label htmlFor={`${id}-uri`}>Resource URI</Label>
+              <Input id={`${id}-uri`} name="uri" type="url" required disabled={loading} />
+              <p className="text-xs text-muted-foreground">
+                Enter a concrete URI for the template.
+              </p>
+            </div>
+          )}
+          {args.map((argument, index) => {
+            const fieldId = `${id}-${index}`;
+            const descriptionId = argument.description ? `${fieldId}-description` : undefined;
+            return (
+              <div key={argument.name} className="space-y-1">
+                <Label htmlFor={fieldId} className="wrap-anywhere">
+                  {argument.name} ({argument.required ? 'required' : 'optional'})
+                </Label>
+                <Textarea
+                  id={fieldId}
+                  name={argument.name}
+                  rows={2}
+                  required={argument.required}
+                  disabled={loading}
+                  aria-describedby={descriptionId}
+                />
+                {argument.description && (
+                  <p id={descriptionId} className="text-xs text-muted-foreground">
+                    {argument.description}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          <Button type="submit" size="sm" disabled={loading}>
+            {target.kind === 'template' ? 'Read resource' : 'Render prompt'}
+          </Button>
+        </form>
+      )}
+      {loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading preview…
+        </p>
+      )}
+      {state.status === 'error' && (
+        <div className="space-y-2">
+          <p role="alert" className="wrap-anywhere text-sm text-destructive">
+            {state.message}
+          </p>
+          {target.kind === 'resource' && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void readResource(target.uri)}
+            >
+              Retry preview
+            </Button>
+          )}
+        </div>
+      )}
+      {state.status === 'ready' && <PreviewResult response={state.response} />}
+    </>
+  );
+
+  if (inline) {
+    return (
+      <Collapsible onOpenChange={handleOpenChange}>
+        <CollapsibleTrigger asChild>{trigger}</CollapsibleTrigger>
+        <CollapsibleContent className="min-w-0 space-y-3 rounded-md border p-3">
+          {content}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
+
   return (
     <Dialog onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-11 sm:h-8"
-          aria-label={`Preview ${title}`}
-        >
-          Preview
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[85dvh] w-11/12 overflow-y-auto sm:max-w-2xl">
         <DialogHeader className="pr-5">
           <DialogTitle className="wrap-anywhere">{title}</DialogTitle>
           <DialogDescription className="break-all font-mono">{detail}</DialogDescription>
         </DialogHeader>
-        {target.kind !== 'resource' && (
-          <form className="space-y-3" onSubmit={submit}>
-            {target.kind === 'template' && (
-              <div className="space-y-1">
-                <Label htmlFor={`${id}-uri`}>Resource URI</Label>
-                <Input id={`${id}-uri`} name="uri" type="url" required disabled={loading} />
-                <p className="text-xs text-muted-foreground">
-                  Enter a concrete URI for the template.
-                </p>
-              </div>
-            )}
-            {args.map((argument, index) => {
-              const fieldId = `${id}-${index}`;
-              const descriptionId = argument.description ? `${fieldId}-description` : undefined;
-              return (
-                <div key={argument.name} className="space-y-1">
-                  <Label htmlFor={fieldId} className="wrap-anywhere">
-                    {argument.name} ({argument.required ? 'required' : 'optional'})
-                  </Label>
-                  <Textarea
-                    id={fieldId}
-                    name={argument.name}
-                    rows={2}
-                    required={argument.required}
-                    disabled={loading}
-                    aria-describedby={descriptionId}
-                  />
-                  {argument.description && (
-                    <p id={descriptionId} className="text-xs text-muted-foreground">
-                      {argument.description}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-            <Button type="submit" size="sm" disabled={loading}>
-              {target.kind === 'template' ? 'Read resource' : 'Render prompt'}
-            </Button>
-          </form>
-        )}
-        {loading && (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading preview…
-          </p>
-        )}
-        {state.status === 'error' && (
-          <div className="space-y-2">
-            <p role="alert" className="wrap-anywhere text-sm text-destructive">
-              {state.message}
-            </p>
-            {target.kind === 'resource' && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void readResource(target.uri)}
-              >
-                Retry preview
-              </Button>
-            )}
-          </div>
-        )}
-        {state.status === 'ready' && <PreviewResult response={state.response} />}
+        {content}
       </DialogContent>
     </Dialog>
   );

@@ -82,15 +82,17 @@ export type McpCatalogList<T> =
   | { status: 'unsupported' }
   | { status: 'error'; message: string };
 
+export type McpCatalogDefinition<T> = T & { estimatedTokens?: number };
+
 export interface McpToolResourceCatalog {
-  resources: McpResourceInfo[];
-  resourceTemplates: McpResourceTemplateInfo[];
+  resources: McpCatalogDefinition<McpResourceInfo>[];
+  resourceTemplates: McpCatalogDefinition<McpResourceTemplateInfo>[];
 }
 
 export interface McpServerCatalog {
-  resources: McpCatalogList<McpResourceInfo>;
-  resourceTemplates: McpCatalogList<McpResourceTemplateInfo>;
-  prompts: McpCatalogList<McpPromptInfo>;
+  resources: McpCatalogList<McpCatalogDefinition<McpResourceInfo>>;
+  resourceTemplates: McpCatalogList<McpCatalogDefinition<McpResourceTemplateInfo>>;
+  prompts: McpCatalogList<McpCatalogDefinition<McpPromptInfo>>;
   toolResources?:
     | { status: 'available' }
     | ({ status: 'ready'; canRead: boolean } & McpToolResourceCatalog)

@@ -80,7 +80,15 @@ export function buildToolInfoFilename(
   serverName: string,
   mcpServerVersion?: string | null
 ): string {
-  const parts = ['tool-info', sanitizeFilenamePart(serverName)];
+  return buildCatalogInfoFilename('tool', serverName, mcpServerVersion);
+}
+
+export function buildCatalogInfoFilename(
+  item: 'tool' | 'resource' | 'prompt',
+  serverName: string,
+  mcpServerVersion?: string | null
+): string {
+  const parts = [`${item}-info`, sanitizeFilenamePart(serverName)];
   const version = mcpServerVersion?.trim();
   if (version) parts.push(`v${sanitizeFilenamePart(version)}`);
   return `${parts.filter(Boolean).join('-')}.json`;

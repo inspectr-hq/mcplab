@@ -64,6 +64,7 @@ export {
   type ToolInputAssertionFailureKind
 } from './eval.js';
 export { McpClientManager } from './mcp.js';
+export { withMcpCatalogTokenEstimates } from './mcp-catalog-token-estimates.js';
 export {
   getMcpResourceToolAccess,
   MCP_LIST_RESOURCES_TOOL,
@@ -72,6 +73,7 @@ export {
   parseMcpResourceToolRead
 } from './mcp-resource-tools.js';
 export type {
+  McpCatalogDefinition,
   McpCatalogList,
   McpPreviewRequest,
   McpPreviewResponse,

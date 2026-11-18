@@ -6,7 +6,8 @@ import {
   getMcpResourceToolAccess,
   McpClientManager,
   MCP_LIST_RESOURCES_TOOL,
-  parseMcpResourceToolCatalog
+  parseMcpResourceToolCatalog,
+  withMcpCatalogTokenEstimates
 } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
@@ -616,25 +617,28 @@ export async function discoverMcpToolsForServers(
         `Failed to load tools: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    entry.catalog = await catalog;
-    if (!entry.catalog) continue;
+    const serverCatalog = await catalog;
+    if (!serverCatalog) continue;
     const { canList, readArgument } = getMcpResourceToolAccess(tools);
-    if (!canList) continue;
-    entry.catalog.toolResources = { status: 'available' };
-    if (!options?.includeToolResources) continue;
-    try {
-      const result = await mcp.callTool(serverName, MCP_LIST_RESOURCES_TOOL, {});
-      entry.catalog.toolResources = {
-        status: 'ready',
-        canRead: Boolean(readArgument),
-        ...parseMcpResourceToolCatalog(result)
-      };
-    } catch (error) {
-      entry.catalog.toolResources = {
-        status: 'error',
-        message: error instanceof Error ? error.message : String(error)
-      };
+    if (canList) {
+      serverCatalog.toolResources = { status: 'available' };
+      if (options?.includeToolResources) {
+        try {
+          const result = await mcp.callTool(serverName, MCP_LIST_RESOURCES_TOOL, {});
+          serverCatalog.toolResources = {
+            status: 'ready',
+            canRead: Boolean(readArgument),
+            ...parseMcpResourceToolCatalog(result)
+          };
+        } catch (error) {
+          serverCatalog.toolResources = {
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
     }
+    entry.catalog = withMcpCatalogTokenEstimates(serverCatalog, tokenEstimateModel);
   }
   return { mcp, servers: discovered };
 }

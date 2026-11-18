@@ -13,12 +13,13 @@ export function estimateTextTokens(
   text: string,
   model: string
 ): { count: number; method: EstimatedTokens['method'] } {
+  // Treat special-token markers in external text as literal characters.
   try {
     const encoding = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
-    return { count: encoding.encode(text).length, method: 'js_tiktoken_estimate' };
+    return { count: encoding.encode(text, [], []).length, method: 'js_tiktoken_estimate' };
   } catch {
     const encoding = getEncoding('cl100k_base');
-    return { count: encoding.encode(text).length, method: 'js_tiktoken_fallback' };
+    return { count: encoding.encode(text, [], []).length, method: 'js_tiktoken_fallback' };
   }
 }
 

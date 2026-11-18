@@ -11,13 +11,12 @@ import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
-import { McpCatalogPanel } from '@/components/tool-analysis/McpCatalogPanel';
-import type { LoadMcpPreview } from '@/components/tool-analysis/McpPreviewDialog';
+  defaultMcpCatalogView,
+  McpCatalogPanel,
+  type McpCatalogView
+} from '@/components/tool-analysis/McpCatalogPanel';
+import { McpCatalogToolbar } from '@/components/tool-analysis/McpCatalogToolbar';
+import type { LoadMcpPreview } from '@/components/tool-analysis/McpPreview';
 import { McpToolList } from '@/components/tool-analysis/McpToolList';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
@@ -30,22 +29,9 @@ import type {
   ToolAnalysisReport
 } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import {
-  ChevronDown,
-  CircleHelp,
-  Copy,
-  Download,
-  Loader2,
-  RefreshCw,
-  Search,
-  Microscope
-} from 'lucide-react';
+import { CircleHelp, Download, Loader2, RefreshCw, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
-import {
-  formatToolAnalysisTokenCount,
-  selectedToolContextTokens
-} from '@/lib/tool-analysis-token-estimates';
-import { ToolTokenEstimateBadge } from '@/components/tool-analysis/ToolTokenEstimateBadge';
+import { selectedToolContextTokens } from '@/lib/tool-analysis-token-estimates';
 import type { SchemaViewMode } from '@/components/tool-analysis/ToolSchemaPreview';
 
 import { parseAnalysisProgressFromEvents } from '@/lib/tool-analysis-progress';
@@ -119,6 +105,9 @@ const ToolAnalysisPage = () => {
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [discovered, setDiscovered] = useState<ToolAnalysisDiscoverResponse['servers']>([]);
   const [selectedToolsByServer, setSelectedToolsByServer] = useState<Record<string, string[]>>({});
+  const [catalogViews, setCatalogViews] = useState<
+    Partial<Record<'resources' | 'prompts', McpCatalogView>>
+  >({});
   const [toolQuery, setToolQuery] = useState('');
   const [metadataReview, setMetadataReview] = useState(true);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
@@ -515,6 +504,7 @@ const ToolAnalysisPage = () => {
     discoveryRequest.current?.abort();
     setDiscovered([]);
     setSelectedToolsByServer({});
+    setCatalogViews({});
     setDiscoveryError(null);
     setDiscovering(checked);
     setSelectedServerNames((prev) =>
@@ -695,7 +685,7 @@ const ToolAnalysisPage = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="tools" className="min-w-0 rounded-lg border bg-background">
+            <Tabs defaultValue="tools" className="min-w-0 rounded-lg border bg-card">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-3 sm:px-4">
                 <div className="min-w-0">
                   <h2 className="text-sm font-semibold">Server catalog</h2>
@@ -711,7 +701,7 @@ const ToolAnalysisPage = () => {
                   variant="outline"
                   onClick={() => void discoverTools()}
                   disabled={discoveryBusy || !selectedServerLabel}
-                  className="h-11 hover:bg-muted hover:text-foreground sm:h-8"
+                  className="h-11 bg-transparent hover:bg-muted hover:text-foreground sm:h-8"
                 >
                   {discovering ? (
                     <Loader2 aria-hidden="true" className="motion-safe:animate-spin" />
@@ -759,93 +749,22 @@ const ToolAnalysisPage = () => {
                 className="mt-0 focus-visible:ring-inset focus-visible:ring-offset-0"
               >
                 {hasTools && (
-                  <div className="space-y-2 px-3 py-3 sm:px-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="relative w-full sm:w-72">
-                        <Label htmlFor="mcp-tool-filter" className="sr-only">
-                          Filter tools
-                        </Label>
-                        <Search
-                          aria-hidden="true"
-                          className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                        <Input
-                          id="mcp-tool-filter"
-                          type="search"
-                          className="h-11 ps-9 sm:h-9"
-                          placeholder="Filter tools…"
-                          value={toolQuery}
-                          onChange={(e) => setToolQuery(e.target.value)}
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-11 sm:h-8"
-                          onClick={selectVisibleTools}
-                          disabled={allVisibleSelected}
-                        >
-                          {toolQueryText ? 'Select visible' : 'Select all'}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-11 sm:h-8"
-                          aria-label="Clear selection"
-                          onClick={clearToolSelection}
-                          disabled={totalSelectedTools === 0}
-                        >
-                          Clear
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-11 sm:h-8"
-                              disabled={discoveryBusy}
-                            >
-                              Export
-                              <ChevronDown aria-hidden="true" className="size-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onSelect={copyToolList}
-                              disabled={visibleTools.length === 0}
-                            >
-                              <Copy aria-hidden="true" className="size-4" />
-                              {toolQueryText ? 'Copy visible tool list' : 'Copy tool list'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={downloadToolInfo}>
-                              <Download aria-hidden="true" className="size-4" />
-                              Download Tool Info
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span role="status">
-                        {totalSelectedTools} of {serverDiscovery?.tools.length} selected
-                      </span>
-                      {selectedToolTokens !== undefined && (
-                        <span>
-                          ~{formatToolAnalysisTokenCount(selectedToolTokens)} tokens selected
-                        </span>
-                      )}
-                      {serverDiscovery?.tokenEstimate?.total !== selectedToolTokens && (
-                        <ToolTokenEstimateBadge
-                          total={serverDiscovery?.tokenEstimate?.total}
-                          title="Estimated tokens for all discovered tool definitions and their schemas"
-                        />
-                      )}
-                    </div>
-                  </div>
+                  <McpCatalogToolbar
+                    item="tool"
+                    query={toolQuery}
+                    onQueryChange={setToolQuery}
+                    selectedCount={totalSelectedTools}
+                    count={serverDiscovery?.tools.length ?? 0}
+                    selectedTokens={selectedToolTokens}
+                    totalTokens={serverDiscovery?.tokenEstimate?.total}
+                    allVisibleSelected={allVisibleSelected}
+                    hasVisibleItems={visibleTools.length > 0}
+                    busy={discoveryBusy}
+                    onSelectVisible={selectVisibleTools}
+                    onClear={clearToolSelection}
+                    onCopy={copyToolList}
+                    onDownload={downloadToolInfo}
+                  />
                 )}
                 {toolDiscoveryWarnings.map((warning) => (
                   <p
@@ -876,7 +795,7 @@ const ToolAnalysisPage = () => {
                 <TabsContent
                   key={kind}
                   value={kind}
-                  className="mt-0 px-3 py-4 focus-visible:ring-inset focus-visible:ring-offset-0 sm:px-4"
+                  className="mt-0 focus-visible:ring-inset focus-visible:ring-offset-0"
                 >
                   {catalog ? (
                     <McpCatalogPanel
@@ -884,12 +803,22 @@ const ToolAnalysisPage = () => {
                       kind={kind}
                       catalog={catalog}
                       serverName={selectedServerLabel}
+                      serverVersion={serverDiscovery?.mcpServerVersion}
                       loadPreview={previewMcp}
                       listViaTool={() => void discoverTools(true)}
                       discovering={discoveryBusy}
+                      view={catalogViews[kind] ?? defaultMcpCatalogView}
+                      updateView={(update) =>
+                        setCatalogViews((previous) => ({
+                          ...previous,
+                          [kind]: update(previous[kind] ?? defaultMcpCatalogView)
+                        }))
+                      }
+                      copyText={copyTextToClipboard}
+                      downloadFile={downloadTextFile}
                     />
                   ) : (
-                    <p role="status" className="text-sm text-muted-foreground">
+                    <p role="status" className="px-3 py-4 text-sm text-muted-foreground sm:px-4">
                       {catalogMessage}
                     </p>
                   )}

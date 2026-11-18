@@ -45,7 +45,9 @@ describe('discoverMcpToolsForServers', () => {
       expect(requested.servers[0].catalog?.toolResources).toEqual({
         status: 'ready',
         canRead: true,
-        resources: [{ name: 'Review', uri: 'skill://review/SKILL.md' }],
+        resources: [
+          { name: 'Review', uri: 'skill://review/SKILL.md', estimatedTokens: expect.any(Number) }
+        ],
         resourceTemplates: []
       });
       expect(call).toHaveBeenCalledWith('docs', 'list_resources', {});
@@ -77,7 +79,19 @@ describe('discoverMcpToolsForServers', () => {
         const {
           servers: [discovered]
         } = await discoverMcpToolsForServers(servers, ['docs'], { includeCatalog });
-        expect(discovered.catalog).toEqual(includeCatalog ? catalog : undefined);
+        expect(discovered.catalog).toEqual(
+          includeCatalog
+            ? {
+                ...catalog,
+                resources: {
+                  status: 'ready',
+                  items: [
+                    { name: 'Guide', uri: 'docs://guide', estimatedTokens: expect.any(Number) }
+                  ]
+                }
+              }
+            : undefined
+        );
         expect(discovered.tools).toEqual([]);
         expect(discovered.warnings).toEqual([]);
         expect(listCatalog).toHaveBeenCalledTimes(includeCatalog ? 1 : 0);

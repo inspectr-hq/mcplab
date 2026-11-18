@@ -309,7 +309,7 @@ export function ToolSchemaPreview({
 
   return (
     <details
-      className={`group/schema min-w-0 max-w-full rounded p-2 ${compact ? 'bg-muted/25' : 'overflow-hidden border bg-muted/10'}`}
+      className={`group/schema min-w-0 max-w-full rounded border p-2 ${compact ? '' : 'overflow-hidden bg-muted/10'}`}
       onClick={(event) => event.stopPropagation()}
     >
       <summary
