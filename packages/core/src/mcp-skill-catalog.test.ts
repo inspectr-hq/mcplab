@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { McpServerCatalog } from './mcp.js';
-import { discoverMcpCatalogSkills, parseMcpSkillManifest } from './mcp-skill-catalog.js';
+import {
+  discoverMcpCatalogSkills,
+  parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles
+} from './mcp-skill-catalog.js';
 
 const resource = (uri: string, description?: string) => ({ name: uri, uri, description });
 
@@ -56,5 +60,57 @@ describe('parseMcpSkillManifest', () => {
     ).toEqual([{ path: 'notes.md', size: 0, digest: 'def' }]);
     expect(parseMcpSkillManifest('{"files":["invalid"]}')).toBeNull();
     expect(parseMcpSkillManifest('not JSON')).toBeNull();
+  });
+});
+
+describe('resolveMcpSkillManifestFiles', () => {
+  it('looks up advertised file transports and resolves unlisted paths within the skill', () => {
+    const root = 'skill://team/work-organizer';
+    const catalog: McpServerCatalog = {
+      resources: {
+        status: 'ready',
+        items: [resource(`${root}/SKILL.md`), resource(`${root}/references/native.md`)]
+      },
+      resourceTemplates: { status: 'unsupported' },
+      prompts: { status: 'unsupported' },
+      toolResources: {
+        status: 'ready',
+        canRead: true,
+        resources: [resource(`${root}/_manifest`), resource(`${root}/references/tool.md`)],
+        resourceTemplates: []
+      }
+    };
+    const [skill] = discoverMcpCatalogSkills(catalog);
+    const files = [
+      { path: 'references/native.md' },
+      { path: 'references/tool.md' },
+      { path: 'references/first draft (1).md' },
+      { path: '../other/SKILL.md' },
+      { path: 'skill://other/SKILL.md' },
+      { path: 'references\\outside.md' },
+      { path: 'SKILL.md' }
+    ];
+    expect(resolveMcpSkillManifestFiles(skill, files, catalog)).toEqual([
+      { path: 'SKILL.md', resource: { uri: `${root}/SKILL.md`, canRead: true } },
+      {
+        path: 'references/native.md',
+        resource: { uri: `${root}/references/native.md`, canRead: true }
+      },
+      {
+        path: 'references/tool.md',
+        resource: { uri: `${root}/references/tool.md`, via: 'tool', canRead: true }
+      },
+      {
+        path: 'references/first draft (1).md',
+        resource: {
+          uri: `${root}/references/first%20draft%20%281%29.md`,
+          via: 'tool',
+          canRead: true
+        }
+      },
+      { path: '../other/SKILL.md' },
+      { path: 'skill://other/SKILL.md' },
+      { path: 'references\\outside.md' }
+    ]);
   });
 });

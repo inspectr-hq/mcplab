@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { ChevronRight, Copy } from 'lucide-react';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/button';
@@ -17,31 +17,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { copyTextToClipboard } from '@/lib/copy-text-to-clipboard';
 import { parseMcpSkillManifest } from '@/lib/data-sources/types';
 import type {
-  McpPreviewRequest,
   McpPreviewResponse,
   McpPromptInfo,
   McpResourceInfo,
   McpSkillManifestFile
 } from '@/lib/data-sources/types';
+import {
+  useMcpPreviewRequest,
+  type InlinePreview,
+  type LoadMcpPreview,
+  type PreviewState
+} from './mcp-preview-state';
+
+export type { LoadMcpPreview } from './mcp-preview-state';
 
 type PreviewTarget =
   | { kind: 'resource'; uri: string }
   | { kind: 'template'; uriTemplate: string }
   | { kind: 'prompt'; prompt: McpPromptInfo };
 
-type PreviewState =
-  | { status: 'idle' | 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; response: McpPreviewResponse };
-
 type ResourceMetadata = Pick<McpResourceInfo, 'uri' | 'mimeType'>;
-
-export type InlinePreview = 'skill' | 'manifest' | 'markdown' | 'raw';
-
-export type LoadMcpPreview = (
-  request: McpPreviewRequest,
-  signal: AbortSignal
-) => Promise<McpPreviewResponse>;
+type RenderManifest = (files: McpSkillManifestFile[]) => ReactNode;
+type PreviewHeading = { title: ReactNode; details: ReactNode };
 
 function skillMarkdownBody(text: string): string {
   return text.replace(
@@ -76,11 +73,15 @@ function ManifestFiles({ files }: { files: McpSkillManifestFile[] }) {
 function PreviewResult({
   response,
   inline,
-  listedResource
+  heading,
+  listedResource,
+  renderManifest
 }: {
   response: McpPreviewResponse;
   inline?: InlinePreview;
+  heading?: PreviewHeading;
   listedResource?: ResourceMetadata;
+  renderManifest?: RenderManifest;
 }) {
   const [raw, setRaw] = useState(false);
   const textStyle = 'whitespace-pre-wrap wrap-anywhere rounded bg-muted p-3 text-sm';
@@ -122,54 +123,72 @@ function PreviewResult({
   if (inline === 'manifest') modeLabel = 'Manifest preview mode';
   if (inline === 'skill') modeLabel = 'Skill preview mode';
   return (
-    <div className="space-y-3" aria-live="polite">
-      {canFormat && (
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b pb-2">
-          <div
-            role="group"
-            aria-label={modeLabel}
-            className="inline-flex gap-0.5 rounded-md border p-0.5"
-          >
-            {modes.map((mode) => (
-              <Button
-                key={mode.label}
-                type="button"
-                size="sm"
-                variant={raw === mode.raw ? 'secondary' : 'ghost'}
-                className="h-11 px-2 sm:h-8 sm:px-3"
-                aria-pressed={raw === mode.raw}
-                onClick={() => setRaw(mode.raw)}
-              >
-                {mode.label}
-              </Button>
-            ))}
-          </div>
-          {markdownParts.length > 0 && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-11 bg-transparent px-2 sm:h-8 sm:px-3"
-              aria-label="Copy raw Markdown"
-              onClick={() => void copyTextToClipboard('Raw Markdown', markdownParts.join('\n\n'))}
+    <div className="space-y-3" aria-live={renderManifest && !raw ? undefined : 'polite'}>
+      {(heading || canFormat) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b pb-2">
+          {heading && <div className="min-w-0 flex-1 basis-48">{heading.title}</div>}
+          {canFormat && (
+            <div
+              className={`flex max-w-full flex-wrap items-center gap-2 ${heading ? '' : 'ml-auto justify-end'}`}
             >
-              <Copy aria-hidden="true" />
-              Copy
-            </Button>
+              <div
+                role="group"
+                aria-label={modeLabel}
+                className="inline-flex gap-0.5 rounded-md border p-0.5"
+              >
+                {modes.map((mode) => (
+                  <Button
+                    key={mode.label}
+                    type="button"
+                    size="sm"
+                    variant={raw === mode.raw ? 'secondary' : 'ghost'}
+                    className="h-11 px-2 sm:h-8 sm:px-3"
+                    aria-pressed={raw === mode.raw}
+                    onClick={() => setRaw(mode.raw)}
+                  >
+                    {mode.label}
+                  </Button>
+                ))}
+              </div>
+              {markdownParts.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-11 bg-transparent px-2 sm:h-8 sm:px-3"
+                  aria-label="Copy raw Markdown"
+                  onClick={() =>
+                    void copyTextToClipboard('Raw Markdown', markdownParts.join('\n\n'))
+                  }
+                >
+                  <Copy aria-hidden="true" />
+                  Copy
+                </Button>
+              )}
+            </div>
           )}
+          {heading && <div className="min-w-0 basis-full">{heading.details}</div>}
         </div>
       )}
       {response.contents.length === 0 && (
         <p className="text-sm">The resource returned no content.</p>
       )}
       {contents.map(({ item, manifest }, index) => {
-        const showUri = contents.length > 1 || item.uri !== listedResource?.uri;
+        const browsingFiles = renderManifest && !raw && manifest;
+        const showUri = !browsingFiles && (contents.length > 1 || item.uri !== listedResource?.uri);
         const showMimeType =
-          item.mimeType && (showUri || item.mimeType !== listedResource?.mimeType);
+          !browsingFiles &&
+          item.mimeType &&
+          (showUri || item.mimeType !== listedResource?.mimeType);
         let textPreview: ReactNode = null;
         if (typeof item.text === 'string') {
-          if (!raw && manifest) textPreview = <ManifestFiles files={manifest} />;
-          else if (!raw && markdown) {
+          if (!raw && manifest) {
+            textPreview = renderManifest ? (
+              renderManifest(manifest)
+            ) : (
+              <ManifestFiles files={manifest} />
+            );
+          } else if (!raw && markdown) {
             textPreview = (
               <MarkdownContent
                 text={inline === 'skill' ? skillMarkdownBody(item.text) : item.text}
@@ -196,6 +215,61 @@ function PreviewResult({
   );
 }
 
+export function McpPreviewBody({
+  state,
+  inline,
+  heading,
+  listedResource,
+  renderManifest,
+  onRetry
+}: {
+  state: PreviewState;
+  inline?: InlinePreview;
+  heading?: PreviewHeading;
+  listedResource?: ResourceMetadata;
+  renderManifest?: RenderManifest;
+  onRetry?: () => void;
+}) {
+  if (state.status === 'ready') {
+    return (
+      <PreviewResult
+        response={state.response}
+        inline={inline}
+        heading={heading}
+        listedResource={listedResource}
+        renderManifest={renderManifest}
+      />
+    );
+  }
+  if (state.status === 'idle') return null;
+  return (
+    <div className="space-y-3">
+      {heading && (
+        <div className="space-y-1">
+          {heading.title}
+          {heading.details}
+        </div>
+      )}
+      {state.status === 'error' ? (
+        <div className="space-y-2">
+          <p role="alert" className="wrap-anywhere text-sm text-destructive">
+            {state.message}
+          </p>
+          {onRetry && (
+            <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+              Retry preview
+            </Button>
+          )}
+        </div>
+      ) : (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading preview…
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function McpPreview({
   title,
   serverName,
@@ -204,7 +278,8 @@ export function McpPreview({
   via,
   inline,
   listedResource,
-  renderTrigger
+  renderTrigger,
+  renderManifest
 }: {
   title: string;
   serverName: string;
@@ -214,36 +289,16 @@ export function McpPreview({
   inline?: InlinePreview;
   listedResource?: ResourceMetadata;
   renderTrigger?: (trigger: ReactNode) => ReactNode;
+  renderManifest?: RenderManifest;
 }) {
   const id = useId();
-  const [state, setState] = useState<PreviewState>({ status: 'idle' });
-  const active = useRef<AbortController | null>(null);
-  useEffect(() => () => active.current?.abort(), []);
-
-  const loadPreview = async (request: McpPreviewRequest) => {
-    active.current?.abort();
-    const controller = new AbortController();
-    active.current = controller;
-    setState({ status: 'loading' });
-    try {
-      const response = await load(request, controller.signal);
-      if (!controller.signal.aborted) setState({ status: 'ready', response });
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setState({
-          status: 'error',
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-  };
+  const { state, loadPreview, reset } = useMcpPreviewRequest(load);
 
   const readResource = (uri: string) =>
     loadPreview({ kind: 'resource', serverName, uri, ...(via ? { via } : {}) });
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      active.current?.abort();
-      setState({ status: 'idle' });
+      reset();
     } else if (target.kind === 'resource') {
       void readResource(target.uri);
     }
@@ -272,15 +327,17 @@ export function McpPreview({
   else if (target.kind === 'resource') detail = target.uri;
   else detail = target.prompt.name;
   let triggerLabel = 'Preview';
-  if (!renderTrigger && inline === 'skill') triggerLabel = 'Skill preview';
-  if (!renderTrigger && inline === 'manifest') triggerLabel = 'Manifest';
+  if (!renderTrigger && inline === 'skill') triggerLabel = 'Preview SKILL.md';
+  if (!renderTrigger && inline === 'manifest') triggerLabel = 'Browse files';
+  const triggerName =
+    triggerLabel === 'Preview' ? `Preview ${title}` : `${triggerLabel} for ${title}`;
   const trigger = (
     <Button
       type="button"
       variant={inline && !renderTrigger ? 'ghost' : 'outline'}
       size="sm"
       className="group h-11 sm:h-8"
-      aria-label={`Preview ${title}`}
+      aria-label={triggerName}
     >
       {triggerLabel}
       {inline && (
@@ -334,35 +391,13 @@ export function McpPreview({
           </Button>
         </form>
       )}
-      {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading preview…
-        </p>
-      )}
-      {state.status === 'error' && (
-        <div className="space-y-2">
-          <p role="alert" className="wrap-anywhere text-sm text-destructive">
-            {state.message}
-          </p>
-          {target.kind === 'resource' && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void readResource(target.uri)}
-            >
-              Retry preview
-            </Button>
-          )}
-        </div>
-      )}
-      {state.status === 'ready' && (
-        <PreviewResult
-          response={state.response}
-          inline={inline}
-          listedResource={inline ? listedResource : undefined}
-        />
-      )}
+      <McpPreviewBody
+        state={state}
+        inline={inline}
+        listedResource={inline ? listedResource : undefined}
+        renderManifest={renderManifest}
+        onRetry={target.kind === 'resource' ? () => void readResource(target.uri) : undefined}
+      />
     </>
   );
 

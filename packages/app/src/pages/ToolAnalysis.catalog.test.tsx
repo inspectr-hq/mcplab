@@ -137,6 +137,10 @@ describe('Analyze MCP catalog', () => {
     });
     source.previewMcpForAnalysis.mockResolvedValueOnce({
       kind: 'resource',
+      contents: [{ uri: referenceUri, mimeType: 'text/markdown', text: '# Search reference' }]
+    });
+    source.previewMcpForAnalysis.mockResolvedValueOnce({
+      kind: 'resource',
       contents: [{ uri: manifestUri, text: manifest }]
     });
     renderPage();
@@ -152,7 +156,9 @@ describe('Analyze MCP catalog', () => {
     expect(skillsPanel.getByRole('heading', { name: 'work-organizer' })).toBeVisible();
     expect(skillsPanel.getByText('Find saved work.')).toBeVisible();
     expect(source.previewMcpForAnalysis).not.toHaveBeenCalled();
-    fireEvent.click(skillsPanel.getByRole('button', { name: 'Preview work-organizer' }));
+    fireEvent.click(
+      skillsPanel.getByRole('button', { name: 'Preview SKILL.md for work-organizer' })
+    );
     expect(await skillsPanel.findByRole('heading', { name: 'Work Organizer' })).toBeVisible();
     expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(1);
     expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
@@ -160,10 +166,25 @@ describe('Analyze MCP catalog', () => {
       { kind: 'resource', serverName: 'alpha', uri },
       expect.any(AbortSignal)
     );
-    fireEvent.click(skillsPanel.getByRole('button', { name: 'Preview work-organizer manifest' }));
-    expect(await skillsPanel.findByText('references/search.md')).toBeVisible();
+    fireEvent.click(skillsPanel.getByRole('button', { name: 'Browse files for work-organizer' }));
+    const referenceFile = await skillsPanel.findByRole('button', {
+      name: /references\/search\.md/
+    });
     expect(skillsPanel.getByText('56 bytes')).toBeVisible();
+    expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(2);
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      2,
+      { kind: 'resource', serverName: 'alpha', uri: manifestUri },
+      expect.any(AbortSignal)
+    );
+    fireEvent.click(referenceFile);
+    expect(await skillsPanel.findByRole('heading', { name: 'Search reference' })).toBeVisible();
     expect(skillsPanel.getByText('sha256:def')).toBeVisible();
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      3,
+      { kind: 'resource', serverName: 'alpha', uri: referenceUri },
+      expect.any(AbortSignal)
+    );
     fireEvent.click(
       within(skillsPanel.getByRole('group', { name: 'Manifest preview mode' })).getByRole(
         'button',
@@ -171,12 +192,7 @@ describe('Analyze MCP catalog', () => {
       )
     );
     expect(skillsPanel.getByText(manifest)).toBeVisible();
-    expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(2);
-    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
-      2,
-      { kind: 'resource', serverName: 'alpha', uri: manifestUri },
-      expect.any(AbortSignal)
-    );
+    expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(3);
     openTab('Resources');
     expect(screen.getByRole('checkbox', { name: 'work-organizer/SKILL.md' })).toBeVisible();
     expect(screen.getByRole('checkbox', { name: 'work-organizer/_manifest' })).toBeVisible();
@@ -197,12 +213,12 @@ describe('Analyze MCP catalog', () => {
     ).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
-      3,
+      4,
       { kind: 'resource', serverName: 'alpha', uri: referenceUri },
       expect.any(AbortSignal)
     );
     expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
-      4,
+      5,
       { kind: 'resource', serverName: 'alpha', uri: manifestUri },
       expect.any(AbortSignal)
     );

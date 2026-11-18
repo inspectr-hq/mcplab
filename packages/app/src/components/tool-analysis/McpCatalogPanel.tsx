@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { buildCatalogInfoFilename } from '@/lib/tool-analysis-export';
 import { McpCatalogToolbar } from './McpCatalogToolbar';
-import { McpPreview, type InlinePreview, type LoadMcpPreview } from './McpPreview';
+import { McpPreview } from './McpPreview';
+import { resourceInlinePreview, type LoadMcpPreview } from './mcp-preview-state';
 import { ToolTokenEstimateBadge } from './ToolTokenEstimateBadge';
 import type {
   McpCatalogDefinition,
@@ -24,16 +25,6 @@ export interface McpCatalogView {
 }
 
 export const defaultMcpCatalogView: McpCatalogView = { query: '', excluded: new Set() };
-
-function resourceInlinePreview(uri: string, mimeType?: string): InlinePreview | undefined {
-  const [path] = uri.split(/[?#]/, 1);
-  if (path.endsWith('/SKILL.md')) return 'skill';
-  if (!/^skill:\/\//i.test(uri)) return undefined;
-  if (path.endsWith('/_manifest')) return 'manifest';
-  const mediaType = mimeType?.split(';', 1)[0].trim().toLowerCase();
-  if (mediaType === 'text/markdown' || /\.(?:md|markdown)$/i.test(path)) return 'markdown';
-  return 'raw';
-}
 
 function catalogRow(definition: Definition, via?: 'tool'): CatalogRow {
   const source = via ?? 'native';

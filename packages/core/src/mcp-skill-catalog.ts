@@ -4,6 +4,7 @@ export interface McpCatalogSkillFile {
   uri: string;
   via?: 'tool';
   canRead: boolean;
+  mimeType?: string;
 }
 
 export interface McpCatalogSkill {
@@ -16,7 +17,7 @@ export interface McpCatalogSkill {
 
 const SKILL_DOCUMENT_URI = /^skill:\/\/([^\s/?#]+(?:\/[^\s/?#]+)*)\/SKILL\.md$/;
 
-export function discoverMcpCatalogSkills(catalog: McpServerCatalog): McpCatalogSkill[] {
+function catalogResources(catalog: McpServerCatalog) {
   const files = new Map<string, { metadata: McpResourceInfo; reference: McpCatalogSkillFile }>();
   const native = catalog.resources.status === 'ready' ? catalog.resources.items : [];
   for (const metadata of native) {
@@ -32,7 +33,11 @@ export function discoverMcpCatalogSkills(catalog: McpServerCatalog): McpCatalogS
       });
     }
   }
+  return files;
+}
 
+export function discoverMcpCatalogSkills(catalog: McpServerCatalog): McpCatalogSkill[] {
+  const files = catalogResources(catalog);
   const candidates = new Map<string, McpCatalogSkill>();
   for (const { metadata, reference } of files.values()) {
     const path = SKILL_DOCUMENT_URI.exec(metadata.uri)?.[1];
@@ -59,6 +64,50 @@ export interface McpSkillManifestFile {
   path: string;
   size?: number;
   digest?: string;
+}
+
+export interface McpSkillFileEntry extends McpSkillManifestFile {
+  resource?: McpCatalogSkillFile;
+}
+
+function encodeSkillFilePath(path: string): string | undefined {
+  const segments = path.split('/');
+  if (segments.some((part) => !part || part === '.' || part === '..' || /[\p{Cc}\\]/u.test(part)))
+    return undefined;
+  try {
+    return segments
+      .map((part) =>
+        encodeURIComponent(part).replace(
+          /[!'()*]/g,
+          (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+        )
+      )
+      .join('/');
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveMcpSkillManifestFiles(
+  skill: McpCatalogSkill,
+  files: McpSkillManifestFile[],
+  catalog: McpServerCatalog
+): McpSkillFileEntry[] {
+  const resources = catalogResources(catalog);
+  const fallback = skill.manifest ?? skill.instructions;
+  const root = `skill://${skill.path}`;
+  return [
+    ...files.filter((file) => file.path === 'SKILL.md'),
+    ...files.filter((file) => file.path !== 'SKILL.md')
+  ].map((file) => {
+    const relativeUri = encodeSkillFilePath(file.path);
+    if (!relativeUri) return file;
+    const uri = `${root}/${relativeUri}`;
+    const listed = resources.get(uri);
+    const resource = listed?.reference ?? { ...fallback, uri };
+    const mimeType = listed?.metadata.mimeType;
+    return { ...file, resource: mimeType ? { ...resource, mimeType } : resource };
+  });
 }
 
 export function parseMcpSkillManifest(text: string): McpSkillManifestFile[] | null {

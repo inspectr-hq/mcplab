@@ -2,7 +2,9 @@ import type { ServerComparisonMetadata } from '@inspectr/mcplab-core';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles,
   type McpCatalogSkill,
+  type McpSkillFileEntry,
   type McpSkillManifestFile
 } from '@inspectr/mcplab-core';
 export type {

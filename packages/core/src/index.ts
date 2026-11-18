@@ -67,7 +67,9 @@ export { McpClientManager } from './mcp.js';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles,
   type McpCatalogSkill,
+  type McpSkillFileEntry,
   type McpSkillManifestFile
 } from './mcp-skill-catalog.js';
 export { withMcpCatalogTokenEstimates } from './mcp-catalog-token-estimates.js';

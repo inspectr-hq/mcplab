@@ -4,7 +4,9 @@ export { isLlmAgent } from './types.js';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,
+  resolveMcpSkillManifestFiles,
   type McpCatalogSkill,
+  type McpSkillFileEntry,
   type McpSkillManifestFile
 } from './mcp-skill-catalog.js';
 export type {

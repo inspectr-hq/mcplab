@@ -559,7 +559,8 @@ const ToolAnalysisPage = () => {
             Analyze MCP
           </h1>
           <p className="text-sm text-muted-foreground">
-            Browse server capabilities and review tools for schema quality and agent readiness.
+            Browse an MCP server’s tools, resources, prompts, and any detected skills. Analyze
+            selected tools for schema quality and agent readiness.
           </p>
         </div>
         <div className="hidden flex-wrap items-center gap-2 md:flex">
@@ -610,10 +611,11 @@ const ToolAnalysisPage = () => {
       {viewStep === 'configure' && (
         <Card>
           <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="text-base">Run MCP analysis</CardTitle>
+            <CardTitle className="text-base">Configure tool analysis</CardTitle>
             <CardDescription>
-              Select servers and tools, choose metadata review and/or deeper sample-call analysis,
-              then run the report.
+              Select one MCP server and the tools you want to analyze. Choose metadata review,
+              sample calls for tools classified as read-only, or both. Select{' '}
+              <strong className="font-medium">Analyze Tools</strong> to generate a report.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 p-3 pt-0 sm:p-6 sm:pt-0">
@@ -719,7 +721,7 @@ const ToolAnalysisPage = () => {
                     <TabsTrigger
                       key={value}
                       value={value}
-                      className="min-h-11 rounded-none border-b-2 border-transparent bg-transparent px-1 py-2 transition-none hover:text-foreground focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-4"
+                      className="min-h-11 cursor-pointer rounded-none border-b-2 border-transparent bg-transparent px-1 py-2 transition-none hover:text-foreground focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-4"
                     >
                       {label}
                     </TabsTrigger>
@@ -792,13 +794,15 @@ const ToolAnalysisPage = () => {
                   </p>
                 )}
               </TabsContent>
-              {hasSkills && (
+              {hasSkills && catalog && (
                 <TabsContent
                   value="skills"
                   className="mt-0 focus-visible:ring-inset focus-visible:ring-offset-0"
                 >
                   <McpSkillsPanel
+                    key={selectedServerLabel}
                     skills={skills}
+                    catalog={catalog}
                     serverName={selectedServerLabel}
                     loadPreview={previewMcp}
                   />
