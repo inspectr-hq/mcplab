@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { buildCatalogInfoFilename } from '@/lib/tool-analysis-export';
 import { McpCatalogToolbar } from './McpCatalogToolbar';
-import { McpPreview, type LoadMcpPreview } from './McpPreview';
+import { McpPreview, type InlinePreview, type LoadMcpPreview } from './McpPreview';
 import { ToolTokenEstimateBadge } from './ToolTokenEstimateBadge';
 import type {
   McpCatalogDefinition,
@@ -24,6 +24,16 @@ export interface McpCatalogView {
 }
 
 export const defaultMcpCatalogView: McpCatalogView = { query: '', excluded: new Set() };
+
+function resourceInlinePreview(uri: string, mimeType?: string): InlinePreview | undefined {
+  const [path] = uri.split(/[?#]/, 1);
+  if (path.endsWith('/SKILL.md')) return 'skill';
+  if (!/^skill:\/\//i.test(uri)) return undefined;
+  if (path.endsWith('/_manifest')) return 'manifest';
+  const mediaType = mimeType?.split(';', 1)[0].trim().toLowerCase();
+  if (mediaType === 'text/markdown' || /\.(?:md|markdown)$/i.test(path)) return 'markdown';
+  return 'raw';
+}
 
 function catalogRow(definition: Definition, via?: 'tool'): CatalogRow {
   const source = via ?? 'native';
@@ -259,7 +269,7 @@ export function McpCatalogPanel({
         : { kind: 'template' as const, uriTemplate: resource.uriTemplate };
     const uri = target.kind === 'resource' ? target.uri : target.uriTemplate;
     const title = resource.title || resource.name;
-    const isSkillFile = /\/SKILL\.md(?:[?#].*)?$/.test(uri);
+    const inline = resourceInlinePreview(uri, resource.mimeType);
     const row = catalogRow(resource, via);
     const preview = canRead && (
       <McpPreview
@@ -268,7 +278,7 @@ export function McpCatalogPanel({
         target={target}
         load={loadPreview}
         via={via}
-        inline={isSkillFile ? 'skill' : undefined}
+        inline={inline}
       />
     );
     return (
@@ -277,15 +287,15 @@ export function McpCatalogPanel({
         {...selectable(row)}
         title={title}
         description={resource.description}
-        action={!isSkillFile && preview}
-        inlinePreview={isSkillFile && preview}
+        action={!inline && preview}
+        inlinePreview={inline && preview}
       >
         {resource.title && resource.title !== resource.name && (
           <p className="wrap-anywhere font-mono text-xs">{resource.name}</p>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <p className="break-all font-mono text-xs">{uri}</p>
-          {isSkillFile && (
+          {inline === 'skill' && (
             <Badge variant="secondary">
               {target.kind === 'resource' ? 'Skill file' : 'Skill file template'}
             </Badge>

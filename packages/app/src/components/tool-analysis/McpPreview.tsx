@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Copy } from 'lucide-react';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { copyTextToClipboard } from '@/lib/copy-text-to-clipboard';
 import { parseMcpSkillManifest } from '@/lib/data-sources/types';
 import type {
   McpPreviewRequest,
@@ -32,7 +33,7 @@ type PreviewState =
   | { status: 'error'; message: string }
   | { status: 'ready'; response: McpPreviewResponse };
 
-type InlinePreview = 'skill' | 'manifest';
+export type InlinePreview = 'skill' | 'manifest' | 'markdown' | 'raw';
 
 export type LoadMcpPreview = (
   request: McpPreviewRequest,
@@ -103,35 +104,54 @@ function PreviewResult({
         ? parseMcpSkillManifest(item.text)
         : null
   }));
-  const canFormat = contents.some(
-    ({ item, manifest }) =>
-      manifest !== null || (inline === 'skill' && typeof item.text === 'string')
-  );
+  const markdown = inline === 'skill' || inline === 'markdown';
+  const markdownParts = markdown
+    ? contents.flatMap(({ item }) => (typeof item.text === 'string' ? [item.text] : []))
+    : [];
+  const canFormat = markdownParts.length > 0 || contents.some(({ manifest }) => manifest !== null);
   const modes = [
     { label: inline === 'manifest' ? 'Files' : 'Markdown', raw: false },
     { label: 'Raw', raw: true }
   ];
+  let modeLabel = 'Preview mode';
+  if (inline === 'manifest') modeLabel = 'Manifest preview mode';
+  if (inline === 'skill') modeLabel = 'Skill preview mode';
   return (
     <div className="space-y-3" aria-live="polite">
       {canFormat && (
-        <div
-          role="group"
-          aria-label={inline === 'manifest' ? 'Manifest preview mode' : 'Skill preview mode'}
-          className="inline-flex gap-0.5 rounded-md border p-0.5"
-        >
-          {modes.map((mode) => (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div
+            role="group"
+            aria-label={modeLabel}
+            className="inline-flex gap-0.5 rounded-md border p-0.5"
+          >
+            {modes.map((mode) => (
+              <Button
+                key={mode.label}
+                type="button"
+                size="sm"
+                variant={raw === mode.raw ? 'secondary' : 'ghost'}
+                className="h-11 sm:h-8"
+                aria-pressed={raw === mode.raw}
+                onClick={() => setRaw(mode.raw)}
+              >
+                {mode.label}
+              </Button>
+            ))}
+          </div>
+          {markdownParts.length > 0 && (
             <Button
-              key={mode.label}
               type="button"
               size="sm"
-              variant={raw === mode.raw ? 'secondary' : 'ghost'}
-              className="h-11 sm:h-8"
-              aria-pressed={raw === mode.raw}
-              onClick={() => setRaw(mode.raw)}
+              variant="outline"
+              className="h-11 bg-transparent sm:h-8"
+              aria-label="Copy raw Markdown"
+              onClick={() => void copyTextToClipboard('Raw Markdown', markdownParts.join('\n\n'))}
             >
-              {mode.label}
+              <Copy aria-hidden="true" />
+              Copy
             </Button>
-          ))}
+          )}
         </div>
       )}
       {response.contents.length === 0 && (
@@ -141,10 +161,10 @@ function PreviewResult({
         let textPreview: ReactNode = null;
         if (typeof item.text === 'string') {
           if (!raw && manifest) textPreview = <ManifestFiles files={manifest} />;
-          else if (!raw && inline === 'skill') {
+          else if (!raw && markdown) {
             textPreview = (
               <MarkdownContent
-                text={skillMarkdownBody(item.text)}
+                text={inline === 'skill' ? skillMarkdownBody(item.text) : item.text}
                 renderImages={false}
                 className="min-w-0 wrap-anywhere text-sm"
               />

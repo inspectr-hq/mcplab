@@ -337,7 +337,7 @@ export function ToolSchemaPreview({
         </span>
       </summary>
       <div className="mt-2">
-        {compact && modeControls}
+        {compact && <div className="flex justify-end">{modeControls}</div>}
         {mode === 'json' && (
           <div className="mt-2 space-y-2">
             {inputSchema !== undefined && (

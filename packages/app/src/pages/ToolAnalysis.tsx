@@ -24,6 +24,7 @@ import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
 import { useLibraries } from '@/contexts/useLibraries';
 import { toast } from '@/hooks/use-toast';
+import { copyTextToClipboard } from '@/lib/copy-text-to-clipboard';
 import { discoverMcpCatalogSkills } from '@/lib/data-sources/types';
 import type {
   RunJobEvent,
@@ -55,19 +56,6 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-async function copyTextToClipboard(label: string, content: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(content);
-    toast({ title: `${label} copied` });
-  } catch (error: unknown) {
-    toast({
-      title: `Could not copy ${label.toLowerCase()}`,
-      description: error instanceof Error ? error.message : String(error),
-      variant: 'destructive'
-    });
-  }
 }
 
 function ModeInfo({ text }: { text: string }) {

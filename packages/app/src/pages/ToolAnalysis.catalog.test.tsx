@@ -175,16 +175,32 @@ describe('Analyze MCP catalog', () => {
     expect(screen.getByRole('checkbox', { name: 'work-organizer/SKILL.md' })).toBeVisible();
     expect(screen.getByRole('checkbox', { name: 'work-organizer/_manifest' })).toBeVisible();
     const referencePreview = screen.getByRole('button', { name: 'Preview references/search.md' });
-    const manifestPreview = screen.getByRole('button', { name: 'Preview work-organizer/_manifest' });
+    const manifestPreview = screen.getByRole('button', {
+      name: 'Preview work-organizer/_manifest'
+    });
     expect(referencePreview).toHaveAttribute('aria-expanded', 'false');
     expect(manifestPreview).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(referencePreview);
-    expect(await within(referencePreview.closest('li')!).findByRole('heading', { name: 'Search reference' })).toBeVisible();
+    expect(
+      await within(referencePreview.closest('li')!).findByRole('heading', {
+        name: 'Search reference'
+      })
+    ).toBeVisible();
     fireEvent.click(manifestPreview);
-    expect(await within(manifestPreview.closest('li')!).findByRole('list', { name: 'Files in manifest' })).toBeVisible();
+    expect(
+      await within(manifestPreview.closest('li')!).findByRole('list', { name: 'Files in manifest' })
+    ).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(3, { kind: 'resource', serverName: 'alpha', uri: referenceUri }, expect.any(AbortSignal));
-    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(4, { kind: 'resource', serverName: 'alpha', uri: manifestUri }, expect.any(AbortSignal));
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      3,
+      { kind: 'resource', serverName: 'alpha', uri: referenceUri },
+      expect.any(AbortSignal)
+    );
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      4,
+      { kind: 'resource', serverName: 'alpha', uri: manifestUri },
+      expect.any(AbortSignal)
+    );
     openTab('Skills');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Alpha' }));
     expect(screen.queryByRole('tab', { name: 'Skills' })).not.toBeInTheDocument();
@@ -192,6 +208,7 @@ describe('Analyze MCP catalog', () => {
   });
 
   it('lists tool-backed resources explicitly and previews a skill file via its server tool', async () => {
+    const writeText = mockClipboard();
     const catalog = {
       ...alpha.catalog,
       resources: { status: 'unsupported' },
@@ -271,8 +288,13 @@ describe('Analyze MCP catalog', () => {
     expect(previewRow.queryByText(/name: review/)).not.toBeInTheDocument();
     expect(previewRow.getByText('Trace diagram')).toBeVisible();
     expect(previewRow.queryByRole('img')).not.toBeInTheDocument();
+    const copy = previewRow.getByRole('button', { name: 'Copy raw Markdown' });
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenNthCalledWith(1, skillSource));
     fireEvent.click(previewRow.getByRole('button', { name: 'Raw' }));
     expect(row.querySelector('pre')?.textContent).toBe(skillSource);
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenNthCalledWith(2, skillSource));
     fireEvent.click(previewRow.getByRole('button', { name: 'Markdown' }));
     expect(previewRow.getByRole('heading', { name: 'Review' })).toBeVisible();
     expect(source.previewMcpForAnalysis).toHaveBeenCalledOnce();
