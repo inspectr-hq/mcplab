@@ -268,7 +268,7 @@ export function McpCatalogPanel({
         target={target}
         load={loadPreview}
         via={via}
-        inline={isSkillFile}
+        inline={isSkillFile ? 'skill' : undefined}
       />
     );
     return (

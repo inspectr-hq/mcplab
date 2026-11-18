@@ -86,11 +86,109 @@ describe('Analyze MCP catalog', () => {
   it('uses the selected server name as the catalog heading', async () => {
     renderPage();
     await screen.findByText('fetch_docs');
+    expect(screen.queryByRole('tab', { name: 'Skills' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Alpha' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Server catalog' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Alpha' }));
     expect(screen.getByRole('heading', { name: 'Server catalog' })).toBeVisible();
+  });
+
+  it('groups the skill file and manifest on demand while keeping both entries in Resources', async () => {
+    const uri = 'skill://work-organizer/SKILL.md';
+    const manifestUri = 'skill://work-organizer/_manifest';
+    const referenceUri = 'skill://work-organizer/references/search.md';
+    const manifest = JSON.stringify({
+      skill: 'work-organizer',
+      files: [
+        { path: 'SKILL.md', size: 42, hash: 'sha256:abc' },
+        { path: 'references/search.md', size: 56, hash: 'sha256:def' }
+      ]
+    });
+    source.discoverToolsForAnalysis.mockResolvedValueOnce({
+      servers: [
+        {
+          ...alpha,
+          catalog: {
+            ...alpha.catalog,
+            resources: {
+              status: 'ready',
+              items: [
+                { name: 'work-organizer/SKILL.md', uri, description: 'Find saved work.' },
+                { name: 'work-organizer/_manifest', uri: manifestUri },
+                { name: 'references/search.md', uri: referenceUri, mimeType: 'text/markdown' }
+              ]
+            }
+          }
+        }
+      ]
+    });
+    source.previewMcpForAnalysis.mockResolvedValueOnce({
+      kind: 'resource',
+      contents: [{ uri, text: '# Work Organizer' }]
+    });
+    source.previewMcpForAnalysis.mockResolvedValueOnce({
+      kind: 'resource',
+      contents: [{ uri: manifestUri, text: manifest }]
+    });
+    source.previewMcpForAnalysis.mockResolvedValueOnce({
+      kind: 'resource',
+      contents: [{ uri: referenceUri, text: '# Search reference' }]
+    });
+    source.previewMcpForAnalysis.mockResolvedValueOnce({
+      kind: 'resource',
+      contents: [{ uri: manifestUri, text: manifest }]
+    });
+    renderPage();
+    await screen.findByRole('tab', { name: 'Skills' });
+    openTab('Skills');
+    const skillsPanel = within(screen.getByRole('tabpanel', { name: 'Skills' }));
+    expect(skillsPanel.getByRole('heading', { name: 'work-organizer' })).toBeVisible();
+    expect(skillsPanel.getByText('Find saved work.')).toBeVisible();
+    expect(source.previewMcpForAnalysis).not.toHaveBeenCalled();
+    fireEvent.click(skillsPanel.getByRole('button', { name: 'Preview work-organizer' }));
+    expect(await skillsPanel.findByRole('heading', { name: 'Work Organizer' })).toBeVisible();
+    expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(1);
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      1,
+      { kind: 'resource', serverName: 'alpha', uri },
+      expect.any(AbortSignal)
+    );
+    fireEvent.click(skillsPanel.getByRole('button', { name: 'Preview work-organizer manifest' }));
+    expect(await skillsPanel.findByText('references/search.md')).toBeVisible();
+    expect(skillsPanel.getByText('56 bytes')).toBeVisible();
+    expect(skillsPanel.getByText('sha256:def')).toBeVisible();
+    fireEvent.click(
+      within(skillsPanel.getByRole('group', { name: 'Manifest preview mode' })).getByRole(
+        'button',
+        { name: 'Raw' }
+      )
+    );
+    expect(skillsPanel.getByText(manifest)).toBeVisible();
+    expect(source.previewMcpForAnalysis).toHaveBeenCalledTimes(2);
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(
+      2,
+      { kind: 'resource', serverName: 'alpha', uri: manifestUri },
+      expect.any(AbortSignal)
+    );
+    openTab('Resources');
+    expect(screen.getByRole('checkbox', { name: 'work-organizer/SKILL.md' })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'work-organizer/_manifest' })).toBeVisible();
+    const referencePreview = screen.getByRole('button', { name: 'Preview references/search.md' });
+    const manifestPreview = screen.getByRole('button', { name: 'Preview work-organizer/_manifest' });
+    expect(referencePreview).toHaveAttribute('aria-expanded', 'false');
+    expect(manifestPreview).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(referencePreview);
+    expect(await within(referencePreview.closest('li')!).findByRole('heading', { name: 'Search reference' })).toBeVisible();
+    fireEvent.click(manifestPreview);
+    expect(await within(manifestPreview.closest('li')!).findByRole('list', { name: 'Files in manifest' })).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(3, { kind: 'resource', serverName: 'alpha', uri: referenceUri }, expect.any(AbortSignal));
+    expect(source.previewMcpForAnalysis).toHaveBeenNthCalledWith(4, { kind: 'resource', serverName: 'alpha', uri: manifestUri }, expect.any(AbortSignal));
+    openTab('Skills');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alpha' }));
+    expect(screen.queryByRole('tab', { name: 'Skills' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Resources' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('lists tool-backed resources explicitly and previews a skill file via its server tool', async () => {
@@ -147,8 +245,10 @@ describe('Analyze MCP catalog', () => {
       expect.any(AbortSignal)
     );
     openTab('Resources');
+    expect(screen.queryByRole('tab', { name: 'Skills' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'List via server tool' }));
     expect(await screen.findByText('Skill file')).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Skills' })).toBeVisible();
     expect(screen.getByRole('checkbox', { name: 'review' })).toBeVisible();
     expect(screen.getByText('Review MCP scenarios and results.')).toBeVisible();
     expect(screen.getByText('docs://pages/{id}')).toBeVisible();

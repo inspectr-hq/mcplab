@@ -17,12 +17,14 @@ import {
 } from '@/components/tool-analysis/McpCatalogPanel';
 import { McpCatalogToolbar } from '@/components/tool-analysis/McpCatalogToolbar';
 import type { LoadMcpPreview } from '@/components/tool-analysis/McpPreview';
+import { McpSkillsPanel } from '@/components/tool-analysis/McpSkillsPanel';
 import { McpToolList } from '@/components/tool-analysis/McpToolList';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
 import { useLibraries } from '@/contexts/useLibraries';
 import { toast } from '@/hooks/use-toast';
+import { discoverMcpCatalogSkills } from '@/lib/data-sources/types';
 import type {
   RunJobEvent,
   ToolAnalysisDiscoverResponse,
@@ -32,6 +34,7 @@ import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Download, Loader2, RefreshCw, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
 import { selectedToolContextTokens } from '@/lib/tool-analysis-token-estimates';
+import { cn } from '@/lib/utils';
 import type { SchemaViewMode } from '@/components/tool-analysis/ToolSchemaPreview';
 
 import { parseAnalysisProgressFromEvents } from '@/lib/tool-analysis-progress';
@@ -40,6 +43,7 @@ const TOOL_ANALYSIS_ACTIVE_JOB_KEY = 'mcplab.toolAnalysis.activeJobId';
 const CATALOG_TABS = [
   { value: 'tools', label: 'Tools' },
   { value: 'resources', label: 'Resources' },
+  { value: 'skills', label: 'Skills' },
   { value: 'prompts', label: 'Prompts' }
 ] as const;
 
@@ -108,6 +112,7 @@ const ToolAnalysisPage = () => {
   const [catalogViews, setCatalogViews] = useState<
     Partial<Record<'resources' | 'prompts', McpCatalogView>>
   >({});
+  const [catalogTab, setCatalogTab] = useState('tools');
   const [toolQuery, setToolQuery] = useState('');
   const [metadataReview, setMetadataReview] = useState(true);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
@@ -319,6 +324,9 @@ const ToolAnalysisPage = () => {
   const serverDisplayName =
     servers.find((server) => server.id === selectedServerLabel)?.name || selectedServerLabel;
   const catalog = serverDiscovery?.catalog;
+  const skills = useMemo(() => (catalog ? discoverMcpCatalogSkills(catalog) : []), [catalog]);
+  const hasSkills = skills.length > 0;
+  const activeCatalogTab = catalogTab === 'skills' && !hasSkills ? 'resources' : catalogTab;
   const toolDiscoveryWarnings = catalog ? (serverDiscovery?.warnings ?? []) : [];
   const toolQueryText = toolQuery.trim().toLowerCase();
   const visibleTools = useMemo(() => {
@@ -505,6 +513,7 @@ const ToolAnalysisPage = () => {
     setDiscovered([]);
     setSelectedToolsByServer({});
     setCatalogViews({});
+    setCatalogTab((current) => (current === 'skills' ? 'resources' : current));
     setDiscoveryError(null);
     setDiscovering(checked);
     setSelectedServerNames((prev) =>
@@ -685,21 +694,20 @@ const ToolAnalysisPage = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="tools" className="min-w-0 rounded-lg border bg-card">
+            <Tabs
+              value={activeCatalogTab}
+              onValueChange={setCatalogTab}
+              className="min-w-0 rounded-lg border bg-card"
+            >
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-3 sm:px-4">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold">Server catalog</h2>
-                  {serverDisplayName && (
-                    <p className="wrap-anywhere text-sm text-muted-foreground">
-                      {serverDisplayName}
-                    </p>
-                  )}
-                </div>
+                <h2 className="min-w-0 wrap-anywhere text-sm font-semibold">
+                  {serverDisplayName || 'Server catalog'}
+                </h2>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => void discoverTools()}
+                  onClick={() => void discoverTools(catalog?.toolResources?.status === 'ready')}
                   disabled={discoveryBusy || !selectedServerLabel}
                   className="h-11 bg-transparent hover:bg-muted hover:text-foreground sm:h-8"
                 >
@@ -713,17 +721,22 @@ const ToolAnalysisPage = () => {
               </div>
               <TabsList
                 aria-label="MCP server capabilities"
-                className="grid h-auto w-full grid-cols-3 gap-0 rounded-none border-b bg-transparent p-0 px-2 sm:flex sm:justify-start sm:px-4"
+                className={cn(
+                  'grid h-auto w-full gap-0 rounded-none border-b bg-transparent p-0 px-2 sm:flex sm:justify-start sm:px-4',
+                  hasSkills ? 'grid-cols-2 min-[360px]:grid-cols-4' : 'grid-cols-3'
+                )}
               >
-                {CATALOG_TABS.map(({ value, label }) => (
-                  <TabsTrigger
-                    key={value}
-                    value={value}
-                    className="min-h-11 rounded-none border-b-2 border-transparent bg-transparent px-2 py-2 transition-none hover:text-foreground focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-4"
-                  >
-                    {label}
-                  </TabsTrigger>
-                ))}
+                {CATALOG_TABS.filter(({ value }) => hasSkills || value !== 'skills').map(
+                  ({ value, label }) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="min-h-11 rounded-none border-b-2 border-transparent bg-transparent px-1 py-2 transition-none hover:text-foreground focus-visible:ring-inset focus-visible:ring-offset-0 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none sm:px-4"
+                    >
+                      {label}
+                    </TabsTrigger>
+                  )
+                )}
               </TabsList>
               {discoveryError && (
                 <p
@@ -791,6 +804,18 @@ const ToolAnalysisPage = () => {
                   </p>
                 )}
               </TabsContent>
+              {hasSkills && (
+                <TabsContent
+                  value="skills"
+                  className="mt-0 focus-visible:ring-inset focus-visible:ring-offset-0"
+                >
+                  <McpSkillsPanel
+                    skills={skills}
+                    serverName={selectedServerLabel}
+                    loadPreview={previewMcp}
+                  />
+                </TabsContent>
+              )}
               {(['resources', 'prompts'] as const).map((kind) => (
                 <TabsContent
                   key={kind}

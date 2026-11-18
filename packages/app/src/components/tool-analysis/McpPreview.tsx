@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/button';
@@ -14,10 +14,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { parseMcpSkillManifest } from '@/lib/data-sources/types';
 import type {
   McpPreviewRequest,
   McpPreviewResponse,
-  McpPromptInfo
+  McpPromptInfo,
+  McpSkillManifestFile
 } from '@/lib/data-sources/types';
 
 type PreviewTarget =
@@ -29,6 +31,8 @@ type PreviewState =
   | { status: 'idle' | 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; response: McpPreviewResponse };
+
+type InlinePreview = 'skill' | 'manifest';
 
 export type LoadMcpPreview = (
   request: McpPreviewRequest,
@@ -42,8 +46,37 @@ function skillMarkdownBody(text: string): string {
   );
 }
 
-function PreviewResult({ response, skill }: { response: McpPreviewResponse; skill: boolean }) {
-  const [mode, setMode] = useState<'Markdown' | 'Raw'>('Markdown');
+function ManifestFiles({ files }: { files: McpSkillManifestFile[] }) {
+  if (!files.length) return <p className="text-sm text-muted-foreground">No files listed.</p>;
+  return (
+    <ul aria-label="Files in manifest" className="divide-y rounded-md border">
+      {files.map(({ path, size, digest }, index) => (
+        <li key={`${path}:${index}`} className="space-y-1 px-3 py-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+            <code className="min-w-0 wrap-anywhere">{path}</code>
+            {size !== undefined && (
+              <span className="text-xs text-muted-foreground">{size.toLocaleString()} bytes</span>
+            )}
+          </div>
+          {digest && (
+            <code title="Digest" className="block wrap-anywhere text-xs text-muted-foreground">
+              {digest}
+            </code>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PreviewResult({
+  response,
+  inline
+}: {
+  response: McpPreviewResponse;
+  inline?: InlinePreview;
+}) {
+  const [raw, setRaw] = useState(false);
   const textStyle = 'whitespace-pre-wrap wrap-anywhere rounded bg-muted p-3 text-sm';
   if (response.kind === 'prompt') {
     return (
@@ -63,27 +96,40 @@ function PreviewResult({ response, skill }: { response: McpPreviewResponse; skil
       </div>
     );
   }
-  const showMode = skill && response.contents.some((item) => typeof item.text === 'string');
-  const renderMarkdown = showMode && mode === 'Markdown';
+  const contents = response.contents.map((item) => ({
+    item,
+    manifest:
+      inline === 'manifest' && typeof item.text === 'string'
+        ? parseMcpSkillManifest(item.text)
+        : null
+  }));
+  const canFormat = contents.some(
+    ({ item, manifest }) =>
+      manifest !== null || (inline === 'skill' && typeof item.text === 'string')
+  );
+  const modes = [
+    { label: inline === 'manifest' ? 'Files' : 'Markdown', raw: false },
+    { label: 'Raw', raw: true }
+  ];
   return (
     <div className="space-y-3" aria-live="polite">
-      {showMode && (
+      {canFormat && (
         <div
           role="group"
-          aria-label="Skill preview mode"
+          aria-label={inline === 'manifest' ? 'Manifest preview mode' : 'Skill preview mode'}
           className="inline-flex gap-0.5 rounded-md border p-0.5"
         >
-          {(['Markdown', 'Raw'] as const).map((option) => (
+          {modes.map((mode) => (
             <Button
-              key={option}
+              key={mode.label}
               type="button"
               size="sm"
-              variant={mode === option ? 'secondary' : 'ghost'}
+              variant={raw === mode.raw ? 'secondary' : 'ghost'}
               className="h-11 sm:h-8"
-              aria-pressed={mode === option}
-              onClick={() => setMode(option)}
+              aria-pressed={raw === mode.raw}
+              onClick={() => setRaw(mode.raw)}
             >
-              {option}
+              {mode.label}
             </Button>
           ))}
         </div>
@@ -91,25 +137,31 @@ function PreviewResult({ response, skill }: { response: McpPreviewResponse; skil
       {response.contents.length === 0 && (
         <p className="text-sm">The resource returned no content.</p>
       )}
-      {response.contents.map((item, index) => (
-        <div key={index} className="space-y-1">
-          <p className="break-all font-mono text-xs">{item.uri}</p>
-          {item.mimeType && <p className="text-xs text-muted-foreground">{item.mimeType}</p>}
-          {typeof item.text === 'string' &&
-            (renderMarkdown ? (
+      {contents.map(({ item, manifest }, index) => {
+        let textPreview: ReactNode = null;
+        if (typeof item.text === 'string') {
+          if (!raw && manifest) textPreview = <ManifestFiles files={manifest} />;
+          else if (!raw && inline === 'skill') {
+            textPreview = (
               <MarkdownContent
                 text={skillMarkdownBody(item.text)}
                 renderImages={false}
                 className="min-w-0 wrap-anywhere text-sm"
               />
-            ) : (
-              <pre className={textStyle}>{item.text}</pre>
-            ))}
-          {item.blobBytes !== undefined && (
-            <p className="text-sm">Binary content ({item.blobBytes.toLocaleString()} bytes)</p>
-          )}
-        </div>
-      ))}
+            );
+          } else textPreview = <pre className={textStyle}>{item.text}</pre>;
+        }
+        return (
+          <div key={index} className="space-y-1">
+            <p className="break-all font-mono text-xs">{item.uri}</p>
+            {item.mimeType && <p className="text-xs text-muted-foreground">{item.mimeType}</p>}
+            {textPreview}
+            {item.blobBytes !== undefined && (
+              <p className="text-sm">Binary content ({item.blobBytes.toLocaleString()} bytes)</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -120,14 +172,14 @@ export function McpPreview({
   target,
   load,
   via,
-  inline = false
+  inline
 }: {
   title: string;
   serverName: string;
   target: PreviewTarget;
   load: LoadMcpPreview;
   via?: 'tool';
-  inline?: boolean;
+  inline?: InlinePreview;
 }) {
   const id = useId();
   const [state, setState] = useState<PreviewState>({ status: 'idle' });
@@ -185,6 +237,9 @@ export function McpPreview({
   if (target.kind === 'template') detail = target.uriTemplate;
   else if (target.kind === 'resource') detail = target.uri;
   else detail = target.prompt.name;
+  let triggerLabel = 'Preview';
+  if (inline === 'skill') triggerLabel = 'Skill preview';
+  if (inline === 'manifest') triggerLabel = 'Manifest';
   const trigger = (
     <Button
       type="button"
@@ -199,7 +254,7 @@ export function McpPreview({
           className="motion-safe:transition-transform group-data-[state=open]:rotate-90"
         />
       )}
-      {inline ? 'Skill preview' : 'Preview'}
+      {triggerLabel}
     </Button>
   );
   const content = (
@@ -266,7 +321,7 @@ export function McpPreview({
           )}
         </div>
       )}
-      {state.status === 'ready' && <PreviewResult response={state.response} skill={inline} />}
+      {state.status === 'ready' && <PreviewResult response={state.response} inline={inline} />}
     </>
   );
 

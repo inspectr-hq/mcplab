@@ -1,4 +1,10 @@
 import type { ServerComparisonMetadata } from '@inspectr/mcplab-core';
+export {
+  discoverMcpCatalogSkills,
+  parseMcpSkillManifest,
+  type McpCatalogSkill,
+  type McpSkillManifestFile
+} from '@inspectr/mcplab-core';
 export type {
   ServerSet,
   ServerVariant,
