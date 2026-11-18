@@ -141,6 +141,12 @@ describe('Analyze MCP catalog', () => {
     });
     renderPage();
     await screen.findByRole('tab', { name: 'Skills' });
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Tools',
+      'Skills',
+      'Resources',
+      'Prompts'
+    ]);
     openTab('Skills');
     const skillsPanel = within(screen.getByRole('tabpanel', { name: 'Skills' }));
     expect(skillsPanel.getByRole('heading', { name: 'work-organizer' })).toBeVisible();

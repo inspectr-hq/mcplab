@@ -43,8 +43,8 @@ import { parseAnalysisProgressFromEvents } from '@/lib/tool-analysis-progress';
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = 'mcplab.toolAnalysis.activeJobId';
 const CATALOG_TABS = [
   { value: 'tools', label: 'Tools' },
-  { value: 'resources', label: 'Resources' },
   { value: 'skills', label: 'Skills' },
+  { value: 'resources', label: 'Resources' },
   { value: 'prompts', label: 'Prompts' }
 ] as const;
 
