@@ -1272,7 +1272,7 @@ paths:
   /api/tool-analysis/discover-tools:
     post:
       tags: [Tool Analysis]
-      summary: Discover MCP tools for a single server (preflight)
+      summary: Discover MCP tools and optionally the native catalog for one server
       operationId: discoverToolsForAnalysis
       requestBody:
         required: true
@@ -1286,6 +1286,12 @@ paths:
                   type: array
                   items: { type: string }
                   minItems: 1
+                  maxItems: 1
+                includeCatalog:
+                  type: boolean
+                includeToolResources:
+                  type: boolean
+                  description: Request tool-backed resource discovery when the server exposes a listing tool.
       responses:
         "200":
           description: Tool discovery result
@@ -1299,7 +1305,7 @@ paths:
   /api/tool-analysis/jobs:
     post:
       tags: [Tool Analysis]
-      summary: Start a tool analysis async job
+      summary: Start an MCP analysis job
       operationId: startToolAnalysisJob
       requestBody:
         required: true
@@ -1320,11 +1326,7 @@ paths:
                     type: array
                     items: { type: string }
                 modes:
-                  type: object
-                  required: [metadataReview, deeperAnalysis]
-                  properties:
-                    metadataReview: { type: boolean }
-                    deeperAnalysis: { type: boolean }
+                  $ref: "#/components/schemas/ToolAnalysisModes"
                 deeperAnalysisOptions:
                   type: object
                   properties:
@@ -2380,6 +2382,10 @@ components:
               warnings:
                 type: array
                 items: { type: string }
+              catalog:
+                type: object
+                description: Native resource, resource template, and prompt listings with coverage status for each section.
+                additionalProperties: true
               tools:
                 type: array
                 items:
@@ -2393,10 +2399,67 @@ components:
                       additionalProperties: true
                     safetyClassification:
                       type: string
-                      enum: [read_like, unsafe_or_unknown]
+                      enum: [read_only, unsafe_or_unknown]
                     classificationReason:
                       type: string
                   additionalProperties: true
+    ToolAnalysisModes:
+      type: object
+      required: [metadataReview, deeperAnalysis]
+      properties:
+        metadataReview: { type: boolean }
+        deeperAnalysis: { type: boolean }
+        catalogChecks:
+          type: boolean
+          default: false
+          description: Inspect the advertised catalog without an assistant or tool execution.
+    ToolAnalysisSummary:
+      type: object
+      properties:
+        serversAnalyzed: { type: integer }
+        toolsAnalyzed: { type: integer }
+        toolsSkipped: { type: integer }
+        issueCounts:
+          type: object
+          additionalProperties: { type: integer }
+        catalogChecks:
+          type: object
+          required: [itemsChecked, statusCounts]
+          properties:
+            itemsChecked: { type: integer }
+            statusCounts:
+              type: object
+              required: [pass, warning, fail, skipped]
+              properties:
+                pass: { type: integer }
+                warning: { type: integer }
+                fail: { type: integer }
+                skipped: { type: integer }
+      additionalProperties: true
+    McpCatalogCheck:
+      type: object
+      required: [kind, status, itemsChecked, findings]
+      properties:
+        kind:
+          type: string
+          enum: [tools, resources, resource_templates, prompts, skills, tool_resources]
+        status:
+          type: string
+          enum: [pass, warning, fail, skipped]
+        itemsChecked: { type: integer }
+        message: { type: string }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [status, item, path, message]
+            properties:
+              status:
+                type: string
+                enum: [warning, fail]
+              item: { type: string }
+              path: { type: string }
+              message: { type: string }
     ToolAnalysisReport:
       type: object
       description: Full tool analysis report payload (shape may evolve)
@@ -2406,18 +2469,21 @@ components:
         assistantAgentName: { type: string }
         assistantAgentModel: { type: string }
         modes:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/ToolAnalysisModes"
         settings:
           type: object
           additionalProperties: true
         summary:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/ToolAnalysisSummary"
         servers:
           type: array
           items:
             type: object
+            properties:
+              catalogChecks:
+                type: array
+                items:
+                  $ref: "#/components/schemas/McpCatalogCheck"
             additionalProperties: true
         findings:
           type: array
@@ -2441,7 +2507,7 @@ components:
       additionalProperties: true
     ToolAnalysisResultSummary:
       type: object
-      required: [reportId, createdAt, assistantAgentName, assistantAgentModel, serverNames, modes, summary]
+      required: [reportId, createdAt, serverNames, modes, summary]
       properties:
         reportId: { type: string }
         createdAt: { type: string, format: date-time }
@@ -2451,29 +2517,9 @@ components:
           type: array
           items: { type: string }
         modes:
-          type: object
-          additionalProperties: true
+          $ref: "#/components/schemas/ToolAnalysisModes"
         summary:
-          type: object
-          additionalProperties: true
-          properties:
-            showSensitiveValues: { type: boolean }
-            issuer: { type: string }
-            clientId: { type: string }
-            redirectUri: { type: string }
-            tokenEndpointStatus: { type: integer }
-            tokenType: { type: string }
-            grantedScopes:
-              type: array
-              items: { type: string }
-            accessToken: { type: string }
-            accessTokenExpiresInSeconds: { type: integer, minimum: 0 }
-            accessTokenExpiresAt: { type: string, format: date-time }
-            accessTokenValidForSeconds: { type: integer, minimum: 0 }
-            accessTokenExpirySource:
-              type: string
-              enum: [expires_in, jwt_exp, none]
-            refreshTokenAvailable: { type: boolean }
+          $ref: "#/components/schemas/ToolAnalysisSummary"
       additionalProperties: true
     ToolAnalysisResultSummaryListEnvelope:
       type: object

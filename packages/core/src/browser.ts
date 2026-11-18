@@ -1,6 +1,20 @@
 export { tallyCheckCounts } from './check-counts.js';
 export { resolveRunAgentSelection } from './run-agent-selection.js';
 export { isLlmAgent } from './types.js';
+export type {
+  McpCatalogCheck,
+  McpCatalogCheckSummary,
+  McpHealthReport,
+  SavedToolAnalysisReportRecord,
+  ToolAnalysisFinding,
+  ToolAnalysisModes,
+  ToolAnalysisReport,
+  ToolAnalysisResultSummary,
+  ToolAnalysisSampleCall,
+  ToolAnalysisServerReport,
+  ToolAnalysisStartRequest,
+  ToolAnalysisToolReport
+} from './types.js';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,

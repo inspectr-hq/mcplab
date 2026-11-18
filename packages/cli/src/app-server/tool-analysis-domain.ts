@@ -1,7 +1,29 @@
 import type { ServerResponse } from 'node:http';
-import type { AgentConfig, EvalConfig, McpServerCatalog, ToolDef } from '@inspectr/mcplab-core';
+import type {
+  AgentConfig,
+  EvalConfig,
+  McpCatalogList,
+  McpServerCatalog,
+  McpToolSafety,
+  ToolAnalysisCallOutcome,
+  ToolAnalysisFinding,
+  ToolAnalysisModes,
+  ToolAnalysisReport,
+  ToolAnalysisSampleCall,
+  ToolAnalysisServerReport,
+  ToolAnalysisSuggestedSchemaChange,
+  ToolAnalysisToolReport,
+  ToolDef
+} from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
+  checkMcpCatalog,
+  duplicateMcpIdentifiers,
+  summarizeMcpCatalogChecks,
+  classifyMcpToolCallFailure,
+  classifyMcpToolSafety,
+  throwIfAborted,
+  withTimeoutSignal,
   estimateToolDefinitionTokens,
   getMcpResourceToolAccess,
   McpClientManager,
@@ -30,121 +52,6 @@ type JobEvent = {
   payload: Record<string, unknown>;
 };
 
-export interface ToolAnalysisFinding {
-  id: string;
-  scope:
-    | 'tool_name'
-    | 'description'
-    | 'schema'
-    | 'ergonomics'
-    | 'safety'
-    | 'eval_readiness'
-    | 'execution';
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  title: string;
-  detail: string;
-  suggestion?: string;
-}
-
-interface ToolAnalysisSuggestedSchemaChange {
-  type: 'description' | 'parameter' | 'required' | 'enum' | 'constraints' | 'examples' | 'naming';
-  summary: string;
-  before?: string;
-  after?: string;
-}
-
-interface ToolAnalysisToolReport {
-  serverName: string;
-  toolName: string;
-  publicToolName: string;
-  title?: string;
-  description?: string;
-  inputSchema?: unknown;
-  outputSchema?: unknown;
-  safetyClassification: 'read_only' | 'unsafe_or_unknown';
-  classificationReason: string;
-  metadataReview?: {
-    strengths: string[];
-    issues: ToolAnalysisFinding[];
-    suggestedDescription?: string;
-    suggestedSchemaChanges: ToolAnalysisSuggestedSchemaChange[];
-    evalReadinessNotes: string[];
-  };
-  deeperAnalysis?: {
-    attempted: boolean;
-    skippedReason?: string;
-    sampleCalls: Array<{
-      callIndex: number;
-      arguments: unknown;
-      ok: boolean;
-      durationMs?: number;
-      resultPreview?: string;
-      error?: string;
-      observations: string[];
-      issues: ToolAnalysisFinding[];
-    }>;
-    overallObservations: string[];
-  };
-  overallRecommendations: string[];
-}
-
-type ToolAnalysisSampleCall = NonNullable<
-  ToolAnalysisToolReport['deeperAnalysis']
->['sampleCalls'][number];
-
-interface ToolAnalysisServerReport {
-  serverName: string;
-  toolCountDiscovered: number;
-  toolCountAnalyzed: number;
-  toolCountSkipped: number;
-  warnings: string[];
-  tools: ToolAnalysisToolReport[];
-  tokenEstimate?: ReturnType<typeof estimateToolDefinitionTokens>;
-}
-
-export interface ToolAnalysisReport {
-  schemaVersion: 1;
-  createdAt: string;
-  assistantAgentName: string;
-  assistantAgentProvider?: string;
-  assistantAgentModel: string;
-  modes: {
-    metadataReview: boolean;
-    deeperAnalysis: boolean;
-  };
-  settings: {
-    autoRunPolicy?: 'read_only_allowlist';
-    sampleCallsPerTool?: number;
-    toolCallTimeoutMs?: number;
-    maxParallelTools?: number;
-  };
-  summary: {
-    serversAnalyzed: number;
-    toolsAnalyzed: number;
-    toolsSkipped: number;
-    issueCounts: {
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-      info: number;
-    };
-  };
-  servers: ToolAnalysisServerReport[];
-  findings: ToolAnalysisFinding[];
-  mcpServerVersions?: Record<string, string | null>;
-}
-
-interface ToolAnalysisDiscoveredTool {
-  name: string;
-  title?: string;
-  description?: string;
-  inputSchema?: unknown;
-  outputSchema?: unknown;
-  safetyClassification: 'read_only' | 'unsafe_or_unknown';
-  classificationReason: string;
-}
-
 export interface ToolAnalysisJob {
   id: string;
   status: 'running' | 'completed' | 'error' | 'stopped';
@@ -159,7 +66,7 @@ export interface ToolAnalysisJob {
 interface ToolAnalysisToolContext {
   serverName: string;
   tool: ToolDef;
-  safetyClassification: 'read_only' | 'unsafe_or_unknown';
+  safetyClassification: McpToolSafety['safetyClassification'];
   classificationReason: string;
 }
 
@@ -229,122 +136,6 @@ const TOOL_ANALYSIS_JSON_RESPONSE_TOOL = {
   inputSchema: { type: 'object', additionalProperties: true }
 } satisfies ToolDef;
 
-const TOOL_ANALYSIS_READ_PREFIXES = [
-  'get',
-  'list',
-  'search',
-  'find',
-  'describe',
-  'read',
-  'fetch',
-  'lookup',
-  'query',
-  'inspect'
-];
-
-const TOOL_ANALYSIS_UNSAFE_PREFIXES = [
-  'create',
-  'update',
-  'delete',
-  'remove',
-  'cleanup',
-  'clean',
-  'clear',
-  'drop',
-  'purge',
-  'destroy',
-  'erase',
-  'truncate',
-  'write',
-  'set',
-  'patch',
-  'post',
-  'put',
-  'execute',
-  'run',
-  'trigger'
-];
-
-export function classifyToolSafety(
-  toolName: string,
-  inputSchema?: unknown,
-  annotations?: ToolDef['annotations']
-): {
-  safetyClassification: 'read_only' | 'unsafe_or_unknown';
-  classificationReason: string;
-} {
-  const hasDestructiveHint = annotations?.destructiveHint === true;
-  const hasReadOnlyHint = annotations?.readOnlyHint === true;
-  const hasExplicitReadOnlyFalse = annotations?.readOnlyHint === false;
-  if (hasDestructiveHint) {
-    return {
-      safetyClassification: 'unsafe_or_unknown',
-      classificationReason:
-        "MCP annotations indicate destructive behavior ('destructiveHint: true')."
-    };
-  }
-  if (hasReadOnlyHint) {
-    return {
-      safetyClassification: 'read_only',
-      classificationReason: "MCP annotations indicate read-only behavior ('readOnlyHint: true')."
-    };
-  }
-
-  const hasExplicitNonDestructiveHint = annotations?.destructiveHint === false;
-  if (hasExplicitReadOnlyFalse) {
-    if (hasExplicitNonDestructiveHint) {
-      return {
-        safetyClassification: 'unsafe_or_unknown',
-        classificationReason:
-          "MCP annotations indicate non-read-only additive behavior ('readOnlyHint: false', 'destructiveHint: false')."
-      };
-    }
-    return {
-      safetyClassification: 'unsafe_or_unknown',
-      classificationReason:
-        "MCP annotations indicate non-read-only behavior ('readOnlyHint: false')."
-    };
-  }
-
-  if (hasExplicitNonDestructiveHint) {
-    return {
-      safetyClassification: 'unsafe_or_unknown',
-      classificationReason:
-        "MCP annotations indicate non-read-only additive behavior ('destructiveHint: false')."
-    };
-  }
-
-  const lower = toolName.toLowerCase();
-  const read = TOOL_ANALYSIS_READ_PREFIXES.find((p) => lower.startsWith(p));
-  const unsafe = TOOL_ANALYSIS_UNSAFE_PREFIXES.find((p) => lower.startsWith(p));
-  if (unsafe) {
-    return {
-      safetyClassification: 'unsafe_or_unknown',
-      classificationReason: `Name starts with potentially side-effectful prefix '${unsafe}'.`
-    };
-  }
-  let schemaHint = '';
-  try {
-    const schemaText = JSON.stringify(inputSchema ?? '').toLowerCase();
-    if (/(confirm|force|commit|delete|write|update)/.test(schemaText)) {
-      schemaHint = ' Schema contains possibly mutating parameter names.';
-    }
-  } catch {
-    // ignore schema stringify errors
-  }
-  if (read) {
-    return {
-      safetyClassification: 'read_only',
-      classificationReason: `Name starts with read-only prefix '${read}'.${schemaHint}`.trim()
-    };
-  }
-  return {
-    safetyClassification: 'unsafe_or_unknown',
-    classificationReason:
-      `Tool name does not match read-only allowlist prefixes.${schemaHint}`.trim()
-  };
-}
-
 function normalizeToolAnalysisFinding(
   raw: unknown,
   fallbackPrefix: string,
@@ -402,11 +193,13 @@ function parseJsonFromToolCalls(response: {
 async function chatJsonWithAgent(
   agent: AgentConfig,
   system: string,
-  userPrompt: string
+  userPrompt: string,
+  signal?: AbortSignal
 ): Promise<unknown> {
   const first = await chatWithAgent({
     agent,
     system,
+    signal,
     tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
     messages: [
       {
@@ -423,6 +216,7 @@ async function chatJsonWithAgent(
     const retry = await chatWithAgent({
       agent,
       system,
+      signal,
       tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
       messages: [
         {
@@ -544,6 +338,15 @@ interface DiscoveredMcpServer {
   tools: ToolAnalysisToolContext[];
   tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
   catalog?: McpServerCatalog;
+  toolListing: McpCatalogList<ToolDef>;
+  duplicateToolNames: Set<string>;
+}
+
+function classifyDiscoveredTool(server: DiscoveredMcpServer, tool: ToolDef): McpToolSafety {
+  return classifyMcpToolSafety(tool, {
+    duplicateName: server.duplicateToolNames.has(tool.name),
+    complete: server.toolListing.status === 'ready'
+  });
 }
 
 export async function discoverMcpToolsForServers(
@@ -554,6 +357,7 @@ export async function discoverMcpToolsForServers(
     tokenEstimateModel?: string;
     includeCatalog?: boolean;
     includeToolResources?: boolean;
+    signal?: AbortSignal;
   }
 ): Promise<{
   mcp: McpClientManager;
@@ -562,102 +366,160 @@ export async function discoverMcpToolsForServers(
   const mcp = new McpClientManager();
   const tokenEstimateModel = options?.tokenEstimateModel ?? 'unknown-model';
   const discovered: DiscoveredMcpServer[] = [];
-  for (const serverName of serverNames) {
-    const server = serversByName[serverName];
-    const entry: DiscoveredMcpServer = {
-      serverName,
-      warnings: [],
-      tools: [],
-      tokenEstimate: estimateToolDefinitionTokens([], tokenEstimateModel)
-    };
-    discovered.push(entry);
-    if (!Object.hasOwn(serversByName, serverName) || !server) {
-      entry.warnings.push(`Server '${serverName}' not found.`);
-      continue;
-    }
-    try {
-      await mcp.connectAll({ [serverName]: server }, undefined, {
-        serverAuthHeaders: options?.serverAuthHeaders
-      });
-    } catch (error: unknown) {
-      entry.warnings.push(
-        `Failed to connect: ${error instanceof Error ? error.message : String(error)}`
-      );
-      continue;
-    }
+  const signal = options?.signal;
+  try {
+    for (const serverName of serverNames) {
+      throwIfAborted(signal);
+      const server = serversByName[serverName];
+      const entry: DiscoveredMcpServer = {
+        serverName,
+        warnings: [],
+        tools: [],
+        toolListing: { status: 'error', message: 'Server unavailable.' },
+        duplicateToolNames: new Set(),
+        tokenEstimate: estimateToolDefinitionTokens([], tokenEstimateModel)
+      };
+      discovered.push(entry);
+      if (!Object.hasOwn(serversByName, serverName) || !server) {
+        const message = `Server '${serverName}' not found.`;
+        entry.toolListing = { status: 'error', message };
+        entry.warnings.push(message);
+        continue;
+      }
+      try {
+        await mcp.connectAll({ [serverName]: server }, signal, {
+          serverAuthHeaders: options?.serverAuthHeaders
+        });
+      } catch (error: unknown) {
+        throwIfAborted(signal);
+        const message = `Failed to connect: ${error instanceof Error ? error.message : String(error)}`;
+        entry.toolListing = { status: 'error', message };
+        entry.warnings.push(message);
+        continue;
+      }
 
-    const catalog = options?.includeCatalog ? mcp.listCatalog(serverName) : undefined;
-    let tools: ToolDef[] = [];
-    try {
-      tools =
-        !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
-          ? await mcp.listTools(serverName)
-          : [];
-      entry.tools = tools.map((tool) => {
-        const safety = classifyToolSafety(tool.name, tool.inputSchema, tool.annotations);
-        return {
-          serverName,
-          tool,
-          safetyClassification: safety.safetyClassification,
-          classificationReason: safety.classificationReason
-        };
-      });
-      entry.tokenEstimate = estimateToolDefinitionTokens(
-        tools.map((tool) => ({
-          name: tool.name,
-          title: tool.title,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          outputSchema: tool.outputSchema
-        })),
-        tokenEstimateModel
-      );
-    } catch (error: unknown) {
-      entry.warnings.push(
-        `Failed to load tools: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-    const serverCatalog = await catalog;
-    if (!serverCatalog) continue;
-    const { canList, readArgument } = getMcpResourceToolAccess(tools);
-    if (canList) {
-      serverCatalog.toolResources = { status: 'available' };
-      if (options?.includeToolResources) {
-        try {
-          const result = await mcp.callTool(serverName, MCP_LIST_RESOURCES_TOOL, {});
-          serverCatalog.toolResources = {
-            status: 'ready',
-            canRead: Boolean(readArgument),
-            ...parseMcpResourceToolCatalog(result)
-          };
-        } catch (error) {
-          serverCatalog.toolResources = {
-            status: 'error',
-            message: error instanceof Error ? error.message : String(error)
-          };
+      const serverCatalog = options?.includeCatalog
+        ? await mcp.listCatalog(serverName, signal)
+        : undefined;
+      let tools: ToolDef[] = [];
+      try {
+        entry.toolListing =
+          !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
+            ? await mcp.listToolsWithCoverage(serverName, signal)
+            : { status: 'unsupported' };
+        tools = 'items' in entry.toolListing ? entry.toolListing.items : [];
+        if (entry.toolListing.status === 'partial') {
+          entry.warnings.push(`Incomplete tool listing. ${entry.toolListing.message}`);
+        }
+        entry.duplicateToolNames = duplicateMcpIdentifiers(tools.map((tool) => tool.name));
+        const seen = new Set<string>();
+        entry.tools = tools.flatMap((tool) => {
+          if (seen.has(tool.name)) return [];
+          seen.add(tool.name);
+          const safety = classifyDiscoveredTool(entry, tool);
+          return [
+            {
+              serverName,
+              tool,
+              safetyClassification: safety.safetyClassification,
+              classificationReason: safety.classificationReason
+            }
+          ];
+        });
+        entry.tokenEstimate = estimateToolDefinitionTokens(
+          entry.tools.map(({ tool }) => ({
+            name: tool.name,
+            title: tool.title,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            outputSchema: tool.outputSchema
+          })),
+          tokenEstimateModel
+        );
+      } catch (error: unknown) {
+        throwIfAborted(signal);
+        const message = error instanceof Error ? error.message : String(error);
+        entry.toolListing = { status: 'error', message };
+        entry.warnings.push(`Failed to load tools: ${message}`);
+      }
+      if (!serverCatalog) continue;
+      const { canList, readArgument } = getMcpResourceToolAccess(tools);
+      if (canList) {
+        serverCatalog.toolResources = { status: 'available' };
+        if (options?.includeToolResources) {
+          try {
+            const result = await mcp.callTool(serverName, MCP_LIST_RESOURCES_TOOL, {});
+            serverCatalog.toolResources = {
+              status: 'ready',
+              canRead: Boolean(readArgument),
+              ...parseMcpResourceToolCatalog(result)
+            };
+          } catch (error) {
+            throwIfAborted(signal);
+            serverCatalog.toolResources = {
+              status: 'error',
+              message: error instanceof Error ? error.message : String(error)
+            };
+          }
         }
       }
+      entry.catalog = withMcpCatalogTokenEstimates(serverCatalog, tokenEstimateModel);
     }
-    entry.catalog = withMcpCatalogTokenEstimates(serverCatalog, tokenEstimateModel);
+    return { mcp, servers: discovered };
+  } catch (error) {
+    await mcp.disconnectAll();
+    throw error;
   }
-  return { mcp, servers: discovered };
 }
 
-function timeoutPromise<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
-      timeoutMs
-    );
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  }) as Promise<T>;
-}
-
-function summarizeToolResultForReport(result: unknown, maxChars = 8000): string {
-  return truncateJson(result, maxChars);
+async function sampleMcpTool(params: {
+  mcp: McpClientManager;
+  server: string;
+  tool: string;
+  args: unknown;
+  timeoutMs: number;
+  jobSignal: AbortSignal;
+}): Promise<
+  | { outcome: 'success'; durationMs: number; result: unknown }
+  | {
+      outcome: Exclude<ToolAnalysisCallOutcome, 'success'>;
+      durationMs: number;
+      error: string;
+      resultPreview?: string;
+    }
+> {
+  const { mcp, server, tool, args, timeoutMs, jobSignal } = params;
+  const deadline = withTimeoutSignal(jobSignal, timeoutMs);
+  const started = Date.now();
+  try {
+    const result = await mcp.callTool(server, tool, args, { signal: deadline.signal });
+    throwIfAborted(deadline.signal);
+    const durationMs = Date.now() - started;
+    if (result?.isError === true) {
+      return {
+        outcome: 'tool_error',
+        durationMs,
+        error: 'The server returned isError: true.',
+        resultPreview: truncateJson(result, 8000)
+      };
+    }
+    return { outcome: 'success', durationMs, result };
+  } catch (error) {
+    throwIfAborted(jobSignal);
+    const outcome = deadline.timeoutSignal.aborted ? 'timeout' : classifyMcpToolCallFailure(error);
+    return {
+      outcome,
+      durationMs: Date.now() - started,
+      error:
+        outcome === 'timeout'
+          ? `${server}::${tool} timed out after ${timeoutMs}ms`
+          : error instanceof Error
+            ? error.message
+            : String(error)
+    };
+  } finally {
+    deadline.dispose();
+  }
 }
 
 export async function runToolAnalysisJob(params: {
@@ -668,7 +530,7 @@ export async function runToolAnalysisJob(params: {
   oauthSessionManager: OAuthSessionManager;
   hostHeader?: string;
   selectedToolsByServer?: Record<string, string[]>;
-  modes: { metadataReview: boolean; deeperAnalysis: boolean };
+  modes: ToolAnalysisModes;
   deeper: {
     autoRunPolicy: 'read_only_allowlist';
     sampleCallsPerTool: number;
@@ -678,25 +540,34 @@ export async function runToolAnalysisJob(params: {
 }): Promise<void> {
   const { job, settings, serverNames, selectedToolsByServer, modes, deeper, maxParallelTools } =
     params;
+  const signal = job.abortController.signal;
+  throwIfAborted(signal);
   const libraries = readLibraries(settings.librariesDir);
-  const selectedAssistantAgentName = pickDefaultAssistantAgentName({
-    requested: params.requestedAssistantAgentName,
-    settingsDefault: settings.assistantAgentName,
-    agentNames: Object.keys(libraries.agents)
-  });
-  if (!selectedAssistantAgentName) {
-    throw new Error(
-      'No assistant agent available. Configure one in Settings or add a library agent.'
-    );
-  }
-  const agentConfig = resolveAssistantAgentFromLibraries(libraries, selectedAssistantAgentName);
-  addJobEvent(job, {
-    type: 'log',
-    ts: new Date().toISOString(),
-    payload: {
-      message: `Using assistant agent ${selectedAssistantAgentName} (${agentConfig.provider}/${agentConfig.model})`
+  let selectedAssistantAgentName: string | undefined;
+  if (modes.metadataReview || modes.deeperAnalysis) {
+    selectedAssistantAgentName = pickDefaultAssistantAgentName({
+      requested: params.requestedAssistantAgentName,
+      settingsDefault: settings.assistantAgentName,
+      agentNames: Object.keys(libraries.agents)
+    });
+    if (!selectedAssistantAgentName) {
+      throw new Error(
+        'No assistant agent available. Configure one in Settings or add a library agent.'
+      );
     }
-  });
+  }
+  const agentConfig = selectedAssistantAgentName
+    ? resolveAssistantAgentFromLibraries(libraries, selectedAssistantAgentName)
+    : undefined;
+  if (agentConfig) {
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Using assistant agent ${selectedAssistantAgentName} (${agentConfig.provider}/${agentConfig.model})`
+      }
+    });
+  }
 
   const oauthServers = serverNames.filter(
     (serverName) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
@@ -717,7 +588,12 @@ export async function runToolAnalysisJob(params: {
   const { mcp, servers: discoveredServers } = await discoverMcpToolsForServers(
     libraries.servers,
     serverNames,
-    { serverAuthHeaders, tokenEstimateModel: agentConfig.model }
+    {
+      serverAuthHeaders,
+      tokenEstimateModel: agentConfig?.model,
+      includeCatalog: modes.catalogChecks,
+      signal
+    }
   );
   const mcpServerVersions = mcp.getServerVersions();
   try {
@@ -727,15 +603,33 @@ export async function runToolAnalysisJob(params: {
     let toolsSkipped = 0;
 
     for (const discovered of discoveredServers) {
-      if (job.abortController.signal.aborted) throw new Error('Tool analysis aborted by user');
-      const requestedToolNames = selectedToolsByServer?.[discovered.serverName];
+      throwIfAborted(signal);
+      const requestedToolNames = agentConfig
+        ? selectedToolsByServer?.[discovered.serverName]
+        : undefined;
       const requestedSet = requestedToolNames ? new Set(requestedToolNames) : null;
-      const selectedTools = requestedSet
-        ? discovered.tools.filter((t) => requestedSet.has(t.tool.name))
-        : discovered.tools;
+      let selectedTools: ToolAnalysisToolContext[] = [];
+      if (agentConfig) {
+        selectedTools = requestedSet
+          ? discovered.tools.filter((t) => requestedSet.has(t.tool.name))
+          : discovered.tools;
+      }
+      const catalogChecks = modes.catalogChecks
+        ? checkMcpCatalog(discovered.toolListing, discovered.catalog)
+        : undefined;
       const missingRequested = requestedSet
         ? requestedToolNames!.filter((name) => !discovered.tools.some((t) => t.tool.name === name))
         : [];
+      if (catalogChecks) {
+        const coverage = summarizeMcpCatalogChecks(catalogChecks);
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: `Checked ${coverage.itemsChecked} catalog entries on ${discovered.serverName}.`
+          }
+        });
+      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),
@@ -748,8 +642,9 @@ export async function runToolAnalysisJob(params: {
       const perToolFindings: ToolAnalysisFinding[][] = new Array(selectedTools.length);
       const perToolSkipped: boolean[] = new Array(selectedTools.length).fill(false);
       const analyzeToolAtIndex = async (toolIndex: number) => {
+        if (!agentConfig) return;
         const toolCtx = selectedTools[toolIndex];
-        if (job.abortController.signal.aborted) throw new Error('Tool analysis aborted by user');
+        throwIfAborted(signal);
         addJobEvent(job, {
           type: 'log',
           ts: new Date().toISOString(),
@@ -793,7 +688,8 @@ export async function runToolAnalysisJob(params: {
                   inputSchema: toolCtx.tool.inputSchema,
                   outputSchema: toolCtx.tool.outputSchema
                 })
-              )
+              ),
+              signal
             )) as MetadataReviewJson;
             const issues = Array.isArray(metaJson.issues)
               ? metaJson.issues.map((item: unknown, idx: number) =>
@@ -865,13 +761,11 @@ export async function runToolAnalysisJob(params: {
         }
 
         if (modes.deeperAnalysis) {
-          const canAutoRun =
-            deeper.autoRunPolicy !== 'read_only_allowlist' ||
-            toolCtx.safetyClassification === 'read_only';
-          if (!canAutoRun) {
+          const safety = classifyDiscoveredTool(discovered, toolCtx.tool);
+          if (safety.safetyClassification !== 'read_only') {
             baseReport.deeperAnalysis = {
               attempted: false,
-              skippedReason: `Skipped by safety policy (${deeper.autoRunPolicy}): ${toolCtx.classificationReason}`,
+              skippedReason: `Skipped by safety policy (${deeper.autoRunPolicy}): ${safety.classificationReason}`,
               sampleCalls: [],
               overallObservations: []
             };
@@ -900,87 +794,29 @@ export async function runToolAnalysisJob(params: {
                     outputSchema: toolCtx.tool.outputSchema,
                     maxCalls: deeper.sampleCallsPerTool
                   })
-                )
+                ),
+                signal
               )) as SamplePlanJson;
               const suggestedSamples = Array.isArray(samplePlan.sampleCalls)
                 ? samplePlan.sampleCalls.slice(0, deeper.sampleCallsPerTool)
                 : [{ arguments: {} }];
               for (let idx = 0; idx < suggestedSamples.length; idx += 1) {
                 const suggestedArgs = suggestedSamples[idx]?.arguments ?? {};
-                const started = Date.now();
-                try {
-                  const result = await timeoutPromise(
-                    mcp.callTool(discovered.serverName, toolCtx.tool.name, suggestedArgs),
-                    deeper.toolCallTimeoutMs,
-                    `${discovered.serverName}::${toolCtx.tool.name}`
-                  );
-                  const durationMs = Date.now() - started;
-                  const resultPreview = summarizeToolResultForReport(result, 8000);
-                  let execReview: ExecutionReviewJson = {};
-                  try {
-                    execReview = (await chatJsonWithAgent(
-                      agentConfig,
-                      toolAnalysisExecutionReviewSystemPrompt(),
-                      JSON.stringify(
-                        buildToolAnalysisExecutionReviewPayload({
-                          serverName: discovered.serverName,
-                          toolName: toolCtx.tool.name,
-                          title: toolCtx.tool.title,
-                          arguments: suggestedArgs,
-                          resultPreview: truncateJson(result, 4000),
-                          description: toolCtx.tool.description,
-                          inputSchema: toolCtx.tool.inputSchema,
-                          outputSchema: toolCtx.tool.outputSchema
-                        })
-                      )
-                    )) as ExecutionReviewJson;
-                  } catch (error: unknown) {
-                    execReview = {
-                      observations: [
-                        `Execution review failed: ${
-                          error instanceof Error ? error.message : String(error)
-                        }`
-                      ],
-                      issues: [],
-                      recommendations: []
-                    };
-                  }
-                  const issues = Array.isArray(execReview.issues)
-                    ? execReview.issues.map((it: unknown, j: number) =>
-                        normalizeToolAnalysisFinding(
-                          {
-                            ...((it && typeof it === 'object'
-                              ? (it as JsonObject)
-                              : {}) as JsonObject),
-                            scope:
-                              it && typeof it === 'object' && 'scope' in it
-                                ? (it as JsonObject).scope
-                                : 'execution'
-                          },
-                          `exec-${discovered.serverName}-${toolCtx.tool.name}-${idx}`,
-                          j
-                        )
-                      )
-                    : [];
+                const call = await sampleMcpTool({
+                  mcp,
+                  server: discovered.serverName,
+                  tool: toolCtx.tool.name,
+                  args: suggestedArgs,
+                  timeoutMs: deeper.toolCallTimeoutMs,
+                  jobSignal: signal
+                });
+                const { outcome, durationMs } = call;
+                if (call.outcome !== 'success') {
                   sampleCalls.push({
-                    callIndex: idx + 1,
-                    arguments: suggestedArgs,
-                    ok: true,
-                    durationMs,
-                    resultPreview,
-                    observations: clampStringArray(execReview.observations),
-                    issues
-                  });
-                  baseReport.overallRecommendations.push(
-                    ...clampStringArray(execReview.recommendations)
-                  );
-                } catch (error: unknown) {
-                  sampleCalls.push({
+                    ...call,
                     callIndex: idx + 1,
                     arguments: suggestedArgs,
                     ok: false,
-                    durationMs: Date.now() - started,
-                    error: error instanceof Error ? error.message : String(error),
                     observations: [],
                     issues: [
                       normalizeToolAnalysisFinding(
@@ -988,14 +824,78 @@ export async function runToolAnalysisJob(params: {
                           scope: 'execution',
                           severity: 'medium',
                           title: 'Sample call failed',
-                          detail: error instanceof Error ? error.message : String(error)
+                          detail: call.error
                         },
                         `exec-fail-${discovered.serverName}-${toolCtx.tool.name}`,
                         idx
                       )
                     ]
                   });
+                  continue;
                 }
+                const { result } = call;
+                const resultPreview = truncateJson(result, 8000);
+                let execReview: ExecutionReviewJson = {};
+                try {
+                  execReview = (await chatJsonWithAgent(
+                    agentConfig,
+                    toolAnalysisExecutionReviewSystemPrompt(),
+                    JSON.stringify(
+                      buildToolAnalysisExecutionReviewPayload({
+                        serverName: discovered.serverName,
+                        toolName: toolCtx.tool.name,
+                        title: toolCtx.tool.title,
+                        arguments: suggestedArgs,
+                        resultPreview: truncateJson(result, 4000),
+                        description: toolCtx.tool.description,
+                        inputSchema: toolCtx.tool.inputSchema,
+                        outputSchema: toolCtx.tool.outputSchema
+                      })
+                    ),
+                    signal
+                  )) as ExecutionReviewJson;
+                } catch (error: unknown) {
+                  throwIfAborted(signal);
+                  execReview = {
+                    observations: [
+                      `Execution review failed: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`
+                    ],
+                    issues: [],
+                    recommendations: []
+                  };
+                }
+                const issues = Array.isArray(execReview.issues)
+                  ? execReview.issues.map((it: unknown, j: number) =>
+                      normalizeToolAnalysisFinding(
+                        {
+                          ...((it && typeof it === 'object'
+                            ? (it as JsonObject)
+                            : {}) as JsonObject),
+                          scope:
+                            it && typeof it === 'object' && 'scope' in it
+                              ? (it as JsonObject).scope
+                              : 'execution'
+                        },
+                        `exec-${discovered.serverName}-${toolCtx.tool.name}-${idx}`,
+                        j
+                      )
+                    )
+                  : [];
+                sampleCalls.push({
+                  callIndex: idx + 1,
+                  arguments: suggestedArgs,
+                  ok: true,
+                  outcome,
+                  durationMs,
+                  resultPreview,
+                  observations: clampStringArray(execReview.observations),
+                  issues
+                });
+                baseReport.overallRecommendations.push(
+                  ...clampStringArray(execReview.recommendations)
+                );
               }
               overallObservations = sampleCalls
                 .flatMap((call: ToolAnalysisSampleCall) => call.observations)
@@ -1006,6 +906,7 @@ export async function runToolAnalysisJob(params: {
                 overallObservations
               };
             } catch (error: unknown) {
+              throwIfAborted(signal);
               baseReport.deeperAnalysis = {
                 attempted: true,
                 sampleCalls: [
@@ -1060,8 +961,7 @@ export async function runToolAnalysisJob(params: {
       await Promise.all(
         Array.from({ length: concurrency }, async () => {
           while (true) {
-            if (job.abortController.signal.aborted)
-              throw new Error('Tool analysis aborted by user');
+            throwIfAborted(signal);
             const current = nextToolIndex;
             nextToolIndex += 1;
             if (current >= selectedTools.length) return;
@@ -1085,12 +985,13 @@ export async function runToolAnalysisJob(params: {
           inputSchema: tool.inputSchema,
           outputSchema: tool.outputSchema
         })),
-        agentConfig.model
+        agentConfig?.model ?? 'unknown-model'
       );
 
       serverReports.push({
         serverName: discovered.serverName,
-        toolCountDiscovered: discovered.tools.length,
+        toolCountDiscovered:
+          'items' in discovered.toolListing ? discovered.toolListing.items.length : 0,
         toolCountAnalyzed: toolReports.length,
         toolCountSkipped: toolReports.filter(
           (tool) => tool.deeperAnalysis && tool.deeperAnalysis.attempted === false
@@ -1100,16 +1001,18 @@ export async function runToolAnalysisJob(params: {
           ...missingRequested.map((name) => `Requested tool not found: ${name}`)
         ],
         tools: toolReports,
-        tokenEstimate: analyzedTokenEstimate
+        tokenEstimate: analyzedTokenEstimate,
+        ...(catalogChecks ? { catalogChecks } : {})
       });
     }
 
+    throwIfAborted(signal);
     job.result = {
       schemaVersion: 1,
       createdAt: new Date().toISOString(),
       assistantAgentName: selectedAssistantAgentName,
-      assistantAgentProvider: agentConfig.provider,
-      assistantAgentModel: agentConfig.model,
+      assistantAgentProvider: agentConfig?.provider,
+      assistantAgentModel: agentConfig?.model,
       modes,
       settings: {
         autoRunPolicy: modes.deeperAnalysis ? deeper.autoRunPolicy : undefined,
@@ -1121,13 +1024,20 @@ export async function runToolAnalysisJob(params: {
         serversAnalyzed: serverReports.length,
         toolsAnalyzed: serverReports.reduce((sum, s) => sum + s.toolCountAnalyzed, 0),
         toolsSkipped,
-        issueCounts
+        issueCounts,
+        ...(modes.catalogChecks
+          ? {
+              catalogChecks: summarizeMcpCatalogChecks(
+                serverReports.flatMap((server) => server.catalogChecks ?? [])
+              )
+            }
+          : {})
       },
       servers: serverReports,
       findings: allFindings,
       mcpServerVersions: Object.keys(mcpServerVersions).length > 0 ? mcpServerVersions : undefined
     };
   } finally {
-    // McpClientManager currently has no explicit close lifecycle API.
+    await mcp.disconnectAll();
   }
 }

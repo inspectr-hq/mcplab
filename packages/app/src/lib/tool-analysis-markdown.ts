@@ -1,4 +1,9 @@
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
+import {
+  CATALOG_SECTION_LABELS,
+  CATALOG_STATUS_LABELS,
+  toolAnalysisCallLabel
+} from './tool-analysis-utils';
 
 export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string {
   const lines: string[] = [];
@@ -14,8 +19,8 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
   };
   lines.push(`# MCP Tool Analysis Report`, '');
   lines.push(`- Created: ${report.createdAt}`);
-  lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
-  lines.push(`- Assistant Model: ${report.assistantAgentModel}`);
+  if (report.assistantAgentName) lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
+  if (report.assistantAgentModel) lines.push(`- Assistant Model: ${report.assistantAgentModel}`);
   if (report.mcpServerVersions && Object.keys(report.mcpServerVersions).length > 0) {
     const versionStr = Object.entries(report.mcpServerVersions)
       .map(([name, v]) => `${name}: ${v ?? 'unknown'}`)
@@ -24,6 +29,7 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
   }
   lines.push(
     `- Modes: ${[
+      report.modes.catalogChecks ? 'catalog checks' : null,
       report.modes.metadataReview ? 'metadata review' : null,
       report.modes.deeperAnalysis ? 'deeper analysis' : null
     ]
@@ -32,12 +38,32 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
   );
   lines.push('', `## Summary`);
   lines.push(`- Servers analyzed: ${report.summary.serversAnalyzed}`);
-  lines.push(`- Tools analyzed: ${report.summary.toolsAnalyzed}`);
-  lines.push(`- Tools skipped: ${report.summary.toolsSkipped}`, '');
+  if (report.summary.catalogChecks)
+    lines.push(`- Catalog entries checked: ${report.summary.catalogChecks.itemsChecked}`);
+  if (report.modes.metadataReview || report.modes.deeperAnalysis) {
+    lines.push(`- Tools analyzed: ${report.summary.toolsAnalyzed}`);
+    lines.push(`- Tools skipped: ${report.summary.toolsSkipped}`);
+  }
+  lines.push('');
   for (const server of report.servers) {
     lines.push(`## Server: ${server.serverName}`);
     if (server.warnings.length > 0) {
       lines.push(...server.warnings.map((w) => `- Warning: ${w}`), '');
+    }
+    if (server.catalogChecks) {
+      lines.push('### Catalog checks');
+      for (const check of server.catalogChecks) {
+        lines.push(
+          `- ${CATALOG_SECTION_LABELS[check.kind]} · ${CATALOG_STATUS_LABELS[check.status]} · ${check.itemsChecked} checked`
+        );
+        if (check.message) lines.push(`  - ${check.message}`);
+        for (const finding of check.findings) {
+          lines.push(
+            `  - [${CATALOG_STATUS_LABELS[finding.status]}] ${finding.item} · ${finding.path} · ${finding.message}`
+          );
+        }
+      }
+      lines.push('');
     }
     for (const tool of server.tools) {
       lines.push(`### ${tool.publicToolName}`);
@@ -60,7 +86,7 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
           lines.push(`- Deeper analysis sample calls: ${tool.deeperAnalysis.sampleCalls.length}`);
           for (const sample of tool.deeperAnalysis.sampleCalls) {
             lines.push(
-              `  - Call ${sample.callIndex}: ${sample.ok ? 'ok' : 'error'}${
+              `  - Call ${sample.callIndex}: ${toolAnalysisCallLabel(sample)}${
                 sample.durationMs ? ` (${sample.durationMs}ms)` : ''
               }`
             );

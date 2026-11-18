@@ -1,3 +1,5 @@
+import type { ToolDefinitionTokenEstimates } from './tool-definition-token-estimates.js';
+
 export interface EvaluationDecisionConfig {
   /** Omitted means enabled for compatibility with existing saved configurations. */
   enabled?: boolean;
@@ -793,6 +795,212 @@ export interface ToolDef {
     openWorldHint?: boolean;
     [key: string]: unknown;
   };
+}
+
+export interface McpToolSafety {
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
+  classificationReason: string;
+  contradictionField?: 'name' | 'description' | 'annotations.destructiveHint';
+}
+
+export interface ToolAnalysisFinding {
+  id: string;
+  scope:
+    | 'tool_name'
+    | 'description'
+    | 'schema'
+    | 'ergonomics'
+    | 'safety'
+    | 'eval_readiness'
+    | 'execution';
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  title: string;
+  detail: string;
+  suggestion?: string;
+}
+
+export interface ToolAnalysisSuggestedSchemaChange {
+  type: 'description' | 'parameter' | 'required' | 'enum' | 'constraints' | 'examples' | 'naming';
+  summary: string;
+  before?: string;
+  after?: string;
+}
+
+export interface ToolAnalysisToolReport {
+  serverName: string;
+  toolName: string;
+  publicToolName: string;
+  title?: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  safetyClassification: McpToolSafety['safetyClassification'];
+  classificationReason: string;
+  metadataReview?: {
+    strengths: string[];
+    issues: ToolAnalysisFinding[];
+    suggestedDescription?: string;
+    suggestedSchemaChanges: ToolAnalysisSuggestedSchemaChange[];
+    evalReadinessNotes: string[];
+  };
+  deeperAnalysis?: {
+    attempted: boolean;
+    skippedReason?: string;
+    sampleCalls: ToolAnalysisSampleCall[];
+    overallObservations: string[];
+  };
+  overallRecommendations: string[];
+}
+
+export type McpToolCallFailure = 'schema_error' | 'protocol_error' | 'transport_error' | 'timeout';
+
+export type ToolAnalysisCallOutcome = 'success' | 'tool_error' | McpToolCallFailure;
+
+export type McpErrorIndicator = 'credential' | 'internal_details';
+
+export interface ToolAnalysisSampleCall {
+  callIndex: number;
+  arguments: unknown;
+  ok: boolean;
+  outcome?: ToolAnalysisCallOutcome;
+  durationMs?: number;
+  resultPreview?: string;
+  error?: string;
+  errorIndicators?: McpErrorIndicator[];
+  observations: string[];
+  issues: ToolAnalysisFinding[];
+}
+
+export interface ToolAnalysisServerReport {
+  serverName: string;
+  toolCountDiscovered: number;
+  toolCountAnalyzed: number;
+  toolCountSkipped: number;
+  warnings: string[];
+  tools: ToolAnalysisToolReport[];
+  tokenEstimate?: ToolDefinitionTokenEstimates;
+  catalogChecks?: McpCatalogCheck[];
+  health?: McpHealthReport;
+}
+
+export interface ToolAnalysisModes {
+  metadataReview: boolean;
+  deeperAnalysis: boolean;
+  catalogChecks?: boolean;
+}
+
+export type McpCatalogCheckStatus = 'pass' | 'warning' | 'fail' | 'skipped';
+
+export interface McpCatalogCheckFinding {
+  code?: 'description' | 'safety' | 'instruction';
+  status: 'warning' | 'fail';
+  item: string;
+  path: string;
+  message: string;
+}
+
+export interface McpCatalogCheck {
+  kind: 'tools' | 'resources' | 'resource_templates' | 'prompts' | 'skills' | 'tool_resources';
+  status: McpCatalogCheckStatus;
+  itemsChecked: number;
+  message?: string;
+  findings: McpCatalogCheckFinding[];
+}
+
+export interface McpCatalogCheckSummary {
+  itemsChecked: number;
+  statusCounts: Record<McpCatalogCheckStatus, number>;
+}
+
+export interface McpHealthFinding {
+  status: 'warning' | 'fail' | 'skipped';
+  item: string;
+  path?: string;
+  message: string;
+}
+
+export interface McpHealthCheck {
+  id: string;
+  title: string;
+  status: McpCatalogCheckStatus;
+  detail: string;
+  findings?: McpHealthFinding[];
+}
+
+export interface McpHealthReport {
+  endpoint?: string;
+  implementation?: { name: string; version?: string };
+  protocolVersion?: string;
+  transport?: 'streamable-http';
+  score: number | null;
+  checkedCount: number;
+  toolsRun: number;
+  toolCount: number;
+  partialListing?: boolean;
+  timings: { connectMs?: number; listMs?: number; averageCallMs?: number };
+  checks: McpHealthCheck[];
+}
+
+export interface ToolAnalysisReport {
+  schemaVersion: 1;
+  createdAt: string;
+  assistantAgentName?: string;
+  assistantAgentProvider?: string;
+  assistantAgentModel?: string;
+  modes: ToolAnalysisModes;
+  settings: {
+    autoRunPolicy?: 'read_only_allowlist';
+    sampleCallsPerTool?: number;
+    toolCallTimeoutMs?: number;
+    maxParallelTools?: number;
+  };
+  summary: {
+    serversAnalyzed: number;
+    toolsAnalyzed: number;
+    toolsSkipped: number;
+    catalogChecks?: McpCatalogCheckSummary;
+    issueCounts: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      info: number;
+    };
+  };
+  servers: ToolAnalysisServerReport[];
+  findings: ToolAnalysisFinding[];
+  mcpServerVersions?: Record<string, string | null>;
+}
+
+export interface ToolAnalysisStartRequest {
+  assistantAgentName?: string;
+  serverNames: string[];
+  selectedToolsByServer?: Record<string, string[]>;
+  maxParallelTools?: number;
+  modes: ToolAnalysisModes;
+  deeperAnalysisOptions?: {
+    autoRunPolicy: 'read_only_allowlist';
+    sampleCallsPerTool?: number;
+    toolCallTimeoutMs?: number;
+  };
+}
+
+export interface SavedToolAnalysisReportRecord {
+  recordVersion: 1;
+  reportId: string;
+  createdAt: string;
+  sourceJobId: string;
+  serverNames: string[];
+  report: ToolAnalysisReport;
+}
+
+export interface ToolAnalysisResultSummary extends Pick<
+  ToolAnalysisReport,
+  'assistantAgentName' | 'assistantAgentModel' | 'mcpServerVersions' | 'modes' | 'summary'
+> {
+  reportId: string;
+  createdAt: string;
+  serverNames: string[];
 }
 
 export interface ToolCall {

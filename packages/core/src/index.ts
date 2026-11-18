@@ -63,7 +63,14 @@ export {
   formatToolSequenceLabel,
   type ToolInputAssertionFailureKind
 } from './eval.js';
-export { McpClientManager } from './mcp.js';
+export { McpClientManager, classifyMcpToolCallFailure } from './mcp.js';
+export {
+  checkMcpCatalog,
+  duplicateMcpIdentifiers,
+  summarizeMcpCatalogChecks
+} from './mcp-catalog-checks.js';
+export { buildMcpHealthReport, inspectMcpError } from './mcp-health.js';
+export { classifyMcpToolSafety } from './mcp-tool-safety.js';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,
@@ -109,7 +116,7 @@ export {
 } from './agent.js';
 export { testAgentConnection } from './agent-connection.js';
 export { formatAssistantToolName } from './assistant-tools.js';
-export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
+export { createAbortError, isAbortError, throwIfAborted, withTimeoutSignal } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
 export * from './run-directory-snapshots.js';

@@ -59,7 +59,59 @@ const report: ToolAnalysisReport = {
   ]
 };
 
+const catalogReport: ToolAnalysisReport = {
+  ...report,
+  assistantAgentName: undefined,
+  assistantAgentModel: undefined,
+  modes: { catalogChecks: true, metadataReview: false, deeperAnalysis: false },
+  summary: {
+    ...report.summary,
+    toolsAnalyzed: 0,
+    catalogChecks: { itemsChecked: 1, statusCounts: { pass: 0, warning: 1, fail: 0, skipped: 1 } }
+  },
+  servers: [
+    {
+      ...report.servers[0],
+      tools: [],
+      toolCountAnalyzed: 0,
+      catalogChecks: [
+        {
+          kind: 'prompts',
+          status: 'warning',
+          itemsChecked: 1,
+          findings: [
+            {
+              status: 'warning',
+              item: 'review',
+              path: '/description',
+              message: 'Description is missing.'
+            }
+          ]
+        },
+        {
+          kind: 'tool_resources',
+          status: 'skipped',
+          itemsChecked: 0,
+          findings: [],
+          message: 'Listing these resources requires executing a tool.'
+        }
+      ]
+    }
+  ]
+};
+
 describe('toolAnalysisReportToMarkdown', () => {
+  it('exports catalog findings and skip reasons without assistant fields', () => {
+    const md = toolAnalysisReportToMarkdown(catalogReport);
+    expect(md).toContain('Prompts · Warning · 1 checked');
+    expect(md).toContain('review · /description · Description is missing.');
+    expect(md).toContain('Listing these resources requires executing a tool.');
+    expect(md).not.toContain('Assistant Agent');
+    expect(JSON.parse(JSON.stringify(catalogReport)).servers[0].catalogChecks).toEqual(
+      catalogReport.servers[0].catalogChecks
+    );
+  });
+
   it('does not throw when a tool schema contains a circular reference', () => {
     const circular: Record<string, unknown> = { type: 'object' };
     circular['self'] = circular;
@@ -84,6 +136,18 @@ describe('toolAnalysisReportToMarkdown', () => {
 });
 
 describe('ToolAnalysisReportView', () => {
+  it('shows catalog status, coverage, evidence, and skip reasons', () => {
+    render(<ToolAnalysisReportView report={catalogReport} />);
+    expect(screen.getByRole('heading', { name: 'Catalog checks for demo' })).toBeVisible();
+    expect(screen.getAllByText('Warning')[0]).toBeVisible();
+    expect(screen.getByText('1 checked')).toBeVisible();
+    expect(screen.getByText('Skipped')).toBeVisible();
+    expect(screen.getByText('Listing these resources requires executing a tool.')).toBeVisible();
+    fireEvent.click(screen.getByText('1 finding'));
+    expect(screen.getByText('/description')).toBeInTheDocument();
+    expect(screen.queryByText('Tools analyzed')).not.toBeInTheDocument();
+  });
+
   it('shows aggregate and per-tool token badges for saved reports', () => {
     render(
       <MemoryRouter>

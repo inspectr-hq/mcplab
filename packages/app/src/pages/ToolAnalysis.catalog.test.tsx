@@ -83,6 +83,33 @@ describe('Analyze MCP catalog', () => {
     vi.unstubAllGlobals();
   });
 
+  it('runs the default catalog mode when the server only exposes prompts', async () => {
+    source.discoverToolsForAnalysis.mockResolvedValue({
+      servers: [
+        { ...alpha, tools: [], catalog: { ...alpha.catalog, resources: { status: 'unsupported' } } }
+      ]
+    });
+    source.startToolAnalysis.mockResolvedValue({ jobId: 'catalog-job' });
+    source.subscribeToolAnalysisJob.mockReturnValue(() => {});
+    renderPage();
+    await screen.findByText('No tools listed.');
+
+    expect(screen.getByRole('checkbox', { name: 'Catalog checks' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /Metadata \/ schema review/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /Deeper analysis/ })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Run analysis' }));
+
+    await waitFor(() =>
+      expect(source.startToolAnalysis).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serverNames: ['alpha'],
+          modes: { catalogChecks: true, metadataReview: false, deeperAnalysis: false }
+        })
+      )
+    );
+    await waitFor(() => expect(source.subscribeToolAnalysisJob).toHaveBeenCalled());
+  });
+
   it('uses the selected server name as the catalog heading', async () => {
     renderPage();
     await screen.findByText('fetch_docs');
@@ -473,7 +500,7 @@ describe('Analyze MCP catalog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download Tool Info' }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze Tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run analysis' }));
     expect(source.startToolAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({
         serverNames: ['alpha'],

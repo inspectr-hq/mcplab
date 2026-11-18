@@ -1,27 +1,11 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { estimateToolDefinitionTokens } from '@inspectr/mcplab-core';
-import type { ToolAnalysisReport } from './tool-analysis-domain.js';
-
-export interface SavedToolAnalysisReportRecord {
-  recordVersion: 1;
-  reportId: string;
-  createdAt: string;
-  sourceJobId: string;
-  serverNames: string[];
-  report: ToolAnalysisReport;
-}
-
-export interface ToolAnalysisResultSummary {
-  reportId: string;
-  createdAt: string;
-  assistantAgentName: string;
-  assistantAgentModel: string;
-  serverNames: string[];
-  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
-  modes: ToolAnalysisReport['modes'];
-  summary: ToolAnalysisReport['summary'];
-}
+import type {
+  SavedToolAnalysisReportRecord,
+  ToolAnalysisReport,
+  ToolAnalysisResultSummary
+} from '@inspectr/mcplab-core';
 
 function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
   if (!Array.isArray(report.servers)) return;

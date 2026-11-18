@@ -1,7 +1,10 @@
+import type { McpCatalogCheck, ToolAnalysisSampleCall } from '@/lib/data-sources/types';
+
 export function isWriteDeleteClassification(classificationReason: string): boolean {
   const lower = classificationReason.toLowerCase();
   return (
     lower.includes('side-effectful prefix') ||
+    lower.includes('indicates side effects') ||
     lower.includes('destructive behavior') ||
     lower.includes('destructivehint') ||
     lower.includes('non-read-only behavior') ||
@@ -17,3 +20,33 @@ export function safeJsonStringify(value: unknown): string {
     return '[schema not serializable]';
   }
 }
+
+const CALL_OUTCOME_LABELS = {
+  success: 'Success',
+  tool_error: 'Tool error',
+  schema_error: 'Schema error',
+  protocol_error: 'Protocol error',
+  transport_error: 'Transport error',
+  timeout: 'Timeout'
+} satisfies Record<NonNullable<ToolAnalysisSampleCall['outcome']>, string>;
+
+export function toolAnalysisCallLabel(sample: ToolAnalysisSampleCall): string {
+  if (sample.outcome) return CALL_OUTCOME_LABELS[sample.outcome];
+  return sample.ok ? 'ok' : 'error';
+}
+
+export const CATALOG_SECTION_LABELS = {
+  tools: 'Tools',
+  resources: 'Resources',
+  resource_templates: 'Resource templates',
+  prompts: 'Prompts',
+  skills: 'Skills',
+  tool_resources: 'Tool-backed resources and skills'
+} satisfies Record<McpCatalogCheck['kind'], string>;
+
+export const CATALOG_STATUS_LABELS = {
+  pass: 'Passed',
+  warning: 'Warning',
+  fail: 'Failed',
+  skipped: 'Skipped'
+} satisfies Record<McpCatalogCheck['status'], string>;

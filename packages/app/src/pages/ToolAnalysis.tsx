@@ -19,6 +19,7 @@ import { McpCatalogToolbar } from '@/components/tool-analysis/McpCatalogToolbar'
 import type { LoadMcpPreview } from '@/components/tool-analysis/McpPreview';
 import { McpSkillsPanel } from '@/components/tool-analysis/McpSkillsPanel';
 import { McpToolList } from '@/components/tool-analysis/McpToolList';
+import { McpCatalogStatusBadges } from '@/components/tool-analysis/McpCatalogCheckResults';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
@@ -102,7 +103,8 @@ const ToolAnalysisPage = () => {
   >({});
   const [catalogTab, setCatalogTab] = useState('tools');
   const [toolQuery, setToolQuery] = useState('');
-  const [metadataReview, setMetadataReview] = useState(true);
+  const [catalogChecks, setCatalogChecks] = useState(true);
+  const [metadataReview, setMetadataReview] = useState(false);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
   const [maxParallelTools, setMaxParallelTools] = useState(2);
   const [sampleCallsPerTool, setSampleCallsPerTool] = useState(1);
@@ -330,6 +332,14 @@ const ToolAnalysisPage = () => {
   const hasTools = Boolean(serverDiscovery?.tools.length);
   const allVisibleSelected = visibleTools.every((tool) => selectedTools.has(tool.name));
   const discoveryBusy = discovering || authInProgress;
+  const needsTools = metadataReview || deeperAnalysis;
+  const canStartAnalysis =
+    Boolean(selectedServerLabel) &&
+    (catalogChecks || needsTools) &&
+    (!needsTools || (totalSelectedTools > 0 && Boolean(effectiveAssistantAgentName))) &&
+    !discoveryBusy &&
+    !submitting &&
+    !activeJobId;
   let catalogMessage = 'Select a server to discover its capabilities.';
   if (selectedServerLabel) {
     catalogMessage = discovering ? 'Loading server capabilities…' : 'No catalog available.';
@@ -338,7 +348,7 @@ const ToolAnalysisPage = () => {
   if (serverDiscovery) toolsMessage = hasTools ? 'No tools match your search.' : 'No tools listed.';
 
   const startAnalysis = async () => {
-    if (!metadataReview && !deeperAnalysis) {
+    if (!catalogChecks && !needsTools) {
       toast({ title: 'Select at least one mode', variant: 'destructive' });
       return;
     }
@@ -346,7 +356,7 @@ const ToolAnalysisPage = () => {
       toast({ title: 'Select exactly one server', variant: 'destructive' });
       return;
     }
-    if (totalSelectedTools === 0) {
+    if (needsTools && totalSelectedTools === 0) {
       toast({ title: 'Select at least one tool', variant: 'destructive' });
       return;
     }
@@ -378,7 +388,7 @@ const ToolAnalysisPage = () => {
         serverNames: selectedServerNames,
         selectedToolsByServer,
         maxParallelTools,
-        modes: { metadataReview, deeperAnalysis },
+        modes: { catalogChecks, metadataReview, deeperAnalysis },
         deeperAnalysisOptions: {
           autoRunPolicy: 'read_only_allowlist',
           sampleCallsPerTool,
@@ -611,15 +621,14 @@ const ToolAnalysisPage = () => {
       {viewStep === 'configure' && (
         <Card>
           <CardHeader className="p-3 sm:p-6">
-            <CardTitle className="text-base">Configure tool analysis</CardTitle>
+            <CardTitle className="text-base">Configure analysis</CardTitle>
             <CardDescription>
-              Select one MCP server and the tools you want to analyze. Choose metadata review,
-              sample calls for tools classified as read-only, or both. Select{' '}
-              <strong className="font-medium">Analyze Tools</strong> to generate a report.
+              Select an MCP server. Catalog checks inspect its advertised definitions. Select tools
+              to include in assistant review or sample calls.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 p-3 pt-0 sm:p-6 sm:pt-0">
-            {!effectiveAssistantAgentName && (
+            {needsTools && !effectiveAssistantAgentName && (
               <Alert>
                 <AlertTitle>No assistant agent available</AlertTitle>
                 <AlertDescription>
@@ -844,7 +853,17 @@ const ToolAnalysisPage = () => {
             </Tabs>
 
             <div className="space-y-3 rounded-md border p-3">
-              <div className="text-sm font-medium">Analysis Modes</div>
+              <div className="text-sm font-medium">Analysis modes</div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={catalogChecks}
+                  onCheckedChange={(value) => setCatalogChecks(Boolean(value))}
+                />
+                <span className="inline-flex items-center gap-1.5">
+                  Catalog checks
+                  <ModeInfo text="Checks the entire advertised catalog without an assistant or tool calls." />
+                </span>
+              </label>
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={metadataReview}
@@ -852,7 +871,7 @@ const ToolAnalysisPage = () => {
                 />
                 <span className="inline-flex items-center gap-1.5">
                   Metadata / schema review
-                  <ModeInfo text="No tool execution. Reviews tool names, descriptions, and schemas only." />
+                  <ModeInfo text="An assistant reviews the selected tool names, descriptions, and schemas." />
                 </span>
               </label>
               <label className="flex items-center gap-2 text-sm">
@@ -862,76 +881,78 @@ const ToolAnalysisPage = () => {
                 />
                 <span className="inline-flex items-center gap-1.5">
                   Deeper analysis
-                  <ModeInfo text="Runs sample MCP tool calls automatically for read-only tools only (based on the safety allowlist)." />
+                  <ModeInfo text="Runs sample calls for tools explicitly marked read-only when their metadata supports that classification." />
                 </span>
               </label>
-              <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Max parallel tools</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={8}
-                    value={maxParallelTools}
-                    onChange={(e) =>
-                      setMaxParallelTools(Math.max(1, Math.min(8, Number(e.target.value) || 2)))
-                    }
-                    className="h-8"
-                  />
+              {needsTools && (
+                <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Max parallel tools</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={maxParallelTools}
+                      onChange={(e) =>
+                        setMaxParallelTools(Math.max(1, Math.min(8, Number(e.target.value) || 2)))
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                  {deeperAnalysis ? (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Safety profile</Label>
+                        <div className="text-sm">Explicitly read-only tools</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Sample calls per tool</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={sampleCallsPerTool}
+                          onChange={(e) =>
+                            setSampleCallsPerTool(
+                              Math.max(1, Math.min(5, Number(e.target.value) || 1))
+                            )
+                          }
+                          className="h-8"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tool call timeout (ms)</Label>
+                        <Input
+                          type="number"
+                          min={1000}
+                          max={60000}
+                          step={500}
+                          value={toolCallTimeoutMs}
+                          onChange={(e) =>
+                            setToolCallTimeoutMs(
+                              Math.max(1000, Math.min(60000, Number(e.target.value) || 10000))
+                            )
+                          }
+                          className="h-8"
+                        />
+                      </div>
+                      <div className="md:col-span-3 text-xs text-amber-700">
+                        Deeper analysis may execute read-only MCP tools automatically.
+                      </div>
+                    </>
+                  ) : null}
                 </div>
-                {deeperAnalysis ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Safety profile</Label>
-                      <div className="text-sm">Read-only allowlist only</div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Sample calls per tool</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={5}
-                        value={sampleCallsPerTool}
-                        onChange={(e) =>
-                          setSampleCallsPerTool(
-                            Math.max(1, Math.min(5, Number(e.target.value) || 1))
-                          )
-                        }
-                        className="h-8"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Tool call timeout (ms)</Label>
-                      <Input
-                        type="number"
-                        min={1000}
-                        max={60000}
-                        step={500}
-                        value={toolCallTimeoutMs}
-                        onChange={(e) =>
-                          setToolCallTimeoutMs(
-                            Math.max(1000, Math.min(60000, Number(e.target.value) || 10000))
-                          )
-                        }
-                        className="h-8"
-                      />
-                    </div>
-                    <div className="md:col-span-3 text-xs text-amber-700">
-                      Deeper analysis may execute read-only MCP tools automatically.
-                    </div>
-                  </>
-                ) : null}
-              </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 onClick={() => void startAnalysis()}
-                disabled={submitting || authInProgress || !!activeJobId || totalSelectedTools === 0}
+                disabled={!canStartAnalysis}
               >
                 {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Analyze Tools
+                Run analysis
               </Button>
             </div>
           </CardContent>
@@ -1032,9 +1053,15 @@ const ToolAnalysisPage = () => {
                     <div>
                       <div className="text-sm font-semibold">Result overview</div>
                       <p className="text-xs text-muted-foreground">
-                        {report.summary.toolsAnalyzed} tools analyzed, {report.summary.toolsSkipped}{' '}
-                        skipped, across {report.summary.serversAnalyzed} server
-                        {report.summary.serversAnalyzed !== 1 ? 's' : ''}.
+                        {report.summary.catalogChecks && (
+                          <>{report.summary.catalogChecks.itemsChecked} catalog entries checked. </>
+                        )}
+                        {(report.modes.metadataReview || report.modes.deeperAnalysis) && (
+                          <>
+                            {report.summary.toolsAnalyzed} tools analyzed,{' '}
+                            {report.summary.toolsSkipped} skipped.
+                          </>
+                        )}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1082,11 +1109,15 @@ const ToolAnalysisPage = () => {
                     {report.summary.issueCounts.info > 0 && (
                       <Badge variant="outline">Info: {report.summary.issueCounts.info}</Badge>
                     )}
-                    {Object.values(report.summary.issueCounts).every((n) => n === 0) && (
-                      <Badge className="bg-green-600 text-white hover:bg-green-600">
-                        No findings
-                      </Badge>
+                    {report.summary.catalogChecks && (
+                      <McpCatalogStatusBadges summary={report.summary.catalogChecks} />
                     )}
+                    {!report.summary.catalogChecks &&
+                      Object.values(report.summary.issueCounts).every((n) => n === 0) && (
+                        <Badge className="bg-green-600 text-white hover:bg-green-600">
+                          No findings
+                        </Badge>
+                      )}
                   </div>
                 </CardContent>
               </Card>
@@ -1101,9 +1132,12 @@ const ToolAnalysisPage = () => {
             <div>
               <h2 className="text-xl font-semibold">Report</h2>
               <p className="text-sm text-muted-foreground">
-                {report.summary.toolsAnalyzed} tools analyzed across{' '}
-                {report.summary.serversAnalyzed} server
-                {report.summary.serversAnalyzed !== 1 ? 's' : ''}.
+                {report.summary.catalogChecks && (
+                  <>{report.summary.catalogChecks.itemsChecked} catalog entries checked. </>
+                )}
+                {(report.modes.metadataReview || report.modes.deeperAnalysis) && (
+                  <>{report.summary.toolsAnalyzed} tools analyzed.</>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">

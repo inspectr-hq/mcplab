@@ -35,7 +35,7 @@ function catalogRow(definition: Definition, via?: 'tool'): CatalogRow {
 }
 
 function listed<T>(section: McpCatalogList<T>): T[] {
-  return section.status === 'ready' ? section.items : [];
+  return 'items' in section ? section.items : [];
 }
 
 function exportCatalog(
@@ -78,11 +78,20 @@ function CatalogSection<T>({
       </p>
     );
   }
-  if (section.items.length === 0) {
-    return <p className="text-sm text-muted-foreground">No {label} listed.</p>;
-  }
   const rows = section.items.filter((item) => visible(item));
-  return rows.length ? <ul className="divide-y">{rows.map((item) => render(item))}</ul> : null;
+  return (
+    <>
+      {section.status === 'partial' && (
+        <p role="alert" className="wrap-anywhere text-sm text-muted-foreground">
+          Incomplete listing. {section.message}
+        </p>
+      )}
+      {section.status === 'ready' && section.items.length === 0 && (
+        <p className="text-sm text-muted-foreground">No {label} listed.</p>
+      )}
+      {rows.length > 0 && <ul className="divide-y">{rows.map((item) => render(item))}</ul>}
+    </>
+  );
 }
 
 function CatalogEntry({

@@ -1,6 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { ServerConfig, ToolDef } from './types.js';
+import {
+  ErrorCode,
+  ListToolsResultSchema,
+  McpError,
+  type Tool
+} from '@modelcontextprotocol/sdk/types.js';
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
+import type { McpToolCallFailure, ServerConfig, ToolDef } from './types.js';
 import { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 import { resolveConfigValue } from './config-values.js';
 
@@ -11,6 +18,28 @@ export interface McpToolInfo {
   inputSchema?: unknown;
   outputSchema?: unknown;
   annotations?: ToolDef['annotations'];
+}
+
+class McpToolOutputError extends Error {}
+
+export function classifyMcpToolCallFailure(error: unknown): McpToolCallFailure {
+  const cause = error instanceof Error ? (error.cause ?? error) : error;
+  if (cause instanceof McpToolOutputError) return 'schema_error';
+  if (cause instanceof McpError) {
+    if (cause.code === ErrorCode.RequestTimeout) return 'timeout';
+    if (cause.code === ErrorCode.ConnectionClosed) return 'transport_error';
+    // The SDK signals these local result validation failures with generic MCP codes.
+    if (
+      /does not match the tool's output schema|did not return structured content|Failed to validate structured content/i.test(
+        cause.message
+      )
+    ) {
+      return 'schema_error';
+    }
+    return 'protocol_error';
+  }
+  if (cause instanceof Error && /ZodError$/.test(cause.name)) return 'protocol_error';
+  return 'transport_error';
 }
 
 export interface McpCallToolOptions {
@@ -77,8 +106,12 @@ export interface McpPromptResult {
   messages: Array<{ role: string; text: string }>;
 }
 
-export type McpCatalogList<T> =
+type McpPagedList<T> =
   | { status: 'ready'; items: T[] }
+  | { status: 'partial'; items: T[]; message: string };
+
+export type McpCatalogList<T> =
+  | McpPagedList<T>
   | { status: 'unsupported' }
   | { status: 'error'; message: string };
 
@@ -114,21 +147,39 @@ async function collectListPages<T>(
   list: (params?: { cursor: string }) => Promise<{ items: T[]; nextCursor?: string }>,
   errorContext: string,
   signal?: AbortSignal
-): Promise<T[]> {
+): Promise<McpPagedList<T>> {
   const items: T[] = [];
+  const cursors = new Set<string>();
   let cursor: string | undefined;
-  try {
-    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+  for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+    throwIfAborted(signal);
+    try {
       const result = await list(cursor ? { cursor } : undefined);
+      throwIfAborted(signal);
       items.push(...result.items);
       cursor = result.nextCursor;
-      if (!cursor) break;
+    } catch (error) {
+      if (signal?.aborted || isAbortError(error)) throw error;
+      const message = formatMcpError(errorContext, undefined, error);
+      if (page === 0) throw new Error(message, { cause: error });
+      return { status: 'partial', items, message };
     }
-    return items;
-  } catch (error) {
-    if (signal?.aborted || isAbortError(error)) throw error;
-    throw new Error(formatMcpError(errorContext, undefined, error));
+    if (!cursor) return { status: 'ready', items };
+    if (cursors.has(cursor)) {
+      return { status: 'partial', items, message: `${errorContext}: repeated pagination cursor.` };
+    }
+    cursors.add(cursor);
   }
+  return {
+    status: 'partial',
+    items,
+    message: `${errorContext}: reached the ${MAX_LIST_PAGES}-page limit.`
+  };
+}
+
+function requireComplete<T>(result: McpPagedList<T>): T[] {
+  if (result.status === 'partial') throw new Error(result.message);
+  return result.items;
 }
 
 function resourceMetadata({ name, title, description, mimeType }: Omit<McpResourceInfo, 'uri'>) {
@@ -142,12 +193,12 @@ function resourceMetadata({ name, title, description, mimeType }: Omit<McpResour
 
 async function listCatalogSection<T>(
   supported: boolean,
-  list: () => Promise<T[]>,
+  list: () => Promise<McpPagedList<T>>,
   signal?: AbortSignal
 ): Promise<McpCatalogList<T>> {
   if (!supported) return { status: 'unsupported' };
   try {
-    return { status: 'ready', items: await list() };
+    return await list();
   } catch (error) {
     if (signal?.aborted || isAbortError(error)) throw error;
     return { status: 'error', message: error instanceof Error ? error.message : String(error) };
@@ -176,9 +227,19 @@ export function normalizeListedTool(tool: any): ToolDef {
   };
 }
 
+interface McpToolMetadata {
+  firstPageNames: Set<string>;
+  tools: Map<string, Tool>;
+}
+
 export class McpClientManager {
   static onBeforeConnect: (() => void) | undefined;
   private clients = new Map<string, Client>();
+  private toolMetadata = new WeakMap<Client, McpToolMetadata>();
+  private laterPageValidators = new WeakMap<
+    Tool,
+    ReturnType<AjvJsonSchemaValidator['getValidator']>
+  >();
   private scopedClients = new Map<string, Client>();
   private scopedClientConnectPromises = new Map<string, Promise<Client>>();
   private servers = new Map<string, ServerConfig>();
@@ -247,6 +308,11 @@ export class McpClientManager {
     }
   }
 
+  getServerProtocolVersion(serverName: string): string | undefined {
+    const transport = this.clients.get(serverName)?.transport;
+    return transport instanceof StreamableHTTPClientTransport ? transport.protocolVersion : undefined;
+  }
+
   getClient(serverName: string): Client {
     const client = this.clients.get(serverName);
     if (!client) {
@@ -260,34 +326,83 @@ export class McpClientManager {
     signal?: AbortSignal,
     requestHeaders?: Record<string, string>
   ): Promise<ToolDef[]> {
+    return requireComplete(await this.listToolsWithCoverage(serverName, signal, requestHeaders));
+  }
+
+  async listToolsWithCoverage(
+    serverName: string,
+    signal?: AbortSignal,
+    requestHeaders?: Record<string, string>
+  ): Promise<McpPagedList<ToolDef>> {
     const client =
       requestHeaders && Object.keys(requestHeaders).length > 0
         ? await this.getOrCreateScopedClient(serverName, requestHeaders, signal)
         : this.getClient(serverName);
-    let lastError: any;
-    for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
+    const options = signal ? { signal } : undefined;
+    const listedTools = new Map<string, Tool>();
+    let metadata: McpToolMetadata | undefined;
+    const result = await collectListPages(
+      async (params) => {
+        // SDK listTools replaces its cache on every call. Keep page one in that cache.
+        const page = params
+          ? await client.request({ method: 'tools/list', params }, ListToolsResultSchema, options)
+          : await this.listFirstToolPage(client, signal);
+        if (!params) {
+          metadata = {
+            firstPageNames: new Set(page.tools.map((tool) => tool.name)),
+            tools: this.toolMetadata.get(client)?.tools ?? new Map()
+          };
+          this.toolMetadata.set(client, metadata);
+        }
+        for (const tool of page.tools) {
+          if (!listedTools.has(tool.name)) listedTools.set(tool.name, tool);
+        }
+        return { items: page.tools.map(normalizeListedTool), nextCursor: page.nextCursor };
+      },
+      `Failed to list tools for server '${serverName}'`,
+      signal
+    );
+    if (metadata && this.toolMetadata.get(client) === metadata) {
+      metadata.tools =
+        result.status === 'ready' ? listedTools : new Map([...metadata.tools, ...listedTools]);
+    }
+    return result;
+  }
+
+  private async listFirstToolPage(client: Client, signal?: AbortSignal) {
+    for (let attempt = 0; ; attempt += 1) {
+      throwIfAborted(signal);
       try {
-        const result: any = await client.listTools(undefined, signal ? { signal } : undefined);
-        const tools = Array.isArray(result?.tools)
-          ? result.tools
-          : Array.isArray(result)
-            ? result
-            : [];
-        return tools.map(normalizeListedTool);
-      } catch (err: any) {
-        throwIfAborted(signal);
-        lastError = err;
-        if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
+        return await client.listTools(undefined, signal ? { signal } : undefined);
+      } catch (error) {
+        if (isAbortError(error) || attempt >= McpClientManager.MAX_CONNECT_RETRIES) throw error;
         await sleep(250 * (attempt + 1), signal);
       }
     }
-    throw new Error(
-      formatMcpError(
-        `Failed to list tools for server '${serverName}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
-        undefined,
-        lastError
-      )
-    );
+  }
+
+  private validateLaterPageOutput(tool: Tool, result: Awaited<ReturnType<Client['callTool']>>) {
+    if (!tool.outputSchema || (result.isError && result.structuredContent === undefined)) return;
+    if (result.structuredContent === undefined) {
+      throw new McpToolOutputError(
+        `Tool ${tool.name} has an output schema but did not return structured content`
+      );
+    }
+    let validator = this.laterPageValidators.get(tool);
+    if (!validator) {
+      try {
+        validator = new AjvJsonSchemaValidator().getValidator(tool.outputSchema);
+        this.laterPageValidators.set(tool, validator);
+      } catch (error) {
+        throw new McpToolOutputError('Failed to compile the tool output schema', { cause: error });
+      }
+    }
+    const validation = validator(result.structuredContent);
+    if (!validation.valid) {
+      throw new McpToolOutputError(
+        `Structured content does not match the tool's output schema: ${validation.errorMessage}`
+      );
+    }
   }
 
   async callTool(
@@ -303,6 +418,14 @@ export class McpClientManager {
         : this.getClient(serverName);
     throwIfAborted(options?.signal);
     try {
+      const metadata = this.toolMetadata.get(client);
+      const laterTool = metadata?.firstPageNames.has(tool) ? undefined : metadata?.tools.get(tool);
+      if (laterTool?.execution?.taskSupport === 'required') {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Tool "${tool}" requires task-based execution.`
+        );
+      }
       const result = await client.callTool(
         {
           name: tool,
@@ -311,13 +434,15 @@ export class McpClientManager {
         undefined,
         options?.signal ? { signal: options.signal } : undefined
       );
+      if (laterTool) this.validateLaterPageOutput(laterTool, result);
       return result;
     } catch (err: any) {
       if (options?.signal?.aborted || isAbortError(err)) {
         throw err;
       }
       throw new Error(
-        formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err)
+        formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err),
+        { cause: err }
       );
     }
   }
@@ -334,6 +459,13 @@ export class McpClientManager {
 
   async listResources(serverName: string, signal?: AbortSignal): Promise<McpResourceInfo[]> {
     if (!this.getServerFeatures(serverName).resources) return [];
+    return requireComplete(await this.listResourcesPages(serverName, signal));
+  }
+
+  private listResourcesPages(
+    serverName: string,
+    signal?: AbortSignal
+  ): Promise<McpPagedList<McpResourceInfo>> {
     const client = this.getClient(serverName);
     return collectListPages(
       async (params) => {
@@ -356,6 +488,13 @@ export class McpClientManager {
     signal?: AbortSignal
   ): Promise<McpResourceTemplateInfo[]> {
     if (!this.getServerFeatures(serverName).resources) return [];
+    return requireComplete(await this.listResourceTemplatesPages(serverName, signal));
+  }
+
+  private listResourceTemplatesPages(
+    serverName: string,
+    signal?: AbortSignal
+  ): Promise<McpPagedList<McpResourceTemplateInfo>> {
     const client = this.getClient(serverName);
     return collectListPages(
       async (params) => {
@@ -378,13 +517,17 @@ export class McpClientManager {
   async listCatalog(serverName: string, signal?: AbortSignal): Promise<McpServerCatalog> {
     const features = this.getServerFeatures(serverName);
     const [resources, resourceTemplates, prompts] = await Promise.all([
-      listCatalogSection(features.resources, () => this.listResources(serverName, signal), signal),
       listCatalogSection(
         features.resources,
-        () => this.listResourceTemplates(serverName, signal),
+        () => this.listResourcesPages(serverName, signal),
         signal
       ),
-      listCatalogSection(features.prompts, () => this.listPrompts(serverName, signal), signal)
+      listCatalogSection(
+        features.resources,
+        () => this.listResourceTemplatesPages(serverName, signal),
+        signal
+      ),
+      listCatalogSection(features.prompts, () => this.listPromptsPages(serverName, signal), signal)
     ]);
     return { resources, resourceTemplates, prompts };
   }
@@ -415,6 +558,13 @@ export class McpClientManager {
 
   async listPrompts(serverName: string, signal?: AbortSignal): Promise<McpPromptInfo[]> {
     if (!this.getServerFeatures(serverName).prompts) return [];
+    return requireComplete(await this.listPromptsPages(serverName, signal));
+  }
+
+  private listPromptsPages(
+    serverName: string,
+    signal?: AbortSignal
+  ): Promise<McpPagedList<McpPromptInfo>> {
     const client = this.getClient(serverName);
     return collectListPages(
       async (params) => {

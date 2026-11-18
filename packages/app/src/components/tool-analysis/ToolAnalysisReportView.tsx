@@ -17,9 +17,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, Copy, Lightbulb } from 'lucide-react';
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
-import { isWriteDeleteClassification, safeJsonStringify } from '@/lib/tool-analysis-utils';
+import {
+  isWriteDeleteClassification,
+  safeJsonStringify,
+  toolAnalysisCallLabel
+} from '@/lib/tool-analysis-utils';
 import { toast } from '@/hooks/use-toast';
 import { ToolSchemaPreview, type SchemaViewMode } from './ToolSchemaPreview';
+import { McpCatalogCheckResults } from './McpCatalogCheckResults';
 import { ToolTokenEstimateBadge } from './ToolTokenEstimateBadge';
 
 const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
@@ -115,15 +120,37 @@ function SafetyBadge({
   );
 }
 
-export function ToolAnalysisReportView({
-  report,
-  schemaMode: controlledSchemaMode,
-  onSchemaModeChange
-}: {
+interface ToolAnalysisReportViewProps {
   report: ToolAnalysisReport;
   schemaMode?: SchemaViewMode;
   onSchemaModeChange?: (mode: SchemaViewMode) => void;
-}) {
+}
+
+export function ToolAnalysisReportView(props: ToolAnalysisReportViewProps) {
+  const { report } = props;
+  const showToolReview = report.modes.metadataReview || report.modes.deeperAnalysis;
+  return (
+    <div className="space-y-4">
+      {report.servers.map(
+        (server) =>
+          server.catalogChecks && (
+            <McpCatalogCheckResults
+              key={server.serverName}
+              server={server.serverName}
+              checks={server.catalogChecks}
+            />
+          )
+      )}
+      {showToolReview && <ToolReviewReport {...props} />}
+    </div>
+  );
+}
+
+function ToolReviewReport({
+  report,
+  schemaMode: controlledSchemaMode,
+  onSchemaModeChange
+}: ToolAnalysisReportViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSeverityFilters, setActiveSeverityFilters] = useState<FindingSeverity[]>([
     ...ALL_SEVERITIES
@@ -763,7 +790,7 @@ export function ToolAnalysisReportView({
                                             variant={sample.ok ? 'secondary' : 'destructive'}
                                             className="text-[10px]"
                                           >
-                                            {sample.ok ? 'ok' : 'error'}
+                                            {toolAnalysisCallLabel(sample)}
                                           </Badge>
                                           <span>Call {sample.callIndex}</span>
                                           {sample.durationMs !== undefined && (

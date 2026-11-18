@@ -1,3 +1,4 @@
+import { McpCatalogStatusBadges } from '@/components/tool-analysis/McpCatalogCheckResults';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -297,9 +298,11 @@ export default function ToolAnalysisResultsPage() {
                             >
                               {item.reportId}
                             </Link>
-                            <div className="text-[11px] text-muted-foreground">
-                              {item.assistantAgentName}
-                            </div>
+                            {item.assistantAgentName && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {item.assistantAgentName}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-[11px] text-muted-foreground">
@@ -309,14 +312,26 @@ export default function ToolAnalysisResultsPage() {
                               <span className="font-medium text-foreground">
                                 {item.serverNames.length}
                               </span>{' '}
-                              · Tools:{' '}
-                              <span className="font-medium text-foreground">
-                                {item.summary.toolsAnalyzed}
-                              </span>
-                              {' · '}Skipped:{' '}
-                              <span className="font-medium text-foreground">
-                                {item.summary.toolsSkipped}
-                              </span>
+                              {item.summary.catalogChecks && (
+                                <>
+                                  {' · '}Catalog entries checked:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.catalogChecks.itemsChecked}
+                                  </span>
+                                </>
+                              )}
+                              {(item.modes.metadataReview || item.modes.deeperAnalysis) && (
+                                <>
+                                  {' · '}Tools:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.toolsAnalyzed}
+                                  </span>
+                                  {' · '}Skipped:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.toolsSkipped}
+                                  </span>
+                                </>
+                              )}
                             </div>
                             {Object.keys(item.mcpServerVersions ?? {}).length > 0 ? (
                               <McpServerBadge versions={item.mcpServerVersions} />
@@ -349,13 +364,18 @@ export default function ToolAnalysisResultsPage() {
                                 </Badge>
                               ) : null
                             )}
-                            {Object.values(item.summary.issueCounts).every((n) => n === 0) && (
-                              <Badge variant="outline">No issues</Badge>
+                            {item.summary.catalogChecks && (
+                              <McpCatalogStatusBadges summary={item.summary.catalogChecks} />
                             )}
+                            {!item.summary.catalogChecks &&
+                              Object.values(item.summary.issueCounts).every((n) => n === 0) && (
+                                <Badge variant="outline">No issues</Badge>
+                              )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
+                            {item.modes.catalogChecks && <Badge variant="outline">catalog</Badge>}
                             {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
                             {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
                           </div>
