@@ -202,7 +202,7 @@ describe('runToolAnalysisJob', () => {
     });
     const call = vi.spyOn(McpClientManager.prototype, 'callTool').mockResolvedValue({
       isError: true,
-      content: [{ type: 'text', text: 'password=pretend-value' }]
+      content: [{ type: 'text', text: 'password=3aZ!8xPq7mN2vB4kL9rT' }]
     });
     const options = jobOptions();
     await runToolAnalysisJob(options);
@@ -219,7 +219,7 @@ describe('runToolAnalysisJob', () => {
       inputSchemaStatus: 'invalid',
       errorIndicators: ['credential']
     });
-    expect(JSON.stringify(options.job.result)).not.toContain('pretend-value');
+    expect(JSON.stringify(options.job.result)).not.toContain('3aZ!8xPq7mN2vB4kL9rT');
   });
 
   it('aborts the real request signal when the sample deadline expires', async () => {

@@ -49,10 +49,27 @@ describe('MCP health report', () => {
 
   it('withholds error strings that contain credentials or internal traces', () => {
     const error = inspectMcpError(
-      'password=pretend-value\n    at handler (/srv/app/index.js:12:3)'
+      'password="pretend-value"\n    at handler (/srv/app/index.js:12:3)'
     );
     expect(error.errorIndicators).toEqual(['credential', 'internal_details']);
     expect(error.error).not.toContain('pretend-value');
     expect(error.error).not.toContain('/srv');
+  });
+
+  it('withholds long high-entropy credential field values', () => {
+    const error = inspectMcpError('api_key: 3aZ!8xPq7mN2vB4kL9rT');
+    expect(error.errorIndicators).toEqual(['credential']);
+    expect(error.error).not.toContain('3aZ!8xPq7mN2vB4kL9rT');
+  });
+
+  it('preserves ordinary validation and authorization errors', () => {
+    for (const message of [
+      'password: must be at least 8 characters',
+      'api_key: invalid format',
+      'HTTP 401: Authorization: required',
+      'Field "secret": expected string'
+    ]) {
+      expect(inspectMcpError(message)).toEqual({ error: message, errorIndicators: [] });
+    }
   });
 });

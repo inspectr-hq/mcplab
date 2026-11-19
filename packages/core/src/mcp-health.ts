@@ -15,7 +15,9 @@ import type {
 const SLOW_PHASE_MS = 3000;
 const CHECK_ORDER = { fail: 0, warning: 1, pass: 2, skipped: 3 } as const;
 const CREDENTIAL =
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:bearer\s+[\w.~-]{12,}|AKIA[A-Z0-9]{16}|(?:gh[pousr]_|sk-)[\w-]{16,})\b|\b(?:password|secret|api[_ -]?key|access[_ -]?token|authorization)\b["']?\s*[:=]\s*["']?[^\s,"'}]{4,}|[a-z][\w+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i;
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:bearer\s+[\w.~-]{12,}|AKIA[A-Z0-9]{16}|(?:gh[pousr]_|sk-)[\w-]{16,})\b|[a-z][\w+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i;
+const CREDENTIAL_FIELD =
+  /\b(?:password|secret|api[_ -]?key|access[_ -]?token|authorization)\b["']?\s*[:=]\s*(?:(["'])([^"']{8,})\1|([^\s,"'}]{20,}))/gi;
 const INTERNAL_DETAILS =
   /\bat\s+[^\n]+\.(?:[cm]?[jt]sx?|py):\d+(?::\d+)?\b|traceback \(most recent call last\)|\b(?:stack trace|stacktrace)\b|(?:^|[\s("'\\])(?:\/(?:srv|home|Users|var|app)\/|[A-Z]:\\(?:Users|Program Files)\\)[^\s)"']+/im;
 
@@ -24,12 +26,28 @@ const INDICATOR_MESSAGES: Record<McpErrorIndicator, string> = {
   internal_details: 'An error response appears to expose a stack trace or internal file path.'
 };
 
+function hasCredentialField(text: string): boolean {
+  for (const match of text.matchAll(CREDENTIAL_FIELD)) {
+    if (match[2]) return true;
+    const value = match[3];
+    if (!value) continue;
+    const frequencies = new Map<string, number>();
+    for (const char of value) frequencies.set(char, (frequencies.get(char) ?? 0) + 1);
+    const entropy = [...frequencies.values()].reduce(
+      (sum, count) => sum - (count / value.length) * Math.log2(count / value.length),
+      0
+    );
+    if (value.length >= 24 || (frequencies.size >= 8 && entropy >= 3.5)) return true;
+  }
+  return false;
+}
+
 export function inspectMcpError(text: string): {
   error: string;
   errorIndicators: McpErrorIndicator[];
 } {
   const errorIndicators: McpErrorIndicator[] = [];
-  if (CREDENTIAL.test(text)) errorIndicators.push('credential');
+  if (CREDENTIAL.test(text) || hasCredentialField(text)) errorIndicators.push('credential');
   if (INTERNAL_DETAILS.test(text)) errorIndicators.push('internal_details');
   return {
     error: errorIndicators.length
