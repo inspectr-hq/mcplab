@@ -49,17 +49,17 @@ describe('MCP health report', () => {
 
   it('withholds error strings that contain credentials or internal traces', () => {
     const error = inspectMcpError(
-      'password="pretend-value"\n    at handler (/srv/app/index.js:12:3)'
+      'password="3aZ!8xPq7mN2vB4kL9rT"\n    at handler (/srv/app/index.js:12:3)'
     );
     expect(error.errorIndicators).toEqual(['credential', 'internal_details']);
-    expect(error.error).not.toContain('pretend-value');
+    expect(error.error).not.toContain('3aZ!8xPq7mN2vB4kL9rT');
     expect(error.error).not.toContain('/srv');
   });
 
   it('withholds long high-entropy credential field values', () => {
-    const error = inspectMcpError('api_key: 3aZ!8xPq7mN2vB4kL9rT');
+    const error = inspectMcpError('api_key=sk_live_abc123def456ghi789');
     expect(error.errorIndicators).toEqual(['credential']);
-    expect(error.error).not.toContain('3aZ!8xPq7mN2vB4kL9rT');
+    expect(error.error).not.toContain('sk_live_abc123def456ghi789');
   });
 
   it('preserves ordinary validation and authorization errors', () => {
@@ -67,9 +67,20 @@ describe('MCP health report', () => {
       'password: must be at least 8 characters',
       'api_key: invalid format',
       'HTTP 401: Authorization: required',
-      'Field "secret": expected string'
+      'Field "secret": expected string',
+      '{"password": "is required"}',
+      'Validation failed: {"api_key": "must be a string"}',
+      "secret: 'not provided'",
+      'authorization: missing_required_bearer_token_header',
+      'password=hunter2hunter2'
     ]) {
       expect(inspectMcpError(message)).toEqual({ error: message, errorIndicators: [] });
     }
+  });
+
+  it('detects Basic authorization credentials', () => {
+    const error = inspectMcpError('Authorization: Basic dXNlcjpwYXNzd29yZA==');
+    expect(error.errorIndicators).toEqual(['credential']);
+    expect(error.error).not.toContain('dXNlcjpwYXNzd29yZA==');
   });
 });
