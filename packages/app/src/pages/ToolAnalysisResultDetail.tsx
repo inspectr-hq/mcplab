@@ -8,16 +8,10 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
+  AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
 import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { SavedToolAnalysisReportRecord } from '@/lib/data-sources/types';
@@ -25,7 +19,7 @@ import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisR
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/lib/provider-format';
-import { ArrowLeft, ChevronDown, Clock, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, Clock, Download, Trash2 } from 'lucide-react';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -146,92 +140,99 @@ export default function ToolAnalysisResultDetailPage() {
               <McpServerBadge versions={record.report.mcpServerVersions} />
             </div>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" className="min-h-11">
-                Report actions
-                <ChevronDown aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="min-h-11 gap-2"
-                onSelect={() =>
+          <div
+            role="group"
+            aria-label="Report actions"
+            className="flex flex-wrap items-center gap-2"
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-11"
+              onClick={() =>
+                downloadTextFile(
+                  `${record.reportId}.json`,
+                  `${JSON.stringify(record, null, 2)}\n`,
+                  'application/json'
+                )
+              }
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Export JSON
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-11"
+              onClick={() =>
+                downloadTextFile(
+                  `${record.reportId}.md`,
+                  toolAnalysisReportToMarkdown(record.report),
+                  'text/markdown'
+                )
+              }
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Export Markdown
+            </Button>
+            {hasToolSchemas && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="min-h-11"
+                onClick={() =>
                   downloadTextFile(
-                    `${record.reportId}.json`,
-                    `${JSON.stringify(record, null, 2)}\n`,
+                    `${record.reportId}-tool-schemas.json`,
+                    `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
                     'application/json'
                   )
                 }
               >
                 <Download className="size-4" aria-hidden="true" />
-                Export JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-h-11 gap-2"
-                onSelect={() =>
-                  downloadTextFile(
-                    `${record.reportId}.md`,
-                    toolAnalysisReportToMarkdown(record.report),
-                    'text/markdown'
-                  )
-                }
-              >
-                <Download className="size-4" aria-hidden="true" />
-                Export Markdown
-              </DropdownMenuItem>
-              {hasToolSchemas && (
-                <DropdownMenuItem
-                  className="min-h-11 gap-2"
-                  onSelect={() =>
-                    downloadTextFile(
-                      `${record.reportId}-tool-schemas.json`,
-                      `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
-                      'application/json'
-                    )
-                  }
+                Export MCP info
+              </Button>
+            )}
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-11 text-destructive hover:text-destructive"
                 >
-                  <Download className="size-4" aria-hidden="true" />
-                  Export MCP info
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="min-h-11 gap-2 text-destructive focus:text-destructive"
-                onSelect={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                Delete report
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete report
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete tool analysis report?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Delete saved report '{record.reportId}' from disk? This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleDelete();
+                    }}
+                    disabled={deleting}
+                  >
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
       </header>
 
       <ToolAnalysisReportView report={record.report} />
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete tool analysis report?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete saved report '{record.reportId}' from disk? This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                void handleDelete();
-              }}
-              disabled={deleting}
-            >
-              {deleting ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
