@@ -71,6 +71,8 @@ describe('MCP health report', () => {
       '{"password": "is required"}',
       'Validation failed: {"api_key": "must be a string"}',
       "secret: 'not provided'",
+      'password: "isrequired"',
+      'password: "missing_required"',
       'authorization: missing_required_bearer_token_header',
       'password=hunter2hunter2'
     ]) {
@@ -82,5 +84,13 @@ describe('MCP health report', () => {
     const error = inspectMcpError('Authorization: Basic dXNlcjpwYXNzd29yZA==');
     expect(error.errorIndicators).toEqual(['credential']);
     expect(error.error).not.toContain('dXNlcjpwYXNzd29yZA==');
+  });
+
+  it('detects quoted human-chosen passwords and secrets', () => {
+    for (const message of ['password: "hunter2hunter2"', "secret: 'MySecret7'"]) {
+      const error = inspectMcpError(message);
+      expect(error.errorIndicators).toEqual(['credential']);
+      expect(error.error).not.toContain(message.split(/['"]+/)[1]);
+    }
   });
 });
