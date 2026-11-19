@@ -3,7 +3,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { DataSourceProvider } from '@/contexts/DataSourceContext';
@@ -32,6 +32,11 @@ const MarkdownReportDetail = lazy(() => import('./pages/MarkdownReportDetail'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 const queryClient = new QueryClient();
+
+function LegacyToolAnalysisRouteRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: '/mcp-analysis', search, hash }} replace />;
+}
 
 export function LegacyScenarioRouteRedirect() {
   const { scenarioId } = useParams<{ scenarioId?: string }>();
@@ -62,7 +67,8 @@ export function AppRouteTree() {
           <Route path="/mcp-evaluations" element={<Configurations />} />
           <Route path="/mcp-evaluations/:id" element={<ConfigEditor />} />
           <Route path="/mcp-evaluations/:id/:tab" element={<ConfigEditor />} />
-          <Route path="/tool-analysis" element={<ToolAnalysis />} />
+          <Route path="/mcp-analysis" element={<ToolAnalysis />} />
+          <Route path="/tool-analysis" element={<LegacyToolAnalysisRouteRedirect />} />
           <Route path="/tool-analysis-results" element={<ToolAnalysisResults />} />
           <Route path="/tool-analysis-results/:id" element={<ToolAnalysisResultDetail />} />
           <Route path="/oauth-debugger" element={<OAuthDebugger />} />

@@ -1,4 +1,9 @@
-import type { McpCatalogCheck, ToolAnalysisSampleCall } from '@/lib/data-sources/types';
+import type {
+  McpCatalogCheck,
+  McpHealthReport,
+  ToolAnalysisModes,
+  ToolAnalysisSampleCall
+} from '@/lib/data-sources/types';
 
 export function isWriteDeleteClassification(classificationReason: string): boolean {
   const lower = classificationReason.toLowerCase();
@@ -50,3 +55,26 @@ export const CATALOG_STATUS_LABELS = {
   fail: 'Failed',
   skipped: 'Skipped'
 } satisfies Record<McpCatalogCheck['status'], string>;
+
+export function mcpHealthCoverage(health: McpHealthReport): string {
+  const listed = health.partialListing ? ' (partial listing)' : '';
+  return `Tested ${health.checkedCount} of ${health.checks.length} checks · ran ${health.toolsRun} of ${health.toolCount} listed tools${listed}`;
+}
+
+export function mcpHealthTimings({ timings }: McpHealthReport): string[] {
+  const phases = [
+    ['Connect', timings.connectMs],
+    ['List tools', timings.listMs],
+    ['Average sample call', timings.averageCallMs]
+  ] as const;
+  return phases.flatMap(([label, ms]) => (ms === undefined ? [] : [`${label} took ${ms} ms`]));
+}
+
+export function mcpHealthPrivacy(modes: ToolAnalysisModes): string {
+  if (modes.deeperAnalysis) {
+    return 'Tool definitions and successful sample output may be shared with the configured assistant provider.';
+  }
+  if (modes.metadataReview)
+    return 'Tool definitions may be shared with the configured assistant provider.';
+  return 'This run used the MCP server and its configured authentication. No assistant provider was used.';
+}

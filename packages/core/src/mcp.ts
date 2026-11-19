@@ -310,7 +310,9 @@ export class McpClientManager {
 
   getServerProtocolVersion(serverName: string): string | undefined {
     const transport = this.clients.get(serverName)?.transport;
-    return transport instanceof StreamableHTTPClientTransport ? transport.protocolVersion : undefined;
+    return transport instanceof StreamableHTTPClientTransport
+      ? transport.protocolVersion
+      : undefined;
   }
 
   getClient(serverName: string): Client {

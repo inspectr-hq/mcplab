@@ -100,7 +100,61 @@ const catalogReport: ToolAnalysisReport = {
   ]
 };
 
+const healthReport: ToolAnalysisReport = {
+  ...catalogReport,
+  servers: [
+    {
+      ...catalogReport.servers[0],
+      health: {
+        endpoint: 'https://example.test/mcp',
+        implementation: { name: 'Demo', version: '1.0' },
+        protocolVersion: '2025-11-25',
+        transport: 'streamable-http',
+        score: 50,
+        checkedCount: 1,
+        toolsRun: 0,
+        toolCount: 1,
+        timings: { connectMs: 25, listMs: 0 },
+        checks: [
+          {
+            id: 'instructions',
+            title: 'Instruction-like metadata',
+            status: 'warning',
+            detail: 'One match.',
+            findings: [
+              {
+                status: 'warning',
+                item: 'get_notes',
+                path: '/description',
+                message: 'An IMPORTANT block appears in metadata.'
+              }
+            ]
+          },
+          {
+            id: 'samples',
+            title: 'Sampled tool calls',
+            status: 'skipped',
+            detail: 'No sample calls ran.'
+          }
+        ]
+      }
+    }
+  ]
+};
+
 describe('toolAnalysisReportToMarkdown', () => {
+  it('exports a score, coverage, timing and evidence before the detailed report', () => {
+    const markdown = toolAnalysisReportToMarkdown(healthReport);
+    expect(markdown.indexOf('Health score 50/100')).toBeLessThan(
+      markdown.indexOf('### Catalog checks')
+    );
+    expect(markdown).toContain('Tested 1 of 2 checks · ran 0 of 1 listed tools');
+    expect(markdown).toContain('List tools took 0 ms');
+    expect(markdown).toContain(
+      'get_notes · An IMPORTANT block appears in metadata. · /description'
+    );
+  });
+
   it('exports catalog findings and skip reasons without assistant fields', () => {
     const md = toolAnalysisReportToMarkdown(catalogReport);
     expect(md).toContain('Prompts · Warning · 1 checked');
@@ -136,6 +190,21 @@ describe('toolAnalysisReportToMarkdown', () => {
 });
 
 describe('ToolAnalysisReportView', () => {
+  it('shows score, connection identity, coverage and check evidence', () => {
+    render(<ToolAnalysisReportView report={healthReport} />);
+    expect(screen.getByRole('heading', { name: 'Server health' })).toBeVisible();
+    expect(screen.getByText('50/100')).toBeVisible();
+    expect(screen.getByText('Demo v1.0')).toBeVisible();
+    expect(screen.getByText('Tested 1 of 2 checks · ran 0 of 1 listed tools')).toBeVisible();
+    const details = screen.getByText('Health check details');
+    expect(details.parentElement).not.toHaveAttribute('open');
+    fireEvent.click(details);
+    expect(
+      screen.getByText('An IMPORTANT block appears in metadata.', { exact: false })
+    ).toBeVisible();
+    expect(screen.getByText('No sample calls ran.')).toBeVisible();
+  });
+
   it('shows catalog status, coverage, evidence, and skip reasons', () => {
     render(<ToolAnalysisReportView report={catalogReport} />);
     expect(screen.getByRole('heading', { name: 'Catalog checks for demo' })).toBeVisible();
@@ -143,8 +212,16 @@ describe('ToolAnalysisReportView', () => {
     expect(screen.getByText('1 checked')).toBeVisible();
     expect(screen.getByText('Skipped')).toBeVisible();
     expect(screen.getByText('Listing these resources requires executing a tool.')).toBeVisible();
-    fireEvent.click(screen.getByText('1 finding'));
-    expect(screen.getByText('/description')).toBeInTheDocument();
+    expect(screen.getByText('/description')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /Needs attention/ }));
+    expect(screen.getByRole('button', { name: /Needs attention/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryByText('Tool-backed resources and skills')).not.toBeInTheDocument();
+    expect(screen.getByText('/description')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'All sections' }));
+    expect(screen.getByText('Tool-backed resources and skills')).toBeVisible();
     expect(screen.queryByText('Tools analyzed')).not.toBeInTheDocument();
   });
 

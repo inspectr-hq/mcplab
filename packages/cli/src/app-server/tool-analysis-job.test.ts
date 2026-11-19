@@ -189,6 +189,39 @@ describe('runToolAnalysisJob', () => {
     });
   });
 
+  it('reports an observed invalid input and redacts sensitive error evidence', async () => {
+    vi.mocked(McpClientManager.prototype.listToolsWithCoverage).mockResolvedValue({
+      status: 'ready',
+      items: [
+        {
+          name: 'get_report',
+          annotations: { readOnlyHint: true },
+          inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+        }
+      ]
+    });
+    const call = vi.spyOn(McpClientManager.prototype, 'callTool').mockResolvedValue({
+      isError: true,
+      content: [{ type: 'text', text: 'password=pretend-value' }]
+    });
+    const options = jobOptions();
+    await runToolAnalysisJob(options);
+
+    const report = options.job.result?.servers[0];
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(report?.health?.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'bad_inputs', status: 'pass' }),
+        expect.objectContaining({ id: 'errors', status: 'fail' })
+      ])
+    );
+    expect(report?.tools[0].deeperAnalysis?.sampleCalls[0]).toMatchObject({
+      inputSchemaStatus: 'invalid',
+      errorIndicators: ['credential']
+    });
+    expect(JSON.stringify(options.job.result)).not.toContain('pretend-value');
+  });
+
   it('aborts the real request signal when the sample deadline expires', async () => {
     vi.spyOn(McpClientManager.prototype, 'callTool').mockImplementation(
       async (_server, _name, _args, options) => {

@@ -9,7 +9,12 @@ import type {
 } from './types.js';
 
 type Finding = Omit<McpCatalogCheckFinding, 'item'>;
-type AddFinding = (status: Finding['status'], path: string, message: string, code?: Finding['code']) => void;
+type AddFinding = (
+  status: Finding['status'],
+  path: string,
+  message: string,
+  code?: Finding['code']
+) => void;
 type Metadata = { title?: string; description?: string };
 
 const UNSUPPORTED = { status: 'unsupported' } as const;
@@ -58,7 +63,8 @@ function inspectText(value: string | undefined, path: string, add: AddFinding) {
 }
 
 function inspectMetadata(item: Metadata, add: AddFinding) {
-  if (!item.description?.trim()) add('warning', '/description', 'Description is missing.', 'description');
+  if (!item.description?.trim())
+    add('warning', '/description', 'Description is missing.', 'description');
   inspectText(item.title, '/title', add);
   inspectText(item.description, '/description', add);
 }
@@ -136,7 +142,12 @@ function inspectToolSchema(value: unknown, path: string, add: AddFinding) {
           typeof schema.$ref !== 'string' &&
           (typeof schema.description !== 'string' || !schema.description.trim())
         ) {
-          add('warning', field + '/description', 'Input field description is missing.', 'description');
+          add(
+            'warning',
+            field + '/description',
+            'Input field description is missing.',
+            'description'
+          );
         }
         pending.push({ schema, path: field });
       }
@@ -177,7 +188,12 @@ function inspectTool(tool: ToolDef, add: AddFinding) {
     tool.annotations?.readOnlyHint === undefined &&
     tool.annotations?.destructiveHint === undefined
   ) {
-    add('warning', '/annotations', 'Tool does not declare read-only or destructive behavior.', 'safety');
+    add(
+      'warning',
+      '/annotations',
+      'Tool does not declare read-only or destructive behavior.',
+      'safety'
+    );
   }
 }
 
@@ -205,7 +221,13 @@ function checkSection<T extends Metadata>(
   for (const [index, item] of list.items.entries()) {
     const id = ids[index];
     const add: AddFinding = (status, path, message, code) =>
-      findings.push({ status, path, message, item: id || 'Entry ' + (index + 1), ...(code ? { code } : {}) });
+      findings.push({
+        status,
+        path,
+        message,
+        item: id || 'Entry ' + (index + 1),
+        ...(code ? { code } : {})
+      });
     const idPath = '/' + idField;
     if (!id.trim()) add('fail', idPath, 'Identifier is missing.');
     if (duplicates.delete(id)) add('fail', idPath, 'Duplicate identifier.');

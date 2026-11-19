@@ -24,6 +24,7 @@ import {
 } from '@/lib/tool-analysis-utils';
 import { toast } from '@/hooks/use-toast';
 import { ToolSchemaPreview, type SchemaViewMode } from './ToolSchemaPreview';
+import { McpHealthOverview } from './McpHealthOverview';
 import { McpCatalogCheckResults } from './McpCatalogCheckResults';
 import { ToolTokenEstimateBadge } from './ToolTokenEstimateBadge';
 
@@ -131,6 +132,18 @@ export function ToolAnalysisReportView(props: ToolAnalysisReportViewProps) {
   const showToolReview = report.modes.metadataReview || report.modes.deeperAnalysis;
   return (
     <div className="space-y-4">
+      {report.servers.map(
+        (server) =>
+          server.health && (
+            <McpHealthOverview
+              key={server.serverName}
+              name={server.serverName}
+              health={server.health}
+              modes={report.modes}
+              hasCatalogChecks={Boolean(server.catalogChecks?.length)}
+            />
+          )
+      )}
       {report.servers.map(
         (server) =>
           server.catalogChecks && (

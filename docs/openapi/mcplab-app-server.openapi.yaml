@@ -2460,6 +2460,58 @@ components:
               item: { type: string }
               path: { type: string }
               message: { type: string }
+    McpHealthReport:
+      type: object
+      description: Score and evidence from measured MCP checks. Skipped checks are excluded from the score.
+      required: [score, checkedCount, toolsRun, toolCount, timings, checks]
+      properties:
+        endpoint: { type: string }
+        implementation:
+          type: object
+          properties:
+            name: { type: string }
+            version: { type: string }
+        protocolVersion: { type: string }
+        transport: { type: string }
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+        checkedCount: { type: integer }
+        toolsRun: { type: integer }
+        toolCount: { type: integer }
+        partialListing: { type: boolean }
+        timings:
+          type: object
+          properties:
+            connectMs: { type: integer }
+            listMs: { type: integer }
+            averageCallMs: { type: integer }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [id, title, status, detail]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              status:
+                type: string
+                enum: [pass, warning, fail, skipped]
+              detail: { type: string }
+              findings:
+                type: array
+                items:
+                  type: object
+                  required: [status, item, message]
+                  properties:
+                    status:
+                      type: string
+                      enum: [warning, fail, skipped]
+                    item: { type: string }
+                    path: { type: string }
+                    message: { type: string }
     ToolAnalysisReport:
       type: object
       description: Full tool analysis report payload (shape may evolve)
@@ -2480,6 +2532,8 @@ components:
           items:
             type: object
             properties:
+              health:
+                $ref: "#/components/schemas/McpHealthReport"
               catalogChecks:
                 type: array
                 items:

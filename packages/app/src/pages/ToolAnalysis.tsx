@@ -21,6 +21,7 @@ import { McpSkillsPanel } from '@/components/tool-analysis/McpSkillsPanel';
 import { McpToolList } from '@/components/tool-analysis/McpToolList';
 import { McpCatalogStatusBadges } from '@/components/tool-analysis/McpCatalogCheckResults';
 import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { mcpHealthCoverage } from '@/lib/tool-analysis-utils';
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { useDataSource } from '@/contexts/useDataSource';
 import { useLibraries } from '@/contexts/useLibraries';
@@ -545,6 +546,7 @@ const ToolAnalysisPage = () => {
   const canOpenRunStep =
     activeJobId !== null || events.length > 0 || runState === 'stopped' || runState === 'error';
   const canOpenReportStep = Boolean(report);
+  const serverHealth = report?.servers[0]?.health;
 
   const openStep = (step: 'configure' | 'run' | 'report') => {
     if (step === 'configure' && canOpenConfigureStep) {
@@ -1052,6 +1054,15 @@ const ToolAnalysisPage = () => {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold">Result overview</div>
+                      {serverHealth && (
+                        <p className="text-sm font-medium">
+                          {serverHealth.score === null
+                            ? 'Unscored'
+                            : `Health score ${serverHealth.score}/100`}
+                          {' · '}
+                          {mcpHealthCoverage(serverHealth)}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {report.summary.catalogChecks && (
                           <>{report.summary.catalogChecks.itemsChecked} catalog entries checked. </>

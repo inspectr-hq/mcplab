@@ -1,15 +1,20 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { estimateToolDefinitionTokens } from '@inspectr/mcplab-core';
+import { buildSavedMcpHealthReport, estimateToolDefinitionTokens } from '@inspectr/mcplab-core';
 import type {
   SavedToolAnalysisReportRecord,
   ToolAnalysisReport,
   ToolAnalysisResultSummary
 } from '@inspectr/mcplab-core';
 
-function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
+function addSavedReportDetails(report: ToolAnalysisReport): void {
   if (!Array.isArray(report.servers)) return;
   for (const server of report.servers) {
+    server.health ??= buildSavedMcpHealthReport(
+      server,
+      report.mcpServerVersions?.[server.serverName],
+      report.modes?.deeperAnalysis
+    );
     if (server.tokenEstimate) continue;
     server.tokenEstimate = estimateToolDefinitionTokens(
       server.tools.map((tool) => ({
@@ -73,7 +78,7 @@ export function readToolAnalysisReportRecord(
 ): SavedToolAnalysisReportRecord | null {
   try {
     const record = parseRecord(readFileSync(reportFile(baseDir, reportId), 'utf8'));
-    addToolDefinitionTokenEstimates(record.report);
+    addSavedReportDetails(record.report);
     return record;
   } catch {
     return null;

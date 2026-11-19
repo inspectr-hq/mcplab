@@ -2,6 +2,9 @@ import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 import {
   CATALOG_SECTION_LABELS,
   CATALOG_STATUS_LABELS,
+  mcpHealthCoverage,
+  mcpHealthPrivacy,
+  mcpHealthTimings,
   toolAnalysisCallLabel
 } from './tool-analysis-utils';
 
@@ -18,6 +21,32 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
     lines.push('```');
   };
   lines.push(`# MCP Tool Analysis Report`, '');
+  for (const { serverName, health } of report.servers) {
+    if (!health) continue;
+    const identity = health.implementation?.name ?? serverName;
+    const version = health.implementation?.version ? ` v${health.implementation.version}` : '';
+    const protocol = [health.protocolVersion, health.transport].filter(Boolean).join(' · ');
+    const score = health.score === null ? 'Unscored' : `${health.score}/100`;
+    lines.push(`## Server health · ${identity}${version}`, '', `**Health score ${score}**`);
+    if (health.endpoint) lines.push(`- Endpoint · ${health.endpoint}`);
+    if (protocol) lines.push(`- MCP · ${protocol}`);
+    lines.push(`- ${mcpHealthCoverage(health)}`, `- ${mcpHealthPrivacy(report.modes)}`);
+    lines.push(...mcpHealthTimings(health).map((timing) => `- ${timing}`), '');
+    lines.push(
+      'Passed checks earn full credit. Warnings earn half credit. Skipped checks are excluded.',
+      ''
+    );
+    for (const check of health.checks) {
+      lines.push(`- **${CATALOG_STATUS_LABELS[check.status]}** · ${check.title} · ${check.detail}`);
+      for (const finding of check.findings ?? []) {
+        const field = finding.path ? ` · ${finding.path}` : '';
+        lines.push(
+          `  - ${CATALOG_STATUS_LABELS[finding.status]} · ${finding.item} · ${finding.message}${field}`
+        );
+      }
+    }
+    lines.push('');
+  }
   lines.push(`- Created: ${report.createdAt}`);
   if (report.assistantAgentName) lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
   if (report.assistantAgentModel) lines.push(`- Assistant Model: ${report.assistantAgentModel}`);

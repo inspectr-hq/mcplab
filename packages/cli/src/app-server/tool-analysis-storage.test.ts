@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -15,10 +15,10 @@ describe('tool analysis report storage', () => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('derives token totals only when reading an existing report detail', () => {
+  it('derives health and token totals when reopening an older report', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-tool-analysis-storage-'));
     tempDirs.push(dir);
-    writeToolAnalysisReportRecord(dir, {
+    const file = writeToolAnalysisReportRecord(dir, {
       recordVersion: 1,
       reportId: 'ta-existing',
       createdAt: '2026-09-05T23:03:14.000Z',
@@ -46,6 +46,21 @@ describe('tool analysis report storage', () => {
             toolCountAnalyzed: 1,
             toolCountSkipped: 0,
             warnings: [],
+            catalogChecks: [
+              {
+                kind: 'tools',
+                status: 'warning',
+                itemsChecked: 1,
+                findings: [
+                  {
+                    item: 'search_docs',
+                    path: '/annotations',
+                    status: 'warning',
+                    message: 'Tool does not declare read-only or destructive behavior.'
+                  }
+                ]
+              }
+            ],
             tools: [
               {
                 serverName: 'demo',
@@ -64,9 +79,18 @@ describe('tool analysis report storage', () => {
       }
     });
 
-    expect(
-      readToolAnalysisReportRecord(dir, 'ta-existing')?.report.servers[0]?.tokenEstimate?.total
-    ).toBeGreaterThan(0);
+    const loaded = readToolAnalysisReportRecord(dir, 'ta-existing')?.report.servers[0];
+    expect(loaded?.tokenEstimate?.total).toBeGreaterThan(0);
+    expect(loaded?.health?.toolCount).toBe(1);
+    expect(loaded?.health?.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'connection', status: 'skipped' }),
+        expect.objectContaining({ id: 'listing', status: 'pass' }),
+        expect.objectContaining({ id: 'safety', status: 'warning' }),
+        expect.objectContaining({ id: 'samples', status: 'skipped' })
+      ])
+    );
+    expect(JSON.parse(readFileSync(file, 'utf8')).report.servers[0]).not.toHaveProperty('health');
     expect(listToolAnalysisReports(dir)[0]).not.toHaveProperty('toolDefinitionTokens');
     expect(listToolAnalysisReports(dir)[0]?.mcpServerVersions).toEqual({ demo: '1.0.0' });
   });

@@ -3,6 +3,7 @@ import type {
   AgentConfig,
   EvalConfig,
   McpCatalogList,
+  McpErrorIndicator,
   McpServerCatalog,
   McpToolSafety,
   ToolAnalysisCallOutcome,
@@ -17,6 +18,9 @@ import type {
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
+  buildMcpHealthReport,
+  inspectMcpError,
+  makeMcpInputChecker,
   checkMcpCatalog,
   duplicateMcpIdentifiers,
   summarizeMcpCatalogChecks,
@@ -340,6 +344,8 @@ interface DiscoveredMcpServer {
   catalog?: McpServerCatalog;
   toolListing: McpCatalogList<ToolDef>;
   duplicateToolNames: Set<string>;
+  connection?: { ok: boolean; durationMs: number; message?: string };
+  listingMs?: number;
 }
 
 function classifyDiscoveredTool(server: DiscoveredMcpServer, tool: ToolDef): McpToolSafety {
@@ -386,13 +392,23 @@ export async function discoverMcpToolsForServers(
         entry.warnings.push(message);
         continue;
       }
+      const connectionStarted = performance.now();
       try {
         await mcp.connectAll({ [serverName]: server }, signal, {
           serverAuthHeaders: options?.serverAuthHeaders
         });
+        entry.connection = {
+          ok: true,
+          durationMs: Math.round(performance.now() - connectionStarted)
+        };
       } catch (error: unknown) {
         throwIfAborted(signal);
-        const message = `Failed to connect: ${error instanceof Error ? error.message : String(error)}`;
+        const message = `Failed to connect. ${inspectMcpError(error instanceof Error ? error.message : String(error)).error}`;
+        entry.connection = {
+          ok: false,
+          durationMs: Math.round(performance.now() - connectionStarted),
+          message
+        };
         entry.toolListing = { status: 'error', message };
         entry.warnings.push(message);
         continue;
@@ -403,12 +419,19 @@ export async function discoverMcpToolsForServers(
         : undefined;
       let tools: ToolDef[] = [];
       try {
-        entry.toolListing =
-          !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
-            ? await mcp.listToolsWithCoverage(serverName, signal)
-            : { status: 'unsupported' };
+        if (!options?.includeCatalog || mcp.getServerFeatures(serverName).tools) {
+          const listingStarted = performance.now();
+          try {
+            entry.toolListing = await mcp.listToolsWithCoverage(serverName, signal);
+          } finally {
+            entry.listingMs = Math.round(performance.now() - listingStarted);
+          }
+        } else {
+          entry.toolListing = { status: 'unsupported' };
+        }
         tools = 'items' in entry.toolListing ? entry.toolListing.items : [];
         if (entry.toolListing.status === 'partial') {
+          entry.toolListing.message = inspectMcpError(entry.toolListing.message).error;
           entry.warnings.push(`Incomplete tool listing. ${entry.toolListing.message}`);
         }
         entry.duplicateToolNames = duplicateMcpIdentifiers(tools.map((tool) => tool.name));
@@ -438,7 +461,9 @@ export async function discoverMcpToolsForServers(
         );
       } catch (error: unknown) {
         throwIfAborted(signal);
-        const message = error instanceof Error ? error.message : String(error);
+        const { error: message } = inspectMcpError(
+          error instanceof Error ? error.message : String(error)
+        );
         entry.toolListing = { status: 'error', message };
         entry.warnings.push(`Failed to load tools: ${message}`);
       }
@@ -486,6 +511,7 @@ async function sampleMcpTool(params: {
       durationMs: number;
       error: string;
       resultPreview?: string;
+      errorIndicators?: McpErrorIndicator[];
     }
 > {
   const { mcp, server, tool, args, timeoutMs, jobSignal } = params;
@@ -496,26 +522,41 @@ async function sampleMcpTool(params: {
     throwIfAborted(deadline.signal);
     const durationMs = Date.now() - started;
     if (result?.isError === true) {
+      const text = Array.isArray(result.content)
+        ? result.content.flatMap((block: { type?: string; text?: unknown }) =>
+            block.type === 'text' && typeof block.text === 'string' ? [block.text] : []
+          )
+        : [];
+      const observed = inspectMcpError(
+        [...text, JSON.stringify(result.structuredContent ?? '')].join('\n')
+      );
+      const safeMessage = text.length ? inspectMcpError(text.join('\n')).error : undefined;
       return {
         outcome: 'tool_error',
         durationMs,
-        error: 'The server returned isError: true.',
-        resultPreview: truncateJson(result, 8000)
+        error: observed.errorIndicators.length
+          ? observed.error
+          : safeMessage || 'The server returned isError: true.',
+        ...(observed.errorIndicators.length ? {} : { resultPreview: truncateJson(result, 8000) }),
+        errorIndicators: observed.errorIndicators
       };
     }
     return { outcome: 'success', durationMs, result };
   } catch (error) {
     throwIfAborted(jobSignal);
     const outcome = deadline.timeoutSignal.aborted ? 'timeout' : classifyMcpToolCallFailure(error);
+    const durationMs = Date.now() - started;
+    if (outcome === 'timeout') {
+      return { outcome, durationMs, error: `${server}::${tool} timed out after ${timeoutMs}ms` };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : '';
+    const observed = inspectMcpError([message, cause].join('\n'));
     return {
       outcome,
-      durationMs: Date.now() - started,
-      error:
-        outcome === 'timeout'
-          ? `${server}::${tool} timed out after ${timeoutMs}ms`
-          : error instanceof Error
-            ? error.message
-            : String(error)
+      durationMs,
+      error: observed.errorIndicators.length ? observed.error : inspectMcpError(message).error,
+      errorIndicators: observed.errorIndicators
     };
   } finally {
     deadline.dispose();
@@ -596,6 +637,7 @@ export async function runToolAnalysisJob(params: {
     }
   );
   const mcpServerVersions = mcp.getServerVersions();
+  const implementations = mcp.getServerImplementations();
   try {
     const serverReports: ToolAnalysisServerReport[] = [];
     const allFindings: ToolAnalysisFinding[] = [];
@@ -614,9 +656,8 @@ export async function runToolAnalysisJob(params: {
           ? discovered.tools.filter((t) => requestedSet.has(t.tool.name))
           : discovered.tools;
       }
-      const catalogChecks = modes.catalogChecks
-        ? checkMcpCatalog(discovered.toolListing, discovered.catalog)
-        : undefined;
+      const checks = checkMcpCatalog(discovered.toolListing, discovered.catalog);
+      const catalogChecks = modes.catalogChecks ? checks : undefined;
       const missingRequested = requestedSet
         ? requestedToolNames!.filter((name) => !discovered.tools.some((t) => t.tool.name === name))
         : [];
@@ -800,8 +841,10 @@ export async function runToolAnalysisJob(params: {
               const suggestedSamples = Array.isArray(samplePlan.sampleCalls)
                 ? samplePlan.sampleCalls.slice(0, deeper.sampleCallsPerTool)
                 : [{ arguments: {} }];
+              const checkInput = makeMcpInputChecker(toolCtx.tool.inputSchema);
               for (let idx = 0; idx < suggestedSamples.length; idx += 1) {
                 const suggestedArgs = suggestedSamples[idx]?.arguments ?? {};
+                const inputSchemaStatus = checkInput?.(suggestedArgs);
                 const call = await sampleMcpTool({
                   mcp,
                   server: discovered.serverName,
@@ -816,6 +859,7 @@ export async function runToolAnalysisJob(params: {
                     ...call,
                     callIndex: idx + 1,
                     arguments: suggestedArgs,
+                    inputSchemaStatus,
                     ok: false,
                     observations: [],
                     issues: [
@@ -886,6 +930,7 @@ export async function runToolAnalysisJob(params: {
                 sampleCalls.push({
                   callIndex: idx + 1,
                   arguments: suggestedArgs,
+                  inputSchemaStatus,
                   ok: true,
                   outcome,
                   durationMs,
@@ -988,7 +1033,22 @@ export async function runToolAnalysisJob(params: {
         agentConfig?.model ?? 'unknown-model'
       );
 
+      const implementation = implementations[discovered.serverName];
+      const health = buildMcpHealthReport({
+        tools: discovered.toolListing,
+        catalogChecks: checks,
+        connection: discovered.connection,
+        listingMs: discovered.listingMs,
+        endpoint: libraries.servers[discovered.serverName]?.url,
+        implementation: implementation
+          ? { name: implementation.name, version: implementation.version }
+          : undefined,
+        protocolVersion: mcp.getServerProtocolVersion(discovered.serverName),
+        toolReports,
+        samplingEnabled: modes.deeperAnalysis
+      });
       serverReports.push({
+        health,
         serverName: discovered.serverName,
         toolCountDiscovered:
           'items' in discovered.toolListing ? discovered.toolListing.items.length : 0,

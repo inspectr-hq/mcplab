@@ -863,6 +863,7 @@ export interface ToolAnalysisSampleCall {
   arguments: unknown;
   ok: boolean;
   outcome?: ToolAnalysisCallOutcome;
+  inputSchemaStatus?: 'valid' | 'invalid';
   durationMs?: number;
   resultPreview?: string;
   error?: string;

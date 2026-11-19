@@ -69,7 +69,12 @@ export {
   duplicateMcpIdentifiers,
   summarizeMcpCatalogChecks
 } from './mcp-catalog-checks.js';
-export { buildMcpHealthReport, inspectMcpError } from './mcp-health.js';
+export {
+  buildMcpHealthReport,
+  buildSavedMcpHealthReport,
+  inspectMcpError,
+  makeMcpInputChecker
+} from './mcp-health.js';
 export { classifyMcpToolSafety } from './mcp-tool-safety.js';
 export {
   discoverMcpCatalogSkills,

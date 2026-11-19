@@ -11,6 +11,13 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import type { SavedToolAnalysisReportRecord } from '@/lib/data-sources/types';
@@ -18,7 +25,7 @@ import { ToolAnalysisReportView } from '@/components/tool-analysis/ToolAnalysisR
 import { toolAnalysisReportToMarkdown } from '@/lib/tool-analysis-markdown';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/lib/provider-format';
-import { Clock, Download, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Clock, Download, Trash2 } from 'lucide-react';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -98,96 +105,108 @@ export default function ToolAnalysisResultDetailPage() {
   if (notFound || !record) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Tool Analysis Result</h1>
+        <h1 className="text-2xl font-bold">MCP Analysis Result</h1>
         <p className="text-sm text-muted-foreground">Saved report not found.</p>
         <Button asChild variant="outline">
-          <Link to="/tool-analysis-results">Back to Tool Analysis Results</Link>
+          <Link to="/tool-analysis-results">Back to MCP Analysis Results</Link>
         </Button>
       </div>
     );
   }
 
+  const assistant = [
+    record.report.assistantAgentProvider
+      ? formatProvider(record.report.assistantAgentProvider)
+      : null,
+    record.report.assistantAgentModel
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const hasToolSchemas = record.report.servers.some((server) => server.tools.length > 0);
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="font-mono text-xl font-semibold">{record.reportId}</h1>
-          <p className="text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1 align-middle">
-              <Clock className="h-3 w-3 shrink-0" />
-              {new Date(record.createdAt).toLocaleString()}
-            </span>{' '}
-            ·{' '}
-            {[
-              record.report.assistantAgentProvider
-                ? formatProvider(record.report.assistantAgentProvider)
-                : null,
-              record.report.assistantAgentModel
-            ]
-              .filter(Boolean)
-              .join(' · ') ||
-              record.serverNames.join(', ') ||
-              '—'}
-          </p>
+    <div className="space-y-5">
+      <header className="space-y-3">
+        <Button asChild size="sm" variant="ghost" className="-ml-2 min-h-11 text-muted-foreground">
+          <Link to="/tool-analysis-results">
+            <ArrowLeft aria-hidden="true" />
+            All analysis results
+          </Link>
+        </Button>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+          <div className="min-w-0 space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight">MCP analysis report</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+              <code className="wrap-anywhere">{record.reportId}</code>
+              <time dateTime={record.createdAt} className="inline-flex items-center gap-1.5">
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                {new Date(record.createdAt).toLocaleString()}
+              </time>
+              {assistant && <span>{assistant}</span>}
+              <McpServerBadge versions={record.report.mcpServerVersions} />
+            </div>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="min-h-11">
+                Report actions
+                <ChevronDown aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="min-h-11 gap-2"
+                onSelect={() =>
+                  downloadTextFile(
+                    `${record.reportId}.json`,
+                    `${JSON.stringify(record, null, 2)}\n`,
+                    'application/json'
+                  )
+                }
+              >
+                <Download className="size-4" aria-hidden="true" />
+                Export JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="min-h-11 gap-2"
+                onSelect={() =>
+                  downloadTextFile(
+                    `${record.reportId}.md`,
+                    toolAnalysisReportToMarkdown(record.report),
+                    'text/markdown'
+                  )
+                }
+              >
+                <Download className="size-4" aria-hidden="true" />
+                Export Markdown
+              </DropdownMenuItem>
+              {hasToolSchemas && (
+                <DropdownMenuItem
+                  className="min-h-11 gap-2"
+                  onSelect={() =>
+                    downloadTextFile(
+                      `${record.reportId}-tool-schemas.json`,
+                      `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
+                      'application/json'
+                    )
+                  }
+                >
+                  <Download className="size-4" aria-hidden="true" />
+                  Export MCP info
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="min-h-11 gap-2 text-destructive focus:text-destructive"
+                onSelect={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Delete report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <McpServerBadge versions={record.report.mcpServerVersions} />
-          <Button asChild size="sm" variant="outline">
-            <Link to="/tool-analysis-results">Back to results</Link>
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadTextFile(
-                `${record.reportId}.json`,
-                `${JSON.stringify(record, null, 2)}\n`,
-                'application/json'
-              )
-            }
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export JSON
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadTextFile(
-                `${record.reportId}.md`,
-                toolAnalysisReportToMarkdown(record.report),
-                'text/markdown'
-              )
-            }
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export Markdown
-          </Button>
-          {record.report.servers.some((server) => server.tools.length > 0) && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                downloadTextFile(
-                  `${record.reportId}-tool-schemas.json`,
-                  `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
-                  'application/json'
-                )
-              }
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export MCP info
-            </Button>
-          )}
-          <Button type="button" size="sm" variant="outline" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete
-          </Button>
-        </div>
-      </div>
+      </header>
 
       <ToolAnalysisReportView report={record.report} />
 
