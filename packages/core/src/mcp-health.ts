@@ -18,7 +18,6 @@ const CREDENTIAL =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:bearer\s+[\w.~-]{12,}|basic\s+[A-Z0-9+/=]{12,}|AKIA[A-Z0-9]{16}|(?:gh[pousr]_|sk-)[\w-]{16,})\b|[a-z][\w+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i;
 const CREDENTIAL_FIELD =
   /\b(?:password|secret|api[_ -]?key|access[_ -]?token|authorization)\b["']?\s*[:=]\s*(?:(["'])([^"']+)\1|([^\s,"'}]+))/gi;
-const QUOTED_HUMAN_SECRET = /\b(?:password|secret)\b["']?\s*[:=]\s*(["'])([^\s"']{8,})\1/gi;
 const INTERNAL_DETAILS =
   /\bat\s+[^\n]+\.(?:[cm]?[jt]sx?|py):\d+(?::\d+)?\b|traceback \(most recent call last\)|\b(?:stack trace|stacktrace)\b|(?:^|[\s("'\\])(?:\/(?:srv|home|Users|var|app)\/|[A-Z]:\\(?:Users|Program Files)\\)[^\s)"']+/im;
 
@@ -28,17 +27,6 @@ const INDICATOR_MESSAGES: Record<McpErrorIndicator, string> = {
 };
 
 function hasCredentialField(text: string): boolean {
-  for (const match of text.matchAll(QUOTED_HUMAN_SECRET)) {
-    const value = match[2];
-    const characterTypes = [
-      /[a-z]/.test(value),
-      /[A-Z]/.test(value),
-      /\d/.test(value),
-      /[^\w]/.test(value)
-    ];
-    if (characterTypes.filter(Boolean).length >= 2) return true;
-  }
-
   for (const match of text.matchAll(CREDENTIAL_FIELD)) {
     const value = match[2] ?? match[3];
     if (!value || /\s/.test(value) || value.length < 12) continue;

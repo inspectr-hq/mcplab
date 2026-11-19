@@ -73,6 +73,12 @@ describe('MCP health report', () => {
       "secret: 'not provided'",
       'password: "isrequired"',
       'password: "missing_required"',
+      '{"password": "Required"}',
+      '{"password": "Invalid."}',
+      '{"secret": "Missing!"}',
+      '{"password": "TooShort"}',
+      '{"secret": "<redacted>"}',
+      '{"password": "minLength:8"}',
       'authorization: missing_required_bearer_token_header',
       'password=hunter2hunter2'
     ]) {
@@ -86,11 +92,9 @@ describe('MCP health report', () => {
     expect(error.error).not.toContain('dXNlcjpwYXNzd29yZA==');
   });
 
-  it('detects quoted human-chosen passwords and secrets', () => {
-    for (const message of ['password: "hunter2hunter2"', "secret: 'MySecret7'"]) {
-      const error = inspectMcpError(message);
-      expect(error.errorIndicators).toEqual(['credential']);
-      expect(error.error).not.toContain(message.split(/['"]+/)[1]);
+  it('preserves quoted password values that do not look like high-entropy tokens', () => {
+    for (const message of ['password: "Tr0ub4dor&3xyz"', 'password: "hunter2hunter2"']) {
+      expect(inspectMcpError(message)).toEqual({ error: message, errorIndicators: [] });
     }
   });
 });
