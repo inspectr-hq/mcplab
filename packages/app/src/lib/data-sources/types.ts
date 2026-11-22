@@ -191,6 +191,7 @@ export interface WorkspaceRunSummary extends ServerComparisonMetadata {
   configName?: string;
   mcpServerVersions?: Record<string, string | null>;
   langsmithTraceUrls?: Record<string, string>;
+  langfuseTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];

@@ -140,6 +140,7 @@ export {
   type TraceExporter,
   type TraceSpan
 } from './langsmith-tracing.js';
+export { createLangfuseTraceExporter, isLangfuseEnabled } from './langfuse-tracing.js';
 export * from './queue-contract.js';
 export {
   parseBrowserProviderProfiles,

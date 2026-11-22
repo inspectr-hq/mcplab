@@ -53,6 +53,7 @@ export interface RunSummary extends ServerComparisonMetadata {
   configName?: string;
   mcpServerVersions?: Record<string, string | null>;
   langsmithTraceUrls?: Record<string, string>;
+  langfuseTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
@@ -153,6 +154,7 @@ function buildRunSummary(runId: string, dir: string, results: ResultsJson): RunS
     configName: results.metadata.config_name,
     mcpServerVersions: results.metadata.mcp_server_versions,
     langsmithTraceUrls: results.metadata.langsmith_trace_urls,
+    langfuseTraceUrls: results.metadata.langfuse_trace_urls,
     toolTokensTotal:
       typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total === 'number'
         ? ((results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null)

@@ -17,6 +17,7 @@ export function aggregateResults(params: {
   configHash: string;
   cliVersion: string;
   langsmithTraceUrls?: Record<string, string>;
+  langfuseTraceUrls?: Record<string, string>;
   mcpServerVersions?: Record<string, string | null>;
   executionSource?: ResultsJson['metadata']['execution_source'];
   executionClient?: string;
@@ -162,6 +163,7 @@ export function aggregateResults(params: {
       git_commit: params.gitCommit,
       config_hash: params.configHash,
       langsmith_trace_urls: params.langsmithTraceUrls,
+      langfuse_trace_urls: params.langfuseTraceUrls,
       total_duration_ms: totalDurationMs,
       total_tool_duration_ms: totalToolDurationMs,
       cli_version: params.cliVersion,
@@ -201,6 +203,11 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
     for (const [requestId, url] of langsmithTraceUrls) {
       lines.push(`- [${requestId}](${url})`);
     }
+  }
+  const langfuseTraceUrls = Object.entries(results.metadata.langfuse_trace_urls ?? {});
+  if (langfuseTraceUrls.length > 0) {
+    lines.push('Langfuse traces:');
+    for (const [requestId, url] of langfuseTraceUrls) lines.push(`- [${requestId}](${url})`);
   }
   const mcpServerVersionEntries = Object.entries(results.metadata.mcp_server_versions ?? {});
   if (mcpServerVersionEntries.length > 0) {

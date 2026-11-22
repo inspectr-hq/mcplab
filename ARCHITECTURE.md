@@ -648,6 +648,10 @@ Configured per-server in YAML. Env var references (`${MY_VAR}`) are resolved at 
 
 When `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` are configured, `packages/core` exports evaluation traces through the LangSmith TypeScript SDK. Each scenario execution is a `chain` parent with nested `llm` provider calls and `tool` MCP calls. `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`, and `LANGSMITH_WORKSPACE_ID` support regional, self-hosted, project, and multi-workspace configurations. Export failures are warnings only; filesystem artifacts remain authoritative.
 
+### Langfuse tracing (optional)
+
+When `LANGFUSE_TRACING=true` and both `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are configured, `packages/core` exports evaluation traces through Langfuse's OpenTelemetry SDK. Set `LANGFUSE_BASE_URL` for regional Cloud or self-hosted instances. Each scenario has nested LLM generation and MCP tool observations. Export failures are warnings only; filesystem artifacts remain authoritative.
+
 | Service | SDK / Protocol | Purpose |
 |---|---|---|
 | Anthropic API | `@anthropic-ai/sdk` | Claude models (Opus, Sonnet, Haiku) |

@@ -29,7 +29,7 @@ export interface ScenarioTraceSpan extends TraceSpan {
 
 export interface TraceExporter {
   startScenario(values: Values): ScenarioTraceSpan;
-  flush(): Promise<{ traceUrls: Record<string, string> }>;
+  flush(): Promise<{ traceUrls: Record<string, string>; langfuseTraceUrls?: Record<string, string> }>;
 }
 
 type LangSmithMessage = Record<string, unknown>;

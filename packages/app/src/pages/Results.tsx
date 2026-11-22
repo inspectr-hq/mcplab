@@ -1411,6 +1411,14 @@ const Results = () => {
                                     </DropdownMenuItem>
                                   )
                                 )}
+                                {Object.entries(item.run.langfuseTraceUrls ?? {}).map(([requestId, url]) => (
+                                  <DropdownMenuItem key={`langfuse-${requestId}`} asChild>
+                                    <a href={url} target="_blank" rel="noreferrer">
+                                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                                      Langfuse trace
+                                    </a>
+                                  </DropdownMenuItem>
+                                ))}
                                 <DropdownMenuItem>
                                   <Download className="mr-2 h-3.5 w-3.5" />
                                   Export JSON

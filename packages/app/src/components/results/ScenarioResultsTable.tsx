@@ -292,6 +292,7 @@ export function ScenarioResultsTable({
                               runId={id}
                               scenario={sc}
                               langsmithTraceUrls={result.langsmithTraceUrls}
+                              langfuseTraceUrls={result.langfuseTraceUrls}
                             />
                             <Button
                               type="button"

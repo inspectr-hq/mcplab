@@ -6,12 +6,14 @@ import { RunTraceButton, type RunTraceItem } from './RunTraceButton';
 export function ScenarioTraceButtons({
   runId,
   scenario,
-  langsmithTraceUrls
+  langsmithTraceUrls,
+  langfuseTraceUrls
 }: {
   /** Result run ID the scenario belongs to; Inspectr sessions are validated against it. */
   runId: string | undefined;
   scenario: ScenarioResult;
   langsmithTraceUrls?: Record<string, string>;
+  langfuseTraceUrls?: Record<string, string>;
 }) {
   const { openingTrace, openTrace } = useOpenInspectrTrace(runId);
   const runLabel = (runIndex: number) => `Run #${runIndex + 1}`;
@@ -28,6 +30,10 @@ export function ScenarioTraceButtons({
       : [];
   });
   const origins = scenario.inspectrOrigins ?? [];
+  const langfuseItems: RunTraceItem[] = scenario.runs.flatMap((run) => {
+    const url = run.requestId ? langfuseTraceUrls?.[run.requestId] : undefined;
+    return url ? [{ key: url, label: runLabel(run.runIndex), open: () => void window.open(url, '_blank', 'noopener,noreferrer') }] : [];
+  });
   const inspectrItems: RunTraceItem[] = origins.flatMap((origin) =>
     scenario.runs.flatMap((run) => {
       const requestId = run.requestId;
@@ -45,6 +51,11 @@ export function ScenarioTraceButtons({
 
   return (
     <>
+      <RunTraceButton
+        name="Langfuse trace"
+        title="Open the Langfuse trace"
+        items={langfuseItems}
+      />
       <RunTraceButton
         name="LangSmith trace"
         title="Open the LangSmith trace"

@@ -932,6 +932,9 @@ async function executeSingleConfigRun(params: {
   for (const url of Object.values(results.metadata.langsmith_trace_urls ?? {})) {
     console.log(kleur.cyan(`LangSmith trace: ${url}`));
   }
+  for (const url of Object.values(results.metadata.langfuse_trace_urls ?? {})) {
+    console.log(kleur.cyan(`Langfuse trace: ${url}`));
+  }
 
   const failedRuns = results.scenarios.reduce(
     (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
