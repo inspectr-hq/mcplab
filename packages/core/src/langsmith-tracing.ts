@@ -29,7 +29,10 @@ export interface ScenarioTraceSpan extends TraceSpan {
 
 export interface TraceExporter {
   startScenario(values: Values): ScenarioTraceSpan;
-  flush(): Promise<{ traceUrls: Record<string, string>; langfuseTraceUrls?: Record<string, string> }>;
+  flush(): Promise<{
+    traceUrls: Record<string, string>;
+    langfuseTraceUrls?: Record<string, string>;
+  }>;
 }
 
 type LangSmithMessage = Record<string, unknown>;
@@ -128,7 +131,8 @@ function createRunFactory(env: Environment): LangSmithRunFactory {
     apiKey: env.LANGSMITH_API_KEY,
     ...(env.LANGSMITH_ENDPOINT ? { apiUrl: env.LANGSMITH_ENDPOINT } : {}),
     ...(env.LANGSMITH_WORKSPACE_ID ? { workspaceId: env.LANGSMITH_WORKSPACE_ID } : {}),
-    autoBatchTracing: true
+    autoBatchTracing: true,
+    timeout_ms: 5000
   });
   return (config) => {
     const options: RunTreeConfig = {
@@ -145,6 +149,19 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
   const roots: LangSmithRun[] = [];
   const runsByRoot = new Map<LangSmithRun, LangSmithRun[]>();
   const requestIdsByRoot = new Map<LangSmithRun, string>();
+  const projectUrls = new Map<string, Promise<string | undefined>>();
+  function getProjectUrl(root: LangSmithRun): Promise<string | undefined> {
+    const projectName = root.project_name ?? env.LANGSMITH_PROJECT ?? 'default';
+    let result = projectUrls.get(projectName);
+    if (!result) {
+      result = resolveProjectUrl(root, projectName).catch((error) => {
+        warn(error);
+        return undefined;
+      });
+      projectUrls.set(projectName, result);
+    }
+    return result;
+  }
   return {
     startScenario(values) {
       try {
@@ -215,10 +232,8 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           await root.postRun();
           const requestId = requestIdsByRoot.get(root);
           if (requestId && root.id && root.client) {
-            const projectUrl = await root.client.getProjectUrl({
-              projectName: root.project_name
-            });
-            traceUrls[requestId] = `${projectUrl}/r/${root.id}?poll=true`;
+            const projectUrl = await getProjectUrl(root);
+            if (projectUrl) traceUrls[requestId] = `${projectUrl}/r/${root.id}?poll=true`;
           }
           runsByRoot.delete(root);
           requestIdsByRoot.delete(root);
@@ -229,6 +244,23 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
       return { traceUrls };
     }
   };
+}
+
+async function resolveProjectUrl(
+  root: LangSmithRun,
+  projectName: string
+): Promise<string | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      root.client?.getProjectUrl({ projectName }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Project URL lookup timed out')), 5000);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function spanFromRun(run: LangSmithRun): TraceSpan {
@@ -242,5 +274,10 @@ export function createLangSmithTraceExporter(
   if (!isEnabled(env)) {
     return { startScenario: () => noopScenarioSpan, flush: async () => ({ traceUrls: {} }) };
   }
-  return createEnabledExporter(env, factory ?? createRunFactory(env));
+  try {
+    return createEnabledExporter(env, factory ?? createRunFactory(env));
+  } catch (error) {
+    warn(error);
+    return { startScenario: () => noopScenarioSpan, flush: async () => ({ traceUrls: {} }) };
+  }
 }
