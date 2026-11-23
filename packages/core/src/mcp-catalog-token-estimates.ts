@@ -16,7 +16,7 @@ export function withMcpCatalogTokenEstimates(
   const list = <T extends object>(
     section: McpCatalogList<McpCatalogDefinition<T>>
   ): McpCatalogList<McpCatalogDefinition<T>> =>
-    section.status === 'ready' ? { status: 'ready', items: section.items.map(count) } : section;
+    'items' in section ? { ...section, items: section.items.map(count) } : section;
   const toolResources = catalog.toolResources;
   return {
     ...catalog,

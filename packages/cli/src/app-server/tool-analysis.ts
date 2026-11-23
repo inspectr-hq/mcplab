@@ -3,7 +3,8 @@ import {
   getMcpResourceToolAccess,
   McpClientManager,
   MCP_READ_RESOURCE_TOOL,
-  parseMcpResourceToolRead
+  parseMcpResourceToolRead,
+  throwIfAborted
 } from '@inspectr/mcplab-core';
 import type { EvalConfig, McpPreviewRequest, McpPreviewResponse } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
@@ -255,6 +256,7 @@ export async function handleToolAnalysisRoutes(params: {
       ? body.serverNames.map((v: unknown) => String(v).trim()).filter(Boolean)
       : [];
     const modes = {
+      ...(body?.modes?.catalogChecks === true ? { catalogChecks: true } : {}),
       metadataReview: Boolean(body?.modes?.metadataReview),
       deeperAnalysis: Boolean(body?.modes?.deeperAnalysis)
     };
@@ -262,7 +264,7 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 400, { error: 'Select exactly one MCP server for tool analysis' });
       return true;
     }
-    if (!modes.metadataReview && !modes.deeperAnalysis) {
+    if (!modes.catalogChecks && !modes.metadataReview && !modes.deeperAnalysis) {
       asJson(res, 400, { error: 'Select at least one analysis mode' });
       return true;
     }
@@ -320,6 +322,7 @@ export async function handleToolAnalysisRoutes(params: {
           },
           maxParallelTools
         });
+        throwIfAborted(job.abortController.signal);
         if (job.result) {
           try {
             const reportId = createToolAnalysisReportId(new Date(job.result.createdAt));
@@ -494,7 +497,7 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 404, { error: 'Job not found' });
       return true;
     }
-    if (!job.result) {
+    if (job.status !== 'completed' || !job.result) {
       asJson(res, 409, { error: `Job not completed (status=${job.status})` });
       return true;
     }

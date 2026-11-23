@@ -143,6 +143,42 @@ describe('handleToolAnalysisRoutes', () => {
     );
   });
 
+  it('accepts a catalog-only job in the existing jobs API', async () => {
+    const deps = createBaseDeps();
+    const modes = { catalogChecks: true, metadataReview: false, deeperAnalysis: false };
+    deps.parseBody.mockResolvedValue({ serverNames: ['demo'], modes });
+    const jobs = new Map();
+    await handleToolAnalysisRoutes({
+      req: { headers: {} } as any,
+      res: {} as any,
+      pathname: '/api/tool-analysis/jobs',
+      method: 'POST',
+      settings: {} as any,
+      toolAnalysisJobs: jobs,
+      oauthSessionManager: {} as any,
+      deps: deps as any
+    });
+    expect(deps.asJson).toHaveBeenCalledWith({}, 202, { jobId: expect.any(String) });
+    expect(deps.runToolAnalysisJob).toHaveBeenCalledWith(expect.objectContaining({ modes }));
+  });
+
+  it('keeps a stopped job result inaccessible during cleanup', async () => {
+    const deps = createBaseDeps();
+    await handleToolAnalysisRoutes({
+      req: {} as any,
+      res: {} as any,
+      pathname: '/api/tool-analysis/jobs/stopped/result',
+      method: 'GET',
+      settings: {} as any,
+      toolAnalysisJobs: new Map([['stopped', { status: 'stopped', result: {} }]]) as any,
+      oauthSessionManager: {} as any,
+      deps: deps as any
+    });
+    expect(deps.asJson).toHaveBeenCalledWith({}, 409, {
+      error: 'Job not completed (status=stopped)'
+    });
+  });
+
   describe('preview', () => {
     const server = {
       transport: 'http',

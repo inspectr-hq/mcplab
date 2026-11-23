@@ -19,7 +19,7 @@ const SKILL_DOCUMENT_URI = /^skill:\/\/([^\s/?#]+(?:\/[^\s/?#]+)*)\/SKILL\.md$/;
 
 function catalogResources(catalog: McpServerCatalog) {
   const files = new Map<string, { metadata: McpResourceInfo; reference: McpCatalogSkillFile }>();
-  const native = catalog.resources.status === 'ready' ? catalog.resources.items : [];
+  const native = 'items' in catalog.resources ? catalog.resources.items : [];
   for (const metadata of native) {
     files.set(metadata.uri, { metadata, reference: { uri: metadata.uri, canRead: true } });
   }

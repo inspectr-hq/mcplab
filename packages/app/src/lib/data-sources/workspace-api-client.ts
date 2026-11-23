@@ -22,6 +22,7 @@ import type {
   ToolAnalysisDiscoverResponse,
   ToolAnalysisDiscoverRequest,
   ToolAnalysisReport,
+  ToolAnalysisStartRequest,
   ToolAnalysisResultSummary,
   ListEnvelope,
   SavedToolAnalysisReportRecord,
@@ -497,18 +498,7 @@ export const workspaceApiClient = {
       signal,
       body: JSON.stringify(params)
     }),
-  startToolAnalysis: (params: {
-    assistantAgentName?: string;
-    serverNames: string[];
-    selectedToolsByServer?: Record<string, string[]>;
-    maxParallelTools?: number;
-    modes: { metadataReview: boolean; deeperAnalysis: boolean };
-    deeperAnalysisOptions?: {
-      autoRunPolicy: 'read_only_allowlist';
-      sampleCallsPerTool?: number;
-      toolCallTimeoutMs?: number;
-    };
-  }) =>
+  startToolAnalysis: (params: ToolAnalysisStartRequest) =>
     request<{ jobId: string }>('/api/tool-analysis/jobs', {
       method: 'POST',
       body: JSON.stringify(params)

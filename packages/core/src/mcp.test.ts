@@ -1,3 +1,4 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   McpClientManager,
@@ -310,6 +311,167 @@ describe('McpClientManager.getRequestHeadersForServers', () => {
 });
 
 describe('McpClientManager.listTools', () => {
+  function pagedClient() {
+    const manager = new McpClientManager();
+    const client = {
+      listTools: vi.fn().mockResolvedValue({ tools: [{ name: 'first' }], nextCursor: 'second' }),
+      request: vi.fn(),
+      callTool: vi.fn()
+    };
+    vi.spyOn(manager as any, 'getClient').mockReturnValue(client);
+    return { manager, client };
+  }
+
+  it('collects tool pages in order and retains duplicate names for diagnostics', async () => {
+    const { manager, client } = pagedClient();
+    client.request.mockResolvedValue({ tools: [{ name: 'first' }, { name: 'last' }] });
+
+    const tools = await manager.listTools('server');
+
+    expect(tools.map(({ name }) => name)).toEqual(['first', 'first', 'last']);
+    expect(client.request).toHaveBeenCalledWith(
+      { method: 'tools/list', params: { cursor: 'second' } },
+      expect.anything(),
+      undefined
+    );
+  });
+
+  it.each(['repeated cursor', 'page failure', 'page limit'])(
+    'reports partial listings after %s',
+    async (failure) => {
+      const { manager, client } = pagedClient();
+      if (failure === 'page failure')
+        client.request.mockRejectedValue(new Error('page unavailable'));
+      else if (failure === 'page limit') {
+        let next = 0;
+        client.request.mockImplementation(async () => ({
+          tools: [],
+          nextCursor: `page-${next++}`
+        }));
+      } else client.request.mockResolvedValue({ tools: [], nextCursor: 'second' });
+
+      expect(await manager.listToolsWithCoverage('server')).toMatchObject({
+        status: 'partial',
+        items: [{ name: 'first' }],
+        message: expect.any(String)
+      });
+      if (failure === 'page limit') expect(client.request).toHaveBeenCalledTimes(9);
+      if (failure !== 'page limit') await expect(manager.listTools('server')).rejects.toThrow();
+    }
+  );
+
+  it('retains SDK validation and task guards for both tool pages', async () => {
+    const manager = new McpClientManager();
+    const client = new Client({ name: 'test', version: '1' });
+    vi.spyOn(manager, 'getClient').mockReturnValue(client);
+    const request = vi.spyOn(client, 'request');
+    for (const page of ['first', 'second']) {
+      request.mockResolvedValueOnce({
+        nextCursor: page === 'first' ? 'second' : undefined,
+        tools: [
+          { name: page + '_validated', outputSchema: { type: 'object', required: ['value'] } },
+          { name: page + '_task', execution: { taskSupport: 'required' } }
+        ]
+      });
+    }
+    request.mockResolvedValue({ structuredContent: {} });
+    await manager.listTools('server');
+
+    for (const page of ['first', 'second']) {
+      await expect(manager.callTool('server', page + '_validated', {})).rejects.toThrow(
+        /output schema/i
+      );
+      await expect(manager.callTool('server', page + '_task', {})).rejects.toThrow(/task-based/);
+    }
+    expect(request.mock.calls.map(([message]) => message.method)).toEqual([
+      'tools/list',
+      'tools/list',
+      'tools/call',
+      'tools/call'
+    ]);
+  });
+
+  it('keeps later-page metadata when a call overlaps a catalog refresh', async () => {
+    const { manager, client } = pagedClient();
+    client.request.mockResolvedValueOnce({
+      tools: [{ name: 'task', execution: { taskSupport: 'required' } }]
+    });
+    await manager.listTools('server');
+    const pending = Promise.withResolvers<{ tools: [] }>();
+    const started = Promise.withResolvers<void>();
+    client.request.mockImplementationOnce(() => {
+      started.resolve();
+      return pending.promise;
+    });
+    const refresh = manager.listTools('server');
+    try {
+      await started.promise;
+      await expect(manager.callTool('server', 'task', {})).rejects.toThrow(/task-based/);
+      expect(client.callTool).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve({ tools: [] });
+      await refresh;
+    }
+  });
+
+  it('propagates cancellation during pagination', async () => {
+    const { manager, client } = pagedClient();
+    const controller = new AbortController();
+    client.request.mockImplementation(async () => {
+      controller.abort();
+      return { tools: [] };
+    });
+    await expect(manager.listToolsWithCoverage('server', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError'
+    });
+  });
+
+  it('keeps later-page metadata isolated between auth-scoped clients', async () => {
+    const { manager, client } = pagedClient();
+    client.request.mockResolvedValue({
+      tools: [{ name: 'shared', execution: { taskSupport: 'required' } }]
+    });
+    const scoped = {
+      listTools: vi.fn().mockResolvedValue({ tools: [{ name: 'first' }], nextCursor: 'second' }),
+      request: vi.fn().mockResolvedValue({ tools: [{ name: 'shared' }] }),
+      callTool: vi.fn().mockResolvedValue({ content: [] })
+    };
+    vi.spyOn(manager as any, 'getOrCreateScopedClient').mockResolvedValue(scoped);
+    const requestHeaders = { authorization: 'Bearer test-token' };
+    await manager.listTools('server');
+    await manager.listTools('server', undefined, requestHeaders);
+
+    await expect(manager.callTool('server', 'shared', {})).rejects.toThrow(/task-based/);
+    await expect(manager.callTool('server', 'shared', {}, { requestHeaders })).resolves.toEqual({
+      content: []
+    });
+  });
+
+  it('retains resources from completed pages when a native listing loops', async () => {
+    const { manager, client } = pagedClient();
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({
+        resources: [{ name: 'Guide', uri: 'docs://guide' }],
+        nextCursor: 'again'
+      })
+      .mockResolvedValue({ resources: [], nextCursor: 'again' });
+    const native = Object.assign(client, {
+      getServerCapabilities: () => ({ resources: {} }),
+      listResources: list,
+      listResourceTemplates: vi.fn().mockResolvedValue({ resourceTemplates: [] })
+    });
+    vi.mocked(manager.getClient).mockReturnValue(native as unknown as Client);
+
+    const catalog = await manager.listCatalog('server');
+    expect(catalog.resources).toMatchObject({
+      status: 'partial',
+      items: [{ name: 'Guide', uri: 'docs://guide' }],
+      message: expect.stringContaining('repeated pagination cursor')
+    });
+    await expect(manager.listResources('server')).rejects.toThrow(/repeated pagination cursor/);
+  });
+
   it('uses a scoped client when request headers are provided', async () => {
     const manager = new McpClientManager();
     const scopedListTools = vi.fn().mockResolvedValue({

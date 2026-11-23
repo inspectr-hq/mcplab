@@ -43,7 +43,7 @@ const navSections = [
     title: 'Lab',
     items: [
       { title: 'MCP Evaluations', url: '/mcp-evaluations', icon: FlaskConical },
-      { title: 'Analyze MCP', url: '/tool-analysis', icon: Microscope },
+      { title: 'Analyze MCP', url: '/mcp-analysis', icon: Microscope },
       { title: 'OAuth Debugger', url: '/oauth-debugger', icon: ShieldCheck }
     ]
   },

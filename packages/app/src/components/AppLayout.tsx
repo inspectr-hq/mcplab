@@ -50,20 +50,20 @@ const buildCrumbs = (pathname: string, search: string): Crumb[] => {
     crumbs.push({ label: 'Settings' });
     return crumbs;
   }
-  if (matchPath('/tool-analysis', pathname)) {
-    crumbs.push({ label: 'Analyze MCP Tools' });
+  if (matchPath('/mcp-analysis', pathname)) {
+    crumbs.push({ label: 'Analyze MCP' });
     return crumbs;
   }
   if (matchPath('/tool-analysis-results/:id', pathname)) {
     const match = matchPath('/tool-analysis-results/:id', pathname);
     crumbs.push(
-      { label: 'Tool Analysis Results', to: '/tool-analysis-results' },
+      { label: 'MCP Analysis Results', to: '/tool-analysis-results' },
       { label: match?.params.id ?? 'Report' }
     );
     return crumbs;
   }
   if (matchPath('/tool-analysis-results', pathname)) {
-    crumbs.push({ label: 'Tool Analysis Results' });
+    crumbs.push({ label: 'MCP Analysis Results' });
     return crumbs;
   }
   if (matchPath('/markdown-reports/view', pathname)) {

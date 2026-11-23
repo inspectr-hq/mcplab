@@ -8,6 +8,13 @@ vi.mock('@/components/AppLayout', () => ({
   AppLayout: () => <Outlet />
 }));
 
+function MockToolAnalysis() {
+  const { pathname, search, hash } = useLocation();
+  return <output data-testid="analysis-route">{pathname + search + hash}</output>;
+}
+
+vi.mock('./pages/ToolAnalysis', () => ({ default: MockToolAnalysis }));
+
 function MockManageTestCases() {
   const { testCaseId } = useParams<{ testCaseId?: string }>();
   const location = useLocation();
@@ -43,6 +50,21 @@ describe('App route tree compatibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it.each(['/mcp-analysis', '/tool-analysis'])(
+    'opens Analyze MCP from %s and preserves query parameters and fragments',
+    async (entry) => {
+      render(
+        <MemoryRouter initialEntries={[`${entry}?embed=1#catalog`]}>
+          <AppRouteTree />
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByTestId('analysis-route')).toHaveTextContent(
+        '/mcp-analysis?embed=1#catalog'
+      );
+    }
+  );
 
   it('shows a loading state while a route is being loaded', async () => {
     render(

@@ -1,3 +1,4 @@
+import { McpCatalogStatusBadges } from '@/components/tool-analysis/McpCatalogCheckResults';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -180,11 +181,9 @@ export default function ToolAnalysisResultsPage() {
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
             <NotebookTabs className="h-6 w-6" />
-            Tool Analysis Results
+            MCP Analysis Results
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Browse persisted Analyze MCP Tools reports.
-          </p>
+          <p className="text-sm text-muted-foreground">Browse saved MCP analysis reports.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
@@ -250,7 +249,7 @@ export default function ToolAnalysisResultsPage() {
             Next
           </Button>
           <Button asChild variant="outline">
-            <Link to="/tool-analysis">Analyze MCP Tools</Link>
+            <Link to="/mcp-analysis">Analyze MCP</Link>
           </Button>
         </div>
       </div>
@@ -259,9 +258,9 @@ export default function ToolAnalysisResultsPage() {
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <p className="p-6 text-sm text-muted-foreground">Loading tool analysis results...</p>
+            <p className="p-6 text-sm text-muted-foreground">Loading MCP analysis results...</p>
           ) : items.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">No saved tool analysis reports yet.</p>
+            <p className="p-6 text-sm text-muted-foreground">No saved MCP analysis reports yet.</p>
           ) : (
             <>
               <div className="border-b px-4 py-3">
@@ -297,9 +296,11 @@ export default function ToolAnalysisResultsPage() {
                             >
                               {item.reportId}
                             </Link>
-                            <div className="text-[11px] text-muted-foreground">
-                              {item.assistantAgentName}
-                            </div>
+                            {item.assistantAgentName && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {item.assistantAgentName}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-[11px] text-muted-foreground">
@@ -309,14 +310,26 @@ export default function ToolAnalysisResultsPage() {
                               <span className="font-medium text-foreground">
                                 {item.serverNames.length}
                               </span>{' '}
-                              · Tools:{' '}
-                              <span className="font-medium text-foreground">
-                                {item.summary.toolsAnalyzed}
-                              </span>
-                              {' · '}Skipped:{' '}
-                              <span className="font-medium text-foreground">
-                                {item.summary.toolsSkipped}
-                              </span>
+                              {item.summary.catalogChecks && (
+                                <>
+                                  {' · '}Catalog entries checked:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.catalogChecks.itemsChecked}
+                                  </span>
+                                </>
+                              )}
+                              {(item.modes.metadataReview || item.modes.deeperAnalysis) && (
+                                <>
+                                  {' · '}Tools:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.toolsAnalyzed}
+                                  </span>
+                                  {' · '}Skipped:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {item.summary.toolsSkipped}
+                                  </span>
+                                </>
+                              )}
                             </div>
                             {Object.keys(item.mcpServerVersions ?? {}).length > 0 ? (
                               <McpServerBadge versions={item.mcpServerVersions} />
@@ -349,13 +362,18 @@ export default function ToolAnalysisResultsPage() {
                                 </Badge>
                               ) : null
                             )}
-                            {Object.values(item.summary.issueCounts).every((n) => n === 0) && (
-                              <Badge variant="outline">No issues</Badge>
+                            {item.summary.catalogChecks && (
+                              <McpCatalogStatusBadges summary={item.summary.catalogChecks} />
                             )}
+                            {!item.summary.catalogChecks &&
+                              Object.values(item.summary.issueCounts).every((n) => n === 0) && (
+                                <Badge variant="outline">No issues</Badge>
+                              )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
+                            {item.modes.catalogChecks && <Badge variant="outline">catalog</Badge>}
                             {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
                             {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
                           </div>

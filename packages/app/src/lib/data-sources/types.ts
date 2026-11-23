@@ -43,6 +43,10 @@ import type {
   EvaluationQueueItem,
   RunQueueEvent,
   ToolDefinitionTokenEstimates,
+  ToolAnalysisReport,
+  ToolAnalysisStartRequest,
+  ToolAnalysisResultSummary,
+  SavedToolAnalysisReportRecord,
   McpPreviewRequest,
   McpPreviewResponse,
   McpServerCatalog,
@@ -337,131 +341,20 @@ export interface ScenarioPreviewResult {
   run: ScenarioRun;
 }
 
-export interface ToolAnalysisFinding {
-  id: string;
-  scope:
-    | 'tool_name'
-    | 'description'
-    | 'schema'
-    | 'ergonomics'
-    | 'safety'
-    | 'eval_readiness'
-    | 'execution';
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  title: string;
-  detail: string;
-  suggestion?: string;
-}
-
-export interface ToolAnalysisToolReport {
-  serverName: string;
-  toolName: string;
-  publicToolName: string;
-  title?: string;
-  description?: string;
-  inputSchema?: unknown;
-  outputSchema?: unknown;
-  safetyClassification: 'read_only' | 'unsafe_or_unknown';
-  classificationReason: string;
-  metadataReview?: {
-    strengths: string[];
-    issues: ToolAnalysisFinding[];
-    suggestedDescription?: string;
-    suggestedSchemaChanges: Array<{
-      type:
-        | 'description'
-        | 'parameter'
-        | 'required'
-        | 'enum'
-        | 'constraints'
-        | 'examples'
-        | 'naming';
-      summary: string;
-      before?: string;
-      after?: string;
-    }>;
-    evalReadinessNotes: string[];
-  };
-  deeperAnalysis?: {
-    attempted: boolean;
-    skippedReason?: string;
-    sampleCalls: Array<{
-      callIndex: number;
-      arguments: unknown;
-      ok: boolean;
-      durationMs?: number;
-      resultPreview?: string;
-      error?: string;
-      observations: string[];
-      issues: ToolAnalysisFinding[];
-    }>;
-    overallObservations: string[];
-  };
-  overallRecommendations: string[];
-}
-
-export interface ToolAnalysisServerReport {
-  serverName: string;
-  toolCountDiscovered: number;
-  toolCountAnalyzed: number;
-  toolCountSkipped: number;
-  warnings: string[];
-  tools: ToolAnalysisToolReport[];
-  tokenEstimate?: ToolDefinitionTokenEstimates;
-}
-
-export interface ToolAnalysisReport {
-  schemaVersion: 1;
-  createdAt: string;
-  assistantAgentName: string;
-  assistantAgentProvider?: string;
-  assistantAgentModel: string;
-  modes: {
-    metadataReview: boolean;
-    deeperAnalysis: boolean;
-  };
-  settings: {
-    autoRunPolicy?: 'read_only_allowlist';
-    sampleCallsPerTool?: number;
-    toolCallTimeoutMs?: number;
-    maxParallelTools?: number;
-  };
-  summary: {
-    serversAnalyzed: number;
-    toolsAnalyzed: number;
-    toolsSkipped: number;
-    issueCounts: {
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-      info: number;
-    };
-  };
-  servers: ToolAnalysisServerReport[];
-  findings: ToolAnalysisFinding[];
-  mcpServerVersions?: Record<string, string | null>;
-}
-
-export interface SavedToolAnalysisReportRecord {
-  recordVersion: 1;
-  reportId: string;
-  createdAt: string;
-  sourceJobId: string;
-  serverNames: string[];
-  report: ToolAnalysisReport;
-}
-
-export interface ToolAnalysisResultSummary {
-  reportId: string;
-  createdAt: string;
-  assistantAgentName: string;
-  assistantAgentModel: string;
-  serverNames: string[];
-  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
-  modes: ToolAnalysisReport['modes'];
-  summary: ToolAnalysisReport['summary'];
-}
+export type {
+  McpCatalogCheck,
+  McpCatalogCheckSummary,
+  McpHealthReport,
+  SavedToolAnalysisReportRecord,
+  ToolAnalysisFinding,
+  ToolAnalysisModes,
+  ToolAnalysisReport,
+  ToolAnalysisResultSummary,
+  ToolAnalysisSampleCall,
+  ToolAnalysisServerReport,
+  ToolAnalysisStartRequest,
+  ToolAnalysisToolReport
+} from '@inspectr/mcplab-core';
 
 export interface ToolAnalysisDiscoveredTool {
   name: string;
@@ -906,21 +799,7 @@ export interface EvalDataSource {
     params: McpPreviewRequest,
     signal?: AbortSignal
   ) => Promise<McpPreviewResponse>;
-  startToolAnalysis: (params: {
-    assistantAgentName?: string;
-    serverNames: string[];
-    selectedToolsByServer?: Record<string, string[]>;
-    maxParallelTools?: number;
-    modes: {
-      metadataReview: boolean;
-      deeperAnalysis: boolean;
-    };
-    deeperAnalysisOptions?: {
-      autoRunPolicy: 'read_only_allowlist';
-      sampleCallsPerTool?: number;
-      toolCallTimeoutMs?: number;
-    };
-  }) => Promise<{ jobId: string }>;
+  startToolAnalysis: (params: ToolAnalysisStartRequest) => Promise<{ jobId: string }>;
   subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
   getToolAnalysisResult: (
     jobId: string

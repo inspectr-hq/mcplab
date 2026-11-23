@@ -1,10 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { McpClientManager } from '@inspectr/mcplab-core';
+import { classifyMcpToolSafety, McpClientManager } from '@inspectr/mcplab-core';
 import {
   buildToolAnalysisExecutionReviewPayload,
   buildToolAnalysisMetadataPayload,
   buildToolAnalysisSamplePlanPayload,
-  classifyToolSafety,
   discoverMcpToolsForServers,
   parseJsonFromAssistantText
 } from './tool-analysis-domain.js';
@@ -19,13 +18,16 @@ describe('discoverMcpToolsForServers', () => {
       resources: false,
       prompts: false
     });
-    vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([
-      { name: 'list_resources', inputSchema: { type: 'object' } },
-      {
-        name: 'read_resource',
-        inputSchema: { type: 'object', properties: { uri: { type: 'string' } } }
-      }
-    ]);
+    vi.spyOn(McpClientManager.prototype, 'listToolsWithCoverage').mockResolvedValue({
+      status: 'ready',
+      items: [
+        { name: 'list_resources', inputSchema: { type: 'object' } },
+        {
+          name: 'read_resource',
+          inputSchema: { type: 'object', properties: { uri: { type: 'string' } } }
+        }
+      ]
+    });
     vi.spyOn(McpClientManager.prototype, 'listCatalog').mockImplementation(async () => ({
       resources: { status: 'unsupported' },
       resourceTemplates: { status: 'unsupported' },
@@ -71,7 +73,9 @@ describe('discoverMcpToolsForServers', () => {
         resources: true,
         prompts: false
       });
-      const listTools = vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+      const listTools = vi
+        .spyOn(McpClientManager.prototype, 'listToolsWithCoverage')
+        .mockResolvedValue({ status: 'ready', items: [] });
       const listCatalog = vi
         .spyOn(McpClientManager.prototype, 'listCatalog')
         .mockResolvedValue(catalog);
@@ -234,37 +238,58 @@ describe('tool-analysis payload builders', () => {
   });
 });
 
-describe('classifyToolSafety', () => {
+describe('classifyMcpToolSafety', () => {
   it('prioritizes destructiveHint true over readOnlyHint true', () => {
-    const result = classifyToolSafety('delete_data', undefined, {
-      readOnlyHint: true,
-      destructiveHint: true
+    const result = classifyMcpToolSafety({
+      name: 'get_data',
+      annotations: { readOnlyHint: true, destructiveHint: true }
     });
-    expect(result.safetyClassification).toBe('unsafe_or_unknown');
-    expect(result.classificationReason).toContain('destructiveHint');
+    expect(result).toMatchObject({
+      safetyClassification: 'unsafe_or_unknown',
+      contradictionField: 'annotations.destructiveHint'
+    });
   });
 
-  it('classifies destructiveHint annotation as unsafe_or_unknown, overriding read prefix', () => {
-    const result = classifyToolSafety('get_data', undefined, { destructiveHint: true });
-    expect(result.safetyClassification).toBe('unsafe_or_unknown');
-    expect(result.classificationReason).toContain('destructiveHint');
+  it('blocks a read-only tool with a destructive action in its name', () => {
+    expect(
+      classifyMcpToolSafety({ name: 'getOrDeleteData', annotations: { readOnlyHint: true } })
+    ).toMatchObject({ safetyClassification: 'unsafe_or_unknown', contradictionField: 'name' });
   });
 
-  it('classifies readOnlyHint annotation as read_only, overriding delete prefix', () => {
-    const result = classifyToolSafety('delete_data', undefined, { readOnlyHint: true });
-    expect(result.safetyClassification).toBe('read_only');
-    expect(result.classificationReason).toContain('readOnlyHint');
+  it('skips unlabeled tools even with a read-only name', () => {
+    expect(classifyMcpToolSafety({ name: 'get_user' }).safetyClassification).toBe(
+      'unsafe_or_unknown'
+    );
   });
 
-  it('falls back to prefix matching when annotations absent', () => {
-    expect(classifyToolSafety('delete_record').safetyClassification).toBe('unsafe_or_unknown');
-    expect(classifyToolSafety('get_user').safetyClassification).toBe('read_only');
+  it('allows an explicitly read-only tool with a matching description', () => {
+    expect(
+      classifyMcpToolSafety({
+        name: 'get_user',
+        annotations: { readOnlyHint: true },
+        description: 'Gets a user.'
+      })
+    ).toMatchObject({ safetyClassification: 'read_only' });
   });
 
-  it('classifies destructiveHint false as non-read-only additive behavior', () => {
-    const result = classifyToolSafety('create_note', undefined, { destructiveHint: false });
-    expect(result.safetyClassification).toBe('unsafe_or_unknown');
-    expect(result.classificationReason).toContain('additive behavior');
+  it.each([
+    'Gets a report and sends an email.',
+    'Use this tool to delete a workspace.',
+    'Allows you to rename a project.',
+    '  - Archive a project.',
+    'The tool deletes a workspace.',
+    'This tool permanently deletes a workspace.'
+  ])('blocks a read-only tool with a side-effectful description %s', (description) => {
+    expect(
+      classifyMcpToolSafety({
+        name: 'get_report',
+        annotations: { readOnlyHint: true },
+        description
+      })
+    ).toMatchObject({
+      safetyClassification: 'unsafe_or_unknown',
+      contradictionField: 'description'
+    });
   });
 });
 
