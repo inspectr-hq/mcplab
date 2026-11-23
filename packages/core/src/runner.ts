@@ -27,6 +27,7 @@ import {
   toLangSmithMessages,
   type TraceExporter
 } from './langsmith-tracing.js';
+import { createLangfuseTraceExporter } from './langfuse-tracing.js';
 
 export interface RunOptions extends WorkspaceEvaluation {
   runsPerScenario: number;
@@ -54,6 +55,27 @@ export interface RunOptions extends WorkspaceEvaluation {
   ) => Record<string, string> | undefined;
   /** Skip standard result projections when a caller owns shared persistence. */
   persistArtifacts?: boolean;
+}
+
+function combineTraceExporters(...exporters: TraceExporter[]): TraceExporter {
+  return {
+    startScenario(values) {
+      const spans = exporters.map((exporter) => exporter.startScenario(values));
+      return {
+        startLlm: (values) => combineTraceSpans(spans.map((span) => span.startLlm(values))),
+        startTool: (values) => combineTraceSpans(spans.map((span) => span.startTool(values))),
+        end: async (values) => { await Promise.all(spans.map((span) => span.end(values))); }
+      };
+    },
+    async flush() {
+      const results = await Promise.all(exporters.map((exporter) => exporter.flush()));
+      return { traceUrls: Object.assign({}, ...results.map((result) => result.traceUrls)), langfuseTraceUrls: Object.assign({}, ...results.map((result) => result.langfuseTraceUrls ?? {})) };
+    }
+  };
+}
+
+function combineTraceSpans(spans: Array<{ end(values: { outputs?: Record<string, unknown>; error?: string }): Promise<void> }>) {
+  return { end: async (values: { outputs?: Record<string, unknown>; error?: string }) => { await Promise.all(spans.map((span) => span.end(values))); } };
 }
 
 export interface McpRequestHeaderContext {
@@ -160,7 +182,7 @@ export async function runAll(
   const resolvedConfigPath = join(runDir, 'resolved-config.yaml');
   writeFileSync(resolvedConfigPath, `${stringifyYaml(config)}\n`, 'utf8');
   const trace = new TraceWriter(tracePath);
-  const traceExporter = options.traceExporter ?? createLangSmithTraceExporter();
+  const traceExporter = options.traceExporter ?? combineTraceExporters(createLangSmithTraceExporter(), createLangfuseTraceExporter());
   let traceExporterFlushed = false;
   trace.write({
     type: 'trace_meta',
@@ -545,6 +567,7 @@ export async function runAll(
       configHash: options.configHash,
       cliVersion: options.cliVersion,
       langsmithTraceUrls: traceExport.traceUrls,
+      langfuseTraceUrls: traceExport.langfuseTraceUrls,
       mcpServerVersions,
       executionSource: 'mcplab',
       scenarioRuns

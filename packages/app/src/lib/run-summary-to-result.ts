@@ -14,6 +14,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     configPath: summary.configPath,
     configName: summary.configName,
     langsmithTraceUrls: summary.langsmithTraceUrls,
+    langfuseTraceUrls: summary.langfuseTraceUrls,
     rerunAgents: summary.rerunAgents,
     rerunScenarioIds: summary.rerunScenarioIds,
     rerunServerOverrideAll: summary.rerunServerOverrideAll,

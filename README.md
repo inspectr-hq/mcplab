@@ -519,6 +519,17 @@ When enabled, MCPLab sends each evaluation scenario to LangSmith as a parent tra
 
 After a run completes, MCPLab prints direct LangSmith trace links in the CLI, includes them in `summary.md` and `results.json`, and exposes them from the Results page.
 
+**Langfuse evaluation traces (optional):**
+
+```env
+LANGFUSE_TRACING=true
+LANGFUSE_PUBLIC_KEY=pk-lf_...
+LANGFUSE_SECRET_KEY=sk-lf_...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+Set `LANGFUSE_BASE_URL` to your Langfuse Cloud region or self-hosted instance. MCPLab exports scenario, LLM generation, and MCP tool traces. Delivery is best-effort, while local run artifacts remain authoritative. Trace links appear in CLI output, `summary.md`, `results.json`, and the Results page.
+
 ---
 
 ## 💡 Usage Examples

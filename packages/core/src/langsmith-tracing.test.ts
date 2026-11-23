@@ -231,4 +231,80 @@ describe('createLangSmithTraceExporter', () => {
     });
     expect(projectUrl).toHaveBeenCalledWith({ projectName: 'mcplab-tests' });
   });
+  it('disables tracing when SDK initialization rejects its configuration', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.stubEnv('LANGSMITH_TRACING_SAMPLING_RATE', '2');
+    try {
+      const exporter = createLangSmithTraceExporter({
+        LANGSMITH_TRACING: 'true',
+        LANGSMITH_API_KEY: 'test'
+      });
+      await exporter.startScenario({}).end({});
+      expect(await exporter.flush()).toEqual({ traceUrls: {} });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('LangSmith tracing warning'));
+    } finally {
+      vi.unstubAllEnvs();
+      warn.mockRestore();
+    }
+  });
+
+  it.each([false, true])('resolves a shared project once (failure: %s)', async (failure) => {
+    const projectUrl = vi.fn(async () => {
+      if (failure) throw new Error('offline');
+      return 'https://smith.test/project';
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const exporter = createLangSmithTraceExporter(
+        { LANGSMITH_TRACING: 'true', LANGSMITH_API_KEY: 'test' },
+        () => ({
+          id: 'root',
+          project_name: 'shared',
+          client: { getProjectUrl: projectUrl },
+          end: async () => undefined,
+          postRun: async () => undefined,
+          createChild: () => {
+            throw new Error('unused');
+          }
+        })
+      );
+      for (const requestId of ['first', 'second'])
+        await exporter.startScenario({ requestId }).end({});
+      const result = await exporter.flush();
+      expect(projectUrl).toHaveBeenCalledOnce();
+      expect(Object.keys(result.traceUrls)).toHaveLength(failure ? 0 : 2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('stops waiting for a stuck project lookup after five seconds', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const projectUrl = vi.fn(() => new Promise<string>(() => undefined));
+      const exporter = createLangSmithTraceExporter(
+        { LANGSMITH_TRACING: 'true', LANGSMITH_API_KEY: 'test' },
+        () => ({
+          id: 'root',
+          project_name: 'shared',
+          client: { getProjectUrl: projectUrl },
+          end: async () => undefined,
+          postRun: async () => undefined,
+          createChild: () => {
+            throw new Error('unused');
+          }
+        })
+      );
+      exporter.startScenario({ requestId: 'first' });
+      exporter.startScenario({ requestId: 'second' });
+      const flushed = exporter.flush();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await flushed).toEqual({ traceUrls: {} });
+      expect(projectUrl).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
+  });
 });
