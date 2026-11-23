@@ -142,11 +142,42 @@ export async function handleToolAnalysisRoutes(params: {
     const libraries = readLibraries(settings.librariesDir);
     const connectionOptions = await analysisConnectionOptions(libraries.servers, serverNames);
     if (!connectionOptions) return true;
-    const { mcp, servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
+    const discoveryOptions = {
       ...connectionOptions,
+      ...(serverNames.some(
+        (name) => libraries.servers[name]?.auth?.type === 'oauth_authorization_code'
+      )
+        ? {
+            refreshOAuthHeaders: async (name: string) => {
+              const refreshed = await oauthSessionManager.refreshAfterUnauthorized(name);
+              const headers = await oauthSessionManager.getAuthHeadersForServers(
+                [name],
+                req.headers.host
+              );
+              return refreshed ? headers[name] : undefined;
+            },
+            reauthorizeOAuth: (name: string) =>
+              oauthSessionManager.reauthorizeAfterUnauthorized(name, req.headers.host)
+          }
+        : {}),
       includeCatalog: body.includeCatalog === true,
       ...(body.includeToolResources === true ? { includeToolResources: true } : {})
-    });
+    };
+    let discovered: Awaited<ReturnType<typeof discoverMcpToolsForServers>>;
+    try {
+      discovered = await discoverMcpToolsForServers(
+        libraries.servers,
+        serverNames,
+        discoveryOptions
+      );
+    } catch (error: unknown) {
+      if (error instanceof OAuthAuthorizationRequiredError) {
+        asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+        return true;
+      }
+      throw error;
+    }
+    const { mcp, servers } = discovered;
     try {
       const mcpServerVersions = mcp.getServerVersions();
       const mcpServerImplementations = mcp.getServerImplementations();

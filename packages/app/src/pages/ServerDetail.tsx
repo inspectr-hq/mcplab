@@ -196,7 +196,19 @@ const ServerDetail = () => {
     }
 
     try {
-      const result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
+      let result: Awaited<ReturnType<typeof source.discoverToolsForAnalysis>>;
+      try {
+        result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
+      } catch (err) {
+        if (
+          form.authType !== 'oauth2' ||
+          (err as { status?: number })?.status !== 401
+        ) {
+          throw err;
+        }
+        await ensureOAuthForServers({ serverNames: [form.id], source });
+        result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
+      }
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
