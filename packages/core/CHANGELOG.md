@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.30.0
+
+### Minor Changes
+
+- feat: list MCP skill, resources and prompts
+- feat: Langfuse evaluation tracing
+
 ## 1.29.1
 
 ### Patch Changes

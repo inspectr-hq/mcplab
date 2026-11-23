@@ -1,5 +1,23 @@
 # @inspectr/mcplab
 
+## 1.36.0
+
+### Minor Changes
+
+- feat: list MCP skill, resources and prompts
+- feat: Langfuse evaluation tracing
+- feat: filter results by pass status
+- feat: add run ID copy button
+- chore: expand long tool descriptions
+- chore: show scenario MCP servers above override toggle
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.30.0
+  - @inspectr/mcplab-mcp-server@1.14.0
+  - @inspectr/mcplab-reporting@1.5.3
+
 ## 1.35.2
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.14.0
+
+### Minor Changes
+
+- feat: list MCP skill, resources and prompts
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.30.0
+  - @inspectr/mcplab-reporting@1.5.3
+
 ## 1.13.1
 
 ### Patch Changes
