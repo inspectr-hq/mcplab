@@ -3,8 +3,8 @@ import type { AgentConfig, EvalConfig, McpServerCatalog, ToolDef } from '@inspec
 import {
   chatWithAgent,
   estimateToolDefinitionTokens,
-  extractHttpStatusCode,
   getMcpResourceToolAccess,
+  isMcpUnauthorizedError,
   McpClientManager,
   MCP_LIST_RESOURCES_TOOL,
   parseMcpResourceToolCatalog,
@@ -562,14 +562,6 @@ async function reconnectWithRefreshedOAuth(
   return true;
 }
 
-function isUnauthorizedMcpError(error: unknown): boolean {
-  const message = String(error);
-  return (
-    extractHttpStatusCode(undefined, message) === 401 ||
-    /"error"\s*:\s*"invalid_token"/i.test(message)
-  );
-}
-
 export async function discoverMcpToolsForServers(
   serversByName: EvalConfig['servers'],
   serverNames: string[],
@@ -610,7 +602,11 @@ export async function discoverMcpToolsForServers(
     } catch (error: unknown) {
       connectionError = error;
     }
-    if (connectionError && options?.refreshOAuthHeaders && isUnauthorizedMcpError(connectionError)) {
+    if (
+      connectionError &&
+      options?.refreshOAuthHeaders &&
+      isMcpUnauthorizedError(connectionError)
+    ) {
       oauthRetryUsed = true;
       try {
         if (
@@ -625,7 +621,7 @@ export async function discoverMcpToolsForServers(
         }
       } catch (error: unknown) {
         if (error instanceof OAuthAuthorizationRequiredError) throw error;
-        if (options?.reauthorizeOAuth && isUnauthorizedMcpError(error)) {
+        if (options?.reauthorizeOAuth && isMcpUnauthorizedError(error)) {
           await mcp.disconnectAll();
           await options.reauthorizeOAuth(serverName);
         }
@@ -653,7 +649,7 @@ export async function discoverMcpToolsForServers(
       !oauthRetryUsed &&
       toolsError &&
       options?.refreshOAuthHeaders &&
-      isUnauthorizedMcpError(toolsError)
+      isMcpUnauthorizedError(toolsError)
     ) {
       oauthRetryUsed = true;
       try {
@@ -673,7 +669,7 @@ export async function discoverMcpToolsForServers(
         }
       } catch (error: unknown) {
         if (error instanceof OAuthAuthorizationRequiredError) throw error;
-        if (options?.reauthorizeOAuth && isUnauthorizedMcpError(error)) {
+        if (options?.reauthorizeOAuth && isMcpUnauthorizedError(error)) {
           await mcp.disconnectAll();
           await options.reauthorizeOAuth(serverName);
         }
