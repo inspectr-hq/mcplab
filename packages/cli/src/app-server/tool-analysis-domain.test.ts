@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
+import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import {
   buildToolAnalysisExecutionReviewPayload,
   buildToolAnalysisMetadataPayload,
@@ -11,6 +12,95 @@ import {
 import { pickDefaultAssistantAgentName } from './assistant-agent.js';
 
 describe('discoverMcpToolsForServers', () => {
+  it('refreshes and reconnects once when the MCP handshake returns invalid_token', async () => {
+    const server = { transport: 'http' as const, url: 'https://example.com/mcp' };
+    const connect = vi
+      .spyOn(McpClientManager.prototype, 'connectAll')
+      .mockRejectedValueOnce(
+        new Error('Streamable HTTP error: {"error": "invalid_token"}')
+      )
+      .mockResolvedValueOnce();
+    vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+    vi.spyOn(McpClientManager.prototype, 'listTools').mockResolvedValue([]);
+    const refreshOAuthHeaders = vi.fn().mockResolvedValue({ authorization: 'Bearer fresh' });
+    try {
+      const result = await discoverMcpToolsForServers(
+        { demo: server },
+        ['demo'],
+        { refreshOAuthHeaders }
+      );
+      expect(result.servers[0].warnings).toEqual([]);
+      expect(refreshOAuthHeaders).toHaveBeenCalledOnce();
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect(connect.mock.calls[1][2]).toEqual({
+        serverAuthHeaders: { demo: { authorization: 'Bearer fresh' } }
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('starts fresh authorization if the refreshed token is also rejected', async () => {
+    const server = { transport: 'http' as const, url: 'https://example.com/mcp' };
+    const connect = vi
+      .spyOn(McpClientManager.prototype, 'connectAll')
+      .mockRejectedValue(new Error('Streamable HTTP error: {"error": "invalid_token"}'));
+    const disconnect = vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+    const refreshOAuthHeaders = vi.fn().mockResolvedValue({ authorization: 'Bearer fresh' });
+    const reauthorizeOAuth = vi
+      .fn()
+      .mockRejectedValue(
+        new OAuthAuthorizationRequiredError([
+          {
+            serverName: 'demo',
+            runtimeSessionId: 'oauthrt-new',
+            message: 'OAuth authorization required for server \'demo\'.'
+          }
+        ])
+      );
+    try {
+      await expect(
+        discoverMcpToolsForServers({ demo: server }, ['demo'], {
+          refreshOAuthHeaders,
+          reauthorizeOAuth
+        })
+      ).rejects.toMatchObject({
+        name: 'OAuthAuthorizationRequiredError',
+        details: [expect.objectContaining({ runtimeSessionId: 'oauthrt-new' })]
+      });
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect(refreshOAuthHeaders).toHaveBeenCalledOnce();
+      expect(reauthorizeOAuth).toHaveBeenCalledOnce();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('refreshes and reconnects when listing tools returns invalid_token', async () => {
+    const server = { transport: 'http' as const, url: 'https://example.com/mcp' };
+    const connect = vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();
+    vi.spyOn(McpClientManager.prototype, 'disconnectAll').mockResolvedValue();
+    const listTools = vi
+      .spyOn(McpClientManager.prototype, 'listTools')
+      .mockRejectedValueOnce(new Error('Streamable HTTP error: {"error": "invalid_token"}'))
+      .mockResolvedValueOnce([]);
+    const refreshOAuthHeaders = vi.fn().mockResolvedValue({ authorization: 'Bearer fresh' });
+    try {
+      const result = await discoverMcpToolsForServers(
+        { demo: server },
+        ['demo'],
+        { refreshOAuthHeaders }
+      );
+      expect(result.servers[0].warnings).toEqual([]);
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect(listTools).toHaveBeenCalledTimes(2);
+      expect(refreshOAuthHeaders).toHaveBeenCalledOnce();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('calls the advertised resource listing tool only on explicit request', async () => {
     const servers = { docs: { transport: 'http' as const, url: 'https://example.com/mcp' } };
     vi.spyOn(McpClientManager.prototype, 'connectAll').mockResolvedValue();

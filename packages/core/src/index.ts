@@ -63,7 +63,7 @@ export {
   formatToolSequenceLabel,
   type ToolInputAssertionFailureKind
 } from './eval.js';
-export { McpClientManager } from './mcp.js';
+export { extractHttpStatusCode, isMcpUnauthorizedError, McpClientManager } from './mcp.js';
 export {
   discoverMcpCatalogSkills,
   parseMcpSkillManifest,

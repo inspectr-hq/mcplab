@@ -200,6 +200,44 @@ export class OAuthSessionManager {
     return state.expiresAt <= Date.now() + this.refreshSkewMs;
   }
 
+  async refreshAfterUnauthorized(serverName: string): Promise<boolean> {
+    const state = this.getState(serverName);
+    this.syncStateFromRuntimeSession(state);
+    state.expiresAt = Date.now();
+    return this.refreshIfNeeded(serverName);
+  }
+
+  async reauthorizeAfterUnauthorized(serverName: string, hostHeader?: string): Promise<never> {
+    const created = await createOAuthRuntimeSession({
+      serverName,
+      hostHeader,
+      librariesDir: this.params.librariesDir,
+      runtimeSessions: this.params.runtimeSessions,
+      oauthDebuggerSessions: this.params.oauthDebuggerSessions
+    });
+    const state = this.getState(serverName);
+    delete state.accessToken;
+    delete state.refreshToken;
+    delete state.expiresAt;
+    delete state.tokenEndpoint;
+    delete state.clientId;
+    delete state.clientSecret;
+    delete state.tokenEndpointAuthMethod;
+    delete state.runtimeTokenSyncedFromSessionId;
+    delete state.runtimeTokenSyncedFromDebuggerUpdatedAt;
+    state.runtimeSessionId = created.id;
+
+    throw new OAuthAuthorizationRequiredError([
+      {
+        serverName,
+        runtimeSessionId: created.id,
+        authorizationUrl: created.authorizationUrl,
+        authorizeLaunchUrl: created.authorizeLaunchUrl,
+        message: `OAuth authorization required for server '${serverName}'.`
+      }
+    ]);
+  }
+
   async refreshIfNeeded(serverName: string): Promise<boolean> {
     const state = this.getState(serverName);
     this.syncStateFromRuntimeSession(state);

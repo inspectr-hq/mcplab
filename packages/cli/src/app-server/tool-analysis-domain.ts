@@ -4,6 +4,7 @@ import {
   chatWithAgent,
   estimateToolDefinitionTokens,
   getMcpResourceToolAccess,
+  isMcpUnauthorizedError,
   McpClientManager,
   MCP_LIST_RESOURCES_TOOL,
   parseMcpResourceToolCatalog,
@@ -546,11 +547,28 @@ interface DiscoveredMcpServer {
   catalog?: McpServerCatalog;
 }
 
+async function reconnectWithRefreshedOAuth(
+  mcp: McpClientManager,
+  serverName: string,
+  server: EvalConfig['servers'][string],
+  refreshOAuthHeaders?: (serverName: string) => Promise<Record<string, string> | undefined>
+): Promise<boolean> {
+  const headers = await refreshOAuthHeaders?.(serverName);
+  if (!headers) return false;
+  await mcp.disconnectAll();
+  await mcp.connectAll({ [serverName]: server }, undefined, {
+    serverAuthHeaders: { [serverName]: headers }
+  });
+  return true;
+}
+
 export async function discoverMcpToolsForServers(
   serversByName: EvalConfig['servers'],
   serverNames: string[],
   options?: {
     serverAuthHeaders?: Record<string, Record<string, string>>;
+    refreshOAuthHeaders?: (serverName: string) => Promise<Record<string, string> | undefined>;
+    reauthorizeOAuth?: (serverName: string) => Promise<void>;
     tokenEstimateModel?: string;
     includeCatalog?: boolean;
     includeToolResources?: boolean;
@@ -575,24 +593,94 @@ export async function discoverMcpToolsForServers(
       entry.warnings.push(`Server '${serverName}' not found.`);
       continue;
     }
+    let connectionError: unknown;
+    let oauthRetryUsed = false;
     try {
       await mcp.connectAll({ [serverName]: server }, undefined, {
         serverAuthHeaders: options?.serverAuthHeaders
       });
     } catch (error: unknown) {
+      connectionError = error;
+    }
+    if (
+      connectionError &&
+      options?.refreshOAuthHeaders &&
+      isMcpUnauthorizedError(connectionError)
+    ) {
+      oauthRetryUsed = true;
+      try {
+        if (
+          await reconnectWithRefreshedOAuth(
+            mcp,
+            serverName,
+            server,
+            options?.refreshOAuthHeaders
+          )
+        ) {
+          connectionError = undefined;
+        }
+      } catch (error: unknown) {
+        if (error instanceof OAuthAuthorizationRequiredError) throw error;
+        if (options?.reauthorizeOAuth && isMcpUnauthorizedError(error)) {
+          await mcp.disconnectAll();
+          await options.reauthorizeOAuth(serverName);
+        }
+        connectionError = error;
+      }
+    }
+    if (connectionError) {
       entry.warnings.push(
-        `Failed to connect: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to connect: ${connectionError instanceof Error ? connectionError.message : String(connectionError)}`
       );
       continue;
     }
 
-    const catalog = options?.includeCatalog ? mcp.listCatalog(serverName) : undefined;
     let tools: ToolDef[] = [];
+    let toolsError: unknown;
     try {
       tools =
         !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
           ? await mcp.listTools(serverName)
           : [];
+    } catch (error: unknown) {
+      toolsError = error;
+    }
+    if (
+      !oauthRetryUsed &&
+      toolsError &&
+      options?.refreshOAuthHeaders &&
+      isMcpUnauthorizedError(toolsError)
+    ) {
+      oauthRetryUsed = true;
+      try {
+        if (
+          await reconnectWithRefreshedOAuth(
+            mcp,
+            serverName,
+            server,
+            options?.refreshOAuthHeaders
+          )
+        ) {
+          tools =
+            !options?.includeCatalog || mcp.getServerFeatures(serverName).tools
+              ? await mcp.listTools(serverName)
+              : [];
+          toolsError = undefined;
+        }
+      } catch (error: unknown) {
+        if (error instanceof OAuthAuthorizationRequiredError) throw error;
+        if (options?.reauthorizeOAuth && isMcpUnauthorizedError(error)) {
+          await mcp.disconnectAll();
+          await options.reauthorizeOAuth(serverName);
+        }
+        toolsError = error;
+      }
+    }
+    if (toolsError) {
+      entry.warnings.push(
+        `Failed to load tools: ${toolsError instanceof Error ? toolsError.message : String(toolsError)}`
+      );
+    } else {
       entry.tools = tools.map((tool) => {
         const safety = classifyToolSafety(tool.name, tool.inputSchema, tool.annotations);
         return {
@@ -612,11 +700,8 @@ export async function discoverMcpToolsForServers(
         })),
         tokenEstimateModel
       );
-    } catch (error: unknown) {
-      entry.warnings.push(
-        `Failed to load tools: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+    const catalog = options?.includeCatalog ? mcp.listCatalog(serverName) : undefined;
     const serverCatalog = await catalog;
     if (!serverCatalog) continue;
     const { canList, readArgument } = getMcpResourceToolAccess(tools);

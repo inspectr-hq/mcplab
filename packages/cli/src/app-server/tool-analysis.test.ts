@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { writeToolAnalysisReportRecord } from './tool-analysis-storage.js';
+import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 
 const tempRoots: string[] = [];
 
@@ -141,6 +142,61 @@ describe('handleToolAnalysisRoutes', () => {
         ]
       })
     );
+  });
+
+  it('starts fresh authorization after an OAuth refresh grant fails', async () => {
+    const deps = createBaseDeps();
+    deps.parseBody.mockResolvedValue({ serverNames: ['demo'] });
+    deps.readLibraries.mockReturnValue({
+      servers: {
+        demo: {
+          transport: 'http',
+          url: 'https://example.com/mcp',
+          auth: { type: 'oauth_authorization_code' }
+        }
+      },
+      agents: {}
+    });
+    const authRequired = new OAuthAuthorizationRequiredError([
+      {
+        serverName: 'demo',
+        runtimeSessionId: 'oauthrt-new',
+        message: 'OAuth authorization required for server \'demo\'.'
+      }
+    ]);
+    const oauthSessionManager = {
+      getAuthHeadersForServers: vi.fn().mockResolvedValue({
+        demo: { authorization: 'Bearer original' }
+      }),
+      refreshAfterUnauthorized: vi.fn().mockResolvedValue(false),
+      reauthorizeAfterUnauthorized: vi.fn().mockRejectedValue(authRequired)
+    };
+    deps.discoverMcpToolsForServers.mockImplementation(async (_servers, _names, options) => {
+      await options.refreshOAuthHeaders('demo');
+    });
+    const res = {};
+
+    await handleToolAnalysisRoutes({
+      req: { headers: { host: 'localhost' } } as any,
+      res: res as any,
+      pathname: '/api/tool-analysis/discover-tools',
+      method: 'POST',
+      settings: { librariesDir: '/tmp/ws/libraries' } as any,
+      toolAnalysisJobs: new Map(),
+      oauthSessionManager: oauthSessionManager as any,
+      deps: deps as any
+    });
+
+    expect(oauthSessionManager.refreshAfterUnauthorized).toHaveBeenCalledWith('demo');
+    expect(oauthSessionManager.reauthorizeAfterUnauthorized).toHaveBeenCalledWith(
+      'demo',
+      'localhost'
+    );
+    expect(oauthSessionManager.getAuthHeadersForServers).toHaveBeenCalledOnce();
+    expect(deps.asJson).toHaveBeenCalledWith(res, 401, {
+      error: authRequired.message,
+      oauth: { required: authRequired.details }
+    });
   });
 
   describe('preview', () => {

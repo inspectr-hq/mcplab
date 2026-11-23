@@ -23,6 +23,14 @@ export interface McpConnectAllOptions {
   serverRequestHeaders?: Record<string, Record<string, string>>;
 }
 
+export function isMcpUnauthorizedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    extractHttpStatusCode(error, message) === 401 ||
+    /["']error["']\s*:\s*["']invalid_token["']/i.test(message)
+  );
+}
+
 export interface McpImplementationIcon {
   src: string;
   mimeType?: string;
@@ -238,7 +246,9 @@ export class McpClientManager {
       } catch (err: any) {
         throw new Error(
           formatMcpError(
-            `Failed to connect to MCP server '${name}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
+            isMcpUnauthorizedError(err)
+              ? `Failed to connect to MCP server '${name}'`
+              : `Failed to connect to MCP server '${name}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
             server.url,
             err
           )
@@ -277,13 +287,16 @@ export class McpClientManager {
       } catch (err: any) {
         throwIfAborted(signal);
         lastError = err;
+        if (isMcpUnauthorizedError(err)) break;
         if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
         await sleep(250 * (attempt + 1), signal);
       }
     }
     throw new Error(
       formatMcpError(
-        `Failed to list tools for server '${serverName}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
+        isMcpUnauthorizedError(lastError)
+          ? `Failed to list tools for server '${serverName}'`
+          : `Failed to list tools for server '${serverName}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
         undefined,
         lastError
       )
@@ -560,6 +573,7 @@ export class McpClientManager {
       } catch (err: any) {
         throwIfAborted(signal);
         lastError = err;
+        if (isMcpUnauthorizedError(err)) break;
         if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
         await sleep(250 * (attempt + 1), signal);
       }

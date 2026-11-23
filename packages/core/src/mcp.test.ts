@@ -45,6 +45,34 @@ describe('extractHttpStatusCode', () => {
   });
 });
 
+describe('McpClientManager authentication failures', () => {
+  const authErrors = [
+    ['HTTP 401', Object.assign(new Error('Unauthorized'), { status: 401 })],
+    ['invalid_token response body', new Error('Streamable HTTP error: {"error":"invalid_token"}')]
+  ] as const;
+
+  it.each(authErrors)('does not retry MCP handshakes after %s', async (_label, error) => {
+    const manager = new McpClientManager();
+    const connect = vi.spyOn(manager as any, 'connectClient').mockRejectedValue(error);
+
+    await expect(
+      manager.connectAll({ demo: { transport: 'http', url: 'https://example.test/mcp' } })
+    ).rejects.toThrow('Failed to connect');
+
+    expect(connect).toHaveBeenCalledOnce();
+  });
+
+  it.each(authErrors)('does not retry tool discovery after %s', async (_label, error) => {
+    const manager = new McpClientManager();
+    const listTools = vi.fn().mockRejectedValue(error);
+    vi.spyOn(manager as any, 'getClient').mockReturnValue({ listTools });
+
+    await expect(manager.listTools('demo')).rejects.toThrow('Failed to list tools');
+
+    expect(listTools).toHaveBeenCalledOnce();
+  });
+});
+
 describe('mergeRequestHeaders', () => {
   it('merges headers with later sources taking precedence', () => {
     const merged = mergeRequestHeaders(
