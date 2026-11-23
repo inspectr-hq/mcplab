@@ -170,6 +170,29 @@ describe('OAuthSessionManager', () => {
     }
   });
 
+  it('does not repeat a failed forced refresh after invalid_grant', async () => {
+    const runtimeSession = makeRuntimeSession();
+    const debuggerSession = makeDebuggerSession({
+      context: {
+        tokenResponse: { access_token: 'tok-old', refresh_token: 'refresh-1', expires_in: 3600 },
+        authServerMetadata: { token_endpoint: 'https://auth.example.com/token' },
+        resolvedClient: { clientId: 'cid', clientSecret: 'secret', tokenEndpointAuthMethod: 'client_secret_post' }
+      } as any
+    });
+    const { manager, librariesDir } = setupHarness({ runtimeSession, debuggerSession });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })
+    );
+    vi.stubGlobal('fetch', fetchMock as any);
+
+    try {
+      expect(await manager.refreshAfterUnauthorized('oauth-server')).toBe(false);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(librariesDir, { recursive: true, force: true });
+    }
+  });
+
   it('starts fresh authorization and clears a token rejected after refresh', async () => {
     const runtimeSession = makeRuntimeSession();
     const debuggerSession = makeDebuggerSession({

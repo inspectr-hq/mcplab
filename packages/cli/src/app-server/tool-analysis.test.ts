@@ -144,7 +144,7 @@ describe('handleToolAnalysisRoutes', () => {
     );
   });
 
-  it('returns a browser authorization challenge after a refreshed OAuth token is rejected', async () => {
+  it('starts fresh authorization after an OAuth refresh grant fails', async () => {
     const deps = createBaseDeps();
     deps.parseBody.mockResolvedValue({ serverNames: ['demo'] });
     deps.readLibraries.mockReturnValue({
@@ -168,13 +168,11 @@ describe('handleToolAnalysisRoutes', () => {
       getAuthHeadersForServers: vi.fn().mockResolvedValue({
         demo: { authorization: 'Bearer original' }
       }),
-      refreshAfterUnauthorized: vi.fn().mockResolvedValue(true),
+      refreshAfterUnauthorized: vi.fn().mockResolvedValue(false),
       reauthorizeAfterUnauthorized: vi.fn().mockRejectedValue(authRequired)
     };
     deps.discoverMcpToolsForServers.mockImplementation(async (_servers, _names, options) => {
-      const headers = await options.refreshOAuthHeaders('demo');
-      expect(headers).toEqual({ authorization: 'Bearer original' });
-      await options.reauthorizeOAuth('demo');
+      await options.refreshOAuthHeaders('demo');
     });
     const res = {};
 
@@ -194,6 +192,7 @@ describe('handleToolAnalysisRoutes', () => {
       'demo',
       'localhost'
     );
+    expect(oauthSessionManager.getAuthHeadersForServers).toHaveBeenCalledOnce();
     expect(deps.asJson).toHaveBeenCalledWith(res, 401, {
       error: authRequired.message,
       oauth: { required: authRequired.details }

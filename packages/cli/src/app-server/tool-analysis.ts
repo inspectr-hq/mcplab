@@ -150,11 +150,14 @@ export async function handleToolAnalysisRoutes(params: {
         ? {
             refreshOAuthHeaders: async (name: string) => {
               const refreshed = await oauthSessionManager.refreshAfterUnauthorized(name);
+              if (!refreshed) {
+                return oauthSessionManager.reauthorizeAfterUnauthorized(name, req.headers.host);
+              }
               const headers = await oauthSessionManager.getAuthHeadersForServers(
                 [name],
                 req.headers.host
               );
-              return refreshed ? headers[name] : undefined;
+              return headers[name];
             },
             reauthorizeOAuth: (name: string) =>
               oauthSessionManager.reauthorizeAfterUnauthorized(name, req.headers.host)
