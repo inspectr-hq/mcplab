@@ -14,6 +14,16 @@ export interface WorkspaceEvaluationSettings {
   evaluationDecision?: EvaluationDecisionConfig;
 }
 
+export interface EvaluationTracingIntegration {
+  provider: 'langsmith' | 'langfuse';
+  endpoint?: string;
+  project?: string;
+}
+
+export interface EvaluationTracingSettings {
+  tracingIntegrations?: EvaluationTracingIntegration[];
+}
+
 export type RunAgentSelectionSource =
   | 'requested'
   | 'evaluation_default'

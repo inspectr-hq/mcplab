@@ -134,6 +134,7 @@ export {
 export { buildScenarioEntry, type ScenarioBuildInput } from './scenario-builder.js';
 export {
   createLangSmithTraceExporter,
+  isLangSmithEnabled,
   type LangSmithRun,
   type LangSmithRunFactory,
   type ScenarioTraceSpan,
@@ -141,6 +142,7 @@ export {
   type TraceSpan
 } from './langsmith-tracing.js';
 export { createLangfuseTraceExporter, isLangfuseEnabled } from './langfuse-tracing.js';
+export { getEvaluationTracingSettings } from './tracing-settings.js';
 export * from './queue-contract.js';
 export {
   parseBrowserProviderProfiles,

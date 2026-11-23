@@ -26,6 +26,7 @@ export type CheckCounts = CoreCheckCounts;
 
 export type {
   ScenarioAttachment,
+  EvaluationTracingIntegration,
   EvaluationDecisionConfig,
   DecisionConnectionTestResult,
   AgentConnectionTestResult,

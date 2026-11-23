@@ -110,7 +110,7 @@ const noopScenarioSpan: ScenarioTraceSpan = {
   startTool: () => noopSpan
 };
 
-function isEnabled(env: Environment): boolean {
+export function isLangSmithEnabled(env: Environment = process.env): boolean {
   return env.LANGSMITH_TRACING?.trim().toLowerCase() === 'true' && Boolean(env.LANGSMITH_API_KEY);
 }
 
@@ -271,7 +271,7 @@ export function createLangSmithTraceExporter(
   env: Environment = process.env,
   factory?: LangSmithRunFactory
 ): TraceExporter {
-  if (!isEnabled(env)) {
+  if (!isLangSmithEnabled(env)) {
     return { startScenario: () => noopScenarioSpan, flush: async () => ({ traceUrls: {} }) };
   }
   try {

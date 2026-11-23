@@ -23,6 +23,7 @@ import type {
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
+  getEvaluationTracingSettings,
   expandConfigForAgents,
   loadConfig,
   readLibraryAgentsAndServers,
@@ -109,7 +110,11 @@ import { OAuthSessionManager } from './oauth-session-manager.js';
 import { resolveLoadedRunAgents } from '@inspectr/mcplab-core';
 import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
-import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
+import {
+  formatLangfuseStatus,
+  formatLangSmithStatus,
+  isLangSmithEnabled
+} from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
 import { InspectrSessionManager } from './inspectr-session-manager.js';
 import { LiveTestService } from './live-tests.js';
@@ -462,7 +467,7 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (pathname === '/api/settings' && method === 'GET') {
-        asJson(res, 200, settings);
+        asJson(res, 200, { ...settings, ...getEvaluationTracingSettings() });
         return;
       }
 
@@ -566,7 +571,7 @@ export async function startAppServer(options: AppServerOptions) {
           });
         }
         if (body.librariesDir) oauthSessionManager.setLibrariesDir(settings.librariesDir);
-        asJson(res, 200, settings);
+        asJson(res, 200, { ...settings, ...getEvaluationTracingSettings() });
         return;
       }
 
@@ -920,6 +925,9 @@ export async function startAppServer(options: AppServerOptions) {
   logPath('libs:', settings.librariesDir);
   if (isLangSmithEnabled()) {
     logPath('langsmith:', formatLangSmithStatus());
+  }
+  if (process.env.LANGFUSE_TRACING?.trim().toLowerCase() === 'true') {
+    logPath('langfuse:', formatLangfuseStatus());
   }
   if (devMcp) {
     logPath('mcp:', `${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);

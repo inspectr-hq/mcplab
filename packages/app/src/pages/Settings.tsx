@@ -15,6 +15,8 @@ import { useLibraries } from '@/contexts/useLibraries';
 import { useDataSource } from '@/contexts/useDataSource';
 import { toast } from '@/hooks/use-toast';
 import DecisionEngineSettings from '@/components/settings/DecisionEngineSettings';
+import { EvaluationTracingSettings } from '@/components/settings/EvaluationTracingSettings';
+import type { EvaluationTracingIntegration } from '@/types/eval';
 import { useLibrariesReady } from '@/hooks/use-libraries-ready';
 
 const SettingsPage = () => {
@@ -30,6 +32,9 @@ const SettingsPage = () => {
   const [savedDecision, setSavedDecision] = useState<EvaluationDecisionConfig>();
   const [decisionError, setDecisionError] = useState('');
   const [testingDecision, setTestingDecision] = useState(false);
+  const [tracingIntegrations, setTracingIntegrations] = useState<EvaluationTracingIntegration[]>(
+    []
+  );
   const llmAgents = agents.filter((agent) => agent.type !== 'browser');
   const defaultAgentIsBrowser = agents.some(
     (agent) => agent.id === defaultEvaluationAgentName && agent.type === 'browser'
@@ -50,12 +55,14 @@ const SettingsPage = () => {
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
       setSavedDecision(settings?.evaluationDecision);
+      setTracingIntegrations(settings?.tracingIntegrations ?? []);
     } catch (error: unknown) {
       setAssistantAgentName('');
       setDefaultEvaluationAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
       setSavedDecision(undefined);
+      setTracingIntegrations([]);
       toast({
         title: 'Could not load settings',
         description: error instanceof Error ? error.message : String(error),
@@ -356,6 +363,8 @@ const SettingsPage = () => {
           <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
         </CardContent>
       </Card>
+
+      <EvaluationTracingSettings integrations={tracingIntegrations} />
     </div>
   );
 };
