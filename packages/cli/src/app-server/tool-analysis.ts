@@ -145,7 +145,7 @@ export async function handleToolAnalysisRoutes(params: {
     const discoveryOptions = {
       ...connectionOptions,
       ...(serverNames.some(
-        (name) => libraries.servers[name]?.auth?.type === 'oauth_authorization_code'
+        (name: string) => libraries.servers[name]?.auth?.type === 'oauth_authorization_code'
       )
         ? {
             refreshOAuthHeaders: async (name: string) => {
