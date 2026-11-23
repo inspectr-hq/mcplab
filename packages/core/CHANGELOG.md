@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.30.1
+
+### Patch Changes
+
+- feat: retry after OAuth invalid token
+
 ## 1.30.0
 
 ### Minor Changes

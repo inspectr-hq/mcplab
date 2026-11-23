@@ -1,5 +1,15 @@
 # @inspectr/mcplab
 
+## 1.36.1
+
+### Patch Changes
+
+- feat: retry after OAuth invalid token
+- Updated dependencies
+  - @inspectr/mcplab-core@1.30.1
+  - @inspectr/mcplab-mcp-server@1.14.1
+  - @inspectr/mcplab-reporting@1.5.4
+
 ## 1.36.0
 
 ### Minor Changes
