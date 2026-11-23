@@ -7,23 +7,45 @@ import { ConfigContext } from '@/contexts/useConfigs';
 import { DataSourceContext } from '@/contexts/useDataSource';
 import { LibraryContext } from '@/contexts/useLibraries';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { demoConfig, sourceFor } from './fixture-data';
+import {
+  demoAgents,
+  demoConfig,
+  demoConfigSuite,
+  demoScenarios,
+  demoVersion,
+  sourceFor
+} from './fixture-data';
 
-export function CoreScreenStory({ path, populated }: { path: string; populated: boolean }) {
-  const configs = populated ? [demoConfig] : [];
+export function CoreScreenStory({
+  path,
+  populated,
+  hasRunningQueue = false
+}: {
+  path: string;
+  populated: boolean;
+  hasRunningQueue?: boolean;
+}) {
+  const configs = populated ? [demoConfig, demoConfigSuite] : [];
   const libraries = {
     servers: populated
       ? [
           {
-            id: 'server-demo',
-            name: 'Support MCP',
+            id: 'weather-mcp',
+            name: 'Weather MCP',
             transport: 'streamable-http' as const,
             url: 'https://example.test/mcp'
+          },
+          {
+            id: 'mcp-lab',
+            name: 'MCPLab',
+            transport: 'streamable-http' as const,
+            url: 'http://127.0.0.1:3011/mcp',
+            inspectrEnabled: true
           }
         ]
       : [],
-    agents: populated ? demoConfig.agents : [],
-    scenarios: [],
+    agents: populated ? demoAgents : [],
+    scenarios: populated ? demoScenarios : [],
     browserProviders: {},
     loading: false,
     setServers: async () => {},
@@ -51,8 +73,8 @@ export function CoreScreenStory({ path, populated }: { path: string; populated: 
             value={{
               mode: 'workspace',
               connection: 'connected',
-              version: 'storybook',
-              source: sourceFor(populated)
+              version: demoVersion,
+              source: sourceFor(populated, hasRunningQueue, path === '/')
             }}
           >
             <LibraryContext.Provider value={libraries}>
