@@ -5,6 +5,7 @@ import {
   formatCliBanner,
   formatCliStartupLine,
   formatLangSmithStatus,
+  formatLangfuseStatus,
   isLangSmithEnabled
 } from './cli-branding.js';
 
@@ -72,6 +73,21 @@ describe('CLI branding', () => {
     );
   });
 
+  it('reports Langfuse enabled status without exposing credentials', () => {
+    expect(
+      formatLangfuseStatus({
+        LANGFUSE_TRACING: 'true',
+        LANGFUSE_PUBLIC_KEY: 'public-secret',
+        LANGFUSE_SECRET_KEY: 'private-secret',
+        LANGFUSE_BASE_URL: 'https://lf.internal'
+      })
+    ).toBe('✓ enabled · endpoint: https://lf.internal');
+  });
+
+  it('reports missing Langfuse keys when tracing is requested', () => {
+    expect(formatLangfuseStatus({ LANGFUSE_TRACING: 'true' })).toContain('waiting');
+  });
+
   it('aligns app startup labels without terminal tab expansion', () => {
     expect(formatCliStartupLine('evals:', '/tmp/evals')).toBe(
       '[mcplab-app]  evals:     /tmp/evals'
@@ -79,5 +95,8 @@ describe('CLI branding', () => {
     expect(formatCliStartupLine('langsmith:', 'enabled · project: demo')).toBe(
       '[mcplab-app]  langsmith: enabled · project: demo'
     );
+    expect(
+      formatCliStartupLine('langfuse:', '✓ enabled · endpoint: https://cloud.langfuse.com')
+    ).toBe('[mcplab-app]  langfuse:  ✓ enabled · endpoint: https://cloud.langfuse.com');
   });
 });

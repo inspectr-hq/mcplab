@@ -55,6 +55,49 @@ vi.mock('@/contexts/useLibraries', () => ({
 }));
 
 describe('SettingsPage', () => {
+  it('shows enabled tracing services with destination details and setup links', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      tracingIntegrations: [
+        {
+          provider: 'langsmith',
+          endpoint: 'https://eu.api.smith.langchain.com',
+          project: 'mcplab'
+        },
+        { provider: 'langfuse', endpoint: 'https://self-hosted.test' }
+      ]
+    });
+    render(<SettingsPage />);
+    expect(await screen.findByText('Evaluation tracing')).toBeInTheDocument();
+    expect(screen.getByText('Project: mcplab')).toBeInTheDocument();
+    expect(screen.getByText('Endpoint: https://self-hosted.test')).toBeInTheDocument();
+    expect(screen.getAllByText('Enabled')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'LangSmith setup guide' })).toHaveAttribute(
+      'href',
+      'https://docs.langchain.com/langsmith/observability-quickstart'
+    );
+    expect(screen.getByRole('link', { name: 'Langfuse setup guide' })).toHaveAttribute(
+      'href',
+      'https://langfuse.com/docs/observability/get-started'
+    );
+  });
+
+  it('hides tracing details for older settings responses', async () => {
+    render(<SettingsPage />);
+    await screen.findByRole('combobox', { name: 'Default Evaluation Agent' });
+    expect(screen.queryByText('Evaluation tracing')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the tracing status and hides it after integrations are disabled', async () => {
+    sourceMock.getWorkspaceSettings.mockResolvedValueOnce({
+      tracingIntegrations: [{ provider: 'langfuse', endpoint: 'https://cloud.langfuse.com' }]
+    });
+    render(<SettingsPage />);
+    await screen.findByRole('link', { name: 'Langfuse setup guide' });
+    expect(screen.queryByRole('link', { name: 'LangSmith setup guide' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(screen.queryByText('Evaluation tracing')).not.toBeInTheDocument());
+  });
+
   it('offers only LLM agents as the shared evaluation default', async () => {
     agentsRef.value.push({ id: 'browser', name: 'Browser Agent', model: '', type: 'browser' });
     render(<SettingsPage />);

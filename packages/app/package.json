@@ -10,7 +10,11 @@
     "lint": "oxlint . --report-unused-disable-directives",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -66,6 +70,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@storybook/addon-docs": "^10.6.8",
+    "@storybook/react-vite": "^10.6.8",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.0",
@@ -77,6 +84,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.5.13",
     "react-is": "^17.0.2",
+    "storybook": "^10.6.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",

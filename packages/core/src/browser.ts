@@ -27,6 +27,8 @@ export {
 } from './decision-config.js';
 export type {
   AssistantKind,
+  EvaluationTracingIntegration,
+  EvaluationTracingSettings,
   AssistantSessionEvent,
   AssistantRuntimeEvent,
   AssistantRuntimeMessage,

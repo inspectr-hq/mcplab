@@ -1,4 +1,7 @@
 import kleur from 'kleur';
+import { isLangfuseEnabled, isLangSmithEnabled } from '@inspectr/mcplab-core';
+export { isLangSmithEnabled } from '@inspectr/mcplab-core';
+export { isLangfuseEnabled } from '@inspectr/mcplab-core';
 
 const ORANGE_OPEN = '\x1b[38;2;249;115;22m';
 const ORANGE_256_OPEN = '\x1b[38;5;208m';
@@ -39,8 +42,16 @@ export function formatLangSmithStatus(
   return `${check} enabled · project: ${project} · endpoint: ${endpoint}`;
 }
 
-export function isLangSmithEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env.LANGSMITH_TRACING?.trim().toLowerCase() === 'true' && Boolean(env.LANGSMITH_API_KEY);
+export function formatLangfuseStatus(
+  env: Record<string, string | undefined> = process.env
+): string {
+  if (!isLangfuseEnabled(env)) {
+    return 'waiting · set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to enable tracing';
+  }
+
+  const endpoint = env.LANGFUSE_BASE_URL?.trim() || 'https://cloud.langfuse.com';
+  const check = kleur.enabled ? kleur.green('✓') : '✓';
+  return `${check} enabled · endpoint: ${endpoint}`;
 }
 
 function supportsTrueColor(): boolean {

@@ -78,6 +78,8 @@ import type {
   ProviderModelsResponse,
   WorkspaceSettingsPatch,
   WorkspaceEvaluationSettings,
+  EvaluationTracingIntegration,
+  EvaluationTracingSettings,
   EvaluationRunRequest
 } from '@inspectr/mcplab-core';
 export type {
@@ -159,6 +161,7 @@ export type {
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 export type { EvaluationDecisionConfig, DecisionConnectionTestResult, WorkspaceSettingsPatch };
+export type { EvaluationTracingIntegration };
 export type { RunAgentSelection, EvaluationRunRequest } from '@inspectr/mcplab-core';
 export type { AgentConnectionTestResult, ProviderModelsResponse };
 export type { QueueChildProgress };
@@ -272,7 +275,7 @@ export interface WorkspaceHealthResponse {
   mcp: HealthMcpConnectionInfo;
 }
 
-export interface WorkspaceSettings extends WorkspaceEvaluationSettings {
+export interface WorkspaceSettings extends WorkspaceEvaluationSettings, EvaluationTracingSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;

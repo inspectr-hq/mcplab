@@ -26,3 +26,6 @@ skills-lock.json
 .mcp.json
 CLAUDE.md
 AGENTS.md
+packages/app/storybook-static/
+packages/app/test-results/
+packages/app/debug-storybook.log
